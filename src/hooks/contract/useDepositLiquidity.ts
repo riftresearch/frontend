@@ -75,7 +75,7 @@ export function useDepositLiquidity() {
                 const allowance = await tokenContract.allowance(userEthAddress, params.riftExchangeContractAddress);
                 if (BigNumber.from(allowance).lt(params.params.depositAmount)) {
                     setStatus(DepositStatus.WaitingForDepositTokenApproval);
-                    const approveTx = await tokenContract.approve(params.riftExchangeContractAddress, validAssets[selectedInputAsset.name].connectedUserBalanceRaw);
+                    const approveTx = await tokenContract.approve(params.riftExchangeContractAddress, params.params.depositAmount);
 
                     setStatus(DepositStatus.ApprovalPending);
                     await approveTx.wait();
