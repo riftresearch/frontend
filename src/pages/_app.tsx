@@ -45,7 +45,7 @@ const config = getDefaultConfig({
     appName: 'My RainbowKit App',
     projectId: 'YOUR_PROJECT_ID',
     //@ts-ignore
-    chains: [base],
+    chains: [base, anvilChain],
     ssr: true, // If your dApp uses server side rendering (SSR)
 });
 
