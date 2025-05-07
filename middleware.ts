@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import geoip from 'geoip-lite';
 
-const BLOCKED_COUNTRIES = ['KP', 'RU', 'IR']; // North Korea, Russia, Iran
+const BLOCKED_COUNTRIES = ['KP', 'RU', 'IR', 'CH']; // North Korea, Russia, Iran, Switzerland
 
 export function middleware(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || request.ip || '';
