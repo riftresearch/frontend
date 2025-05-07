@@ -4,15 +4,23 @@ import type { NextRequest } from 'next/server';
 const BLOCKED_COUNTRIES = ['KP', 'RU', 'IR', 'CH']; // North Korea, Russia, Iran, Switzerland
 
 export function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname === '/blocked') {
+  const country = request.geo?.country || 'Unknown';
+  const ip = request.ip || 'Unknown';
+  const path = request.nextUrl.pathname;
+  
+  console.log(`[Middleware] Request from country: ${country}, IP: ${ip}, Path: ${path}`);
+  
+  if (path === '/blocked') {
+    console.log('[Middleware] Allowing access to blocked page');
     return NextResponse.next();
   }
 
   if (
-    request.nextUrl.pathname.startsWith('/_next') ||
-    request.nextUrl.pathname.startsWith('/api') ||
-    request.nextUrl.pathname === '/favicon.ico'
+    path.startsWith('/_next') ||
+    path.startsWith('/api') ||
+    path === '/favicon.ico'
   ) {
+    console.log('[Middleware] Allowing access to static asset or API route');
     return NextResponse.next();
   }
 
@@ -20,14 +28,13 @@ export function middleware(request: NextRequest) {
     console.log('[Middleware] Development mode - redirecting to blocked page');
     return NextResponse.redirect(new URL('/blocked', request.url));
   }
-
-  const country = request.geo?.country || '';
   
   if (country && BLOCKED_COUNTRIES.includes(country)) {
     console.log(`[Middleware] Blocking access from ${country}`);
     return NextResponse.redirect(new URL('/blocked', request.url));
   }
   
+  console.log(`[Middleware] Allowing access from ${country}`);
   return NextResponse.next();
 }
 
