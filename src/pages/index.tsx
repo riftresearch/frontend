@@ -31,19 +31,6 @@ const Home = () => {
     const { isTablet, isMobile } = useWindowSize();
     const router = useRouter();
     
-    useEffect(() => {
-        if (process.env.NODE_ENV === 'development' && SIMULATE_BLOCKED_COUNTRY) {
-            console.log('[Home] Simulating request from blocked country, redirecting to /blocked');
-            router.replace('/blocked');
-            return;
-        }
-        
-        const country = document.cookie.match(/(?:^|; )country=([^;]*)/)?.[1] || '';
-        if (country && BLOCKED_COUNTRIES.includes(country)) {
-            console.log(`[Home] Blocking access from ${country}`);
-            router.replace('/blocked');
-        }
-    }, [router]);
     
     const handleNavigation = (route: string) => {
         router.push(route);
