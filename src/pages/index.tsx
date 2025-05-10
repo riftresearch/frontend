@@ -32,9 +32,15 @@ import { HiOutlineExternalLink, HiOutlineHome } from 'react-icons/hi';
 import { useToast } from '@chakra-ui/react';
 import { copyToClipboard } from '../utils/frontendHelpers';
 
+const BLOCKED_COUNTRIES = ['KP', 'RU', 'IR', 'CH']; // North Korea, Russia, Iran, Switzerland
+
+const SIMULATE_BLOCKED_COUNTRY = true;
+
 const Home = () => {
     const { isTablet, isMobile } = useWindowSize();
     const router = useRouter();
+    
+    
     const handleNavigation = (route: string) => {
         router.push(route);
     };
