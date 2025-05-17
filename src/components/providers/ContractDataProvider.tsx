@@ -5,7 +5,7 @@ import { useStore } from '../../store';
 import { useAccount } from 'wagmi';
 import { formatUnits } from 'ethers/lib/utils';
 import { checkIfNewDepositsArePaused, getTokenBalance } from '../../utils/contractReadFunctions';
-import { DEVNET_BASE_CHAIN_ID, DEVNET_BASE_RPC_URL, ERC20ABI, IS_FRONTEND_PAUSED } from '../../utils/constants';
+import { ERC20ABI, IS_FRONTEND_PAUSED } from '../../utils/constants';
 import riftExchangeABI from '../../abis/RiftExchange.json';
 import { getUSDPrices } from '../../utils/fetchUniswapPrices';
 import { getSwapsForAddress } from '../../utils/dataEngineClient';
@@ -30,8 +30,8 @@ export function ContractDataProvider({ children }: { children: ReactNode }) {
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const setUserSwapsLoadingState = useStore((state) => state.setUserSwapsLoadingState);
 
-    const contractRpcURL = (selectedInputAsset as ValidAsset)?.contractRpcURL || DEVNET_BASE_RPC_URL;
-    const contractChainID = (selectedInputAsset as ValidAsset)?.contractChainID || DEVNET_BASE_CHAIN_ID;
+    const contractRpcURL = (selectedInputAsset as ValidAsset)?.contractRpcURL;
+    const contractChainID = (selectedInputAsset as ValidAsset)?.contractChainID;
 
     // [1] fetch selected asset user balance - Reads latest state directly
     const fetchSelectedAssetUserBalance = async () => {

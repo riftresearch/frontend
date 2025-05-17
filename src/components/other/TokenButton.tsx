@@ -8,7 +8,6 @@ import { ARBITRUM_LOGO, BASE_LOGO } from './SVGs';
 import Image from 'next/image';
 import combinedTokenData from '@/json/tokenData.json';
 import { useStore } from '@/store';
-import { DEVNET_BASE_CHAIN_ID, MAINNET_BASE_CHAIN_ID } from '@/utils/constants';
 
 interface TokenProps {
     asset: TokenMeta | ValidAsset;
@@ -90,7 +89,7 @@ const TokenButton: React.FC<TokenProps> = ({
                 gap='8px'
                 cursor={cursor}
                 onClick={onDropDown}>
-                {(selectedChainId === DEVNET_BASE_CHAIN_ID || selectedChainId === MAINNET_BASE_CHAIN_ID) && (
+                {selectedChainId === 8453 && (
                     <Flex ml='0px' mr='-1px' mt='-1px'>
                         <BASE_LOGO width='22' height='22' />
                     </Flex>

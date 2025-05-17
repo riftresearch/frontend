@@ -135,7 +135,7 @@ export const ReserveLiquidity = ({}) => {
 
             if (chainId !== selectedInputAsset.contractChainID) {
                 setIsWaitingForCorrectNetwork(true);
-                switchChain({ chainId: selectedInputAsset.contractChainID });
+                switchChain(selectedInputAsset.contractChainID);
                 return;
             }
             proceedWithReservationPayingFeesUsingEth();

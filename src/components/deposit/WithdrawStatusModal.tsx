@@ -143,7 +143,7 @@ const WithdrawStatusModal: React.FC<WithdrawStatusModalProps> = ({ isOpen, onClo
         if (chainId !== selectedInputAsset.contractChainID) {
             console.log('Switching network');
             setIsWaitingForCorrectNetwork(true);
-            switchChain({ chainId: selectedInputAsset.contractChainID });
+            switchChain(selectedInputAsset.contractChainID);
             return;
         }
 
