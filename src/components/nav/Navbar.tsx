@@ -1,4 +1,4 @@
-import { Box, Button, Flex, FlexProps, Spacer, Text, Image, useClipboard, VStack, Input } from '@chakra-ui/react';
+import { Box, Button, Flex, FlexProps, Spacer, Text, Image, useClipboard, VStack, Input, Select } from '@chakra-ui/react';
 import { colors } from '../../utils/colors';
 import useWindowSize from '../../hooks/useWindowSize';
 import { useRouter } from 'next/router';
@@ -36,6 +36,8 @@ export const Navbar = ({}) => {
     const { address, isConnected } = useAccount();
 
     const depositFlowState = useStore((state) => state.depositFlowState);
+    const switchChain = useStore((state) => state.switchChain);
+    const selectedChainID = useStore((state) => state.selectedChainID);
 
     const [displayWarning, setDisplayWarning] = useState<boolean | undefined>(undefined);
 
@@ -310,6 +312,18 @@ export const Navbar = ({}) => {
                             />
                         </Flex>
                     )}
+                    <Select
+                        value={selectedChainID}
+                        onChange={(e) => switchChain(Number(e.target.value))}
+                        bg={colors.offBlack}
+                        borderColor={colors.textGray}
+                        color={colors.offWhite}
+                        size='sm'
+                        w='90px'>
+                        <option value={8453}>Base</option>
+                        <option value={1}>Ethereum</option>
+                        <option value={1337}>Devnet</option>
+                    </Select>
                     <ConnectWalletButton />
                 </Flex>
             </Flex>

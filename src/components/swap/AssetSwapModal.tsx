@@ -21,7 +21,6 @@ import {
 } from '@chakra-ui/react';
 import { ArrowBackIcon, SearchIcon } from '@chakra-ui/icons';
 import { useStore } from '@/store';
-import { DEVNET_BASE_CHAIN_ID, MAINNET_BASE_CHAIN_ID } from '@/utils/constants';
 import type { TokenMeta, ValidAsset } from '@/types';
 import TokenCard from './TokenCard';
 import { useAutoAnimate } from '@formkit/auto-animate/react';

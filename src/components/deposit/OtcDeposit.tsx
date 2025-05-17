@@ -53,7 +53,7 @@ import DepositStatusModal from './DepositStatusModal';
 import WhiteText from '../other/WhiteText';
 import OrangeText from '../other/OrangeText';
 import { formatUnits, parseUnits } from 'ethers/lib/utils';
-import { BITCOIN_DECIMALS, DEVNET_DATA_ENGINE_URL, opaqueBackgroundColor } from '../../utils/constants';
+import { BITCOIN_DECIMALS, opaqueBackgroundColor } from '../../utils/constants';
 import { ArrowRightIcon, CheckCircleIcon, CheckIcon, ChevronLeftIcon, SettingsIcon } from '@chakra-ui/icons';
 import { HiOutlineXCircle, HiXCircle } from 'react-icons/hi';
 import { IoCheckmarkDoneCircle } from 'react-icons/io5';
