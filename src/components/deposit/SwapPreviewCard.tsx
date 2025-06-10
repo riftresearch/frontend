@@ -48,7 +48,15 @@ const SwapPreviewCard: React.FC<SwapPreviewCardProps> = ({ swap, selectedInputAs
     const SettingsWithTooltip = () => {
         const label = `Deposit TX: ${swap.deposit_txid}\nSettings`;
         return (
-            <Tooltip fontFamily={FONT_FAMILIES.AUX_MONO} label={label} fontSize='sm' bg={colors.offBlackLighter3} borderColor={colors.offBlack} color={colors.textGray} borderRadius='md' hasArrow>
+            <Tooltip
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                label={label}
+                fontSize='sm'
+                bg={colors.offBlackLighter3}
+                borderColor={colors.offBlack}
+                color={colors.textGray}
+                borderRadius='md'
+                hasArrow>
                 <Flex w='30px' justify='flex-end' alignItems='center'>
                     <IoMdSettings size={18} color={colors.textGray} />
                 </Flex>
@@ -82,7 +90,12 @@ const SwapPreviewCard: React.FC<SwapPreviewCardProps> = ({ swap, selectedInputAs
                 }}>
                 {/* TIMESTAMP */}
                 <Flex w='100%' align='center' direction={isMobile ? 'column' : 'row'}>
-                    <Text width='130px' pr='10px' fontSize='14px' fontFamily={FONT_FAMILIES.AUX_MONO} fontWeight='normal'>
+                    <Text
+                        width='130px'
+                        pr='10px'
+                        fontSize='14px'
+                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        fontWeight='normal'>
                         {timeAgo}
                     </Text>
 
@@ -101,20 +114,50 @@ const SwapPreviewCard: React.FC<SwapPreviewCardProps> = ({ swap, selectedInputAs
                                 pl='15px'
                                 pr='10px'
                                 align={'center'}>
-                                <Text fontSize='16px' color={colors.offWhite} letterSpacing={'-1px'} fontFamily={FONT_FAMILIES.AUX_MONO}>
-                                    {formatUnits(BigNumber.from(swap.depositAmount).toString(), BITCOIN_DECIMALS).toString()}
+                                <Text
+                                    fontSize='16px'
+                                    color={colors.offWhite}
+                                    letterSpacing={'-1px'}
+                                    fontFamily={FONT_FAMILIES.AUX_MONO}>
+                                    {formatUnits(
+                                        BigNumber.from(swap.depositAmount).toString(),
+                                        BITCOIN_DECIMALS,
+                                    ).toString()}
                                 </Text>
                                 <Spacer />
                                 <AssetTag assetName={'cbBTC'} width='110px' />
                             </Flex>
                         </Flex>
-                        <Text mt='7px' mx='12px' fontSize='20px' opacity={0.9} fontWeight={'bold'} color={colors.offWhite} letterSpacing={'-1px'} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                        <Text
+                            mt='7px'
+                            mx='12px'
+                            fontSize='20px'
+                            opacity={0.9}
+                            fontWeight={'bold'}
+                            color={colors.offWhite}
+                            letterSpacing={'-1px'}
+                            fontFamily={FONT_FAMILIES.AUX_MONO}>
                             <FaRegArrowAltCircleRight color={colors.RiftOrange} />
                         </Text>
 
                         <Flex direction='column'>
-                            <Flex h='50px' mr='55px' mt='6px' w='100%' bg='#2E1C0C' border={'3px solid'} borderColor={'#78491F'} borderRadius={'14px'} pl='15px' pr='10px' align={'center'}>
-                                <Text fontSize='16px' color={colors.offWhite} letterSpacing={'-1px'} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                            <Flex
+                                h='50px'
+                                mr='55px'
+                                mt='6px'
+                                w='100%'
+                                bg='#2E1C0C'
+                                border={'3px solid'}
+                                borderColor={'#78491F'}
+                                borderRadius={'14px'}
+                                pl='15px'
+                                pr='10px'
+                                align={'center'}>
+                                <Text
+                                    fontSize='16px'
+                                    color={colors.offWhite}
+                                    letterSpacing={'-1px'}
+                                    fontFamily={FONT_FAMILIES.AUX_MONO}>
                                     {satsToBtc(BigNumber.from(swap.expectedSats))}
                                 </Text>
 
@@ -145,7 +188,13 @@ const SwapPreviewCard: React.FC<SwapPreviewCardProps> = ({ swap, selectedInputAs
                     {/* STATUS  */}
                     <Flex align='center' mt='10px' justify='center'>
                         <GooSpinner flexSize={10} lRingSize={15} stroke={2} color={colors.textGray} />
-                        <Text ml='14px' mt='-14px' mr='30px' fontFamily={FONT_FAMILIES.AUX_MONO} fontSize='15px' color={colors.textGray}>
+                        <Text
+                            ml='14px'
+                            mt='-14px'
+                            mr='30px'
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            fontSize='15px'
+                            color={colors.textGray}>
                             {status}
                         </Text>
                     </Flex>
