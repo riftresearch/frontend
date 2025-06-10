@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useEffect } from 'react';
 import { CurrencyModalTitle, ReserveLiquidityParams, TokenMeta, UniswapTokenList, UserSwap } from './types';
-import { BigNumber, ethers } from 'ethers';
+import { ethers, BigNumber } from 'ethers';
 import { USDT_Icon, ETH_Icon, ETH_Logo, Coinbase_BTC_Icon } from './components/other/SVGs';
 import {
     ERC20ABI,
@@ -166,10 +166,26 @@ type Store = {
 
     // swap flow
 
-    swapFlowState: '0-not-started' | '1-reserve-liquidity' | '2-send-bitcoin' | '3-receive-evm-token' | '4-completed' | '5-expired';
-    setSwapFlowState: (state: '0-not-started' | '1-reserve-liquidity' | '2-send-bitcoin' | '3-receive-evm-token' | '4-completed' | '5-expired') => void;
+    swapFlowState:
+        | '0-not-started'
+        | '1-reserve-liquidity'
+        | '2-send-bitcoin'
+        | '3-receive-evm-token'
+        | '4-completed'
+        | '5-expired';
+    setSwapFlowState: (
+        state:
+            | '0-not-started'
+            | '1-reserve-liquidity'
+            | '2-send-bitcoin'
+            | '3-receive-evm-token'
+            | '4-completed'
+            | '5-expired',
+    ) => void;
     depositFlowState: '0-not-started' | '1-finding-liquidity' | '2-awaiting-payment' | '3-payment-recieved';
-    setDepositFlowState: (state: '0-not-started' | '1-finding-liquidity' | '2-awaiting-payment' | '3-payment-recieved') => void;
+    setDepositFlowState: (
+        state: '0-not-started' | '1-finding-liquidity' | '2-awaiting-payment' | '3-payment-recieved',
+    ) => void;
     btcInputSwapAmount: string;
     setBtcInputSwapAmount: (amount: string) => void;
     coinbaseBtcDepositAmount: string;
@@ -216,6 +232,10 @@ type Store = {
     // global
     isOnline: boolean;
     setIsOnline: (b: boolean) => void;
+
+    // Rift Developer Mode
+    riftDeveloperMode: boolean;
+    setRiftDeveloperMode: (mode: boolean) => void;
 
     // Uniswap
     uniswapInputAssetPriceUSD: number;
@@ -590,6 +610,10 @@ export const useStore = create<Store>((set, get) => {
         // global
         isOnline: true, // typeof window != 'undefined' ? navigator.onLine : true
         setIsOnline: (b) => set({ isOnline: b }),
+
+        // Rift Developer Mode
+        riftDeveloperMode: false,
+        setRiftDeveloperMode: (mode) => set({ riftDeveloperMode: mode }),
 
         // Uniswap
         uniswapInputAssetPriceUSD: 0,

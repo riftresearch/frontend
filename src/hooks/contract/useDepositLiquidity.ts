@@ -4,7 +4,6 @@ import { useStore } from '../../store';
 import { ERC20ABI } from '../../utils/constants';
 import { BlockLeaf } from '../../types';
 import { useContractData } from '../../components/providers/ContractDataProvider';
-import { useBundlerCaller } from '@/utils/bundleCaller';
 import { SwapRoute } from '@uniswap/smart-order-router';
 import { useWaitForTransactionReceipt } from 'wagmi';
 
@@ -82,47 +81,6 @@ export function useDepositLiquidity() {
     const userEthAddress = useStore((state) => state.userEthAddress);
     const validAssets = useStore((state) => state.validAssets);
     const { refreshUserSwapsFromAddress } = useContractData();
-    const {
-        proceedWithBundler,
-        status: bundlerStatus,
-        error: bundlerError,
-        data: bundlerTxHash,
-        ...rest
-    } = useBundlerCaller();
-
-    const {
-        data,
-        isLoading: ConfirmingCreation,
-        isSuccess: creationSuccess,
-        error: transactionError,
-        ...receiptRest
-    } = useWaitForTransactionReceipt({
-        confirmations: 1,
-        hash: bundlerTxHash,
-    });
-
-    useEffect(() => {
-        if (bundlerStatus === DepositStatus.Error || transactionError) {
-            setError(bundlerError?.message || transactionError.message);
-            setStatus(DepositStatus.Error);
-        }
-
-        if (bundlerStatus === 'pending') {
-            setError(null);
-            setTxHash(bundlerTxHash);
-            setStatus(DepositStatus.DepositPending);
-        }
-
-        if (bundlerStatus === 'success' && ConfirmingCreation) {
-            setTxHash(bundlerTxHash);
-            setStatus(DepositStatus.DepositPending);
-        }
-
-        if (bundlerStatus === 'success' && creationSuccess) {
-            setTxHash(bundlerTxHash);
-            setStatus(DepositStatus.Confirmed);
-        }
-    }, [ConfirmingCreation, bundlerError, bundlerStatus, bundlerTxHash, creationSuccess, rest, transactionError]);
 
     const resetDepositState = useCallback(() => {
         if (isClient) {
@@ -189,8 +147,6 @@ export function useDepositLiquidity() {
                     refreshUserSwapsFromAddress();
                 } else {
                     // Other ERC20, use bundler
-                    await proceedWithBundler(swapRoute, params.params, setStatus);
-
                     // REPEATED CODE
                     // setStatus(DepositStatus.DepositPending);
                     // setTxHash(depositTx.hash);

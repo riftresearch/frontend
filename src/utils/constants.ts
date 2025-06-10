@@ -1,10 +1,59 @@
-import { BigNumber, BigNumberish, ethers } from 'ethers';
+import { BigNumberish, ethers } from 'ethers';
 import { ValidAsset, DeploymentType } from '../types';
 import { useStore } from '../store';
 import { ETH_Icon, ETH_Logo, USDT_Icon } from '../components/other/SVGs';
 
 export const DEPLOYMENT_TYPE: DeploymentType = DeploymentType.DEVNET; // Local devnet
 export const IS_FRONTEND_PAUSED = false;
+
+export type ChainScopedConfig = {
+    chainId: number;
+    etherscanUrl: string;
+    rpcUrl: string;
+    esploraUrl: string;
+    dataEngineUrl: string;
+    cbbtcTokenAddress: string;
+    riftExchangeAddress: string;
+    bundlerAddress: string;
+};
+
+export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
+    // TODO: Define all fields for base + mainnet
+    // Mainnet
+    1: {
+        chainId: 1,
+        etherscanUrl: 'https://etherscan.io/',
+        rpcUrl: null,
+        esploraUrl: null,
+        dataEngineUrl: null,
+        cbbtcTokenAddress: null,
+        riftExchangeAddress: null,
+        bundlerAddress: null,
+    },
+    // Base Mainnet
+    8453: {
+        chainId: 8453,
+        etherscanUrl: 'https://basescan.org/',
+        rpcUrl: null,
+        esploraUrl: null,
+        dataEngineUrl: null,
+        cbbtcTokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        riftExchangeAddress: null,
+        bundlerAddress: '0x6BFd8137e702540E7A42B74178A4a49Ba43920C4',
+    },
+    // Devnet
+    1337: {
+        chainId: 1337,
+        etherscanUrl: 'https://etherscan.io/',
+        rpcUrl: 'http://0.0.0.0:50101',
+        esploraUrl: 'http://0.0.0.0:50103',
+        dataEngineUrl: 'http://0.0.0.0:50100',
+        cbbtcTokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        riftExchangeAddress: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
+        bundlerAddress: '0x6BFd8137e702540E7A42B74178A4a49Ba43920C4',
+    },
+};
+
 export const MIN_SWAP_AMOUNT_SATS = 3000; // 1000 sats = ~$0.96 currently
 export const MAX_SWAP_AMOUNT_SATS = 100_000_000_000; // 1,000 cbBTC
 export const SAMEES_DEMO_CB_BTC_ADDRESS = '0xA976a1F4Ee6DC8011e777133C6719087C10b6259';
@@ -67,8 +116,8 @@ export const MAINNET_ETH_RPC_URL = [
 
 export const MAX_SWAP_LP_OUTPUTS = 175;
 export const REQUIRED_BLOCK_CONFIRMATIONS = 2;
-export const PROTOCOL_FEE = BigNumber.from(1); // 0.1%
-export const PROTOCOL_FEE_DENOMINATOR = BigNumber.from(1000); // 100% / 0.1% = 1000
+export const PROTOCOL_FEE = ethers.BigNumber.from(1); // 0.1%
+export const PROTOCOL_FEE_DENOMINATOR = ethers.BigNumber.from(1000); // 100% / 0.1% = 1000
 export const CONTRACT_RESERVATION_EXPIRATION_WINDOW_IN_SECONDS = 4 * 60 * 60; // 4 hours
 export const FRONTEND_RESERVATION_EXPIRATION_WINDOW_IN_SECONDS = 1 * 60 * 60; // 1 hour
 

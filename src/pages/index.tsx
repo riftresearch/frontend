@@ -52,7 +52,16 @@ const Home = () => {
     const depositMode = useStore((state) => state.depositMode);
     const { isLaptop, isSmallMobile, windowSize, isLargeDesktop } = useWindowSize();
 
+    // Rift Developer Mode
+    const riftDeveloperMode = useStore((state) => state.riftDeveloperMode);
+    const setRiftDeveloperMode = useStore((state) => state.setRiftDeveloperMode);
+
     const [auctionStep, setAuctionStep] = useState(0);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; show: boolean }>({
+        x: 0,
+        y: 0,
+        show: false,
+    });
 
     const animationURL = '/rift.riv';
     const { rive, RiveComponent } = useRive({
@@ -102,13 +111,65 @@ const Home = () => {
         }
     }, [depositFlowState]);
 
+    // Handle right-click context menu
+    const handleContextMenu = (e: React.MouseEvent) => {
+        // Only show context menu on localhost
+        if (
+            typeof window !== 'undefined' &&
+            (window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1' ||
+                window.location.hostname === '0.0.0.0')
+        ) {
+            e.preventDefault();
+            setContextMenu({
+                x: e.pageX,
+                y: e.pageY,
+                show: true,
+            });
+        }
+    };
+
+    const handleClickOutside = () => {
+        setContextMenu((prev) => ({ ...prev, show: false }));
+    };
+
+    const toggleDeveloperMode = () => {
+        setRiftDeveloperMode(!riftDeveloperMode);
+        setContextMenu((prev) => ({ ...prev, show: false }));
+    };
+
+    // Add event listeners for context menu
+    useEffect(() => {
+        const handleClick = () => handleClickOutside();
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                handleClickOutside();
+            }
+        };
+
+        if (contextMenu.show) {
+            document.addEventListener('click', handleClick);
+            document.addEventListener('keydown', handleEscape);
+        }
+
+        return () => {
+            document.removeEventListener('click', handleClick);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [contextMenu.show]);
+
     const particlesInit = useCallback(async (engine: Engine) => {
         await loadSlim(engine);
     }, []);
 
     const RiftSVG = () => {
         return (
-            <svg width={isTablet ? '50' : '250'} height={isTablet ? '30' : '40'} viewBox='0 0 2293 547' fill='none' xmlns='http://www.w3.org/2000/svg'>
+            <svg
+                width={isTablet ? '50' : '250'}
+                height={isTablet ? '30' : '40'}
+                viewBox='0 0 2293 547'
+                fill='none'
+                xmlns='http://www.w3.org/2000/svg'>
                 <path
                     fillRule='evenodd'
                     clipRule='evenodd'
@@ -123,9 +184,42 @@ const Home = () => {
         <>
             <OpenGraph />
             {/* <OfflinePage> */}
-            <Flex h='100vh' width='100%' direction='column' backgroundImage={'/images/rift_background_low.webp'} backgroundSize='cover' backgroundPosition='center'>
+            <Flex
+                h='100vh'
+                width='100%'
+                direction='column'
+                backgroundImage={'/images/rift_background_low.webp'}
+                backgroundSize='cover'
+                backgroundPosition='center'
+                onContextMenu={handleContextMenu}>
                 <Navbar />
-                <Flex direction={'column'} align='center' w='100%' mt={swapFlowState === '0-not-started' ? '15vh' : '100px'}>
+
+                {/* Developer Mode Indicator */}
+                {riftDeveloperMode && (
+                    <Box
+                        position='fixed'
+                        bottom='20px'
+                        left='50%'
+                        transform='translateX(-50%)'
+                        bg='rgba(255, 160, 76, 0.9)'
+                        color='black'
+                        px={4}
+                        py={2}
+                        borderRadius='md'
+                        fontSize='sm'
+                        fontWeight='bold'
+                        zIndex={9999}
+                        boxShadow='0px 4px 12px rgba(255, 160, 76, 0.3)'
+                        fontFamily={FONT_FAMILIES.AUX_MONO}>
+                        🔧 RIFT DEVELOPER MODE ACTIVATED
+                    </Box>
+                )}
+
+                <Flex
+                    direction={'column'}
+                    align='center'
+                    w='100%'
+                    mt={swapFlowState === '0-not-started' ? '15vh' : '100px'}>
                     {depositFlowState === '0-not-started' && (
                         // 0 - MAIN SWAP UI
                         <>
@@ -194,12 +288,34 @@ const Home = () => {
                                     </Text>
 
                                     <Flex align='center' justify='center'>
-                                        <Spinner color='#FFA04C' width='16px' height='16px' borderRadius={'200px'} thickness='3px' mr='10px' mt='-2px' speed='0.85s' position='relative' zIndex='1' />
-                                        <Text fontSize={'32px'} color={'#fff'} fontWeight={'bold'} fontFamily={FONT_FAMILIES.NOSTROMO} textShadow='0px 0px 4px rgba(150, 150, 150, 0.8)'>
+                                        <Spinner
+                                            color='#FFA04C'
+                                            width='16px'
+                                            height='16px'
+                                            borderRadius={'200px'}
+                                            thickness='3px'
+                                            mr='10px'
+                                            mt='-2px'
+                                            speed='0.85s'
+                                            position='relative'
+                                            zIndex='1'
+                                        />
+                                        <Text
+                                            fontSize={'32px'}
+                                            color={'#fff'}
+                                            fontWeight={'bold'}
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            textShadow='0px 0px 4px rgba(150, 150, 150, 0.8)'>
                                             SEARCHING FOR the best price...
                                         </Text>
                                     </Flex>
-                                    <Text fontSize={'12px'} color={'#aaa'} fontFamily={FONT_FAMILIES.AUX_MONO} fontWeight={'normal'} letterSpacing={'-1px'} textShadow='0px 2px 4px rgba(0, 0, 0, 0.7)'>
+                                    <Text
+                                        fontSize={'12px'}
+                                        color={'#aaa'}
+                                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                                        fontWeight={'normal'}
+                                        letterSpacing={'-1px'}
+                                        textShadow='0px 2px 4px rgba(0, 0, 0, 0.7)'>
                                         {auctionStep === 0 && 'initializing market maker auction...'}
                                         {auctionStep === 1 && 'broadcasting request to liquidity providers...'}
                                         {auctionStep === 2 && 'collecting price quotes...'}
@@ -323,7 +439,13 @@ const Home = () => {
                                 borderLeft={'2px solid #FFA04C'}
                                 borderTop={'2px solid #FFA04C'}
                                 borderRight={'2px solid #FFA04C'}>
-                                <Flex w='100%' h='100%' mt='-80px' justifyContent={'center'} alignItems={'center'} overflow={'clip'}>
+                                <Flex
+                                    w='100%'
+                                    h='100%'
+                                    mt='-80px'
+                                    justifyContent={'center'}
+                                    alignItems={'center'}
+                                    overflow={'clip'}>
                                     <RiveComponent />
                                 </Flex>
                                 <Flex w='90%' direction={'column'} alignItems={'center'} mt='-20px' zIndex='1'>
@@ -339,11 +461,22 @@ const Home = () => {
 
                                     <Flex align='center' justify='center'>
                                         {/* <Spinner color='#FFA04C' width='16px' height='16px' borderRadius={'200px'} thickness='3px' mr='10px' mt='-2px' speed='0.85s' position='relative' zIndex='1' /> */}
-                                        <Text fontSize={'30px'} color={'#fff'} fontWeight={'bold'} fontFamily={FONT_FAMILIES.NOSTROMO} textShadow='0px 0px 4px rgba(150, 150, 150, 0.8)'>
+                                        <Text
+                                            fontSize={'30px'}
+                                            color={'#fff'}
+                                            fontWeight={'bold'}
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            textShadow='0px 0px 4px rgba(150, 150, 150, 0.8)'>
                                             TRANSFERRING ASSETS TO YOUR WALLET...
                                         </Text>
                                     </Flex>
-                                    <Text fontSize={'12px'} color={'#aaa'} fontFamily={FONT_FAMILIES.AUX_MONO} fontWeight={'normal'} letterSpacing={'-1px'} textShadow='0px 2px 4px rgba(0, 0, 0, 0.7)'>
+                                    <Text
+                                        fontSize={'12px'}
+                                        color={'#aaa'}
+                                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                                        fontWeight={'normal'}
+                                        letterSpacing={'-1px'}
+                                        textShadow='0px 2px 4px rgba(0, 0, 0, 0.7)'>
                                         We found you the best price! Assets are being transferred to your wallet...
                                     </Text>
                                 </Flex>
@@ -368,7 +501,15 @@ const Home = () => {
                                 borderLeft={'2px solid #FFA04C'}
                                 borderTop={'2px solid #FFA04C'}
                                 borderRight={'2px solid #FFA04C'}>
-                                <Flex w='80%' h='100%' ml='60px' mt='-19px' justifyContent={'center'} alignItems={'center'} position='absolute' overflow={'clip'}>
+                                <Flex
+                                    w='80%'
+                                    h='100%'
+                                    ml='60px'
+                                    mt='-19px'
+                                    justifyContent={'center'}
+                                    alignItems={'center'}
+                                    position='absolute'
+                                    overflow={'clip'}>
                                     <OrangeButtonRiveComponent />
                                 </Flex>
 
@@ -408,9 +549,19 @@ const Home = () => {
                                 </Flex>
 
                                 {/* PAYMENT DETAILS */}
-                                <Flex w='89%' direction={'row'} justifyContent={'space-between'} alignItems={'center'} mt='55px' gap='15px'>
+                                <Flex
+                                    w='89%'
+                                    direction={'row'}
+                                    justifyContent={'space-between'}
+                                    alignItems={'center'}
+                                    mt='55px'
+                                    gap='15px'>
                                     <Flex direction={'column'} w='100%'>
-                                        <Text fontFamily={FONT_FAMILIES.NOSTROMO} fontSize={'13px'} mb='7px' fontWeight={'bold'}>
+                                        <Text
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            fontSize={'13px'}
+                                            mb='7px'
+                                            fontWeight={'bold'}>
                                             Status
                                         </Text>
                                         <Button
@@ -421,7 +572,12 @@ const Home = () => {
                                             fontSize={'15px'}
                                             fontWeight={'normal'}
                                             justifyContent={'flex-start'}
-                                            onClick={() => window.open('https://mempool.space/tx/b3f89c0729bb16636af6bca2a0d0965e8b32663e9d091067e24f52a73d70e869', '_blank')}
+                                            onClick={() =>
+                                                window.open(
+                                                    'https://mempool.space/tx/b3f89c0729bb16636af6bca2a0d0965e8b32663e9d091067e24f52a73d70e869',
+                                                    '_blank',
+                                                )
+                                            }
                                             letterSpacing={'-1.5px'}
                                             fontFamily={FONT_FAMILIES.AUX_MONO}
                                             border='2px solid rgb(64, 170, 90)'
@@ -470,7 +626,12 @@ const Home = () => {
                                                 opacity: 0,
                                                 transition: 'opacity 0.3s ease',
                                             }}>
-                                            <Flex alignItems={'center'} mt='-1px' mr={'8px'} position='relative' zIndex='1'>
+                                            <Flex
+                                                alignItems={'center'}
+                                                mt='-1px'
+                                                mr={'8px'}
+                                                position='relative'
+                                                zIndex='1'>
                                                 <BsCheckCircleFill size={15.5} color={'rgb(64, 170, 90)'} />
                                             </Flex>
                                             <Text mt='0.5px' position='relative' zIndex='1'>
@@ -480,7 +641,11 @@ const Home = () => {
                                     </Flex>
 
                                     <Flex direction={'column'} w='100%'>
-                                        <Text fontFamily={FONT_FAMILIES.NOSTROMO} fontSize={'13px'} mb='7px' fontWeight={'bold'}>
+                                        <Text
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            fontSize={'13px'}
+                                            mb='7px'
+                                            fontWeight={'bold'}>
                                             TXN HASH
                                         </Text>
                                         <Button
@@ -490,7 +655,12 @@ const Home = () => {
                                             py='19px'
                                             fontSize={'15px'}
                                             fontWeight={'normal'}
-                                            onClick={() => window.open('https://mempool.space/tx/b3f89c0729bb16636af6bca2a0d0965e8b32663e9d091067e24f52a73d70e869', '_blank')}
+                                            onClick={() =>
+                                                window.open(
+                                                    'https://mempool.space/tx/b3f89c0729bb16636af6bca2a0d0965e8b32663e9d091067e24f52a73d70e869',
+                                                    '_blank',
+                                                )
+                                            }
                                             letterSpacing={'-1.5px'}
                                             fontFamily={FONT_FAMILIES.AUX_MONO}
                                             border='2px solid #445BCB'
@@ -539,14 +709,22 @@ const Home = () => {
                                                 opacity: 0,
                                                 transition: 'opacity 0.3s ease',
                                             }}>
-                                            <Flex w='100%' justifyContent='space-between' alignItems='center' position='relative' zIndex='1'>
+                                            <Flex
+                                                w='100%'
+                                                justifyContent='space-between'
+                                                alignItems='center'
+                                                position='relative'
+                                                zIndex='1'>
                                                 <Text mr='10px'>0cabaa52f2c2f49b9a...40a1ddeffb9c201</Text>
                                                 <Box
                                                     as='span'
                                                     cursor='pointer'
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        copyToClipboard('0cabaa52f2c2f49b9a40a1ddeffb9c201', 'Transaction hash copied to clipboard!');
+                                                        copyToClipboard(
+                                                            '0cabaa52f2c2f49b9a40a1ddeffb9c201',
+                                                            'Transaction hash copied to clipboard!',
+                                                        );
                                                     }}>
                                                     <LuCopy color='gray' />
                                                 </Box>
@@ -555,7 +733,12 @@ const Home = () => {
                                     </Flex>
                                     <Flex direction={'column'} w='100%' mt='26px'>
                                         <Button
-                                            onClick={() => window.open('https://mempool.space/tx/b3f89c0729bb16636af6bca2a0d0965e8b32663e9d091067e24f52a73d70e869', '_blank')}
+                                            onClick={() =>
+                                                window.open(
+                                                    'https://mempool.space/tx/b3f89c0729bb16636af6bca2a0d0965e8b32663e9d091067e24f52a73d70e869',
+                                                    '_blank',
+                                                )
+                                            }
                                             bg={colors.offBlackLighter}
                                             borderWidth={'2px'}
                                             borderColor={colors.borderGrayLight}
@@ -611,16 +794,32 @@ const Home = () => {
                                             <Flex mt='-2px ' mr='8px' position='relative' zIndex='1'>
                                                 <HiOutlineExternalLink size={'16px'} color={colors.offerWhite} />
                                             </Flex>
-                                            <Text fontSize='13px' color={colors.offerWhite} fontFamily={FONT_FAMILIES.NOSTROMO} cursor={'pointer'} fontWeight={'normal'} position='relative' zIndex='1'>
+                                            <Text
+                                                fontSize='13px'
+                                                color={colors.offerWhite}
+                                                fontFamily={FONT_FAMILIES.NOSTROMO}
+                                                cursor={'pointer'}
+                                                fontWeight={'normal'}
+                                                position='relative'
+                                                zIndex='1'>
                                                 View on Mempool
                                             </Text>
                                         </Button>
                                     </Flex>
                                 </Flex>
 
-                                <Flex w='89%' direction={'row'} justifyContent={'space-between'} alignItems={'center'} mt='25px'>
+                                <Flex
+                                    w='89%'
+                                    direction={'row'}
+                                    justifyContent={'space-between'}
+                                    alignItems={'center'}
+                                    mt='25px'>
                                     <Flex direction={'column'} w='64%'>
-                                        <Text fontFamily={FONT_FAMILIES.NOSTROMO} fontSize={'13px'} mb='7px' fontWeight={'bold'}>
+                                        <Text
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            fontSize={'13px'}
+                                            mb='7px'
+                                            fontWeight={'bold'}>
                                             Your Address{' '}
                                         </Text>
                                         <Button
@@ -629,7 +828,12 @@ const Home = () => {
                                             px='17px'
                                             py='19px'
                                             fontSize={'15px'}
-                                            onClick={() => window.open('https://mempool.space/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', '_blank')}
+                                            onClick={() =>
+                                                window.open(
+                                                    'https://mempool.space/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+                                                    '_blank',
+                                                )
+                                            }
                                             fontWeight={'normal'}
                                             letterSpacing={'-1.5px'}
                                             fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -647,7 +851,8 @@ const Home = () => {
                                                 left: 0,
                                                 right: 0,
                                                 bottom: 0,
-                                                background: 'linear-gradient(0deg, rgba(242, 119, 31, 0.16) 0%, rgba(111, 44, 15, 0.12) 100%)',
+                                                background:
+                                                    'linear-gradient(0deg, rgba(242, 119, 31, 0.16) 0%, rgba(111, 44, 15, 0.12) 100%)',
                                                 zIndex: -1,
                                                 transition: 'opacity 0.3s ease',
                                             }}
@@ -675,14 +880,25 @@ const Home = () => {
                                                 left: 0,
                                                 right: 0,
                                                 bottom: 0,
-                                                background: 'linear-gradient(0deg, rgba(242, 119, 31, 0.25) 0%, rgba(111, 44, 15, 0.2) 100%)',
+                                                background:
+                                                    'linear-gradient(0deg, rgba(242, 119, 31, 0.25) 0%, rgba(111, 44, 15, 0.2) 100%)',
                                                 zIndex: -1,
                                                 opacity: 0,
                                                 transition: 'opacity 0.3s ease',
                                             }}>
-                                            <Flex w='100%' justifyContent='space-between' alignItems='center' position='relative' zIndex='1'>
+                                            <Flex
+                                                w='100%'
+                                                justifyContent='space-between'
+                                                alignItems='center'
+                                                position='relative'
+                                                zIndex='1'>
                                                 <Text>bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</Text>
-                                                <Text ml='-35px' fontFamily={FONT_FAMILIES.AUX_MONO} fontSize={'13px'} fontWeight={'normal'} color={'#999'}>
+                                                <Text
+                                                    ml='-35px'
+                                                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                                                    fontSize={'13px'}
+                                                    fontWeight={'normal'}
+                                                    color={'#999'}>
                                                     P2PKSH
                                                 </Text>
                                                 <Box
@@ -690,7 +906,10 @@ const Home = () => {
                                                     cursor='pointer'
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        copyToClipboard('bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', 'Bitcoin address copied to clipboard');
+                                                        copyToClipboard(
+                                                            'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+                                                            'Bitcoin address copied to clipboard',
+                                                        );
                                                     }}>
                                                     <LuCopy color='gray' />
                                                 </Box>
@@ -698,7 +917,11 @@ const Home = () => {
                                         </Button>
                                     </Flex>
                                     <Flex direction={'column'} w='33.5%'>
-                                        <Text fontFamily={FONT_FAMILIES.NOSTROMO} fontSize={'13px'} mb='7px' fontWeight={'bold'}>
+                                        <Text
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            fontSize={'13px'}
+                                            mb='7px'
+                                            fontWeight={'bold'}>
                                             BALANCE
                                         </Text>
 
@@ -716,7 +939,12 @@ const Home = () => {
                                             overflow='hidden'
                                             background='transparent'
                                             color='white'
-                                            onClick={() => window.open('https://mempool.space/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', '_blank')}
+                                            onClick={() =>
+                                                window.open(
+                                                    'https://mempool.space/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+                                                    '_blank',
+                                                )
+                                            }
                                             boxShadow='0px 2.566px 23.096px 3.208px rgba(254, 157, 56, 0.29)'
                                             backdropFilter='blur(32.00636672973633px)'
                                             _before={{
@@ -726,7 +954,8 @@ const Home = () => {
                                                 left: 0,
                                                 right: 0,
                                                 bottom: 0,
-                                                background: 'linear-gradient(0deg, rgba(242, 119, 31, 0.16) 0%, rgba(111, 44, 15, 0.12) 100%)',
+                                                background:
+                                                    'linear-gradient(0deg, rgba(242, 119, 31, 0.16) 0%, rgba(111, 44, 15, 0.12) 100%)',
                                                 zIndex: -1,
                                                 transition: 'opacity 0.3s ease',
                                             }}
@@ -754,18 +983,29 @@ const Home = () => {
                                                 left: 0,
                                                 right: 0,
                                                 bottom: 0,
-                                                background: 'linear-gradient(0deg, rgba(242, 119, 31, 0.25) 0%, rgba(111, 44, 15, 0.2) 100%)',
+                                                background:
+                                                    'linear-gradient(0deg, rgba(242, 119, 31, 0.25) 0%, rgba(111, 44, 15, 0.2) 100%)',
                                                 zIndex: -1,
                                                 opacity: 0,
                                                 transition: 'opacity 0.3s ease',
                                             }}>
                                             <Flex w='100%' alignItems='center' position='relative' zIndex='1'>
                                                 <BTC_Logo width={'19px'} height={'19px'} />
-                                                <Text ml='8px' letterSpacing={'-1.5px'} fontFamily={FONT_FAMILIES.AUX_MONO} fontSize={'16px'} fontWeight={'normal'}>
+                                                <Text
+                                                    ml='8px'
+                                                    letterSpacing={'-1.5px'}
+                                                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                                                    fontSize={'16px'}
+                                                    fontWeight={'normal'}>
                                                     1.20240252
                                                 </Text>
                                                 <Spacer />
-                                                <Text ml='15px' fontFamily={FONT_FAMILIES.AUX_MONO} fontSize={'13px'} fontWeight={'normal'} color={'#999'}>
+                                                <Text
+                                                    ml='15px'
+                                                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                                                    fontSize={'13px'}
+                                                    fontWeight={'normal'}
+                                                    color={'#999'}>
                                                     $121,355.63
                                                 </Text>
                                             </Flex>
@@ -794,7 +1034,8 @@ const Home = () => {
                                             left: 0,
                                             right: 0,
                                             bottom: 0,
-                                            background: 'linear-gradient(0deg, rgba(255, 80, 2, 0.35) 0%, rgba(111, 44, 15, 0.12) 100%)',
+                                            background:
+                                                'linear-gradient(0deg, rgba(255, 80, 2, 0.35) 0%, rgba(111, 44, 15, 0.12) 100%)',
                                             zIndex: -1,
                                             transition: 'opacity 0.3s ease',
                                         }}
@@ -822,7 +1063,8 @@ const Home = () => {
                                             left: 0,
                                             right: 0,
                                             bottom: 0,
-                                            background: 'linear-gradient(0deg, rgba(255, 80, 2, 0.45) 0%, rgba(111, 44, 15, 0.2) 100%)',
+                                            background:
+                                                'linear-gradient(0deg, rgba(255, 80, 2, 0.45) 0%, rgba(111, 44, 15, 0.2) 100%)',
                                             zIndex: -1,
                                             opacity: 0,
                                             transition: 'opacity 0.3s ease',
@@ -830,7 +1072,14 @@ const Home = () => {
                                         <Flex mt='-1px' mr='6px' position='relative' zIndex='1'>
                                             <GoHomeFill size={'15px'} color={colors.offerWhite} />
                                         </Flex>
-                                        <Text fontSize='14px' color={colors.offerWhite} fontFamily={FONT_FAMILIES.NOSTROMO} cursor={'pointer'} fontWeight={'normal'} position='relative' zIndex='1'>
+                                        <Text
+                                            fontSize='14px'
+                                            color={colors.offerWhite}
+                                            fontFamily={FONT_FAMILIES.NOSTROMO}
+                                            cursor={'pointer'}
+                                            fontWeight={'normal'}
+                                            position='relative'
+                                            zIndex='1'>
                                             HOME
                                         </Text>
                                     </Button>
@@ -840,6 +1089,37 @@ const Home = () => {
                     )}
                 </Flex>
                 <CurrencyModal />
+
+                {/* Custom Context Menu */}
+                {contextMenu.show && (
+                    <Box
+                        position='fixed'
+                        top={`${contextMenu.y}px`}
+                        left={`${contextMenu.x}px`}
+                        bg='rgba(0, 0, 0, 0.9)'
+                        borderRadius='md'
+                        boxShadow='0px 4px 12px rgba(0, 0, 0, 0.3)'
+                        zIndex={10000}
+                        border='1px solid #333'
+                        overflow='hidden'>
+                        <Button
+                            w='200px'
+                            h='40px'
+                            bg='transparent'
+                            border='none'
+                            color='white'
+                            fontSize='sm'
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            _hover={{ bg: 'rgba(255, 160, 76, 0.1)' }}
+                            _active={{ bg: 'rgba(255, 160, 76, 0.2)' }}
+                            justifyContent='flex-start'
+                            pl={4}
+                            borderRadius='none'
+                            onClick={toggleDeveloperMode}>
+                            {riftDeveloperMode ? '🔧 Disable' : '🔧 Enable'} Rift Developer Mode
+                        </Button>
+                    </Box>
+                )}
             </Flex>
             {/* </OfflinePage> */}
         </>

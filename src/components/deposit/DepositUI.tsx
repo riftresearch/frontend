@@ -65,8 +65,12 @@ import { useDebounce } from '@uidotdev/usehooks';
 
 export const DepositUI = () => {
     const { isMobile } = useWindowSize();
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
-    const fontSize = isMobile ? '20px' : '20px';
+
+    // Use mounted state to prevent hydration errors
+    const fontSize = mounted && isMobile ? '20px' : '20px';
+
     const coinbaseBtcDepositAmount = useStore((state) => state.coinbaseBtcDepositAmount);
     const setCoinbaseBtcDepositAmount = useStore((state) => state.setCoinbaseBtcDepositAmount);
     const btcPriceUSD = useStore.getState().findAssetByName('BTC')?.priceUSD;
@@ -147,6 +151,8 @@ export const DepositUI = () => {
 
     // Clear form values on component mount
     useEffect(() => {
+        setMounted(true);
+
         // Reset all input values when component mounts
         setCoinbaseBtcDepositAmount('');
         setBtcOutputAmount('');
@@ -390,6 +396,8 @@ export const DepositUI = () => {
                 setDots((prev) => (prev === '...' ? '' : prev + '.'));
             }, 350);
             return () => clearInterval(interval);
+        } else {
+            setDots('');
         }
     }, [loading]);
 
@@ -573,6 +581,24 @@ export const DepositUI = () => {
 
     console.log({ btcPriceUSD, btcOutputAmount, coinbaseBtcPriceUSD });
     // DEPOSIT INPUTS UI
+    if (!mounted) {
+        return (
+            <Flex
+                direction='column'
+                align='center'
+                py='27px'
+                w='630px'
+                borderRadius='20px'
+                {...opaqueBackgroundColor}
+                borderBottom={borderColor}
+                borderLeft={borderColor}
+                borderTop={borderColor}
+                borderRight={borderColor}>
+                <Skeleton height='400px' width='90%' borderRadius='10px' />
+            </Flex>
+        );
+    }
+
     return (
         <>
             {depositFlowState === '2-awaiting-payment' && (
@@ -583,8 +609,8 @@ export const DepositUI = () => {
             <Flex
                 direction='column'
                 align='center'
-                py={isMobile ? '20px' : '27px'}
-                w={isMobile ? '100%' : depositFlowState === '2-awaiting-payment' ? '800px' : '630px'}
+                py={mounted && isMobile ? '20px' : '27px'}
+                w={mounted && isMobile ? '100%' : depositFlowState === '2-awaiting-payment' ? '800px' : '630px'}
                 borderRadius='20px'
                 {...opaqueBackgroundColor}
                 borderBottom={borderColor}
@@ -628,7 +654,7 @@ export const DepositUI = () => {
                                             userSelect='none'>
                                             {loading ? `Loading contract data${dots}` : 'You Send'}
                                         </Text>
-                                        {loading && !isMobile ? (
+                                        {loading && !mounted ? (
                                             <Skeleton
                                                 height='62px'
                                                 pt='40px'
@@ -677,8 +703,8 @@ export const DepositUI = () => {
                                                         userBalanceExceeded
                                                             ? colors.redHover
                                                             : !coinbaseBtcDepositAmount
-                                                            ? colors.offWhite
-                                                            : colors.textGray
+                                                              ? colors.offWhite
+                                                              : colors.textGray
                                                     }
                                                     fontSize={'14px'}
                                                     mt='6px'
@@ -735,8 +761,8 @@ export const DepositUI = () => {
                                                     {isAboveMaxSwapLimitCoinbaseBtcDeposit
                                                         ? `${satsToBtc(BigNumber.from(MAX_SWAP_AMOUNT_SATS))} cbBTC Max`
                                                         : isBelowMinCoinbaseBtcDeposit
-                                                        ? `${satsToBtc(BigNumber.from(MIN_SWAP_AMOUNT_SATS))} cbBTC Min`
-                                                        : `${parseFloat(userCoinbaseBtcBalance).toFixed(4)} cbBTC Max`}
+                                                          ? `${satsToBtc(BigNumber.from(MIN_SWAP_AMOUNT_SATS))} cbBTC Min`
+                                                          : `${parseFloat(userCoinbaseBtcBalance).toFixed(4)} cbBTC Max`}
                                                 </Text>
                                             )}
                                         </Flex>
@@ -821,7 +847,7 @@ export const DepositUI = () => {
                                             userSelect='none'>
                                             {loading ? `Loading contract data${dots}` : `You Receive`}
                                         </Text>
-                                        {loading && !isMobile ? (
+                                        {loading && !mounted ? (
                                             <Skeleton
                                                 height='62px'
                                                 pt='40px'
@@ -954,7 +980,6 @@ export const DepositUI = () => {
                                         fontFamily={'Aux'}
                                         letterSpacing={'-0.5px'}
                                         color={colors.offWhite}
-                                        ml='100px'
                                         bg={'#121212'}
                                         fontSize={'12px'}
                                         label='Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported.'
@@ -1090,7 +1115,7 @@ export const DepositUI = () => {
                                     }
 
                                     // Then check if on mobile
-                                    if (isMobile) {
+                                    if (mounted && isMobile) {
                                         toastInfo({
                                             title: 'Hop on your laptop',
                                             description: 'This app is too cool for small screens, mobile coming soon!',
@@ -1114,7 +1139,6 @@ export const DepositUI = () => {
                                     color={canProceedWithDeposit() ? colors.offWhite : colors.darkerGray}
                                     fontFamily='Nostromo'>
                                     {canProceedWithDeposit() ? 'Exchange' : 'Deposits Disabled'}
-
                                 </Text>
                             </Flex>
                         </>

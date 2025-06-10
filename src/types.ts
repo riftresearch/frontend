@@ -39,12 +39,6 @@ export type ReserveLiquidityParams = {
     totalSatsInputInlcudingProxyFee: BigNumber;
 };
 
-export type UpdateExchangeRateParams = {
-    globalVaultIndex: number;
-    newExchangeRate: BigNumberish;
-    expiredSwapReservationIndexes: number[];
-};
-
 export type ValidAsset = {
     name: string;
     display_name?: string;
@@ -82,11 +76,6 @@ export interface ProxyWalletLiquidityProvider {
     amount: string;
     btcExchangeRate: string;
     lockingScriptHex: string;
-}
-
-export interface ProxyWalletSwapArgs {
-    orderNonceHex: string;
-    liquidityProviders: Array<ProxyWalletLiquidityProvider>;
 }
 
 export type AssetType = 'BTC' | 'USDT' | 'USDC' | 'ETH' | 'WETH' | 'WBTC' | 'CoinbaseBTC' | 'cbBTC';
@@ -174,22 +163,6 @@ export interface TokenMeta {
         >;
     };
 }
-export type SingleExecuteSwapAndDeposit = [
-    amountIn: BigNumberish,
-    swapCalldata: BytesLike,
-    params: DepositLiquidityParamsStruct,
-    owner: Address,
-    permit: ISignatureTransfer.PermitTransferFromStruct,
-    signature: BytesLike,
-];
-export type BatchExecuteSwapAndDeposit = [
-    batchPermit: ISignatureTransfer.PermitBatchTransferFromStruct,
-    transferDetails: ISignatureTransfer.SignatureTransferDetailsStruct[],
-    owner: Address,
-    signature: BytesLike,
-    swapCalldata: BytesLike,
-    params: DepositLiquidityParamsStruct,
-];
 
 export interface NestedDepositData {
     vaultIndex: string;
