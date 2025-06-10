@@ -8,4 +8,6 @@ __pycache__/
 .next/
 .next/cache/webpack/
 /src/utils/vault.json
+.env.local
 .env
+.env.production

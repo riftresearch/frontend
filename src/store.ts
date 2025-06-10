@@ -5,33 +5,16 @@ import { ethers, BigNumber } from 'ethers';
 import { USDT_Icon, ETH_Icon, ETH_Logo, Coinbase_BTC_Icon } from './components/other/SVGs';
 import {
     ERC20ABI,
-    DEPLOYMENT_TYPE,
-    MAINNET_BASE_CHAIN_ID,
-    MAINNET_BASE_ETHERSCAN_URL,
-    MAINNET_BASE_RPC_URL,
+    CHAIN_SCOPED_CONFIGS,
+    ChainScopedConfig,
+    CoinbaseBTCAsset,
     REQUIRED_BLOCK_CONFIRMATIONS,
-    TESTNET_BASE_CHAIN_ID,
-    TESTNET_BASE_ETHERSCAN_URL,
-    TESTNET_BASE_RIFT_EXCHANGE_ADDRESS,
-    TESTNET_BASE_RPC_URL,
-    DEVNET_BASE_CHAIN_ID,
-    DEVNET_BASE_RPC_URL,
-    DEVNET_BASE_ETHERSCAN_URL,
-    DEVNET_BASE_RIFT_EXCHANGE_ADDRESS,
-    MAINNET_BASE_RIFT_EXCHANGE_ADDRESS,
-    MAINNET_BASE_CBBTC_TOKEN_ADDRESS,
-    DEVNET_BASE_CBBTC_TOKEN_ADDRESS,
-    TESTNET_BASE_CBBTC_TOKEN_ADDRESS,
     BITCOIN_DECIMALS,
-    MAINNET_DATA_ENGINE_URL,
-    DEVNET_DATA_ENGINE_URL,
-    TESTNET_DATA_ENGINE_URL,
 } from './utils/constants';
 import { ValidAsset } from './types';
 import riftExchangeABI from './abis/RiftExchange.json';
 import { base, baseGoerli, baseSepolia } from 'viem/chains';
 import { DeploymentType } from './types';
-import { getDeploymentValue } from './utils/deploymentUtils';
 import combinedTokenData from '@/json/tokenData.json';
 import { getEffectiveChainID } from './utils/dappHelper';
 
@@ -141,8 +124,20 @@ type Store = {
     updateTotalAvailableLiquidity: (assetKey: string, newLiquidity: BigNumber) => void;
     updateConnectedUserBalanceRaw: (assetKey: string, newBalance: BigNumber) => void;
     updateConnectedUserBalanceFormatted: (assetKey: string, newBalance: string) => void;
-    selectedInputAsset: ValidAsset;
-    setSelectedInputAsset: (asset: ValidAsset) => void;
+
+    // Chain-based selection (replacing selectedInputAsset)
+    selectedChainId: number;
+    selectedChain: ChainScopedConfig & {
+        // Runtime data
+        proverFee: BigNumber;
+        releaserFee: BigNumber;
+        priceUSD: number | null;
+        totalAvailableLiquidity: BigNumber;
+        connectedUserBalanceRaw: BigNumber;
+        connectedUserBalanceFormatted: string;
+    };
+    setSelectedChainId: (chainId: number) => void;
+
     isPayingFeesInBTC: boolean;
     setIsPayingFeesInBTC: (isPayingFeesInBTC: boolean) => void;
 
@@ -165,7 +160,6 @@ type Store = {
     setShowManageDepositVaultsScreen: (show: boolean) => void;
 
     // swap flow
-
     swapFlowState:
         | '0-not-started'
         | '1-reserve-liquidity'
@@ -248,85 +242,80 @@ type Store = {
     setUniswapTokens: (tokens: TokenMeta[]) => void;
 };
 
-export const useStore = create<Store>((set, get) => {
-    // Get the current chain ID
-    const currentChainId = getDeploymentValue(
-        DEPLOYMENT_TYPE,
-        MAINNET_BASE_CHAIN_ID,
-        TESTNET_BASE_CHAIN_ID,
-        DEVNET_BASE_CHAIN_ID,
-    );
+// Helper function to create selected chain from config
+const createSelectedChain = (chainId: number) => {
+    const config = CHAIN_SCOPED_CONFIGS[chainId];
+    if (!config) {
+        throw new Error(`Chain ID ${chainId} not found in CHAIN_SCOPED_CONFIGS`);
+    }
 
-    // Create CoinbaseBTC asset with proper fields
-    const coinbaseBtcAddress = getDeploymentValue(
-        DEPLOYMENT_TYPE,
-        MAINNET_BASE_CBBTC_TOKEN_ADDRESS,
-        TESTNET_BASE_CBBTC_TOKEN_ADDRESS,
-        DEVNET_BASE_CBBTC_TOKEN_ADDRESS,
-    ).toLowerCase();
-
-    const coinbaseBtc = {
-        name: 'CoinbaseBTC',
-        display_name: 'cbBTC',
-        tokenAddress: coinbaseBtcAddress,
-        dataEngineUrl: getDeploymentValue(
-            DEPLOYMENT_TYPE,
-            MAINNET_DATA_ENGINE_URL,
-            TESTNET_DATA_ENGINE_URL,
-            DEVNET_DATA_ENGINE_URL,
-        ),
-        decimals: BITCOIN_DECIMALS,
-        riftExchangeContractAddress: getDeploymentValue(
-            DEPLOYMENT_TYPE,
-            MAINNET_BASE_RIFT_EXCHANGE_ADDRESS,
-            TESTNET_BASE_RIFT_EXCHANGE_ADDRESS,
-            DEVNET_BASE_RIFT_EXCHANGE_ADDRESS,
-        ),
-        riftExchangeAbi: riftExchangeABI.abi,
-        contractChainID: currentChainId,
-        chainDetails: base, // ONLY USE FOR MAINNET SWITCHING NETWORKS WITH METAMASK
-        contractRpcURL: getDeploymentValue(
-            DEPLOYMENT_TYPE,
-            MAINNET_BASE_RPC_URL,
-            TESTNET_BASE_RPC_URL,
-            DEVNET_BASE_RPC_URL,
-        ),
-        etherScanBaseUrl: getDeploymentValue(
-            DEPLOYMENT_TYPE,
-            MAINNET_BASE_ETHERSCAN_URL,
-            TESTNET_BASE_ETHERSCAN_URL,
-            DEVNET_BASE_ETHERSCAN_URL,
-        ),
+    return {
+        ...config,
+        // Runtime data with default values
         proverFee: BigNumber.from(0),
         releaserFee: BigNumber.from(0),
-        icon_svg: Coinbase_BTC_Icon,
-        bg_color: '#2E59BB',
-        border_color: '#1C61FD',
-        border_color_light: '#3B70E8',
-        dark_bg_color: 'rgba(9, 36, 97, 0.3)',
-        light_text_color: '#365B9F',
-        exchangeRateInTokenPerBTC: 1.001,
         priceUSD: null,
         totalAvailableLiquidity: BigNumber.from(0),
         connectedUserBalanceRaw: BigNumber.from(0),
         connectedUserBalanceFormatted: '0',
-        symbol: 'cbBTC',
-        address: coinbaseBtcAddress,
-        chainId: currentChainId,
-        logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp',
+    };
+};
+
+export const useStore = create<Store>((set, get) => {
+    // Default to Base Mainnet
+    const defaultChainId = 8453;
+    const initialSelectedChain = createSelectedChain(defaultChainId);
+
+    // Create assets based on the selected chain using the coinbaseBTCAsset from config
+    const createAssetFromChain = (chainConfig: ChainScopedConfig) => {
+        const coinbaseBtcAddress = chainConfig.cbbtcTokenAddress.toLowerCase();
+        const asset = chainConfig.coinbaseBTCAsset;
+
+        return {
+            name: asset.name,
+            display_name: asset.displayName,
+            tokenAddress: coinbaseBtcAddress,
+            dataEngineUrl: chainConfig.dataEngineUrl,
+            decimals: asset.decimals,
+            riftExchangeContractAddress: chainConfig.riftExchangeAddress,
+            riftExchangeAbi: riftExchangeABI.abi,
+            contractChainID: chainConfig.chainId,
+            chainDetails: base, // ONLY USE FOR MAINNET SWITCHING NETWORKS WITH METAMASK
+            contractRpcURL: chainConfig.rpcUrl,
+            etherScanBaseUrl: chainConfig.etherscanUrl,
+            proverFee: BigNumber.from(0),
+            releaserFee: BigNumber.from(0),
+            icon_svg: Coinbase_BTC_Icon,
+            bg_color: asset.bgColor,
+            border_color: asset.borderColor,
+            border_color_light: asset.borderColorLight,
+            dark_bg_color: asset.darkBgColor,
+            light_text_color: asset.lightTextColor,
+            exchangeRateInTokenPerBTC: asset.exchangeRateInTokenPerBTC,
+            priceUSD: null,
+            totalAvailableLiquidity: BigNumber.from(0),
+            connectedUserBalanceRaw: BigNumber.from(0),
+            connectedUserBalanceFormatted: '0',
+            symbol: asset.symbol,
+            address: coinbaseBtcAddress,
+            chainId: chainConfig.chainId,
+            logoURI: asset.logoURI,
+        };
     };
 
-    // Create default Uniswap asset from coinbaseBtc
+    const initialCoinbaseBtc = createAssetFromChain(initialSelectedChain);
+
+    // Create default Uniswap asset from the chain config
     const defaultUniswapAsset: TokenMeta = {
-        chainId: coinbaseBtc.chainId,
+        chainId: initialSelectedChain.chainId,
         name: 'Coinbase Wrapped BTC',
-        address: coinbaseBtc.address,
-        symbol: coinbaseBtc.symbol,
-        decimals: coinbaseBtc.decimals,
-        logoURI: coinbaseBtc.logoURI,
+        address: initialSelectedChain.cbbtcTokenAddress.toLowerCase(),
+        symbol: initialSelectedChain.coinbaseBTCAsset.symbol,
+        decimals: initialSelectedChain.coinbaseBTCAsset.decimals,
+        logoURI: initialSelectedChain.coinbaseBTCAsset.logoURI,
     };
 
-    // Off-chain BTC is a special case
+    // Off-chain BTC is still a special case
     const btc = {
         name: 'BTC',
         display_name: 'BTC',
@@ -334,7 +323,7 @@ export const useStore = create<Store>((set, get) => {
         icon_svg: null,
         bg_color: '#c26920',
         border_color: '#FFA04C',
-        border_color_light: '#FFA04C',
+        border_color_light: '#FFA04F',
         dark_bg_color: '#372412',
         light_text_color: '#7d572e',
         priceUSD: 88000, // TEST
@@ -344,26 +333,53 @@ export const useStore = create<Store>((set, get) => {
 
     // Use the new key format
     const initialValidAssets: Record<string, ValidAsset> = {
-        [`${currentChainId}-${coinbaseBtcAddress}`]: coinbaseBtc,
+        [`${defaultChainId}-${initialSelectedChain.cbbtcTokenAddress.toLowerCase()}`]: initialCoinbaseBtc,
         '0-bitcoin': btc,
     };
 
     const updatedValidAssets = mergeTokenListIntoValidAssets(
         deduplicateTokens(combinedTokenData),
-        coinbaseBtc,
+        initialCoinbaseBtc,
         initialValidAssets,
     );
 
     return {
-        // setup & asset data
-        selectedInputAsset: coinbaseBtc,
-        setSelectedInputAsset: (selectedInputAsset) => set({ selectedInputAsset }),
+        // Chain-based setup instead of asset-based
+        selectedChainId: defaultChainId,
+        selectedChain: initialSelectedChain,
+        setSelectedChainId: (chainId) => {
+            const newChain = createSelectedChain(chainId);
+            const newAsset = createAssetFromChain(newChain);
+
+            set((state) => {
+                // Update the valid assets with the new chain's asset
+                const newValidAssets = { ...state.validAssets };
+                const newAssetKey = `${chainId}-${newChain.cbbtcTokenAddress.toLowerCase()}`;
+                newValidAssets[newAssetKey] = newAsset;
+
+                return {
+                    selectedChainId: chainId,
+                    selectedChain: newChain,
+                    validAssets: newValidAssets,
+                    selectedUniswapInputAsset: {
+                        chainId: newChain.chainId,
+                        name: 'Coinbase Wrapped BTC',
+                        address: newChain.cbbtcTokenAddress.toLowerCase(),
+                        symbol: newChain.coinbaseBTCAsset.symbol,
+                        decimals: newChain.coinbaseBTCAsset.decimals,
+                        logoURI: newChain.coinbaseBTCAsset.logoURI,
+                    },
+                };
+            });
+        },
+
         userEthAddress: '',
         setUserEthAddress: (userEthAddress) => set({ userEthAddress }),
         ethersRpcProvider: null,
         setEthersRpcProvider: (provider) => set({ ethersRpcProvider: provider }),
         validAssets: updatedValidAssets,
         setValidAssets: (assets) => set({ validAssets: assets }),
+
         updateValidValidAsset: (assetKey, updates) =>
             set((state) => {
                 const assets = { ...state.validAssets };
@@ -376,10 +392,10 @@ export const useStore = create<Store>((set, get) => {
                     if (assetKey === 'BTC') {
                         actualKey = '0-bitcoin';
                     } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
                     } else {
                         // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
                     }
                 }
 
@@ -390,6 +406,7 @@ export const useStore = create<Store>((set, get) => {
 
                 return { validAssets: assets };
             }),
+
         mergeValidAssets: (newAssets) =>
             set((state) => {
                 const mergedAssets = { ...state.validAssets };
@@ -405,7 +422,7 @@ export const useStore = create<Store>((set, get) => {
                     } else if (key === 'BTC') {
                         properKey = '0-bitcoin';
                     } else if (key === 'CoinbaseBTC') {
-                        const existingKey = findAssetKeyByName(state.validAssets, 'CoinbaseBTC', currentChainId);
+                        const existingKey = findAssetKeyByName(state.validAssets, 'CoinbaseBTC', state.selectedChainId);
                         if (existingKey) {
                             properKey = existingKey;
                         }
@@ -417,6 +434,7 @@ export const useStore = create<Store>((set, get) => {
 
                 return { validAssets: mergedAssets };
             }),
+
         updatePriceUSD: (assetKey, newPrice) => {
             return set((state) => {
                 const assets = { ...state.validAssets };
@@ -429,10 +447,10 @@ export const useStore = create<Store>((set, get) => {
                     if (assetKey === 'BTC') {
                         actualKey = '0-bitcoin';
                     } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
                     } else {
                         // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
                     }
                 }
 
@@ -444,6 +462,7 @@ export const useStore = create<Store>((set, get) => {
                 return { validAssets: assets };
             });
         },
+
         updatePriceUSDByAddress: (address, newPrice) =>
             set((state) => {
                 const assets = { ...state.validAssets };
@@ -451,23 +470,17 @@ export const useStore = create<Store>((set, get) => {
                 // Find keys for the given address across all chains
                 const matchingKeys = Object.keys(assets).filter((key) => {
                     const asset = assets[key];
-                    return (
-                        asset.tokenAddress?.toLowerCase() === address.toLowerCase() ||
-                        asset.address?.toLowerCase() === address.toLowerCase()
-                    );
+                    return asset.address && asset.address.toLowerCase() === address.toLowerCase();
                 });
 
-                // If we have matching keys
-                if (matchingKeys.length > 0) {
-                    // Create a new object with updated price for all matching tokens
-                    matchingKeys.forEach((key) => {
-                        assets[key] = { ...assets[key], priceUSD: newPrice };
-                    });
+                // Update all matching assets
+                matchingKeys.forEach((key) => {
+                    assets[key] = { ...assets[key], priceUSD: newPrice };
+                });
 
-                    return { validAssets: assets };
-                }
-                return state;
+                return { validAssets: assets };
             }),
+
         updateTotalAvailableLiquidity: (assetKey, newLiquidity) =>
             set((state) => {
                 const assets = { ...state.validAssets };
@@ -480,10 +493,10 @@ export const useStore = create<Store>((set, get) => {
                     if (assetKey === 'BTC') {
                         actualKey = '0-bitcoin';
                     } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
                     } else {
                         // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
                     }
                 }
 
@@ -494,6 +507,7 @@ export const useStore = create<Store>((set, get) => {
 
                 return { validAssets: assets };
             }),
+
         updateConnectedUserBalanceRaw: (assetKey, newBalance) =>
             set((state) => {
                 const assets = { ...state.validAssets };
@@ -506,10 +520,10 @@ export const useStore = create<Store>((set, get) => {
                     if (assetKey === 'BTC') {
                         actualKey = '0-bitcoin';
                     } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
                     } else {
                         // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
                     }
                 }
 
@@ -520,6 +534,7 @@ export const useStore = create<Store>((set, get) => {
 
                 return { validAssets: assets };
             }),
+
         updateConnectedUserBalanceFormatted: (assetKey, newBalance) =>
             set((state) => {
                 const assets = { ...state.validAssets };
@@ -532,10 +547,10 @@ export const useStore = create<Store>((set, get) => {
                     if (assetKey === 'BTC') {
                         actualKey = '0-bitcoin';
                     } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
                     } else {
                         // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, currentChainId) || assetKey;
+                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
                     }
                 }
 
@@ -546,140 +561,110 @@ export const useStore = create<Store>((set, get) => {
 
                 return { validAssets: assets };
             }),
-        isPayingFeesInBTC: true,
+
+        isPayingFeesInBTC: false,
         setIsPayingFeesInBTC: (isPayingFeesInBTC) => set({ isPayingFeesInBTC }),
 
+        // Helper functions to find assets
+        findAssetByAddress: (address, chainId) => {
+            const assets = get().validAssets;
+            const currentChainId = chainId || get().selectedChainId;
+
+            return Object.values(assets).find(
+                (asset) =>
+                    asset.address &&
+                    asset.address.toLowerCase() === address.toLowerCase() &&
+                    asset.chainId === currentChainId,
+            );
+        },
+
+        findAssetByName: (name, chainId) => {
+            const assets = get().validAssets;
+            const currentChainId = chainId || get().selectedChainId;
+
+            return findAssetByName(assets, name, currentChainId);
+        },
+
+        findAssetBySymbol: (symbol, chainId) => {
+            const assets = get().validAssets;
+            const currentChainId = chainId || get().selectedChainId;
+
+            return Object.values(assets).find(
+                (asset) => asset.symbol === symbol && (asset.chainId === currentChainId || !asset.chainId),
+            );
+        },
+
+        getAssetKey: (asset) => {
+            if (asset.address === 'bitcoin') {
+                return '0-bitcoin';
+            }
+            return `${asset.chainId}-${asset.address.toLowerCase()}`;
+        },
+
         // contract data (deposit vaults, swap reservations)
-        setUserSwapsFromAddress: (swaps: UserSwap[]) => set({ userSwapsFromAddress: swaps }),
+        setUserSwapsFromAddress: (swaps) => set({ userSwapsFromAddress: swaps }),
         userSwapsFromAddress: [],
-        userSwapsLoadingState: 'loading' as 'loading' | 'error' | 'received',
-        setUserSwapsLoadingState: (state: 'loading' | 'error' | 'received') => set({ userSwapsLoadingState: state }),
-
-        // activity page
+        userSwapsLoadingState: 'loading',
+        setUserSwapsLoadingState: (state) => set({ userSwapsLoadingState: state }),
         selectedSwapToManage: null,
-        setSelectedSwapToManage: (selectedSwapToManage) => set({ selectedSwapToManage }),
+        setSelectedSwapToManage: (swap) => set({ selectedSwapToManage: swap }),
         showManageDepositVaultsScreen: false,
-        setShowManageDepositVaultsScreen: (showManageDepositVaultsScreen) => set({ showManageDepositVaultsScreen }),
-
-        // swap flow
+        setShowManageDepositVaultsScreen: (show) => set({ showManageDepositVaultsScreen: show }),
         swapFlowState: '0-not-started',
-        setSwapFlowState: (swapFlowState) => set({ swapFlowState }),
+        setSwapFlowState: (state) => set({ swapFlowState: state }),
         depositFlowState: '0-not-started',
-        setDepositFlowState: (depositFlowState) => set({ depositFlowState }),
+        setDepositFlowState: (state) => set({ depositFlowState: state }),
         btcInputSwapAmount: '',
-        setBtcInputSwapAmount: (btcInputSwapAmount) => set({ btcInputSwapAmount }),
+        setBtcInputSwapAmount: (amount) => set({ btcInputSwapAmount: amount }),
         coinbaseBtcDepositAmount: '',
-        setCoinbaseBtcDepositAmount: (coinbaseBtcDepositAmount) => set({ coinbaseBtcDepositAmount }),
+        setCoinbaseBtcDepositAmount: (amount) => set({ coinbaseBtcDepositAmount: amount }),
         btcOutputAmount: '',
-        setBtcOutputAmount: (btcOutputAmount) => set({ btcOutputAmount }),
+        setBtcOutputAmount: (amount) => set({ btcOutputAmount: amount }),
         coinbaseBtcOutputAmount: '',
-        setCoinbaseBtcOutputAmount: (coinbaseBtcOutputAmount) => set({ coinbaseBtcOutputAmount }),
+        setCoinbaseBtcOutputAmount: (amount) => set({ coinbaseBtcOutputAmount: amount }),
         payoutBTCAddress: '',
-        setPayoutBTCAddress: (payoutBTCAddress) => set({ payoutBTCAddress }),
+        setPayoutBTCAddress: (address) => set({ payoutBTCAddress: address }),
         lowestFeeReservationParams: null,
-        setLowestFeeReservationParams: (lowestFeeReservationParams) => set({ lowestFeeReservationParams }),
+        setLowestFeeReservationParams: (reservation) => set({ lowestFeeReservationParams: reservation }),
         showManageReservationScreen: false,
-        setShowManageReservationScreen: (showManageReservationScreen) => set({ showManageReservationScreen }),
-        depositMode: true,
-        setDepositMode: (depositMode) => set({ depositMode }),
+        setShowManageReservationScreen: (show) => set({ showManageReservationScreen: show }),
+        depositMode: false,
+        setDepositMode: (mode) => set({ depositMode: mode }),
         withdrawAmount: '',
-        setWithdrawAmount: (withdrawAmount) => set({ withdrawAmount }),
+        setWithdrawAmount: (amount) => set({ withdrawAmount: amount }),
+        protocolFeeAmountMicroUsdt: '',
+        setProtocolFeeAmountMicroUsdt: (amount) => set({ protocolFeeAmountMicroUsdt: amount }),
+        swapReservationNotFound: false,
+        setSwapReservationNotFound: (notFound) => set({ swapReservationNotFound: notFound }),
+        currentReservationState: '',
+        setCurrentReservationState: (state) => set({ currentReservationState: state }),
+        areNewDepositsPaused: false,
+        setAreNewDepositsPaused: (paused) => set({ areNewDepositsPaused: paused }),
+        isGasFeeTooHigh: false,
+        setIsGasFeeTooHigh: (isGasFeeTooHigh) => set({ isGasFeeTooHigh: isGasFeeTooHigh }),
+        confirmationBlocksNeeded: REQUIRED_BLOCK_CONFIRMATIONS,
+        setConfirmationBlocksNeeded: (blocks) => set({ confirmationBlocksNeeded: blocks }),
+        currentTotalBlockConfirmations: 0,
+        setCurrentTotalBlockConfirmations: (confirmations) => set({ currentTotalBlockConfirmations: confirmations }),
+        proxyWalletSwapStatus: 0,
+        setProxyWalletSwapStatus: (status) => set({ proxyWalletSwapStatus: status }),
         currencyModalTitle: 'close',
         setCurrencyModalTitle: (x) => set({ currencyModalTitle: x }),
         ethPayoutAddress: '',
-        setEthPayoutAddress: (ethPayoutAddress) => set({ ethPayoutAddress }),
+        setEthPayoutAddress: (address) => set({ ethPayoutAddress: address }),
         bitcoinSwapTransactionHash: '',
-        setBitcoinSwapTransactionHash: (bitcoinSwapTransactionHash) => set({ bitcoinSwapTransactionHash }),
-        protocolFeeAmountMicroUsdt: '',
-        setProtocolFeeAmountMicroUsdt: (protocolFeeAmountMicroUsdt) => set({ protocolFeeAmountMicroUsdt }),
-        swapReservationNotFound: false,
-        setSwapReservationNotFound: (swapReservationNotFound) => set({ swapReservationNotFound }),
-        currentReservationState: '',
-        setCurrentReservationState: (currentReservationState) => set({ currentReservationState }),
-        areNewDepositsPaused: false,
-        setAreNewDepositsPaused: (areNewDepositsPaused) => set({ areNewDepositsPaused }),
-        isGasFeeTooHigh: false,
-        setIsGasFeeTooHigh: (isGasFeeTooHigh) => set({ isGasFeeTooHigh }),
-        confirmationBlocksNeeded: REQUIRED_BLOCK_CONFIRMATIONS,
-        setConfirmationBlocksNeeded: (confirmationBlocksNeeded) => set({ confirmationBlocksNeeded }),
-        currentTotalBlockConfirmations: 0,
-        setCurrentTotalBlockConfirmations: (currentTotalBlockConfirmations) => set({ currentTotalBlockConfirmations }),
-        proxyWalletSwapStatus: null,
-        setProxyWalletSwapStatus: (proxyWalletSwapStatus) => set({ proxyWalletSwapStatus }),
-
-        // global
-        isOnline: true, // typeof window != 'undefined' ? navigator.onLine : true
+        setBitcoinSwapTransactionHash: (hash) => set({ bitcoinSwapTransactionHash: hash }),
+        isOnline: true,
         setIsOnline: (b) => set({ isOnline: b }),
-
-        // Rift Developer Mode
         riftDeveloperMode: false,
         setRiftDeveloperMode: (mode) => set({ riftDeveloperMode: mode }),
-
-        // Uniswap
         uniswapInputAssetPriceUSD: 0,
-        setUniswapInputAssetPriceUSD: (price: number) => set({ uniswapInputAssetPriceUSD: price }),
+        setUniswapInputAssetPriceUSD: (price) => set({ uniswapInputAssetPriceUSD: price }),
         selectedUniswapInputAsset: defaultUniswapAsset,
-        setSelectedUniswapInputAsset: (asset: TokenMeta) => {
-            set({ selectedUniswapInputAsset: asset });
-        },
-        selectedChainID: currentChainId,
-        setSelectChainID: (chainID: number) => set({ selectedChainID: chainID }),
-        uniswapTokens: deduplicateTokens(combinedTokenData).tokens,
-        setUniswapTokens: (tokens: TokenMeta[]) => set({ uniswapTokens: tokens }),
-
-        // Helper functions to find assets
-        findAssetByAddress: (address: string, chainId?: number) => {
-            const assets = get().validAssets;
-
-            // If chainId is provided, create a specific key to look up
-            if (chainId !== undefined) {
-                const key = `${chainId}-${address.toLowerCase()}`;
-                return assets[key];
-            }
-
-            // Otherwise, search across all assets
-            return Object.values(assets).find(
-                (asset) =>
-                    (asset.address?.toLowerCase() === address.toLowerCase() ||
-                        asset.tokenAddress?.toLowerCase() === address.toLowerCase()) &&
-                    (chainId === undefined || asset.chainId === chainId),
-            );
-        },
-        findAssetByName: (name: string, chainId?: number) => {
-            const assets = get().validAssets;
-
-            // Special handling for BTC and CoinbaseBTC
-            if (name === 'BTC' && assets['0-bitcoin']) {
-                return assets['0-bitcoin'];
-            }
-
-            if (name === 'CoinbaseBTC') {
-                const key = findAssetKeyByName(assets, 'CoinbaseBTC', chainId ?? currentChainId);
-                if (key) return assets[key];
-            }
-
-            console.log('Debug', { assets });
-
-            // Search across all assets
-            return Object.values(assets).find(
-                (asset) =>
-                    asset.name?.toLowerCase() === name.toLowerCase() &&
-                    (chainId === undefined || asset.chainId === chainId),
-            );
-        },
-        findAssetBySymbol: (symbol: string, chainId?: number) => {
-            const assets = get().validAssets;
-
-            // Search across all assets
-            return Object.values(assets).find(
-                (asset) =>
-                    (asset.symbol?.toLowerCase() === symbol.toLowerCase() ||
-                        asset.display_name?.toLowerCase() === symbol.toLowerCase()) &&
-                    (chainId === undefined || asset.chainId === chainId),
-            );
-        },
-        getAssetKey: (asset: ValidAsset) => {
-            return `${asset.chainId || 0}-${(asset.address || asset.tokenAddress || '').toLowerCase()}`;
-        },
+        setSelectedUniswapInputAsset: (asset) => set({ selectedUniswapInputAsset: asset }),
+        selectedChainID: defaultChainId,
+        setSelectChainID: (chainID) => set({ selectedChainID: chainID }),
+        uniswapTokens: [],
+        setUniswapTokens: (tokens) => set({ uniswapTokens: tokens }),
     };
 });
