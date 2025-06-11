@@ -2,6 +2,7 @@ import { BigNumberish, ethers } from 'ethers';
 import { ValidAsset, DeploymentType, ChainScopedConfig, TokenStyling } from '../types';
 import { useStore } from '../store';
 import { ETH_Icon, ETH_Logo, USDT_Icon } from '../components/other/SVGs';
+import { minOutputSats } from './contractUtils';
 
 export const IS_FRONTEND_PAUSED = process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === 'true';
 
@@ -19,6 +20,7 @@ export const PROTOCOL_FEE_DENOMINATOR = ethers.BigNumber.from(1000); // 100% / 0
 export const CONTRACT_RESERVATION_EXPIRATION_WINDOW_IN_SECONDS = 4 * 60 * 60; // 4 hours
 export const FRONTEND_RESERVATION_EXPIRATION_WINDOW_IN_SECONDS = 1 * 60 * 60; // 1 hour
 export const opaqueBackgroundColor = { bg: 'rgba(15, 15, 15, 0.55)', backdropFilter: 'blur(10px)' };
+console.log('minOutputSats', minOutputSats());
 
 export const bitcoin: TokenStyling = {
     name: 'Bitcoin',
@@ -87,6 +89,11 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
             tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
             decimals: 8,
             tokenStyling: cbBTCDisplayInfo,
+            chainDetails: {
+                chainId: 8453,
+                name: 'Base',
+                type: 'Mainnet',
+            },
         },
         riftExchangeAddress: '0x1234567890123456789012345678901234567890', // TODO: Replace with actual address
         bundler3: {
@@ -110,6 +117,11 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
             tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
             decimals: 8,
             tokenStyling: cbBTCDisplayInfo,
+            chainDetails: {
+                chainId: 1337,
+                name: 'Devnet',
+                type: 'Testnet',
+            },
         },
         riftExchangeAddress: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
         bundler3: {
@@ -120,193 +132,3 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
         },
     },
 };
-
-// add erc-20 to the back so we can auto import using tevm + protocol bender
-export const ERC20ABI = [
-    {
-        type: 'event',
-        name: 'Approval',
-        inputs: [
-            {
-                indexed: true,
-                name: 'owner',
-                type: 'address',
-            },
-            {
-                indexed: true,
-                name: 'spender',
-                type: 'address',
-            },
-            {
-                indexed: false,
-                name: 'value',
-                type: 'uint256',
-            },
-        ],
-    },
-    {
-        type: 'event',
-        name: 'Transfer',
-        inputs: [
-            {
-                indexed: true,
-                name: 'from',
-                type: 'address',
-            },
-            {
-                indexed: true,
-                name: 'to',
-                type: 'address',
-            },
-            {
-                indexed: false,
-                name: 'value',
-                type: 'uint256',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'allowance',
-        stateMutability: 'view',
-        inputs: [
-            {
-                name: 'owner',
-                type: 'address',
-            },
-            {
-                name: 'spender',
-                type: 'address',
-            },
-        ],
-        outputs: [
-            {
-                type: 'uint256',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'approve',
-        stateMutability: 'nonpayable',
-        inputs: [
-            {
-                name: 'spender',
-                type: 'address',
-            },
-            {
-                name: 'amount',
-                type: 'uint256',
-            },
-        ],
-        outputs: [
-            {
-                type: 'bool',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'balanceOf',
-        stateMutability: 'view',
-        inputs: [
-            {
-                name: 'account',
-                type: 'address',
-            },
-        ],
-        outputs: [
-            {
-                type: 'uint256',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'decimals',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            {
-                type: 'uint8',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'name',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            {
-                type: 'string',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'symbol',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            {
-                type: 'string',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'totalSupply',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            {
-                type: 'uint256',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'transfer',
-        stateMutability: 'nonpayable',
-        inputs: [
-            {
-                name: 'recipient',
-                type: 'address',
-            },
-            {
-                name: 'amount',
-                type: 'uint256',
-            },
-        ],
-        outputs: [
-            {
-                type: 'bool',
-            },
-        ],
-    },
-    {
-        type: 'function',
-        name: 'transferFrom',
-        stateMutability: 'nonpayable',
-        inputs: [
-            {
-                name: 'sender',
-                type: 'address',
-            },
-            {
-                name: 'recipient',
-                type: 'address',
-            },
-            {
-                name: 'amount',
-                type: 'uint256',
-            },
-        ],
-        outputs: [
-            {
-                type: 'bool',
-            },
-        ],
-    },
-];
