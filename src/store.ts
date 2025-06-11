@@ -1,13 +1,20 @@
 import { create } from 'zustand';
 import { useEffect } from 'react';
-import { CurrencyModalTitle, ReserveLiquidityParams, TokenMeta, UniswapTokenList, UserSwap } from './types';
+import {
+    CurrencyModalTitle,
+    ChainScopedConfig,
+    ReserveLiquidityParams,
+    TokenMeta,
+    UniswapTokenList,
+    UserSwap,
+} from './types';
 import { ethers, BigNumber } from 'ethers';
 import { USDT_Icon, ETH_Icon, ETH_Logo, Coinbase_BTC_Icon } from './components/other/SVGs';
 import {
     ERC20ABI,
     CHAIN_SCOPED_CONFIGS,
-    ChainScopedConfig,
-    CoinbaseBTCAsset,
+    bitcoin,
+    cbBTCDisplayInfo,
     REQUIRED_BLOCK_CONFIRMATIONS,
     BITCOIN_DECIMALS,
 } from './utils/constants';
@@ -17,81 +24,7 @@ import { base, baseGoerli, baseSepolia } from 'viem/chains';
 import { DeploymentType } from './types';
 import combinedTokenData from '@/json/tokenData.json';
 import { getEffectiveChainID } from './utils/dappHelper';
-
-/**
- * Deduplicates tokens in a token list to ensure only unique tokens per chain by address
- */
-function deduplicateTokens(tokenList: UniswapTokenList): UniswapTokenList {
-    const addressChainMap = new Map<string, TokenMeta>();
-
-    tokenList.tokens.forEach((token) => {
-        const key = `${token.chainId}-${token.address.toLowerCase()}`;
-        if (!addressChainMap.has(key)) {
-            addressChainMap.set(key, token);
-        }
-    });
-
-    // Sort tokens alphabetically by symbol after deduplication
-    const sortedTokens = Array.from(addressChainMap.values()).sort((a, b) =>
-        a.symbol.toUpperCase().localeCompare(b.symbol.toUpperCase()),
-    );
-
-    return {
-        ...tokenList,
-        tokens: sortedTokens,
-    };
-}
-
-/**
- * Merges a Uniswap token list into an existing record of valid assets.
- *
- * @param tokenList - The Uniswap token list object.
- * @param defaultAssetTemplate - A template ValidAsset (e.g. your CoinbaseBTC asset) that contains all required properties.
- * @param existingAssets - (Optional) Existing valid assets record to merge into.
- * @returns A new record of ValidAsset objects keyed by token symbol.
- */
-export function mergeTokenListIntoValidAssets(
-    tokenList: UniswapTokenList,
-    defaultAssetTemplate: ValidAsset,
-    existingAssets: Record<string, ValidAsset> = {},
-): Record<string, ValidAsset> {
-    const convertIpfsUri = (uri: string | undefined, gateway: string = 'https://ipfs.io/ipfs/') => {
-        if (!uri) return null;
-        if (uri.startsWith('ipfs://')) {
-            // Remove the "ipfs://" prefix.
-            let cid = uri.slice('ipfs://'.length);
-            // If the CID starts with "ipfs/", remove that segment.
-            if (cid.startsWith('ipfs/')) {
-                cid = cid.slice('ipfs/'.length);
-            }
-            return gateway + cid;
-        }
-        return uri;
-    };
-
-    // Start with the provided existing assets
-    const mergedAssets: Record<string, ValidAsset> = { ...existingAssets };
-
-    tokenList.tokens.forEach((token) => {
-        // Use a unique key based on chain ID and address
-        const key = `${token.chainId}-${token.address.toLowerCase()}`;
-
-        // The new asset is built by taking the template and overriding
-        // properties with those from the token.
-        mergedAssets[key] = {
-            ...defaultAssetTemplate,
-            ...token,
-            // Override with token-specific data:
-            display_name: token.symbol,
-            tokenAddress: token.address,
-            // If available, use the token's logo URI; otherwise, fall back to the template icon.
-            icon_svg: convertIpfsUri(token.logoURI) || defaultAssetTemplate.icon_svg,
-            fromTokenList: true,
-        };
-    });
-
-    return mergedAssets;
-}
+import { deduplicateTokens, mergeTokenListIntoValidAssets } from './utils/tokenListHelpers';
 
 /**
  * Helper function to find an asset by name in the validAssets Record
@@ -242,104 +175,29 @@ type Store = {
     setUniswapTokens: (tokens: TokenMeta[]) => void;
 };
 
-// Helper function to create selected chain from config
-const createSelectedChain = (chainId: number) => {
-    const config = CHAIN_SCOPED_CONFIGS[chainId];
-    if (!config) {
-        throw new Error(`Chain ID ${chainId} not found in CHAIN_SCOPED_CONFIGS`);
-    }
-
-    return {
-        ...config,
-        // Runtime data with default values
-        proverFee: BigNumber.from(0),
-        releaserFee: BigNumber.from(0),
-        priceUSD: null,
-        totalAvailableLiquidity: BigNumber.from(0),
-        connectedUserBalanceRaw: BigNumber.from(0),
-        connectedUserBalanceFormatted: '0',
-    };
-};
-
 export const useStore = create<Store>((set, get) => {
     // Default to Base Mainnet
     const defaultChainId = 8453;
     const initialSelectedChain = createSelectedChain(defaultChainId);
-
-    // Create assets based on the selected chain using the coinbaseBTCAsset from config
-    const createAssetFromChain = (chainConfig: ChainScopedConfig) => {
-        const coinbaseBtcAddress = chainConfig.cbbtcTokenAddress.toLowerCase();
-        const asset = chainConfig.coinbaseBTCAsset;
-
-        return {
-            name: asset.name,
-            display_name: asset.displayName,
-            tokenAddress: coinbaseBtcAddress,
-            dataEngineUrl: chainConfig.dataEngineUrl,
-            decimals: asset.decimals,
-            riftExchangeContractAddress: chainConfig.riftExchangeAddress,
-            riftExchangeAbi: riftExchangeABI.abi,
-            contractChainID: chainConfig.chainId,
-            chainDetails: base, // ONLY USE FOR MAINNET SWITCHING NETWORKS WITH METAMASK
-            contractRpcURL: chainConfig.rpcUrl,
-            etherScanBaseUrl: chainConfig.etherscanUrl,
-            proverFee: BigNumber.from(0),
-            releaserFee: BigNumber.from(0),
-            icon_svg: Coinbase_BTC_Icon,
-            bg_color: asset.bgColor,
-            border_color: asset.borderColor,
-            border_color_light: asset.borderColorLight,
-            dark_bg_color: asset.darkBgColor,
-            light_text_color: asset.lightTextColor,
-            exchangeRateInTokenPerBTC: asset.exchangeRateInTokenPerBTC,
-            priceUSD: null,
-            totalAvailableLiquidity: BigNumber.from(0),
-            connectedUserBalanceRaw: BigNumber.from(0),
-            connectedUserBalanceFormatted: '0',
-            symbol: asset.symbol,
-            address: coinbaseBtcAddress,
-            chainId: chainConfig.chainId,
-            logoURI: asset.logoURI,
-        };
-    };
-
-    const initialCoinbaseBtc = createAssetFromChain(initialSelectedChain);
 
     // Create default Uniswap asset from the chain config
     const defaultUniswapAsset: TokenMeta = {
         chainId: initialSelectedChain.chainId,
         name: 'Coinbase Wrapped BTC',
         address: initialSelectedChain.cbbtcTokenAddress.toLowerCase(),
-        symbol: initialSelectedChain.coinbaseBTCAsset.symbol,
-        decimals: initialSelectedChain.coinbaseBTCAsset.decimals,
-        logoURI: initialSelectedChain.coinbaseBTCAsset.logoURI,
+        symbol: cbBTCDisplayInfo.symbol,
+        decimals: cbBTCDisplayInfo.decimals,
+        logoURI: cbBTCDisplayInfo.logoURI,
     };
 
-    // Off-chain BTC is still a special case
-    const btc = {
-        name: 'BTC',
-        display_name: 'BTC',
-        decimals: 8,
-        icon_svg: null,
-        bg_color: '#c26920',
-        border_color: '#FFA04C',
-        border_color_light: '#FFA04F',
-        dark_bg_color: '#372412',
-        light_text_color: '#7d572e',
-        priceUSD: 88000, // TEST
-        chainId: 0, // Non-EVM chain
-        address: 'bitcoin', // Placeholder for off-chain BTC
-    };
-
-    // Use the new key format
+    // Initialize with basic BTC asset
     const initialValidAssets: Record<string, ValidAsset> = {
-        [`${defaultChainId}-${initialSelectedChain.cbbtcTokenAddress.toLowerCase()}`]: initialCoinbaseBtc,
-        '0-bitcoin': btc,
+        '0-bitcoin': btcDisplayInfo,
     };
 
     const updatedValidAssets = mergeTokenListIntoValidAssets(
         deduplicateTokens(combinedTokenData),
-        initialCoinbaseBtc,
+        btcDisplayInfo, // Use BTC as template instead of coinbaseBtc
         initialValidAssets,
     );
 
@@ -348,26 +206,19 @@ export const useStore = create<Store>((set, get) => {
         selectedChainId: defaultChainId,
         selectedChain: initialSelectedChain,
         setSelectedChainId: (chainId) => {
-            const newChain = createSelectedChain(chainId);
-            const newAsset = createAssetFromChain(newChain);
+            const newChain = CHAIN_SCOPED_CONFIGS[chainId];
 
             set((state) => {
-                // Update the valid assets with the new chain's asset
-                const newValidAssets = { ...state.validAssets };
-                const newAssetKey = `${chainId}-${newChain.cbbtcTokenAddress.toLowerCase()}`;
-                newValidAssets[newAssetKey] = newAsset;
-
                 return {
                     selectedChainId: chainId,
                     selectedChain: newChain,
-                    validAssets: newValidAssets,
                     selectedUniswapInputAsset: {
                         chainId: newChain.chainId,
                         name: 'Coinbase Wrapped BTC',
                         address: newChain.cbbtcTokenAddress.toLowerCase(),
-                        symbol: newChain.coinbaseBTCAsset.symbol,
-                        decimals: newChain.coinbaseBTCAsset.decimals,
-                        logoURI: newChain.coinbaseBTCAsset.logoURI,
+                        symbol: cbBTCDisplayInfo.symbol,
+                        decimals: cbBTCDisplayInfo.decimals,
+                        logoURI: cbBTCDisplayInfo.logoURI,
                     },
                 };
             });

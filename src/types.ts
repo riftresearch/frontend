@@ -1,72 +1,50 @@
 import type { BigNumber, BigNumberish, BytesLike, ethers } from 'ethers';
 import type { Address } from 'viem';
 
-export enum ReservationState {
-    None,
-    Created,
-    Proved,
-    Completed,
-    Expired,
-}
-
-export type UserSwap = {
-    vaultIndex: string;
-    depositTimestamp: number;
-    depositAmount: string;
-    depositFee: string;
-    expectedSats: number;
-    btcPayoutScriptPubKey: string;
-    specifiedPayoutAddress: string;
-    ownerAddress: string;
-    salt: string;
-    confirmationBlocks: number;
-    attestedBitcoinBlockHeight: number;
-    deposit_block_number: number;
-    deposit_block_hash: string;
-    deposit_txid: string;
-    swap_proofs: any[];
+export type Bundler3Config = {
+    bundler3Address: string;
+    generalAdapter1Address: string;
+    paraswapAdapterAddress: string;
+    riftcbBTCAdapterAddress: string;
 };
 
-export type ReserveLiquidityParams = {
-    swapAmountInSats: number;
-    vaultIndexesToReserve: number[];
-    amountsInMicroUsdtToReserve: BigNumberish[];
-    amountsInSatsToBePaid: BigNumberish[];
-    btcPayoutLockingScripts: string[];
-    btcExchangeRates: BigNumberish[];
-    ethPayoutAddress: string;
-    expiredSwapReservationIndexes: number[];
-    totalSatsInputInlcudingProxyFee: BigNumber;
+export type ChainScopedConfig = {
+    name: string;
+    type: 'Mainnet' | 'Testnet' | 'Devnet';
+    chainId: number;
+    etherscanUrl: string;
+    rpcUrl: string;
+    esploraUrl: string;
+    dataEngineUrl: string;
+    underlyingSwappingAsset: ValidAsset;
+    riftExchangeAddress: string;
+    bundler3: Bundler3Config;
 };
 
-export type ValidAsset = {
+// Styling and display information for a token
+export type TokenStyling = {
     name: string;
     display_name?: string;
-    tokenAddress?: string;
-    dataEngineUrl?: string;
-    decimals: number;
-    riftExchangeContractAddress?: string;
-    riftExchangeAbi?: any;
-    contractChainID?: number;
-    chainDetails?: any;
-    contractRpcURL?: string;
-    etherScanBaseUrl?: string;
-    proverFee?: BigNumber;
-    releaserFee?: BigNumber;
-    icon_svg: any;
-    bg_color: string;
-    border_color: string;
-    border_color_light: string;
-    dark_bg_color: string;
-    light_text_color: string;
+    icon_svg?: any;
+    bg_color?: string;
+    border_color?: string;
+    border_color_light?: string;
+    dark_bg_color?: string;
+    light_text_color?: string;
     exchangeRateInTokenPerBTC?: number | null;
     exchangeRateInSmallestTokenUnitPerSat?: BigNumber | null;
-    priceUSD: number | null;
-    totalAvailableLiquidity?: BigNumber;
+    priceUSD?: number | null;
     connectedUserBalanceRaw?: BigNumber;
     connectedUserBalanceFormatted?: string;
     fromTokenList?: boolean;
 } & Partial<TokenMeta>;
+
+// Keep ValidAsset as an alias for backward compatibility
+export type ValidAsset = {
+    tokenAddress: string;
+    decimals: number;
+    tokenInfo: TokenStyling;
+};
 
 export type LiqudityProvider = {
     depositVaultIndexes: number[];
@@ -178,6 +156,30 @@ export interface NestedDepositData {
     attestedBitcoinBlockHeight: number;
 }
 
+export interface UserSwap {
+    vaultIndex: string;
+    depositTimestamp: number;
+    depositAmount: string;
+    depositFee: string;
+    expectedSats: number;
+    btcPayoutScriptPubKey: string;
+    specifiedPayoutAddress: string;
+    ownerAddress: string;
+    salt: string;
+    confirmationBlocks: number;
+    attestedBitcoinBlockHeight: number;
+    deposit_block_number: number;
+    deposit_block_hash: string;
+    deposit_txid: string;
+    swap_proofs: any[]; // Based on ChainAwareProposedSwap from dataEngineClient
+}
+
+export interface ReserveLiquidityParams {
+    vaultIndexes: number[];
+    amountsToReserve: BigNumber[];
+    // Add other fields as needed based on usage
+}
+
 export interface ContractDataContextType {
     loading: boolean;
     error: any;
@@ -204,54 +206,3 @@ export type DepositLiquidityParamsStruct = {
     safeBlockSiblings: BytesLike[];
     safeBlockPeaks: BytesLike[];
 };
-
-export declare namespace ISignatureTransfer {
-    export type TokenPermissionsStruct = { token: string; amount: BigNumberish };
-
-    export type TokenPermissionsStructOutput = [string, BigNumber] & {
-        token: string;
-        amount: BigNumber;
-    };
-
-    export type PermitTransferFromStruct = {
-        permitted: ISignatureTransfer.TokenPermissionsStruct;
-        nonce: BigNumberish;
-        deadline: BigNumberish;
-    };
-
-    export type PermitTransferFromStructOutput = [
-        ISignatureTransfer.TokenPermissionsStructOutput,
-        BigNumber,
-        BigNumber,
-    ] & {
-        permitted: ISignatureTransfer.TokenPermissionsStructOutput;
-        nonce: BigNumber;
-        deadline: BigNumber;
-    };
-
-    export type SignatureTransferDetailsStruct = {
-        to: string;
-        requestedAmount: BigNumberish;
-    };
-
-    export type SignatureTransferDetailsStructOutput = [string, BigNumber] & {
-        to: string;
-        requestedAmount: BigNumber;
-    };
-
-    export type PermitBatchTransferFromStruct = {
-        permitted: ISignatureTransfer.TokenPermissionsStruct[];
-        nonce: BigNumberish;
-        deadline: BigNumberish;
-    };
-
-    export type PermitBatchTransferFromStructOutput = [
-        ISignatureTransfer.TokenPermissionsStructOutput[],
-        BigNumber,
-        BigNumber,
-    ] & {
-        permitted: ISignatureTransfer.TokenPermissionsStructOutput[];
-        nonce: BigNumber;
-        deadline: BigNumber;
-    };
-}
