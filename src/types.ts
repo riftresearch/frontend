@@ -39,7 +39,7 @@ export type ValidAsset = {
     priceUSD?: number | null;
     connectedUserBalanceRaw?: BigNumber;
     totalAvailableLiquidity?: BigNumber;
-    chainDetails: any;
+    chainDetails?: any;
     tokenStyling: TokenStyling;
 };
 
