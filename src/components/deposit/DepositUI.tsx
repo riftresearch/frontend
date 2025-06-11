@@ -76,7 +76,6 @@ export const DepositUI = () => {
     const btcPriceUSD = useStore.getState().findAssetByName('BTC')?.priceUSD;
     const userEthAddress = useStore((state) => state.userEthAddress);
     const [userBalanceExceeded, setUserBalanceExceeded] = useState(false);
-    const selectedInputAsset = useStore((state) => state.selectedInputAsset);
     const coinbaseBtcPriceUSD = useStore.getState().findAssetByName('CoinbaseBTC')?.priceUSD;
     const [availableLiquidity, setAvailableLiquidity] = useState(BigNumber.from(0));
     const [coinbaseBtcExchangeRatePerBTC, setCoinbaseBtcExchangeRatePerBTC] = useState(0);
@@ -122,19 +121,11 @@ export const DepositUI = () => {
     const selectedUniswapInputAsset = useStore((state) => state.selectedUniswapInputAsset);
     const setSelectedUniswapInputAsset = useStore((state) => state.setSelectedUniswapInputAsset);
     const setSelectedInputAsset = useStore((state) => state.setSelectedInputAsset);
+    const selectedInputAsset = useStore((state) => state.selectedInputAsset);
     const debouncedCoinbaseBtcDepositAmount = useDebounce(coinbaseBtcDepositAmount, 300);
+    const selectedChain = useStore((state) => state.selectedChain);
 
-    // Use the findAssetByName function for dynamic asset lookups
-    const getAssetByName = useCallback((name: string) => {
-        return useStore.getState().findAssetByName(name);
-    }, []);
-
-    // Helper function to get the selected input asset's current data
-    const getSelectedAsset = useCallback(() => {
-        return useStore.getState().findAssetByName(selectedInputAsset.name);
-    }, [selectedInputAsset.name]);
-
-    const validAssetPriceUSD = getSelectedAsset()?.priceUSD;
+    const validAssetPriceUSD = selectedInputAsset?.priceUSD;
     // Route finding
     const {
         isFetching,
@@ -194,15 +185,16 @@ export const DepositUI = () => {
     };
 
     // update token price and available liquidity
-    useEffect(() => {
-        if (selectedInputAsset) {
-            const currentAsset = getSelectedAsset();
-            const totalAvailableLiquidity = currentAsset?.totalAvailableLiquidity;
-            setAvailableLiquidity(totalAvailableLiquidity ?? BigNumber.from(0));
-            setCoinbaseBtcExchangeRatePerBTC(currentAsset?.exchangeRateInTokenPerBTC || 0);
-            setUserCoinbaseBtcBalance(currentAsset?.connectedUserBalanceFormatted || '0');
-        }
-    }, [selectedInputAsset, validAssets, swapRouteData, getSelectedAsset]);
+    // useEffect(() => {
+    //     if (selectedInputAsset) {
+    //         const totalAvailableLiquidity = selectedInputAsset?.totalAvailableLiquidity;
+    //         setAvailableLiquidity(totalAvailableLiquidity ?? BigNumber.from(0));
+    //         setCoinbaseBtcExchangeRatePerBTC(selectedInputAsset?.exchangeRateInTokenPerBTC || 0);
+    //         setUserCoinbaseBtcBalance(
+    //             formatUnits(selectedInputAsset?.connectedUserBalanceRaw, selectedInputAsset?.decimals) || '0',
+    //         );
+    //     }
+    // }, [selectedInputAsset, validAssets, swapRouteData, selectedInputAsset]);
 
     useEffect(() => {
         setUserBalanceExceeded(false);
@@ -218,15 +210,12 @@ export const DepositUI = () => {
     // --------------- cbBTC INPUT ---------------
     const processCoinbaseBtcInputChange = useCallback(
         (amount) => {
-            const asset = getSelectedAsset();
-            console.log('JSH+ Bun handleCoinbaseBtcInputChange', { amount });
+            const asset = selectedInputAsset;
             setIsAboveMaxSwapLimitBtcOutput(false);
             setIsBelowMinBtcOutput(false);
             setUserBalanceExceeded(false);
 
             const maxDecimals = asset?.decimals;
-            console.log('JSH+ coinbaseBtcValue', amount);
-            console.log('Change 1 ', { maxDecimals });
             const validateCoinbaseBtcInputChange = (value: string) => {
                 return true;
                 console.log({ value });
@@ -235,43 +224,31 @@ export const DepositUI = () => {
                 console.log('Test results: ', { valid: regex.test(value), decimals: maxDecimals });
                 return regex.test(value);
             };
-            console.log('Change 1.2 ; ', { coinbaseBtcValue: amount });
             if (validateCoinbaseBtcInputChange(amount)) {
-                console.log('Change 1.3');
                 setIsAboveMaxSwapLimitCoinbaseBtcDeposit(false);
                 setIsBelowMinCoinbaseBtcDeposit(false);
-                console.log('Change 2');
                 // check if input is above max swap limit
-                if (!asset.fromTokenList) {
-                    console.log('Inside');
-                    // TODO: Skip next check for testing
 
-                    if (
-                        parseFloat(amount) > parseFloat(formatUnits(MAX_SWAP_AMOUNT_SATS, selectedInputAsset.decimals))
-                    ) {
-                        setIsAboveMaxSwapLimitCoinbaseBtcDeposit(true);
-                        setCoinbaseBtcDepositAmount(amount);
-                        setBtcOutputAmount('');
-                        setBtcInputSwapAmount('');
-                        console.log('JSH+ ERR1');
-                        return;
-                    }
-
-                    console.log('Change 3');
-                    // check if input is below min required amount
-                    if (
-                        parseFloat(amount) > 0 &&
-                        parseFloat(amount) < parseFloat(satsToBtc(BigNumber.from(MIN_SWAP_AMOUNT_SATS)))
-                    ) {
-                        setIsBelowMinCoinbaseBtcDeposit(true);
-                        setCoinbaseBtcDepositAmount(amount);
-                        setBtcOutputAmount('');
-                        setBtcInputSwapAmount('');
-                        console.log('JSH+ Change 3 ERR');
-                        return;
-                    }
+                if (parseFloat(amount) > parseFloat(formatUnits(MAX_SWAP_AMOUNT_SATS, selectedInputAsset.decimals))) {
+                    setIsAboveMaxSwapLimitCoinbaseBtcDeposit(true);
+                    setCoinbaseBtcDepositAmount(amount);
+                    setBtcOutputAmount('');
+                    setBtcInputSwapAmount('');
+                    return;
                 }
-                console.log('JSH+ Change (Trigger??): coinbaseBtcValue:', amount);
+
+                // check if input is below min required amount
+                if (
+                    parseFloat(amount) > 0 &&
+                    parseFloat(amount) < parseFloat(satsToBtc(BigNumber.from(MIN_SWAP_AMOUNT_SATS)))
+                ) {
+                    setIsBelowMinCoinbaseBtcDeposit(true);
+                    setCoinbaseBtcDepositAmount(amount);
+                    setBtcOutputAmount('');
+                    setBtcInputSwapAmount('');
+                    return;
+                }
+
                 // setCoinbaseBtcDepositAmount(coinbaseBtcValue);
                 // Use the actual exchange rate instead of hardcoded 0.999
                 const outputAmount = swapRouteData
@@ -279,7 +256,6 @@ export const DepositUI = () => {
                     : parseFloat(amount) / coinbaseBtcExchangeRatePerBTC;
                 setBtcOutputAmount(outputAmount > 0 ? outputAmount.toFixed(8) : '');
                 setBtcInputSwapAmount(outputAmount > 0 ? outputAmount.toFixed(8) : '');
-                console.log('Change 5');
                 // check if exceeds user balance
                 if (isConnected) {
                     checkLiquidityExceeded(amount);
@@ -291,7 +267,7 @@ export const DepositUI = () => {
             coinbaseBtcExchangeRatePerBTC,
             isConnected,
             selectedInputAsset.decimals,
-            selectedInputAsset.name,
+            selectedInputAsset.tokenStyling.name,
             setBtcInputSwapAmount,
             setBtcOutputAmount,
             setCoinbaseBtcDepositAmount,
@@ -301,7 +277,6 @@ export const DepositUI = () => {
 
     useEffect(() => {
         if (swapRouteData) {
-            console.log('JSH+ Trigger handleCoinbaseBtcInputChange');
             processCoinbaseBtcInputChange(swapRouteData.formattedOutputAmount);
         }
     }, [processCoinbaseBtcInputChange, swapRouteData]);
@@ -328,7 +303,7 @@ export const DepositUI = () => {
         //     setIsBelowMinBtcOutput(false);
         //     setIsBelowMinCoinbaseBtcDeposit(false);
         //     // calculate equivalent cbBTC deposit amount using the exchange rate
-        //     const coinbaseBtcInputValueLocal = btcValue && parseFloat(btcValue) > 0 ? parseFloat(btcValue) * useStore.getState().validAssets[selectedInputAsset.name].exchangeRateInTokenPerBTC : 0;
+        //     const coinbaseBtcInputValueLocal = btcValue && parseFloat(btcValue) > 0 ? parseFloat(btcValue) * useStore.getState().validAssets[selectedInputAsset.tokenStyling.name].exchangeRateInTokenPerBTC : 0;
         //     // check if BTC output exceeds max swap limit
         //     if (coinbaseBtcInputValueLocal > parseFloat(formatUnits(MAX_SWAP_AMOUNT_SATS, selectedInputAsset.decimals))) {
         //         setIsAboveMaxSwapLimitBtcOutput(true);
@@ -345,7 +320,7 @@ export const DepositUI = () => {
         //     }
         //     setBtcOutputAmount(btcValue);
         //     setBtcInputSwapAmount(btcValue);
-        //     let coinbaseBtcInputValue = btcValue && parseFloat(btcValue) > 0 ? parseFloat(btcValue) * useStore.getState().validAssets[selectedInputAsset.name].exchangeRateInTokenPerBTC : 0;
+        //     let coinbaseBtcInputValue = btcValue && parseFloat(btcValue) > 0 ? parseFloat(btcValue) * useStore.getState().validAssets[selectedInputAsset.tokenStyling.name].exchangeRateInTokenPerBTC : 0;
         //     setCoinbaseBtcDepositAmount(formatAmountToString(selectedInputAsset, coinbaseBtcInputValue));
         //     checkLiquidityExceeded(coinbaseBtcInputValue);
         // }
@@ -370,14 +345,11 @@ export const DepositUI = () => {
             if (isConnected && isAwaitingConnection) {
                 setIsAwaitingConnection(false);
 
-                console.log(
-                    'getSelectedAsset().connectedUserBalanceFormatted:',
-                    getSelectedAsset()?.connectedUserBalanceFormatted,
-                );
-
                 // fetch the latest user balance after refreshing
                 await refreshConnectedUserBalance();
-                const latestUserCoinbaseBtcBalance = getSelectedAsset()?.connectedUserBalanceFormatted || '0';
+                const latestUserCoinbaseBtcBalance = selectedInputAsset?.connectedUserBalanceRaw
+                    ? formatUnits(selectedInputAsset.connectedUserBalanceRaw, selectedInputAsset.decimals)
+                    : '0';
 
                 if (parseFloat(coinbaseBtcDepositAmount || '0') > parseFloat(latestUserCoinbaseBtcBalance || '0')) {
                     setUserBalanceExceeded(true);
@@ -388,7 +360,7 @@ export const DepositUI = () => {
         };
 
         handleConnection();
-    }, [isConnected, coinbaseBtcDepositAmount, getSelectedAsset, isAwaitingConnection, refreshConnectedUserBalance]);
+    }, [isConnected, coinbaseBtcDepositAmount, isAwaitingConnection, refreshConnectedUserBalance, selectedInputAsset]);
 
     useEffect(() => {
         if (loading) {
@@ -410,10 +382,10 @@ export const DepositUI = () => {
             return;
         }
 
-        if (chainId !== selectedInputAsset.contractChainID) {
+        if (chainId !== selectedInputAsset.tokenStyling.chainId) {
             console.log('Deposit Switching or adding network');
             console.log('Deposit current chainId:', chainId);
-            console.log('Deposit target chainId:', selectedInputAsset.contractChainID);
+            console.log('Deposit target chainId:', selectedInputAsset.tokenStyling.chainId);
             setIsWaitingForCorrectNetwork(true);
 
             const client = createWalletClient({
@@ -421,7 +393,7 @@ export const DepositUI = () => {
             });
 
             // convert chainId to the proper hex format
-            const hexChainId = `0x${selectedInputAsset.contractChainID.toString(16)}`;
+            const hexChainId = `0x${selectedInputAsset.tokenStyling.chainId.toString(16)}`;
 
             // check if the chain is already available in MetaMask
             try {
@@ -479,8 +451,6 @@ export const DepositUI = () => {
 
             // [1] convert deposit amount to smallest token unit (sats), prepare
             // deposit params
-            const selectedValidAsset = getSelectedAsset();
-            console.log('Deposit SELECTED ASSET', selectedValidAsset);
             const depositTokenDecimals = BITCOIN_DECIMALS; // Will always be depositing cbBTC
             console.log('Deposit depositTokenDecmials', depositTokenDecimals);
             console.log({ coinbaseBtcDepositAmount, depositTokenDecmials: depositTokenDecimals });
@@ -516,7 +486,7 @@ export const DepositUI = () => {
             // Get tip proof and handle potential errors
             let tipProof;
             try {
-                tipProof = await getTipProof(selectedInputAsset.dataEngineUrl);
+                tipProof = await getTipProof(selectedChain.dataEngineUrl);
                 console.log('Deposit [alpine] tipProof', tipProof);
             } catch (error) {
                 console.error('[alpine] error', error);
@@ -524,8 +494,9 @@ export const DepositUI = () => {
                 setIsModalOpen(true);
                 depositLiquidity({
                     signer,
-                    riftExchangeAbi: selectedInputAsset.riftExchangeAbi,
-                    riftExchangeContractAddress: selectedInputAsset.riftExchangeContractAddress,
+                    //@ts-ignore
+                    riftExchangeAbi: riftExchangeAbi, // TODO: actually import the abi from tevm
+                    riftExchangeContractAddress: selectedChain.riftExchangeAddress,
                     tokenAddress: selectedInputAsset.tokenAddress,
                     params: {
                         // We're passing empty/dummy values here because we know it will fail
@@ -553,8 +524,9 @@ export const DepositUI = () => {
             await depositLiquidity(
                 {
                     signer: signer,
-                    riftExchangeAbi: selectedInputAsset.riftExchangeAbi,
-                    riftExchangeContractAddress: selectedInputAsset.riftExchangeContractAddress,
+                    //@ts-ignore
+                    riftExchangeAbi: riftExchangeAbi, // TODO: actually import the abi from tevm
+                    riftExchangeContractAddress: selectedChain.riftExchangeAddress,
                     tokenAddress: selectedInputAsset.tokenAddress,
                     params: {
                         depositOwnerAddress: DEVNET_BASE_BUNDLER_ADDRESS, // TEST, THIS NEEDS TO BE VARIABLE userEthAddress,
@@ -632,11 +604,11 @@ export const DepositUI = () => {
                                 {/* cbBTC Input */}
                                 <Flex
                                     px='10px'
-                                    bg={selectedInputAsset.dark_bg_color}
+                                    bg={selectedInputAsset.tokenStyling.dark_bg_color}
                                     w='100%'
                                     h='117px'
                                     border='2px solid'
-                                    borderColor={selectedInputAsset.bg_color}
+                                    borderColor={selectedInputAsset.tokenStyling.bg_color}
                                     borderRadius={'10px'}>
                                     <Flex direction={'column'} py='10px' px='5px'>
                                         <Text
@@ -689,7 +661,9 @@ export const DepositUI = () => {
                                                 _selected={{ border: 'none', boxShadow: 'none' }}
                                                 fontSize='46px'
                                                 placeholder='0.0'
-                                                _placeholder={{ color: selectedInputAsset.light_text_color }}
+                                                _placeholder={{
+                                                    color: selectedInputAsset.tokenStyling.light_text_color,
+                                                }}
                                             />
                                         )}
 
@@ -743,7 +717,7 @@ export const DepositUI = () => {
                                                     mt='7px'
                                                     mr='-116px'
                                                     zIndex={'10'}
-                                                    color={selectedInputAsset.border_color_light}
+                                                    color={selectedInputAsset.tokenStyling.border_color_light}
                                                     cursor='pointer'
                                                     onClick={() =>
                                                         processCoinbaseBtcInputChange(
@@ -923,7 +897,7 @@ export const DepositUI = () => {
                                                     mt='7px'
                                                     mr='-116px'
                                                     zIndex={'10'}
-                                                    color={selectedInputAsset.border_color_light}
+                                                    color={selectedInputAsset.tokenStyling.border_color_light}
                                                     cursor='pointer'
                                                     onClick={() => {
                                                         if (isAboveMaxSwapLimitBtcOutput) {

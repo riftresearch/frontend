@@ -64,11 +64,13 @@ export function mergeTokenListIntoValidAssets(
             ...defaultAssetTemplate,
             ...token,
             // Override with token-specific data:
-            display_name: token.symbol,
-            tokenAddress: token.address,
-            // If available, use the token's logo URI; otherwise, fall back to the template icon.
-            icon_svg: convertIpfsUri(token.logoURI) || defaultAssetTemplate.icon_svg,
-            fromTokenList: true,
+            tokenStyling: {
+                ...defaultAssetTemplate.tokenStyling,
+                name: token.symbol,
+                display_name: token.symbol,
+                // If available, use the token's logo URI; otherwise, fall back to the template icon.
+                logoURI: convertIpfsUri(token.logoURI) || defaultAssetTemplate.tokenStyling.logoURI,
+            },
         };
     });
 

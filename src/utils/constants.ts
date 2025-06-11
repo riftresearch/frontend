@@ -1,5 +1,5 @@
 import { BigNumberish, ethers } from 'ethers';
-import { ValidAsset, DeploymentType, ChainScopedConfig } from '../types';
+import { ValidAsset, DeploymentType, ChainScopedConfig, TokenStyling } from '../types';
 import { useStore } from '../store';
 import { ETH_Icon, ETH_Logo, USDT_Icon } from '../components/other/SVGs';
 
@@ -10,6 +10,8 @@ export const SATS_PER_BTC = 100000000; // 10^8
 export const MIN_SWAP_AMOUNT_SATS = 3000; // 1000 sats = ~$0.96 currently
 export const MAX_SWAP_AMOUNT_SATS = 100_000_000_000; // 1,000 cbBTC
 export const SAMEES_DEMO_CB_BTC_ADDRESS = '0xA976a1F4Ee6DC8011e777133C6719087C10b6259';
+export const DEVNET_BASE_BUNDLER_ADDRESS = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
+export const MAX_SWAP_LP_OUTPUTS = 10;
 
 export const REQUIRED_BLOCK_CONFIRMATIONS = 2;
 export const PROTOCOL_FEE = ethers.BigNumber.from(1); // 0.1%
@@ -18,7 +20,7 @@ export const CONTRACT_RESERVATION_EXPIRATION_WINDOW_IN_SECONDS = 4 * 60 * 60; //
 export const FRONTEND_RESERVATION_EXPIRATION_WINDOW_IN_SECONDS = 1 * 60 * 60; // 1 hour
 export const opaqueBackgroundColor = { bg: 'rgba(15, 15, 15, 0.55)', backdropFilter: 'blur(10px)' };
 
-export const bitcoin: ValidAsset = {
+export const bitcoin: TokenStyling = {
     name: 'Bitcoin',
     display_name: 'BTC',
     decimals: BITCOIN_DECIMALS,
@@ -30,7 +32,7 @@ export const bitcoin: ValidAsset = {
     light_text_color: '#7d572e',
 };
 
-export const cbBTCDisplayInfo: ValidAsset = {
+export const cbBTCDisplayInfo: TokenStyling = {
     name: 'CoinbaseBTC',
     display_name: 'cbBTC',
     symbol: 'cbBTC',
@@ -40,7 +42,6 @@ export const cbBTCDisplayInfo: ValidAsset = {
     border_color_light: '#3B70E8',
     dark_bg_color: 'rgba(9, 36, 97, 0.3)',
     light_text_color: '#365B9F',
-    exchangeRateInTokenPerBTC: 1.001,
     logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp',
 };
 
@@ -55,8 +56,16 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
         rpcUrl: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY', // TODO: Replace with actual RPC
         esploraUrl: 'https://blockstream.info/api',
         dataEngineUrl: 'https://api.mainnet.rift.finance', // TODO: Replace with actual URL'
-        underlyingSwappingAsset: cbBTCDisplayInfo,
-        cbbtcTokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        underlyingSwappingAsset: {
+            tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+            decimals: 8,
+            tokenStyling: cbBTCDisplayInfo,
+            chainDetails: {
+                chainId: 1,
+                name: 'Ethereum',
+                type: 'Mainnet',
+            },
+        },
         riftExchangeAddress: '0x1234567890123456789012345678901234567890', // TODO: Replace with actual address
         bundler3: {
             bundler3Address: '0x0000000000000000000000000000000000000000',
@@ -74,8 +83,11 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
         rpcUrl: 'https://mainnet.base.org', // Base Mainnet RPC
         esploraUrl: 'https://blockstream.info/api',
         dataEngineUrl: 'https://api.base.rift.finance', // TODO: Replace with actual URL
-        underlyingSwappingAsset: cbBTC,
-        cbbtcTokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        underlyingSwappingAsset: {
+            tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+            decimals: 8,
+            tokenStyling: cbBTCDisplayInfo,
+        },
         riftExchangeAddress: '0x1234567890123456789012345678901234567890', // TODO: Replace with actual address
         bundler3: {
             bundler3Address: '0x6BFd8137e702540E7A42B74178A4a49Ba43920C4',
@@ -94,8 +106,11 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
         rpcUrl: 'http://0.0.0.0:50101',
         esploraUrl: 'http://0.0.0.0:50103',
         dataEngineUrl: 'http://0.0.0.0:50100',
-        underlyingSwappingAsset: cbBTC,
-        cbbtcTokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        underlyingSwappingAsset: {
+            tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+            decimals: 8,
+            tokenStyling: cbBTCDisplayInfo,
+        },
         riftExchangeAddress: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
         bundler3: {
             bundler3Address: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',

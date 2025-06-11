@@ -21,7 +21,6 @@ export type ChainScopedConfig = {
     bundler3: Bundler3Config;
 };
 
-// Styling and display information for a token
 export type TokenStyling = {
     name: string;
     display_name?: string;
@@ -31,41 +30,20 @@ export type TokenStyling = {
     border_color_light?: string;
     dark_bg_color?: string;
     light_text_color?: string;
-    exchangeRateInTokenPerBTC?: number | null;
-    exchangeRateInSmallestTokenUnitPerSat?: BigNumber | null;
-    priceUSD?: number | null;
-    connectedUserBalanceRaw?: BigNumber;
-    connectedUserBalanceFormatted?: string;
-    fromTokenList?: boolean;
 } & Partial<TokenMeta>;
 
-// Keep ValidAsset as an alias for backward compatibility
 export type ValidAsset = {
     tokenAddress: string;
     decimals: number;
-    tokenInfo: TokenStyling;
+    exchangeRateInTokenPerBTC?: number | null;
+    priceUSD?: number | null;
+    connectedUserBalanceRaw?: BigNumber;
+    totalAvailableLiquidity?: BigNumber;
+    chainDetails: any;
+    tokenStyling: TokenStyling;
 };
-
-export type LiqudityProvider = {
-    depositVaultIndexes: number[];
-};
-
-export interface ProxyWalletLiquidityProvider {
-    amount: string;
-    btcExchangeRate: string;
-    lockingScriptHex: string;
-}
-
-export type AssetType = 'BTC' | 'USDT' | 'USDC' | 'ETH' | 'WETH' | 'WBTC' | 'CoinbaseBTC' | 'cbBTC';
 
 export type CurrencyModalTitle = 'send' | 'recieve' | 'deposit' | 'close';
-
-export type LiquidityReservedEvent = {
-    reserver: string;
-    swapReservationIndex: string;
-    orderNonce: string;
-    event: ethers.Event;
-};
 
 export type RouteButton = 'Swap' | 'Manage' | 'About';
 

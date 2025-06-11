@@ -7,6 +7,9 @@ import { colors } from '../../utils/colors';
 import { FONT_FAMILIES } from '../../utils/font';
 import { opaqueBackgroundColor } from '../../utils/constants';
 
+// @ts-ignore
+import { RiftExchange } from '../../../protocol/contracts/src/RiftExchange.sol';
+
 export const DepositAmounts = () => {
     const coinbaseBtcDepositAmount = useStore((state) => state.coinbaseBtcDepositAmount);
     const btcOutputAmount = useStore((state) => state.btcOutputAmount);
@@ -32,8 +35,20 @@ export const DepositAmounts = () => {
                             <AssetTag assetName='ARBITRUM_USDT' width='108px' />
                         </Flex>
                     </Flex>
-                    <Text color={colors.textGray} fontSize='13px' mt='-12px' ml='6px' letterSpacing='-2px' fontWeight='normal' fontFamily='Aux'>
-                        ≈ ${parseFloat(coinbaseBtcDepositAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                    <Text
+                        color={colors.textGray}
+                        fontSize='13px'
+                        mt='-12px'
+                        ml='6px'
+                        letterSpacing='-2px'
+                        fontWeight='normal'
+                        fontFamily='Aux'>
+                        ≈ $
+                        {parseFloat(coinbaseBtcDepositAmount).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}{' '}
+                        USD
                     </Text>
                 </Flex>
 
@@ -52,8 +67,20 @@ export const DepositAmounts = () => {
                             <AssetTag assetName='BTC' width='79px' />
                         </Flex>
                     </Flex>
-                    <Text color={colors.textGray} fontSize='13px' mt='-10.5px' ml='6px' letterSpacing='-2px' fontWeight='normal' fontFamily='Aux'>
-                        ≈ ${(parseFloat(btcOutputAmount) * bitcoinPriceUSD).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                    <Text
+                        color={colors.textGray}
+                        fontSize='13px'
+                        mt='-10.5px'
+                        ml='6px'
+                        letterSpacing='-2px'
+                        fontWeight='normal'
+                        fontFamily='Aux'>
+                        ≈ $
+                        {(parseFloat(btcOutputAmount) * bitcoinPriceUSD).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}{' '}
+                        USD
                     </Text>
                 </Flex>
             </>

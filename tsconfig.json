@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "plugins": [
+      { "name": "@tevm/ts-plugin" }
+    ],
     "skipDefaultLibCheck": true,
     "target": "es5",
     "lib": [

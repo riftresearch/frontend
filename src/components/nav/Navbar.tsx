@@ -22,17 +22,8 @@ export const Navbar = ({}) => {
     const router = useRouter();
     const fontSize = isMobile ? '20px' : '20px';
     const [isLocalhost, setIsLocalhost] = useState(false);
-    const selectedInputAsset = useStore((state) => state.selectedInputAsset);
     const validAssets = useStore((state) => state.validAssets);
     const lowestFeeReservationParams = useStore((state) => state.lowestFeeReservationParams);
-    const [availableLiquidity, setAvailableLiquidity] = useState(BigNumber.from(0));
-    const [formattedTotalAmount, setFormattedTotalAmount] = useState<string>('0');
-    const protocolFeeAmountMicroUsdt = useStore((state) => state.protocolFeeAmountMicroUsdt);
-    const setSelectedSwapToManage = useStore((state) => state.setSelectedSwapToManage);
-    const selectedSwapToManage = useStore((state) => state.selectedSwapToManage);
-    const [localSelectedVaultToManage, setLocalSelectedVaultToManage] = useState<number | null>(null);
-    const [isLoadingVault, setIsLoadingVault] = useState(false);
-    const ethersRpcProvider = useStore.getState().ethersRpcProvider;
     const { address, isConnected } = useAccount();
 
     const depositFlowState = useStore((state) => state.depositFlowState);
@@ -44,25 +35,9 @@ export const Navbar = ({}) => {
     }, []);
 
     useEffect(() => {
-        const totalAvailableLiquidity = validAssets[selectedInputAsset.name]?.totalAvailableLiquidity;
-        setAvailableLiquidity(totalAvailableLiquidity ?? BigNumber.from(0));
-    }, [validAssets]);
-
-    useEffect(() => {
         const hostname = window.location.hostname;
         setIsLocalhost(hostname === 'localhost' || hostname === '127.0.0.1');
     }, []);
-
-    useEffect(() => {
-        if (!lowestFeeReservationParams) {
-            return;
-        }
-        const totalAmount = lowestFeeReservationParams?.amountsInMicroUsdtToReserve.reduce(
-            (acc, curr) => BigNumber.from(acc).add(curr),
-            ethers.BigNumber.from(0),
-        );
-        setFormattedTotalAmount(formatUnits(totalAmount, selectedInputAsset.decimals));
-    }, [lowestFeeReservationParams]);
 
     const handleNavigation = (route: string) => {
         router.push(route);
@@ -102,38 +77,6 @@ export const Navbar = ({}) => {
                 )}
             </Flex>
         );
-    };
-
-    const StatCard = ({ label, value, color = colors.RiftOrange }) => (
-        <Box
-            borderWidth='1px'
-            borderColor={colors.textGray}
-            borderRadius='10px'
-            bg={colors.offBlack}
-            p={'10px'}
-            textAlign='center'>
-            <Text color={colors.textGray} fontSize='10px' mb={1}>
-                {label}
-            </Text>
-            <Text color={color} fontSize='14px' fontWeight='bold'>
-                {value}
-            </Text>
-        </Box>
-    );
-
-    const getChainName = (id) => {
-        switch (id) {
-            case 11155111:
-                return 'Sepolia';
-            case 17000:
-                return 'Holesky';
-            case 421614:
-                return 'Arbitrum Sepolia';
-            case 1:
-                return 'ETH';
-            default:
-                return id;
-        }
     };
 
     // Function to map numeric state to string literal

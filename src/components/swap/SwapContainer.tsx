@@ -1,7 +1,6 @@
 import { Flex } from '@chakra-ui/react';
 import { useStore } from '../../store';
 import { DepositUI } from '../deposit/DepositUI';
-import { SwapUI } from './SwapUI';
 
 export const SwapContainer = ({}) => {
     const depositMode = useStore((state) => state.depositMode);
@@ -21,7 +20,7 @@ export const SwapContainer = ({}) => {
                 <DepositUI />
             ) : (
                 // SWAP UI
-                <SwapUI />
+                <>{/* TODO: Add the swap UI here */}</>
             )}
         </Flex>
     );
