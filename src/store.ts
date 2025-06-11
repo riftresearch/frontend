@@ -1,5 +1,8 @@
+// store.ts
+/* eslint-disable @typescript-eslint/no-shadow */
 import { create } from 'zustand';
-import { useEffect } from 'react';
+import type { StateCreator } from 'zustand';
+import { ethers, BigNumber } from 'ethers';
 import {
     CurrencyModalTitle,
     ChainScopedConfig,
@@ -7,9 +10,8 @@ import {
     TokenMeta,
     UniswapTokenList,
     UserSwap,
+    ValidAsset,
 } from './types';
-import { ethers, BigNumber } from 'ethers';
-import { USDT_Icon, ETH_Icon, ETH_Logo, Coinbase_BTC_Icon } from './components/other/SVGs';
 import {
     ERC20ABI,
     CHAIN_SCOPED_CONFIGS,
@@ -18,17 +20,12 @@ import {
     REQUIRED_BLOCK_CONFIRMATIONS,
     BITCOIN_DECIMALS,
 } from './utils/constants';
-import { ValidAsset } from './types';
 import riftExchangeABI from './abis/RiftExchange.json';
-import { base, baseGoerli, baseSepolia } from 'viem/chains';
-import { DeploymentType } from './types';
 import combinedTokenData from '@/json/tokenData.json';
-import { getEffectiveChainID } from './utils/dappHelper';
 import { deduplicateTokens, mergeTokenListIntoValidAssets } from './utils/tokenListHelpers';
 
-/**
- * Helper function to find an asset by name in the validAssets Record
- */
+/* ─────────────────────────── helpers ─────────────────────────── */
+
 function findAssetByName(assets: Record<string, ValidAsset>, name: string, chainId: number): ValidAsset | undefined {
     return Object.values(assets).find(
         (asset) =>
@@ -36,9 +33,6 @@ function findAssetByName(assets: Record<string, ValidAsset>, name: string, chain
     );
 }
 
-/**
- * Helper function to find an asset key by name in the validAssets Record
- */
 function findAssetKeyByName(assets: Record<string, ValidAsset>, name: string, chainId: number): string | undefined {
     return Object.keys(assets).find(
         (key) =>
@@ -47,8 +41,35 @@ function findAssetKeyByName(assets: Record<string, ValidAsset>, name: string, ch
     );
 }
 
-type Store = {
-    // setup & asset data
+/* ─────────────────────────── initial assets ─────────────────────────── */
+
+const initialValidAssets: Record<string, ValidAsset> = {
+    '0-bitcoin': {
+        tokenAddress: 'bitcoin',
+        decimals: BITCOIN_DECIMALS,
+        tokenStyling: bitcoin,
+    },
+    coinbaseBTC: {
+        tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        decimals: 8,
+        tokenStyling: cbBTCDisplayInfo,
+    },
+};
+
+const updatedValidAssets = mergeTokenListIntoValidAssets(
+    deduplicateTokens(combinedTokenData),
+    {
+        tokenAddress: 'bitcoin',
+        decimals: BITCOIN_DECIMALS,
+        tokenStyling: bitcoin,
+    },
+    initialValidAssets,
+);
+
+/* ─────────────────────────── Store type ─────────────────────────── */
+
+export type Store = {
+    /* --------------- setup & asset data --------------- */
     selectedInputAsset: ValidAsset;
     setSelectedInputAsset: (asset: ValidAsset) => void;
     userEthAddress: string;
@@ -63,41 +84,29 @@ type Store = {
     updatePriceUSDByAddress: (address: string, newPrice: number) => void;
     updateConnectedUserBalanceRaw: (assetKey: string, newBalance: BigNumber) => void;
 
-    // Chain-based selection (replacing selectedInputAsset)
-    selectedChainId: number;
-    selectedChain: ChainScopedConfig & {
-        // Runtime data
-        proverFee: BigNumber;
-        releaserFee: BigNumber;
-        priceUSD: number | null;
-        totalAvailableLiquidity: BigNumber;
-        connectedUserBalanceRaw: BigNumber;
-        connectedUserBalanceFormatted: string;
-    };
+    /* --------------- chain-based selection ------------- */
+    selectedChain: ChainScopedConfig;
     setSelectedChainId: (chainId: number) => void;
 
-    isPayingFeesInBTC: boolean;
-    setIsPayingFeesInBTC: (isPayingFeesInBTC: boolean) => void;
-
-    // Helper functions to find assets
+    /* --------------- asset find helpers ---------------- */
     findAssetByAddress: (address: string, chainId?: number) => ValidAsset | undefined;
     findAssetByName: (name: string, chainId?: number) => ValidAsset | undefined;
     findAssetBySymbol: (symbol: string, chainId?: number) => ValidAsset | undefined;
     getAssetKey: (asset: ValidAsset) => string;
 
-    // contract data (deposit vaults, swap reservations)
+    /* --------------- contract data --------------------- */
     setUserSwapsFromAddress: (swaps: UserSwap[]) => void;
     userSwapsFromAddress: UserSwap[];
     userSwapsLoadingState: 'loading' | 'error' | 'received';
-    setUserSwapsLoadingState: (state: 'loading' | 'error' | 'received') => void;
+    setUserSwapsLoadingState: (s: 'loading' | 'error' | 'received') => void;
 
-    // activity page
+    /* --------------- activity page --------------------- */
     selectedSwapToManage: UserSwap | null;
     setSelectedSwapToManage: (swap: UserSwap | null) => void;
     showManageDepositVaultsScreen: boolean;
-    setShowManageDepositVaultsScreen: (show: boolean) => void;
+    setShowManageDepositVaultsScreen: (b: boolean) => void;
 
-    // swap flow
+    /* --------------- swap flow ------------------------- */
     swapFlowState:
         | '0-not-started'
         | '1-reserve-liquidity'
@@ -105,149 +114,212 @@ type Store = {
         | '3-receive-evm-token'
         | '4-completed'
         | '5-expired';
-    setSwapFlowState: (
-        state:
-            | '0-not-started'
-            | '1-reserve-liquidity'
-            | '2-send-bitcoin'
-            | '3-receive-evm-token'
-            | '4-completed'
-            | '5-expired',
-    ) => void;
+    setSwapFlowState: (s: Store['swapFlowState']) => void;
     depositFlowState: '0-not-started' | '1-finding-liquidity' | '2-awaiting-payment' | '3-payment-recieved';
-    setDepositFlowState: (
-        state: '0-not-started' | '1-finding-liquidity' | '2-awaiting-payment' | '3-payment-recieved',
-    ) => void;
+    setDepositFlowState: (s: Store['depositFlowState']) => void;
     btcInputSwapAmount: string;
-    setBtcInputSwapAmount: (amount: string) => void;
+    setBtcInputSwapAmount: (v: string) => void;
     coinbaseBtcDepositAmount: string;
-    setCoinbaseBtcDepositAmount: (amount: string) => void;
+    setCoinbaseBtcDepositAmount: (v: string) => void;
     btcOutputAmount: string;
-    setBtcOutputAmount: (amount: string) => void;
+    setBtcOutputAmount: (v: string) => void;
     coinbaseBtcOutputAmount: string;
-    setCoinbaseBtcOutputAmount: (amount: string) => void;
+    setCoinbaseBtcOutputAmount: (v: string) => void;
     payoutBTCAddress: string;
-    setPayoutBTCAddress: (address: string) => void;
+    setPayoutBTCAddress: (v: string) => void;
     lowestFeeReservationParams: ReserveLiquidityParams | null;
-    setLowestFeeReservationParams: (reservation: ReserveLiquidityParams | null) => void;
+    setLowestFeeReservationParams: (x: ReserveLiquidityParams | null) => void;
     showManageReservationScreen: boolean;
-    setShowManageReservationScreen: (show: boolean) => void;
+    setShowManageReservationScreen: (b: boolean) => void;
     depositMode: boolean;
-    setDepositMode: (mode: boolean) => void;
+    setDepositMode: (b: boolean) => void;
     withdrawAmount: string;
-    setWithdrawAmount: (amount: string) => void;
+    setWithdrawAmount: (v: string) => void;
     protocolFeeAmountMicroUsdt: string;
-    setProtocolFeeAmountMicroUsdt: (amount: string) => void;
+    setProtocolFeeAmountMicroUsdt: (v: string) => void;
     swapReservationNotFound: boolean;
-    setSwapReservationNotFound: (notFound: boolean) => void;
+    setSwapReservationNotFound: (b: boolean) => void;
     currentReservationState: string;
-    setCurrentReservationState: (state: string) => void;
+    setCurrentReservationState: (v: string) => void;
     areNewDepositsPaused: boolean;
-    setAreNewDepositsPaused: (paused: boolean) => void;
+    setAreNewDepositsPaused: (b: boolean) => void;
     isGasFeeTooHigh: boolean;
-    setIsGasFeeTooHigh: (isGasFeeTooHigh: boolean) => void;
+    setIsGasFeeTooHigh: (b: boolean) => void;
     confirmationBlocksNeeded: number;
-    setConfirmationBlocksNeeded: (blocks: number) => void;
+    setConfirmationBlocksNeeded: (n: number) => void;
     currentTotalBlockConfirmations: number;
-    setCurrentTotalBlockConfirmations: (confirmations: number) => void;
+    setCurrentTotalBlockConfirmations: (n: number) => void;
     proxyWalletSwapStatus: number;
-    setProxyWalletSwapStatus: (status: number) => void;
+    setProxyWalletSwapStatus: (n: number) => void;
 
-    // modals
+    /* --------------- modals ---------------------------- */
     currencyModalTitle: CurrencyModalTitle;
-    setCurrencyModalTitle: (x: CurrencyModalTitle) => void;
+    setCurrencyModalTitle: (t: CurrencyModalTitle) => void;
     ethPayoutAddress: string;
-    setEthPayoutAddress: (address: string) => void;
+    setEthPayoutAddress: (v: string) => void;
     bitcoinSwapTransactionHash: string;
-    setBitcoinSwapTransactionHash: (hash: string) => void;
+    setBitcoinSwapTransactionHash: (v: string) => void;
 
-    // global
+    /* --------------- global ---------------------------- */
     isOnline: boolean;
     setIsOnline: (b: boolean) => void;
 
-    // Rift Developer Mode
+    /* --------------- Rift Dev Mode --------------------- */
     riftDeveloperMode: boolean;
-    setRiftDeveloperMode: (mode: boolean) => void;
+    setRiftDeveloperMode: (b: boolean) => void;
 
-    // Uniswap
+    /* --------------- Uniswap --------------------------- */
     uniswapInputAssetPriceUSD: number;
-    setUniswapInputAssetPriceUSD: (price: number) => void;
+    setUniswapInputAssetPriceUSD: (n: number) => void;
     selectedUniswapInputAsset: TokenMeta;
-    setSelectedUniswapInputAsset: (asset: TokenMeta) => void;
+    setSelectedUniswapInputAsset: (t: TokenMeta) => void;
     selectedChainID: number;
-    setSelectChainID: (chainID: number) => void;
+    setSelectChainID: (id: number) => void;
     uniswapTokens: TokenMeta[];
-    setUniswapTokens: (tokens: TokenMeta[]) => void;
+    setUniswapTokens: (arr: TokenMeta[]) => void;
 };
 
-// Helper function to create selected chain from config
-const createSelectedChain = (chainId: number) => {
-    const config = CHAIN_SCOPED_CONFIGS[chainId];
-    if (!config) {
-        throw new Error(`Chain ID ${chainId} not found in CHAIN_SCOPED_CONFIGS`);
-    }
+/* ─────────────────────────── factory ─────────────────────────── */
 
-    return {
-        ...config,
-        // Runtime data with default values
-        proverFee: BigNumber.from(0),
-        releaserFee: BigNumber.from(0),
-        priceUSD: null,
-        totalAvailableLiquidity: BigNumber.from(0),
-        connectedUserBalanceRaw: BigNumber.from(0),
-        connectedUserBalanceFormatted: '0',
-    };
-};
+const createStore: StateCreator<Store> = (set, get) =>
+    ({
+        /* ── initial data ── */
+        selectedInputAsset: initialValidAssets.coinbaseBTC,
+        userEthAddress: '',
+        ethersRpcProvider: null,
+        validAssets: updatedValidAssets,
+        selectedChain: CHAIN_SCOPED_CONFIGS[8453],
 
-export const useStore = create<Store>((set, get) => {
-    // Default to Base Mainnet
-    const defaultChainId = 8453;
-    const initialSelectedChain = createSelectedChain(defaultChainId);
+        userSwapsFromAddress: [],
+        userSwapsLoadingState: 'loading',
 
-    // Create default Uniswap asset from the chain config
-    const defaultUniswapAsset: TokenMeta = {
-        chainId: initialSelectedChain.chainId,
-        name: 'Coinbase Wrapped BTC',
-        address: initialSelectedChain.underlyingSwappingAsset.tokenAddress.toLowerCase(),
-        symbol: cbBTCDisplayInfo.symbol,
-        decimals: cbBTCDisplayInfo.decimals,
-        logoURI: cbBTCDisplayInfo.logoURI,
-    };
+        selectedSwapToManage: null,
+        showManageDepositVaultsScreen: false,
 
-    // Initialize with basic BTC asset
-    const initialValidAssets: Record<string, ValidAsset> = {
-        '0-bitcoin': {
-            tokenAddress: 'bitcoin',
+        swapFlowState: '0-not-started',
+        depositFlowState: '0-not-started',
+        btcInputSwapAmount: '',
+        coinbaseBtcDepositAmount: '',
+        btcOutputAmount: '',
+        coinbaseBtcOutputAmount: '',
+        payoutBTCAddress: '',
+        lowestFeeReservationParams: null,
+        showManageReservationScreen: false,
+        depositMode: true,
+        withdrawAmount: '',
+        protocolFeeAmountMicroUsdt: '',
+        swapReservationNotFound: false,
+        currentReservationState: '',
+        areNewDepositsPaused: false,
+        isGasFeeTooHigh: false,
+        confirmationBlocksNeeded: REQUIRED_BLOCK_CONFIRMATIONS,
+        currentTotalBlockConfirmations: 0,
+        proxyWalletSwapStatus: 0,
+
+        currencyModalTitle: 'close',
+        ethPayoutAddress: '',
+        bitcoinSwapTransactionHash: '',
+
+        isOnline: true,
+        riftDeveloperMode: false,
+
+        uniswapInputAssetPriceUSD: 0,
+        selectedUniswapInputAsset: {
+            chainId: 8453,
+            name: 'Coinbase Wrapped BTC',
+            address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+            symbol: 'cbBTC',
             decimals: 8,
-            tokenStyling: bitcoin,
+            logoURI: 'https://assets.coingecko.com/coins/images/2528/large/coinbase-wrapped-bitcoin.png?1693153486',
         },
-        coinbaseBTC: {
-            tokenAddress: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
-            decimals: 8,
-            tokenStyling: cbBTCDisplayInfo,
-        },
-    };
+        selectedChainID: 8453,
+        uniswapTokens: [],
 
-    const updatedValidAssets = mergeTokenListIntoValidAssets(
-        deduplicateTokens(combinedTokenData),
-        {
-            tokenAddress: 'bitcoin',
-            decimals: 8,
-            tokenStyling: bitcoin,
-        },
-        initialValidAssets,
-    );
+        /* ── setters & actions ── */
+        setSelectedInputAsset: (asset) => set({ selectedInputAsset: asset }),
+        setUserEthAddress: (address) => set({ userEthAddress: address }),
+        setEthersRpcProvider: (provider) => set({ ethersRpcProvider: provider }),
+        setValidAssets: (assets) => set({ validAssets: assets }),
 
-    return {
-        selectedInputAsset: initialValidAssets['coinbaseBTC'],
-        setSelectedInputAsset: (selectedInputAsset) => set({ selectedInputAsset }),
-        // Chain-based setup instead of asset-based
-        selectedChainId: defaultChainId,
-        selectedChain: initialSelectedChain,
-        setSelectedChainId: (chainId) => {
-            const newChain = createSelectedChain(chainId);
-
+        updateValidValidAsset: (assetKey, updates) =>
             set((state) => {
+                const assets = { ...state.validAssets };
+                let key = assetKey;
+
+                if (!key.includes('-')) {
+                    if (key === 'BTC') key = '0-bitcoin';
+                    else if (key === 'CoinbaseBTC')
+                        key = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChain.chainId) || key;
+                    else key = findAssetKeyByName(assets, key, state.selectedChain.chainId) || key;
+                }
+                if (assets[key]) assets[key] = { ...assets[key], ...updates };
+                return { validAssets: assets };
+            }),
+
+        mergeValidAssets: (newAssets) =>
+            set((state) => {
+                const merged = { ...state.validAssets };
+                Object.entries(newAssets).forEach(([key, asset]) => {
+                    const v = asset as ValidAsset;
+                    let k = key;
+
+                    if (!k.includes('-') && v.tokenAddress && v.tokenStyling.chainId)
+                        k = `${v.tokenStyling.chainId}-${v.tokenAddress.toLowerCase()}`;
+                    else if (k === 'BTC') k = '0-bitcoin';
+                    else if (k === 'CoinbaseBTC') {
+                        const existing = findAssetKeyByName(
+                            state.validAssets,
+                            'CoinbaseBTC',
+                            state.selectedChain.chainId,
+                        );
+                        if (existing) k = existing;
+                    }
+                    merged[k] = v;
+                });
+                return { validAssets: merged };
+            }),
+
+        updatePriceUSD: (assetKey, newPrice) =>
+            set((state) => {
+                const assets = { ...state.validAssets };
+                let key = assetKey;
+                if (!key.includes('-')) {
+                    if (key === 'BTC') key = '0-bitcoin';
+                    else if (key === 'CoinbaseBTC')
+                        key = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChain.chainId) || key;
+                    else key = findAssetKeyByName(assets, key, state.selectedChain.chainId) || key;
+                }
+                if (assets[key]) assets[key] = { ...assets[key], priceUSD: newPrice };
+                return { validAssets: assets };
+            }),
+
+        updatePriceUSDByAddress: (address, newPrice) =>
+            set((state) => {
+                const assets = { ...state.validAssets };
+                Object.keys(assets).forEach((k) => {
+                    if (assets[k].tokenAddress?.toLowerCase() === address.toLowerCase())
+                        assets[k] = { ...assets[k], priceUSD: newPrice };
+                });
+                return { validAssets: assets };
+            }),
+
+        updateConnectedUserBalanceRaw: (assetKey, newBalance) =>
+            set((state) => {
+                const assets = { ...state.validAssets };
+                let key = assetKey;
+                if (!key.includes('-')) {
+                    if (key === 'BTC') key = '0-bitcoin';
+                    else if (key === 'CoinbaseBTC')
+                        key = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChain.chainId) || key;
+                    else key = findAssetKeyByName(assets, key, state.selectedChain.chainId) || key;
+                }
+                if (assets[key]) assets[key] = { ...assets[key], connectedUserBalanceRaw: newBalance };
+                return { validAssets: assets };
+            }),
+
+        setSelectedChainId: (chainId) =>
+            set((state) => {
+                const newChain = CHAIN_SCOPED_CONFIGS[chainId];
                 return {
                     selectedChainId: chainId,
                     selectedChain: newChain,
@@ -260,258 +332,68 @@ export const useStore = create<Store>((set, get) => {
                         logoURI: cbBTCDisplayInfo.logoURI,
                     },
                 };
-            });
-        },
-
-        userEthAddress: '',
-        setUserEthAddress: (userEthAddress) => set({ userEthAddress }),
-        ethersRpcProvider: null,
-        setEthersRpcProvider: (provider) => set({ ethersRpcProvider: provider }),
-        validAssets: updatedValidAssets,
-        setValidAssets: (assets) => set({ validAssets: assets }),
-
-        updateValidValidAsset: (assetKey, updates) =>
-            set((state) => {
-                const assets = { ...state.validAssets };
-
-                // Try to find the correct key if assetKey is a name
-                let actualKey = assetKey;
-
-                if (!assetKey.includes('-')) {
-                    // Special handling for BTC and CoinbaseBTC
-                    if (assetKey === 'BTC') {
-                        actualKey = '0-bitcoin';
-                    } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
-                    } else {
-                        // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
-                    }
-                }
-
-                // Update the asset if we have the key
-                if (assets[actualKey]) {
-                    assets[actualKey] = { ...assets[actualKey], ...updates };
-                }
-
-                return { validAssets: assets };
             }),
 
-        mergeValidAssets: (newAssets) =>
-            set((state) => {
-                const mergedAssets = { ...state.validAssets };
-
-                Object.entries(newAssets).forEach(([key, asset]) => {
-                    const validAsset = asset as ValidAsset;
-
-                    // Try to create a proper key if needed
-                    let properKey = key;
-
-                    if (!key.includes('-') && validAsset.tokenAddress && validAsset.tokenStyling.chainId) {
-                        properKey = `${validAsset.tokenStyling.chainId}-${validAsset.tokenAddress.toLowerCase()}`;
-                    } else if (key === 'BTC') {
-                        properKey = '0-bitcoin';
-                    } else if (key === 'CoinbaseBTC') {
-                        const existingKey = findAssetKeyByName(state.validAssets, 'CoinbaseBTC', state.selectedChainId);
-                        if (existingKey) {
-                            properKey = existingKey;
-                        }
-                    }
-
-                    // Add or update the asset
-                    mergedAssets[properKey] = validAsset;
-                });
-
-                return { validAssets: mergedAssets };
-            }),
-
-        updatePriceUSD: (assetKey, newPrice) => {
-            return set((state) => {
-                const assets = { ...state.validAssets };
-
-                // Try to find the correct key if assetKey is a name
-                let actualKey = assetKey;
-
-                if (!assetKey.includes('-')) {
-                    // Special handling for BTC and CoinbaseBTC
-                    if (assetKey === 'BTC') {
-                        actualKey = '0-bitcoin';
-                    } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
-                    } else {
-                        // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
-                    }
-                }
-
-                // Update the asset if we have the key
-                if (assets[actualKey]) {
-                    assets[actualKey] = {
-                        ...assets[actualKey],
-                        priceUSD: newPrice,
-                    };
-                }
-
-                return { validAssets: assets };
-            });
-        },
-
-        updatePriceUSDByAddress: (address, newPrice) =>
-            set((state) => {
-                const assets = { ...state.validAssets };
-
-                // Find keys for the given address across all chains
-                const matchingKeys = Object.keys(assets).filter((key) => {
-                    const asset = assets[key];
-                    return asset.tokenAddress && asset.tokenAddress.toLowerCase() === address.toLowerCase();
-                });
-
-                // Update all matching assets
-                matchingKeys.forEach((key) => {
-                    assets[key] = {
-                        ...assets[key],
-                        priceUSD: newPrice,
-                    };
-                });
-
-                return { validAssets: assets };
-            }),
-
-        updateConnectedUserBalanceRaw: (assetKey, newBalance) =>
-            set((state) => {
-                const assets = { ...state.validAssets };
-
-                // Try to find the correct key if assetKey is a name
-                let actualKey = assetKey;
-
-                if (!assetKey.includes('-')) {
-                    // Special handling for BTC and CoinbaseBTC
-                    if (assetKey === 'BTC') {
-                        actualKey = '0-bitcoin';
-                    } else if (assetKey === 'CoinbaseBTC') {
-                        actualKey = findAssetKeyByName(assets, 'CoinbaseBTC', state.selectedChainId) || assetKey;
-                    } else {
-                        // Try to find by name
-                        actualKey = findAssetKeyByName(assets, assetKey, state.selectedChainId) || assetKey;
-                    }
-                }
-
-                // Update the asset if we have the key
-                if (assets[actualKey]) {
-                    assets[actualKey] = {
-                        ...assets[actualKey],
-                        connectedUserBalanceRaw: newBalance,
-                    };
-                }
-
-                return { validAssets: assets };
-            }),
-
-        isPayingFeesInBTC: false,
-        setIsPayingFeesInBTC: (isPayingFeesInBTC) => set({ isPayingFeesInBTC }),
-
-        // Helper functions to find assets
         findAssetByAddress: (address, chainId) => {
             const assets = get().validAssets;
-            const currentChainId = chainId || get().selectedChainId;
-
+            const cid = chainId ?? get().selectedChain.chainId;
             return Object.values(assets).find(
-                (asset) =>
-                    asset.tokenAddress &&
-                    asset.tokenAddress.toLowerCase() === address.toLowerCase() &&
-                    asset.tokenStyling.chainId === currentChainId,
+                (a) => a.tokenAddress?.toLowerCase() === address.toLowerCase() && a.tokenStyling.chainId === cid,
             );
         },
-
-        findAssetByName: (name, chainId) => {
-            const assets = get().validAssets;
-            const currentChainId = chainId || get().selectedChainId;
-
-            return findAssetByName(assets, name, currentChainId);
-        },
-
+        findAssetByName: (name, chainId) =>
+            findAssetByName(get().validAssets, name, chainId ?? get().selectedChain.chainId),
         findAssetBySymbol: (symbol, chainId) => {
-            const assets = get().validAssets;
-            const currentChainId = chainId || get().selectedChainId;
-
-            return Object.values(assets).find(
-                (asset) =>
-                    asset.tokenStyling.symbol === symbol &&
-                    (asset.tokenStyling.chainId === currentChainId || !asset.tokenStyling.chainId),
+            const cid = chainId ?? get().selectedChain.chainId;
+            return Object.values(get().validAssets).find(
+                (a) => a.tokenStyling.symbol === symbol && (a.tokenStyling.chainId === cid || !a.tokenStyling.chainId),
             );
         },
+        getAssetKey: (asset) =>
+            asset.tokenAddress === 'bitcoin'
+                ? '0-bitcoin'
+                : `${asset.tokenStyling.chainId}-${asset.tokenAddress.toLowerCase()}`,
 
-        getAssetKey: (asset) => {
-            if (asset.tokenAddress === 'bitcoin') {
-                return '0-bitcoin';
-            }
-            return `${asset.tokenStyling.chainId}-${asset.tokenAddress.toLowerCase()}`;
-        },
-
-        // contract data (deposit vaults, swap reservations)
         setUserSwapsFromAddress: (swaps) => set({ userSwapsFromAddress: swaps }),
-        userSwapsFromAddress: [],
-        userSwapsLoadingState: 'loading',
-        setUserSwapsLoadingState: (state) => set({ userSwapsLoadingState: state }),
-        selectedSwapToManage: null,
+        setUserSwapsLoadingState: (s) => set({ userSwapsLoadingState: s }),
+
         setSelectedSwapToManage: (swap) => set({ selectedSwapToManage: swap }),
-        showManageDepositVaultsScreen: false,
-        setShowManageDepositVaultsScreen: (show) => set({ showManageDepositVaultsScreen: show }),
-        swapFlowState: '0-not-started',
-        setSwapFlowState: (state) => set({ swapFlowState: state }),
-        depositFlowState: '0-not-started',
-        setDepositFlowState: (state) => set({ depositFlowState: state }),
-        btcInputSwapAmount: '',
-        setBtcInputSwapAmount: (amount) => set({ btcInputSwapAmount: amount }),
-        coinbaseBtcDepositAmount: '',
-        setCoinbaseBtcDepositAmount: (amount) => set({ coinbaseBtcDepositAmount: amount }),
-        btcOutputAmount: '',
-        setBtcOutputAmount: (amount) => set({ btcOutputAmount: amount }),
-        coinbaseBtcOutputAmount: '',
-        setCoinbaseBtcOutputAmount: (amount) => set({ coinbaseBtcOutputAmount: amount }),
-        payoutBTCAddress: '',
-        setPayoutBTCAddress: (address) => set({ payoutBTCAddress: address }),
-        lowestFeeReservationParams: null,
-        setLowestFeeReservationParams: (reservation) => set({ lowestFeeReservationParams: reservation }),
-        showManageReservationScreen: false,
-        setShowManageReservationScreen: (show) => set({ showManageReservationScreen: show }),
-        depositMode: true,
-        setDepositMode: (mode) => set({ depositMode: mode }),
-        withdrawAmount: '',
-        setWithdrawAmount: (amount) => set({ withdrawAmount: amount }),
-        protocolFeeAmountMicroUsdt: '',
-        setProtocolFeeAmountMicroUsdt: (amount) => set({ protocolFeeAmountMicroUsdt: amount }),
-        swapReservationNotFound: false,
-        setSwapReservationNotFound: (notFound) => set({ swapReservationNotFound: notFound }),
-        currentReservationState: '',
-        setCurrentReservationState: (state) => set({ currentReservationState: state }),
-        areNewDepositsPaused: false,
-        setAreNewDepositsPaused: (paused) => set({ areNewDepositsPaused: paused }),
-        isGasFeeTooHigh: false,
-        setIsGasFeeTooHigh: (isGasFeeTooHigh) => set({ isGasFeeTooHigh: isGasFeeTooHigh }),
-        confirmationBlocksNeeded: REQUIRED_BLOCK_CONFIRMATIONS,
-        setConfirmationBlocksNeeded: (blocks) => set({ confirmationBlocksNeeded: blocks }),
-        currentTotalBlockConfirmations: 0,
-        setCurrentTotalBlockConfirmations: (confirmations) => set({ currentTotalBlockConfirmations: confirmations }),
-        proxyWalletSwapStatus: 0,
-        setProxyWalletSwapStatus: (status) => set({ proxyWalletSwapStatus: status }),
-        currencyModalTitle: 'close',
-        setCurrencyModalTitle: (x) => set({ currencyModalTitle: x }),
-        ethPayoutAddress: '',
-        setEthPayoutAddress: (address) => set({ ethPayoutAddress: address }),
-        bitcoinSwapTransactionHash: '',
-        setBitcoinSwapTransactionHash: (hash) => set({ bitcoinSwapTransactionHash: hash }),
-        isOnline: true,
+        setShowManageDepositVaultsScreen: (b) => set({ showManageDepositVaultsScreen: b }),
+
+        setSwapFlowState: (s) => set({ swapFlowState: s }),
+        setDepositFlowState: (s) => set({ depositFlowState: s }),
+
+        setBtcInputSwapAmount: (v) => set({ btcInputSwapAmount: v }),
+        setCoinbaseBtcDepositAmount: (v) => set({ coinbaseBtcDepositAmount: v }),
+        setBtcOutputAmount: (v) => set({ btcOutputAmount: v }),
+        setCoinbaseBtcOutputAmount: (v) => set({ coinbaseBtcOutputAmount: v }),
+        setPayoutBTCAddress: (v) => set({ payoutBTCAddress: v }),
+        setLowestFeeReservationParams: (x) => set({ lowestFeeReservationParams: x }),
+        setShowManageReservationScreen: (b) => set({ showManageReservationScreen: b }),
+        setDepositMode: (b) => set({ depositMode: b }),
+        setWithdrawAmount: (v) => set({ withdrawAmount: v }),
+        setProtocolFeeAmountMicroUsdt: (v) => set({ protocolFeeAmountMicroUsdt: v }),
+        setSwapReservationNotFound: (b) => set({ swapReservationNotFound: b }),
+        setCurrentReservationState: (v) => set({ currentReservationState: v }),
+        setAreNewDepositsPaused: (b) => set({ areNewDepositsPaused: b }),
+        setIsGasFeeTooHigh: (b) => set({ isGasFeeTooHigh: b }),
+        setConfirmationBlocksNeeded: (n) => set({ confirmationBlocksNeeded: n }),
+        setCurrentTotalBlockConfirmations: (n) => set({ currentTotalBlockConfirmations: n }),
+        setProxyWalletSwapStatus: (n) => set({ proxyWalletSwapStatus: n }),
+
+        setCurrencyModalTitle: (t) => set({ currencyModalTitle: t }),
+        setEthPayoutAddress: (v) => set({ ethPayoutAddress: v }),
+        setBitcoinSwapTransactionHash: (v) => set({ bitcoinSwapTransactionHash: v }),
+
         setIsOnline: (b) => set({ isOnline: b }),
-        riftDeveloperMode: false,
-        setRiftDeveloperMode: (mode) => set({ riftDeveloperMode: mode }),
-        uniswapInputAssetPriceUSD: 0,
-        setUniswapInputAssetPriceUSD: (price) => set({ uniswapInputAssetPriceUSD: price }),
-        selectedUniswapInputAsset: defaultUniswapAsset,
-        setSelectedUniswapInputAsset: (asset) => set({ selectedUniswapInputAsset: asset }),
-        selectedChainID: defaultChainId,
-        setSelectChainID: (chainID) => set({ selectedChainID: chainID }),
-        uniswapTokens: [],
-        setUniswapTokens: (tokens) => set({ uniswapTokens: tokens }),
-    };
-});
+        setRiftDeveloperMode: (b) => set({ riftDeveloperMode: b }),
+
+        setUniswapInputAssetPriceUSD: (n) => set({ uniswapInputAssetPriceUSD: n }),
+        setSelectedUniswapInputAsset: (t) => set({ selectedUniswapInputAsset: t }),
+        setSelectChainID: (id) => set({ selectedChainID: id }),
+        setUniswapTokens: (arr) => set({ uniswapTokens: arr }),
+    }) satisfies Store;
+
+/* ─────────────────────────── export hook ─────────────────────────── */
+
+export const useStore = create<Store>()(createStore);
