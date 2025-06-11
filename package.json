@@ -2,7 +2,7 @@
     "private": true,
     "scripts": {
         "preinstall": "git submodule update --init --depth 1",
-        "sub:latest": "git submodule update --remote --merge --depth 1",
+        "sub:latest": "git submodule update --remote --force --depth 1",
         "dev": "next dev",
         "dev-debug": "NODE_OPTIONS='--inspect' next dev",
         "build": "next build",
