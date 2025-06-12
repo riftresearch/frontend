@@ -33,6 +33,9 @@ export type ChainScopedConfig = {
     paraswapAdapterAddress: string;
     riftcbBTCAdapterAddress: string;
   };
+  marketMakers: Array<{
+    bitcoinAddress: string;
+  }>;
 };
 
 export type RouteButton = "Swap" | "Manage" | "About";
