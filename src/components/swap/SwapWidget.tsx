@@ -9,6 +9,7 @@ import {
   Portal,
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent } from "react";
+import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
 import { BITCOIN_DECIMALS, opaqueBackgroundColor } from "@/utils/constants";
 import TokenButton from "@/components/other/TokenButton";
@@ -22,6 +23,7 @@ import { useAvailableBitcoinLiquidity } from "@/hooks/useAvailableBitcoinLiquidi
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
+  const { isConnected: isWalletConnected } = useAccount();
   const [mounted, setMounted] = useState(false);
   const [inputAmount, setInputAmount] = useState("");
   const [outputAmount, setOutputAmount] = useState("");
@@ -62,6 +64,14 @@ export const SwapWidget = () => {
   };
 
   const handleSwap = () => {
+    if (!isWalletConnected) {
+      toastInfo({
+        title: "Connect wallet",
+        description: "Please connect your wallet to swap",
+      });
+      return;
+    }
+
     if (mounted && isMobile) {
       toastInfo({
         title: "Hop on your laptop",
@@ -95,13 +105,13 @@ export const SwapWidget = () => {
       return;
     }
 
-    const inputAmountInSatoshis = BigInt(
-      parseFloat(inputAmount) * 10 ** BITCOIN_DECIMALS
+    const estimatedOutputAmountInSatoshis = BigInt(
+      parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS
     );
     const largestMarketMakerBalance = BigInt(
       availableBitcoinLiquidity.largestBalance
     );
-    if (inputAmountInSatoshis > largestMarketMakerBalance) {
+    if (estimatedOutputAmountInSatoshis > largestMarketMakerBalance) {
       toastInfo({
         title: "Insufficient liquidity",
         description: `We don't have enough liquidity to swap ${inputAmount} BTC`,
