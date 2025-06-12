@@ -1,6 +1,7 @@
 import React from "react";
 import { Button, Flex } from "@chakra-ui/react";
-import { useAccount, useChainId, useChains } from "wagmi";
+import { useAccount, useChains } from "wagmi";
+import { useStore } from "@/utils/store";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
 import { reownModal } from "@/utils/wallet";
@@ -13,7 +14,7 @@ const getCustomChainName = (chainId: number): string => {
 
 export const ConnectWalletButton: React.FC = () => {
   const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const chainId = useStore((state) => state.connectedChainId);
   const chains = useChains();
 
   // Format the user's address for display

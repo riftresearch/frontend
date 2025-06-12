@@ -45,6 +45,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     etherscanUrl: "https://etherscan.io/",
     rpcUrl: "https://mainnet.infura.io/v3/YOUR_INFURA_KEY", // TODO: Replace with actual RPC
     esploraUrl: "https://blockstream.info/api",
+    bitcoinNetwork: "mainnet",
     dataEngineUrl: "https://api.mainnet.rift.finance", // TODO: Replace with actual URL'
     underlyingSwappingAsset: {
       tokenAddress: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
@@ -58,6 +59,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
       paraswapAdapterAddress: "0x0000000000000000000000000000000000000000",
       riftcbBTCAdapterAddress: "0x0000000000000000000000000000000000000000",
     },
+    marketMakers: [],
   },
   // Base Mainnet
   8453: {
@@ -67,6 +69,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     etherscanUrl: "https://basescan.org/",
     rpcUrl: "https://mainnet.base.org", // Base Mainnet RPC
     esploraUrl: "https://blockstream.info/api",
+    bitcoinNetwork: "mainnet",
     dataEngineUrl: "https://api.base.rift.finance", // TODO: Replace with actual URL
     underlyingSwappingAsset: {
       tokenAddress: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
@@ -80,6 +83,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
       paraswapAdapterAddress: "0x6abE8ABd0275E5564ed1336F0243A52C32562F71",
       riftcbBTCAdapterAddress: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual address
     },
+    marketMakers: [],
   },
   // Devnet
   // cargo run --release --bin devnet -- --fund-address 0x82bdA835Ab91D3F38Cb291030A5B0e6Dff086d44 --fund-address 0xb0D3EE0B9d205aa52b7e59adC61df39f80963413
@@ -90,6 +94,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     etherscanUrl: "https://etherscan.io/",
     rpcUrl: "http://0.0.0.0:50101",
     esploraUrl: "http://0.0.0.0:50103",
+    bitcoinNetwork: "regtest",
     dataEngineUrl: "http://0.0.0.0:50100",
     underlyingSwappingAsset: {
       tokenAddress: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
@@ -103,5 +108,10 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
       paraswapAdapterAddress: "0x0000000000000000000000000000000000000000",
       riftcbBTCAdapterAddress: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
     },
+    marketMakers: [
+      {
+        bitcoinAddress: "bcrt1q6emp5yxls9zrac9wmucn2xffvhp5n7qhx7xxa3",
+      },
+    ],
   },
 };

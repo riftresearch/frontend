@@ -7,7 +7,6 @@ import { BASE_LOGO } from "./SVGs";
 import Image from "next/image";
 import { useStore } from "@/utils/store";
 import { ValidAsset } from "@/utils/types";
-import { useChainId } from "wagmi";
 
 interface TokenProps {
   asset: ValidAsset;
@@ -35,7 +34,7 @@ const TokenButton: React.FC<TokenProps> = ({
   cursor = "default",
 }) => {
   const { isMobile } = useWindowSize();
-  const chainId = useChainId();
+  const chainId = useStore((state) => state.connectedChainId);
   const adjustedH = h ?? isMobile ? "30px" : "36px";
   const adjustedFontSize = fontSize ?? `calc(${adjustedH} / 2 + 0px)`;
   const arrowSize = fontSize ?? `calc(${adjustedH} / 4)`;

@@ -1,6 +1,6 @@
 import React from "react";
 import { Text } from "@chakra-ui/react";
-import { useChainId } from "wagmi";
+import { useStore } from "@/utils/store";
 import {
   BASE_LOGO,
   ARBITRUM_LOGO,
@@ -47,8 +47,8 @@ export const NetworkIcon: React.FC<NetworkIconProps> = ({
   mr,
 }) => {
   // Use provided chainId or get from context
-  const contextChainId = useChainId();
-  const chainId = providedChainId || contextChainId;
+  const connectedChainId = useStore((state) => state.connectedChainId);
+  const chainId = providedChainId || connectedChainId;
 
   // Get the icon with width/height applied
   const icon = getNetworkIcon(chainId, width, height);

@@ -10,7 +10,7 @@ import {
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent } from "react";
 import { colors } from "@/utils/colors";
-import { opaqueBackgroundColor } from "@/utils/constants";
+import { BITCOIN_DECIMALS, opaqueBackgroundColor } from "@/utils/constants";
 import TokenButton from "@/components/other/TokenButton";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { InfoSVG } from "../other/SVGs";
@@ -18,6 +18,7 @@ import { useStore } from "@/utils/store";
 import { toastInfo } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { TokenStyle, ValidAsset } from "@/utils/types";
+import { useAvailableBitcoinLiquidity } from "@/hooks/useAvailableBitcoinLiquidity";
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
@@ -26,6 +27,10 @@ export const SwapWidget = () => {
   const [outputAmount, setOutputAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
+  const {
+    data: availableBitcoinLiquidity,
+    isLoading: isLoadingAvailableBitcoinLiquidity,
+  } = useAvailableBitcoinLiquidity();
 
   const [inputAsset, setInputAsset] = useState<ValidAsset>(
     selectedChainConfig.underlyingSwappingAsset
@@ -74,9 +79,40 @@ export const SwapWidget = () => {
       return;
     }
 
+    if (inputAsset.style.symbol.toLowerCase() !== "cbbtc") {
+      toastInfo({
+        title: "Not supported",
+        description: "[TODO: Add support for other tokens]",
+      });
+      return;
+    }
+
+    if (isLoadingAvailableBitcoinLiquidity || !availableBitcoinLiquidity) {
+      toastInfo({
+        title: "Loading...",
+        description: "Searching for available Bitcoin liquidity",
+      });
+      return;
+    }
+
+    const inputAmountInSatoshis = BigInt(
+      parseFloat(inputAmount) * 10 ** BITCOIN_DECIMALS
+    );
+    const largestMarketMakerBalance = BigInt(
+      availableBitcoinLiquidity.largestBalance
+    );
+    if (inputAmountInSatoshis > largestMarketMakerBalance) {
+      toastInfo({
+        title: "Insufficient liquidity",
+        description: `We don't have enough liquidity to swap ${inputAmount} BTC`,
+      });
+      return;
+    }
+
+    // TODO: At this point, we have enough liquidity to swap
     toastInfo({
       title: "Swap functionality coming soon!",
-      description: "This is a demo swap widget",
+      description: "We can fill this!",
     });
   };
 
