@@ -12,3 +12,8 @@
 - Test: `pnpm test`
 - Lint: `pnpm lint`
 - Type check: `pnpm typecheck`
+
+## Git Commits
+- Never reference Claude, AI, or assistant in commit messages
+- Use standard conventional commit format
+- Focus on technical changes and business value
