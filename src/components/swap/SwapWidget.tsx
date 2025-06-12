@@ -15,6 +15,9 @@ import { BITCOIN_DECIMALS, opaqueBackgroundColor } from "@/utils/constants";
 import TokenButton from "@/components/other/TokenButton";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { InfoSVG } from "../other/SVGs";
+import { validateBitcoinPayoutAddress, validateBitcoinPayoutAddressWithNetwork } from "@/utils/bitcoinUtils";
+import { FONT_FAMILIES } from "@/utils/font";
+import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
 import { toastInfo } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
@@ -28,6 +31,12 @@ export const SwapWidget = () => {
   const [inputAmount, setInputAmount] = useState("");
   const [outputAmount, setOutputAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  const [payoutBTCAddress, setPayoutBTCAddress] = useState("");
+  const [addressValidation, setAddressValidation] = useState<{
+    isValid: boolean;
+    networkMismatch?: boolean;
+    detectedNetwork?: string;
+  }>({ isValid: false });
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const {
     data: availableBitcoinLiquidity,
@@ -49,7 +58,21 @@ export const SwapWidget = () => {
     // Reset values on mount
     setInputAmount("");
     setOutputAmount("");
+    setPayoutBTCAddress("");
   }, []);
+
+  // Validate Bitcoin address whenever it changes
+  useEffect(() => {
+    if (payoutBTCAddress) {
+      const validation = validateBitcoinPayoutAddressWithNetwork(
+        payoutBTCAddress,
+        selectedChainConfig.bitcoinNetwork
+      );
+      setAddressValidation(validation);
+    } else {
+      setAddressValidation({ isValid: false });
+    }
+  }, [payoutBTCAddress, selectedChainConfig.bitcoinNetwork]);
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -85,6 +108,18 @@ export const SwapWidget = () => {
       toastInfo({
         title: "Enter amounts",
         description: "Please enter an amount to swap",
+      });
+      return;
+    }
+
+    if (!payoutBTCAddress || !addressValidation.isValid) {
+      let description = "Please enter a valid Bitcoin payout address";
+      if (addressValidation.networkMismatch) {
+        description = `Wrong network: expected ${selectedChainConfig.bitcoinNetwork} but detected ${addressValidation.detectedNetwork}`;
+      }
+      toastInfo({
+        title: "Invalid Bitcoin address",
+        description,
       });
       return;
     }
@@ -126,7 +161,23 @@ export const SwapWidget = () => {
     });
   };
 
-  const canSwap = inputAmount && outputAmount && parseFloat(inputAmount) > 0;
+  const canSwap = inputAmount && outputAmount && parseFloat(inputAmount) > 0 && payoutBTCAddress && addressValidation.isValid;
+  
+  const getButtonText = () => {
+    if (!inputAmount || !outputAmount || parseFloat(inputAmount) <= 0) {
+      return "Enter Amount";
+    }
+    if (!payoutBTCAddress) {
+      return "Enter Bitcoin Address";
+    }
+    if (payoutBTCAddress && !addressValidation.isValid) {
+      if (addressValidation.networkMismatch) {
+        return `Wrong Network (${addressValidation.detectedNetwork})`;
+      }
+      return "Invalid Bitcoin Address";
+    }
+    return "Swap";
+  };
 
   if (!mounted) {
     return (
@@ -349,6 +400,93 @@ export const SwapWidget = () => {
               <WebAssetTag cursor="default" asset="BTC" />
             </Flex>
           </Flex>
+
+          {/* BTC Payout Address */}
+          <Flex
+            ml="8px"
+            alignItems="center"
+            mt="18px"
+            w="100%"
+            mb="6px"
+          >
+            <Text
+              fontSize="15px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              color={colors.offWhite}
+            >
+              Bitcoin Payout Address
+            </Text>
+            <ChakraTooltip.Root>
+              <ChakraTooltip.Trigger asChild>
+                <Flex pl="5px" mt="-2px" cursor="pointer" userSelect="none">
+                  <Flex mt="0px" mr="2px">
+                    <InfoSVG width="12px" />
+                  </Flex>
+                </Flex>
+              </ChakraTooltip.Trigger>
+              <Portal>
+                <ChakraTooltip.Positioner>
+                  <ChakraTooltip.Content
+                    fontFamily="Aux"
+                    letterSpacing="-0.5px"
+                    color={colors.offWhite}
+                    bg="#121212"
+                    fontSize="12px"
+                  >
+                    Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported.
+                  </ChakraTooltip.Content>
+                </ChakraTooltip.Positioner>
+              </Portal>
+            </ChakraTooltip.Root>
+          </Flex>
+          <Flex
+            mt="-4px"
+            mb="10px"
+            px="10px"
+            bg="rgba(46, 29, 14, 0.66)"
+            border="2px solid #78491F"
+            w="100%"
+            h="60px"
+            borderRadius="10px"
+          >
+            <Flex direction="row" py="6px" px="5px">
+              <Input
+                value={payoutBTCAddress}
+                onChange={(e) => setPayoutBTCAddress(e.target.value)}
+                fontFamily="Aux"
+                border="none"
+                bg="transparent"
+                outline="none"
+                mt="3.5px"
+                mr="15px"
+                ml="-4px"
+                p="0px"
+                w="485px"
+                letterSpacing="-5px"
+                color={colors.offWhite}
+                _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                _selected={{
+                  border: "none",
+                  boxShadow: "none",
+                  outline: "none",
+                }}
+                fontSize="28px"
+                placeholder="bc1q5d7rjq7g6rd2d..."
+                _placeholder={{ color: "#856549" }}
+                spellCheck={false}
+              />
+
+              {payoutBTCAddress.length > 0 && (
+                <Flex ml="-5px">
+                  <BitcoinAddressValidation 
+                    address={payoutBTCAddress} 
+                    validation={addressValidation}
+                  />
+                </Flex>
+              )}
+            </Flex>
+          </Flex>
         </Flex>
 
         {/* Exchange Rate */}
@@ -433,7 +571,7 @@ export const SwapWidget = () => {
             color={canSwap ? colors.offWhite : colors.darkerGray}
             fontFamily="Nostromo"
           >
-            {canSwap ? "Swap" : "Enter Amount"}
+            {getButtonText()}
           </Text>
         </Flex>
       </Flex>

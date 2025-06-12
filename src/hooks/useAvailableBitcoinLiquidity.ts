@@ -44,7 +44,7 @@ export function useAvailableBitcoinLiquidity() {
       return { balances, largestBalance };
     },
     enabled: !!esploraUrl && marketMakers.length > 0,
-    staleTime: 30_000, // 30 seconds
-    refetchInterval: 30_000, // Refetch every 30 seconds
+    staleTime: 10_000, // 10 seconds
+    refetchInterval: 10_000, // Refetch every 10 seconds
   });
 }

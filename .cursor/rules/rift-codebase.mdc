@@ -103,5 +103,9 @@ Remember: The best TypeScript code is the code your team can **understand, maint
 
 
 ## Ethereum Engineering
-Never use ethers always the the `wagmi` and `viem` packages for any ethereum/smart contract related coding
+Never use ethers always the `wagmi` and `viem` packages for any ethereum/smart contract related coding
 Documentation on ethers v5 -> viem is here: https://viem.sh/docs/ethers-migration
+
+
+## Data Fetching
+If you need to get/update data from a remote, always lean towards creating a tanstack query based hook in the hooks/ directory
