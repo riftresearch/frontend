@@ -15,7 +15,10 @@ import { BITCOIN_DECIMALS, opaqueBackgroundColor } from "@/utils/constants";
 import TokenButton from "@/components/other/TokenButton";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { InfoSVG } from "../other/SVGs";
-import { validateBitcoinPayoutAddress, validateBitcoinPayoutAddressWithNetwork } from "@/utils/bitcoinUtils";
+import {
+  validateBitcoinPayoutAddress,
+  validateBitcoinPayoutAddressWithNetwork,
+} from "@/utils/bitcoinUtils";
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
@@ -23,10 +26,12 @@ import { toastInfo } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { TokenStyle, ValidAsset } from "@/utils/types";
 import { useAvailableBitcoinLiquidity } from "@/hooks/useAvailableBitcoinLiquidity";
+import { useCreateAuction } from "@/hooks/useCreateAuction";
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected } = useAccount();
+  useCreateAuction();
   const [mounted, setMounted] = useState(false);
   const [inputAmount, setInputAmount] = useState("");
   const [outputAmount, setOutputAmount] = useState("");
@@ -161,8 +166,13 @@ export const SwapWidget = () => {
     });
   };
 
-  const canSwap = inputAmount && outputAmount && parseFloat(inputAmount) > 0 && payoutBTCAddress && addressValidation.isValid;
-  
+  const canSwap =
+    inputAmount &&
+    outputAmount &&
+    parseFloat(inputAmount) > 0 &&
+    payoutBTCAddress &&
+    addressValidation.isValid;
+
   const getButtonText = () => {
     if (!inputAmount || !outputAmount || parseFloat(inputAmount) <= 0) {
       return "Enter Amount";
@@ -402,13 +412,7 @@ export const SwapWidget = () => {
           </Flex>
 
           {/* BTC Payout Address */}
-          <Flex
-            ml="8px"
-            alignItems="center"
-            mt="18px"
-            w="100%"
-            mb="6px"
-          >
+          <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="6px">
             <Text
               fontSize="15px"
               fontFamily={FONT_FAMILIES.NOSTROMO}
@@ -479,8 +483,8 @@ export const SwapWidget = () => {
 
               {payoutBTCAddress.length > 0 && (
                 <Flex ml="-5px">
-                  <BitcoinAddressValidation 
-                    address={payoutBTCAddress} 
+                  <BitcoinAddressValidation
+                    address={payoutBTCAddress}
                     validation={addressValidation}
                   />
                 </Flex>
