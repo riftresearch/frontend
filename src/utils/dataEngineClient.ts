@@ -63,10 +63,16 @@ export interface OTCSwap {
   refund?: FinalizedTransaction;
 }
 
+export interface BlockLeafReturn {
+  height: number;
+  block_hash: number[]; // 32-byte array (stored in reverse byte order)
+  cumulative_chainwork: number[]; // 32-byte array (stored in reverse byte order)
+}
+
 export interface BlockLeaf {
   height: number;
-  block_hash: string; // 32-byte hex string (stored in reverse byte order)
-  cumulative_chainwork: string; // 32-byte hex string (stored in reverse byte order)
+  block_hash: `0x${string}`;
+  cumulative_chainwork: `0x${string}`;
 }
 
 export interface DutchAuctionParams {
@@ -96,9 +102,10 @@ export interface DutchAuction {
 }
 
 export interface TipProofResponse {
-  leaf: BlockLeaf;
-  siblings: string[];
-  peaks: string[];
+  leaf: BlockLeafReturn;
+  siblings: number[][]; // Array of 32-byte arrays
+  peaks: number[][]; // Array of 32-byte arrays
+  mmr_root: number[]; // 32-byte array
 }
 
 export interface SwapQuery {

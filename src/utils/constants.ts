@@ -4,6 +4,8 @@ import { useStore } from "./store";
 export const IS_FRONTEND_PAUSED =
   process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === "true";
 
+export const LIGHT_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD = 1000;
+
 export const BITCOIN_DECIMALS = 8;
 
 export const bitcoinStyle: TokenStyle = {

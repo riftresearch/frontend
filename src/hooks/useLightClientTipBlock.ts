@@ -99,11 +99,15 @@ export function useLightClientTipBlock(): TipBlockInfo {
     queryKey: ["dataEngine", "tipProof", mmrRoot],
     queryFn: async () => {
       const tipProof = await dataEngineClient.getTipProof();
-      console.log("tipProof", tipProof);
 
       // Check if MMR roots match
+      // Convert contract MMR root (hex string) to bytes for comparison
       const contractMmrRoot = mmrRoot?.toLowerCase();
-      const dataEngineMmrRoot = tipProof.peaks?.[0]?.toLowerCase(); // Assuming first peak represents MMR root
+      // Convert data engine MMR root (byte array) to hex string for comparison
+      const dataEngineMmrRoot = tipProof.mmr_root
+        ? "0x" +
+          tipProof.mmr_root.map((b) => b.toString(16).padStart(2, "0")).join("")
+        : undefined;
 
       return {
         ...tipProof,
@@ -111,10 +115,10 @@ export function useLightClientTipBlock(): TipBlockInfo {
       };
     },
     enabled: !!mmrRoot && !!riftExchangeAddress,
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
       // If not in sync, poll every 5 seconds
-      // If in sync, poll every 30 seconds for updates
-      return (data as any)?.isInSync ? 30_000 : 5_000;
+      // If in sync, disable polling and rely on useWatchContractEvent
+      return query.state.data?.isInSync === true ? false : 5_000;
     },
     retry: (failureCount, error) => {
       // Retry up to 3 times for network errors
@@ -154,8 +158,8 @@ export function useLightClientTipBlock(): TipBlockInfo {
     tipProofData?.isInSync && tipProofData.leaf
       ? {
           height: tipProofData.leaf.height,
-          block_hash: tipProofData.leaf.block_hash,
-          cumulative_chainwork: tipProofData.leaf.cumulative_chainwork,
+          block_hash: `0x${tipProofData.leaf.block_hash.map((b) => b.toString(16).padStart(2, "0")).join("")}`,
+          cumulative_chainwork: `0x${tipProofData.leaf.cumulative_chainwork.map((b) => b.toString(16).padStart(2, "0")).join("")}`,
         }
       : undefined;
 
