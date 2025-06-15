@@ -1,0 +1,51 @@
+{
+  "name": "bundler-sdk-viem",
+  "description": "Viem-based extension of `@morpho-org/simulation-sdk` that exports utilities to transform simple interactions on Morpho (such as `Blue_Borrow`) and Morpho Vaults (such as `MetaMorpho_Deposit`) into the required bundles (with ERC20 approvals, transfers, etc) to submit to the bundler onchain.",
+  "version": "3.2.0",
+  "author": "Morpho Association <contact@morpho.org>, Rift Research <dev@rift.trade>",
+  "contributors": [
+    "Rubilmax <rmilon@gmail.com>",
+    "Alpine <cliff@rift.trade>" 
+  ],
+  "repository": "github:morpho-org/sdks",
+  "homepage": "https://github.com/morpho-org/sdks",
+  "bugs": {
+    "url": "https://github.com/morpho-org/sdks/issues",
+    "email": "contact@morpho.org"
+  },
+  "license": "MIT",
+  "main": "lib/index.js",
+  "files": [
+    "lib"
+  ],
+  "peerDependencies": {
+    "viem": "^2.0.0",
+    "@morpho-org/blue-sdk": "^4.0.0",
+    "@morpho-org/blue-sdk-viem": "^3.1.1",
+    "@morpho-org/morpho-ts": "^2.4.0",
+    "@morpho-org/simulation-sdk": "^3.1.0"
+  },
+  "devDependencies": {
+    "@tanstack/query-core": "^5.62.16",
+    "@tanstack/react-query": "^5.62.11",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/lodash": "^4.17.12",
+    "lodash": "^4.17.21",
+    "typescript": "^5.7.2",
+    "viem": "^2.23.0",
+    "vitest": "^3.0.5",
+    "@morpho-org/blue-sdk": "^4.0.0",
+    "@morpho-org/blue-sdk-viem": "^3.1.1",
+    "@morpho-org/morpho-ts": "^2.4.0",
+    "@morpho-org/morpho-test": "^2.3.0",
+    "@morpho-org/simulation-sdk": "^3.1.0",
+    "@morpho-org/simulation-sdk-wagmi": "^3.0.2",
+    "@morpho-org/test-wagmi": "^2.0.4",
+    "@morpho-org/test": "^2.1.4"
+  },
+  "scripts": {
+    "prepublish": "$npm_execpath build",
+    "build": "tsc --build tsconfig.build.json"
+  }
+}

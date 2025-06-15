@@ -1,9 +1,11 @@
-import { useWaitForTransactionReceipt } from "wagmi";
-import { type Address } from "viem";
 import {
-  useSimulateRiftAuctionAdaptorCreateAuction,
-  useWriteRiftAuctionAdaptorCreateAuction,
-} from "@/generated";
+  useWaitForTransactionReceipt,
+  useWriteContract,
+  useSimulateContract,
+  useAccount,
+} from "wagmi";
+import { type Address } from "viem";
+import { bundler3Abi } from "@/generated";
 import { useStore } from "@/utils/store";
 import { useLightClientTipBlock } from "./useLightClientTipBlock";
 import { useBitcoinTipBlock } from "./useBitcoinTipBlock";
@@ -66,6 +68,7 @@ const isLightClientSafeForOrders = (
 export function useCreateAuction() {
   const connectedChainId = useStore((state) => state.connectedChainId);
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
+  const { address: userAddress } = useAccount();
   const { blockLeaf, isLoading: isLightClientLoading } =
     useLightClientTipBlock();
   const { blockInfo, isLoading: isBitcoinLoading } = useBitcoinTipBlock();
@@ -73,7 +76,41 @@ export function useCreateAuction() {
   const isLoading =
     isLightClientLoading || isBitcoinLoading || !blockLeaf || !blockInfo;
 
-  const createAuction = async () => {
+  // Bundler3 contract interaction hooks
+  const {
+    writeContract: writeBundler,
+    isPending: isBundlerPending,
+    data: bundlerTxHash,
+  } = useWriteContract();
+
+  const {
+    data: simulationData,
+    isLoading: isSimulating,
+    error: simulationError,
+  } = useSimulateContract({
+    abi: bundler3Abi,
+    address: selectedChainConfig?.bundler3.bundler3Address as Address,
+    functionName: "multicall",
+    args: [] as any, // Will be populated when we have bundle data
+    query: { enabled: false }, // Only simulate when explicitly triggered
+  });
+
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
+      hash: bundlerTxHash,
+    });
+
+  const createAuction = async (params: {
+    // TODO: Add params
+  }) => {
+    if (!userAddress || !selectedChainConfig) {
+      toastError(new Error(), {
+        title: "Wallet not connected",
+        description: "Please connect your wallet to create an auction",
+      });
+      return;
+    }
+
     if (isLoading) {
       toastInfo({
         title: "Loading block information",
@@ -90,12 +127,14 @@ export function useCreateAuction() {
       });
       return;
     }
-  };
 
-  const {
-    writeContract: write,
-    writeContractAsync: writeAsync,
-    data,
-    isPending,
-  } = useWriteRiftAuctionAdaptorCreateAuction();
+  return {
+    createAuction,
+    isLoading: isLoading || isBundlerPending || isConfirming,
+    isConfirmed,
+    isPending: isBundlerPending,
+    isSimulating,
+    simulationError,
+    txHash: bundlerTxHash,
+  };
 }
