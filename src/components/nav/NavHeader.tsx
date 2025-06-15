@@ -24,7 +24,7 @@ const NavHeader: React.FC<NavHeaderProps> = ({}) => {
 
   useEffect(() => {
     setTimeout(() => setHideItems(!isOpen), isOpen ? 100 : animationDelay.num);
-  }, [isOpen]);
+  }, [isOpen, animationDelay.num]);
 
   if (isTablet)
     return (

@@ -1,7 +1,7 @@
 import type { SimulationResult } from "@morpho-org/simulation-sdk";
 
 import type { Address } from "viem";
-import type { ActionType, InputBundlerOperation } from "./types/index.js";
+import type { ActionType, InputBundlerOperation } from "./types/index";
 
 export namespace BundlerErrors {
   export class Bundle extends Error {

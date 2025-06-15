@@ -2960,3 +2960,131 @@ export const compoundV3MigrationAdapterAbi = [
     stateMutability: "nonpayable",
   },
 ] as const;
+
+export const riftAuctionAdaptorAbi = [
+  ...coreAdapterAbi,
+  {
+    type: "constructor",
+    inputs: [
+      {
+        name: "_bundler3",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "_btcAuctionHouse",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "syntheticBitcoin",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "btcAuctionHouse",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "createAuction",
+    inputs: [
+      {
+        name: "startsBTCperBTCRate",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "endcbsBTCperBTCRate",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "decayBlocks",
+        type: "uint64",
+        internalType: "uint64",
+      },
+      {
+        name: "deadline",
+        type: "uint64",
+        internalType: "uint64",
+      },
+      {
+        name: "fillerWhitelistContract",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "baseParams",
+        type: "tuple",
+        internalType: "struct BaseCreateOrderParams",
+        components: [
+          {
+            name: "owner",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "bitcoinScriptPubKey",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "salt",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "confirmationBlocks",
+            type: "uint8",
+            internalType: "uint8",
+          },
+          {
+            name: "safeBlockLeaf",
+            type: "tuple",
+            internalType: "struct BlockLeaf",
+            components: [
+              {
+                name: "blockHash",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "height",
+                type: "uint32",
+                internalType: "uint32",
+              },
+              {
+                name: "cumulativeChainwork",
+                type: "uint256",
+                internalType: "uint256",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;

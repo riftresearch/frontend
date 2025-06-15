@@ -1,7 +1,11 @@
 import { Navbar } from "@/components/nav/Navbar";
-import { SwapWidget } from "@/components/swap/SwapWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { Flex } from "@chakra-ui/react";
+import dynamic from "next/dynamic";
+
+const SwapWidget = dynamic(() => import("@/components/swap/SwapWidget").then(mod => ({ default: mod.SwapWidget })), {
+  ssr: false,
+});
 
 export default function Home() {
   useSyncChainIdToStore();

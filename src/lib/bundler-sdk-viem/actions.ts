@@ -38,14 +38,15 @@ import {
   getPermit2PermitTypedData,
   getPermitTypedData,
 } from "@morpho-org/blue-sdk-viem";
+import { riftAuctionAdaptorAbi } from "./abis";
 import { signTypedData } from "viem/actions";
-import { ActionBundle, ActionBundleRequirements } from "./ActionBundle.js";
-import { BundlerErrors } from "./errors.js";
+import { ActionBundle, ActionBundleRequirements } from "./ActionBundle";
+import { BundlerErrors } from "./errors";
 import type {
   Action,
   BundlerOperation,
   TransactionRequirement,
-} from "./types/index.js";
+} from "./types/index";
 
 const encodeErc20Approval = (
   token: Address,
@@ -1116,6 +1117,33 @@ export const encodeOperation = (
           ],
         },
       );
+
+      break;
+    }
+    case "Rift_CreateAuction": {
+      const {
+        riftAdaptorAddress,
+        startsBTCperBTCRate,
+        endcbsBTCperBTCRate,
+        decayBlocks,
+        deadline,
+        fillerWhitelistContract,
+        baseParams,
+      } = operation.args;
+
+      actions.push({
+        type: "riftCreateAuction",
+        args: [
+          riftAdaptorAddress,
+          startsBTCperBTCRate,
+          endcbsBTCperBTCRate,
+          decayBlocks,
+          deadline,
+          fillerWhitelistContract,
+          baseParams,
+          operation.skipRevert,
+        ],
+      });
 
       break;
     }

@@ -371,6 +371,28 @@ export interface ActionArgs {
     amount: bigint,
     skipRevert?: boolean,
   ];
+
+  /* Rift Auction Adaptor */
+  riftCreateAuction: [
+    riftAdaptorAddress: Address,
+    startsBTCperBTCRate: bigint,
+    endcbsBTCperBTCRate: bigint,
+    decayBlocks: bigint,
+    deadline: bigint,
+    fillerWhitelistContract: Address,
+    baseParams: {
+      owner: Address;
+      bitcoinScriptPubKey: Hex;
+      salt: Hex;
+      confirmationBlocks: number;
+      safeBlockLeaf: {
+        blockHash: Hex;
+        height: number;
+        cumulativeChainwork: bigint;
+      };
+    },
+    skipRevert?: boolean,
+  ];
 }
 
 export type ActionType = keyof ActionArgs;

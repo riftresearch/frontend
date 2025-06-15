@@ -56,10 +56,10 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     },
     riftExchangeAddress: "0x1234567890123456789012345678901234567890", // TODO: Replace with actual address
     bundler3: {
-      bundler3Address: "0x0000000000000000000000000000000000000000",
-      generalAdapter1Address: "0x0000000000000000000000000000000000000000",
-      paraswapAdapterAddress: "0x0000000000000000000000000000000000000000",
-      riftcbBTCAdapterAddress: "0x0000000000000000000000000000000000000000",
+      bundler3Address: "0x6566194141eefa99Af43Bb5Aa71460Ca2Dc90245",
+      generalAdapter1Address: "0x4A6c312ec70E8747a587EE860a0353cd42Be0aE0",
+      paraswapAdapterAddress: "0x03b5259Bd204BfD4A616E5B79b0B786d90c6C38f",
+      riftcbBTCAdapterAddress: "0x0000000000000000000000000000000000000000", // Your custom adapter (not deployed on mainnet yet)
     },
     marketMakers: [],
   },

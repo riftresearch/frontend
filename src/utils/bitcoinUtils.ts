@@ -200,7 +200,7 @@ export function convertLockingScriptToBitcoinAddress(lockingScript: string): str
 export function convertToBitcoinLockingScript(address: string): string {
     // TODO - validate and test all address types with alpine
     try {
-        let script: Buffer;
+        let script: Buffer | undefined;
 
         // Handle Bech32 addresses (including P2WPKH, P2WSH, and P2TR)
         if (address.toLowerCase().startsWith('bc1')) {

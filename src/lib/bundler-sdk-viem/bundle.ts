@@ -1,12 +1,12 @@
 import type { SimulationState } from "@morpho-org/simulation-sdk";
 import type { Address } from "viem";
-import { encodeBundle } from "./actions.js";
+import { encodeBundle } from "./actions";
 import {
   type BundlingOptions,
   finalizeBundle,
   populateBundle,
-} from "./operations.js";
-import type { InputBundlerOperation } from "./types/index.js";
+} from "./operations";
+import type { InputBundlerOperation } from "./types/index";
 
 export const setupBundle = (
   inputOperations: InputBundlerOperation[],

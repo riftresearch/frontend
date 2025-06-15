@@ -10,8 +10,9 @@ import {
   ethereumGeneralAdapter1Abi,
   generalAdapter1Abi,
   paraswapAdapterAbi,
+  riftAuctionAdaptorAbi,
   universalRewardsDistributorAbi,
-} from "./abis.js";
+} from "./abis";
 
 import {
   ChainId,
@@ -35,13 +36,13 @@ import {
   parseSignature,
   zeroHash,
 } from "viem";
-import { BundlerErrors } from "./errors.js";
+import { BundlerErrors } from "./errors";
 import type {
   Action,
   Authorization,
   InputReallocation,
   Permit2PermitSingle,
-} from "./types/index.js";
+} from "./types/index";
 
 export interface BundlerCall {
   to: Address;
@@ -410,6 +411,11 @@ export namespace BundlerAction {
       case "morphoWrapperDepositFor": {
         return BundlerAction.morphoWrapperDepositFor(chainId, ...args);
       }
+
+      /* Rift Auction Adaptor */
+      case "riftCreateAuction": {
+        return BundlerAction.riftCreateAuction(chainId, ...args);
+      }
     }
 
     throw Error(`unhandled action encoding: ${type}`);
@@ -762,6 +768,63 @@ export namespace BundlerAction {
           abi: ethereumGeneralAdapter1Abi,
           functionName: "morphoWrapperDepositFor",
           args: [recipient, amount],
+        }),
+        value: 0n,
+        skipRevert,
+        callbackHash: zeroHash,
+      },
+    ];
+  }
+
+  /* Rift Auction Adaptor */
+
+  /**
+   * Encodes a call to the RiftAuctionAdaptor to create a Bitcoin auction.
+   * @param chainId The chain id for which to encode the call.
+   * @param riftAdaptorAddress The address of the RiftAuctionAdaptor contract.
+   * @param startsBTCperBTCRate The starting sBTC per BTC rate (WAD 1e18).
+   * @param endcbsBTCperBTCRate The ending sBTC per BTC rate (WAD 1e18).
+   * @param decayBlocks The number of blocks over which the auction price decays.
+   * @param deadline The timestamp after which the auction expires.
+   * @param fillerWhitelistContract Optional contract to whitelist auction fillers.
+   * @param baseParams Base parameters for the liquidity deposit.
+   * @param skipRevert Whether to allow the auction creation to revert without making the whole bundler revert. Defaults to false.
+   */
+  export function riftCreateAuction(
+    chainId: ChainId,
+    riftAdaptorAddress: Address,
+    startsBTCperBTCRate: bigint,
+    endcbsBTCperBTCRate: bigint,
+    decayBlocks: bigint,
+    deadline: bigint,
+    fillerWhitelistContract: Address,
+    baseParams: {
+      owner: Address;
+      bitcoinScriptPubKey: Hex;
+      salt: Hex;
+      confirmationBlocks: number;
+      safeBlockLeaf: {
+        blockHash: Hex;
+        height: number;
+        cumulativeChainwork: bigint;
+      };
+    },
+    skipRevert = false,
+  ): BundlerCall[] {
+    return [
+      {
+        to: riftAdaptorAddress,
+        data: encodeFunctionData({
+          abi: riftAuctionAdaptorAbi,
+          functionName: "createAuction",
+          args: [
+            startsBTCperBTCRate,
+            endcbsBTCperBTCRate,
+            decayBlocks,
+            deadline,
+            fillerWhitelistContract,
+            baseParams,
+          ],
         }),
         value: 0n,
         skipRevert,

@@ -1,5 +1,13 @@
 # Claude Instructions
 
+# IMPORTANT REMINDERS
+- **NO Claude/AI references in git commits**
+
+## Git Commits - CRITICAL
+- **NEVER reference Claude, AI, or assistant in commit messages**
+- Use standard conventional commit format
+- Focus on technical changes and business value
+
 ## Package Manager
 - Always use `pnpm` instead of `npm` or `yarn` for package management
 - Use `pnpm install` instead of `npm install`
@@ -13,7 +21,3 @@
 - Lint: `pnpm lint`
 - Type check: `pnpm typecheck`
 
-## Git Commits
-- Never reference Claude, AI, or assistant in commit messages
-- Use standard conventional commit format
-- Focus on technical changes and business value

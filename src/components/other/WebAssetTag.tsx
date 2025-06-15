@@ -78,6 +78,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
               : `calc(${adjustedH} - 14px)`
           }
           userSelect="none"
+          alt={`${asset} icon`}
         />
       </Flex>
       {/* Button Text */}

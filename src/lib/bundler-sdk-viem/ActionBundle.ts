@@ -1,11 +1,11 @@
 import type { SimulationResult } from "@morpho-org/simulation-sdk";
 import type { Account, Address, Chain, Client, Hex, Transport } from "viem";
-import { BundlerAction } from "./BundlerAction.js";
+import { BundlerAction } from "./BundlerAction";
 import type {
   Action,
   SignatureRequirement,
   TransactionRequirement,
-} from "./types/index.js";
+} from "./types/index";
 
 export class ActionBundleRequirements<
   TR extends { tx: { to: Address; data: Hex } } = TransactionRequirement,

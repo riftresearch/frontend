@@ -15,7 +15,7 @@ import {
   type ParaswapOperationType,
   type WithOperationArgs,
 } from "@morpho-org/simulation-sdk";
-import type { UnionOmit } from "viem";
+import type { UnionOmit, Address } from "viem";
 
 export const BLUE_BUNDLER_OPERATIONS = [
   "Blue_SetAuthorization",
@@ -99,34 +99,78 @@ export type Erc20BundlerOperations = {
 export type Erc20BundlerOperation =
   Erc20BundlerOperations[Erc20BundlerOperationType];
 
+// Rift Auction Adaptor Operations
+export const RIFT_BUNDLER_OPERATIONS = [
+  "Rift_CreateAuction",
+] as const;
+
+export type RiftBundlerOperationType = (typeof RIFT_BUNDLER_OPERATIONS)[number];
+
+// Define operation argument types for Rift operations
+export interface RiftOperationArgs {
+  Rift_CreateAuction: {
+    riftAdaptorAddress: Address;
+    startsBTCperBTCRate: bigint;
+    endcbsBTCperBTCRate: bigint;
+    decayBlocks: bigint;
+    deadline: bigint;
+    fillerWhitelistContract: Address;
+    baseParams: {
+      owner: Address;
+      bitcoinScriptPubKey: `0x${string}`;
+      salt: `0x${string}`;
+      confirmationBlocks: number;
+      safeBlockLeaf: {
+        blockHash: `0x${string}`;
+        height: number;
+        cumulativeChainwork: bigint;
+      };
+    };
+  };
+}
+
+export type RiftBundlerOperations = {
+  [OperationType in RiftBundlerOperationType]: WithOperationArgs<
+    OperationType,
+    RiftOperationArgs
+  >;
+};
+export type RiftBundlerOperation =
+  RiftBundlerOperations[RiftBundlerOperationType];
+
 export interface BundlerOperationArgs
   extends BlueOperationArgs,
     MetaMorphoOperationArgs,
     ParaswapOperationArgs,
-    Erc20OperationArgs {}
+    Erc20OperationArgs,
+    RiftOperationArgs {}
 
 export type BundlerOperations = BlueBundlerOperations &
   MetaMorphoBundlerOperations &
   ParaswapBundlerOperations &
-  Erc20BundlerOperations;
+  Erc20BundlerOperations &
+  RiftBundlerOperations;
 
 export type BundlerOperationType =
   | BlueBundlerOperationType
   | MetaMorphoBundlerOperationType
   | ParaswapBundlerOperationType
-  | Erc20BundlerOperationType;
+  | Erc20BundlerOperationType
+  | RiftBundlerOperationType;
 
 export type BundlerOperation =
   | BlueBundlerOperation
   | MetaMorphoBundlerOperation
   | ParaswapBundlerOperation
-  | Erc20BundlerOperation;
+  | Erc20BundlerOperation
+  | RiftBundlerOperation;
 
 export const BUNDLER_OPERATIONS = [
   ...BLUE_BUNDLER_OPERATIONS,
   ...METAMORPHO_BUNDLER_OPERATIONS,
   ...ERC20_BUNDLER_OPERATIONS,
-] as const satisfies readonly OperationType[];
+  ...RIFT_BUNDLER_OPERATIONS,
+] as const;
 
 export type CallbackBundlerOperationType = (typeof CALLBACK_OPERATIONS)[number];
 export type CallbackBundlerOperations = Pick<
@@ -139,7 +183,7 @@ export type CallbackBundlerOperation =
 export const isBlueBundlerOperation = (
   operation: BundlerOperation,
 ): operation is BlueBundlerOperation => {
-  return (BLUE_BUNDLER_OPERATIONS as readonly OperationType[]).includes(
+  return (BLUE_BUNDLER_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
@@ -147,7 +191,7 @@ export const isBlueBundlerOperation = (
 export const isMetaMorphoBundlerOperation = (
   operation: BundlerOperation,
 ): operation is MetaMorphoBundlerOperation => {
-  return (METAMORPHO_BUNDLER_OPERATIONS as readonly OperationType[]).includes(
+  return (METAMORPHO_BUNDLER_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
@@ -155,7 +199,7 @@ export const isMetaMorphoBundlerOperation = (
 export const isErc20BundlerOperation = (
   operation: BundlerOperation,
 ): operation is Erc20BundlerOperation => {
-  return (ERC20_BUNDLER_OPERATIONS as readonly OperationType[]).includes(
+  return (ERC20_BUNDLER_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
@@ -163,7 +207,7 @@ export const isErc20BundlerOperation = (
 export const isCallbackBundlerOperation = (
   operation: BundlerOperation,
 ): operation is CallbackBundlerOperation => {
-  return (CALLBACK_OPERATIONS as readonly OperationType[]).includes(
+  return (CALLBACK_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
@@ -227,48 +271,67 @@ export interface InputBundlerOperationArgs
   extends BlueOperationArgs,
     MetaMorphoOperationArgs,
     ParaswapOperationArgs,
-    Erc20OperationArgs {}
+    Erc20OperationArgs,
+    RiftOperationArgs {}
 
 export type InputBundlerOperationType =
   | BlueInputBundlerOperationType
   | MetaMorphoInputBundlerOperationType
   | ParaswapInputBundlerOperationType
-  | Erc20InputBundlerOperationType;
+  | Erc20InputBundlerOperationType
+  | RiftBundlerOperationType;
 
 export type InputBundlerOperation =
   | BlueInputBundlerOperation
   | MetaMorphoInputBundlerOperation
   | ParaswapInputBundlerOperation
-  | Erc20InputBundlerOperation;
+  | Erc20InputBundlerOperation
+  | RiftBundlerOperation;
 
 export const isBlueInputBundlerOperation = (operation: {
-  type: OperationType;
+  type: string;
 }): operation is BlueInputBundlerOperation => {
-  return (BLUE_INPUT_OPERATIONS as readonly OperationType[]).includes(
+  return (BLUE_INPUT_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
 
 export const isMetaMorphoInputBundlerOperation = (operation: {
-  type: OperationType;
+  type: string;
 }): operation is MetaMorphoInputBundlerOperation => {
-  return (METAMORPHO_INPUT_OPERATIONS as readonly OperationType[]).includes(
+  return (METAMORPHO_INPUT_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
 
 export const isErc20InputBundlerOperation = (operation: {
-  type: OperationType;
+  type: string;
 }): operation is Erc20InputBundlerOperation => {
-  return (ERC20_INPUT_OPERATIONS as readonly OperationType[]).includes(
+  return (ERC20_INPUT_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };
 
 export const isParaswapInputBundlerOperation = (operation: {
-  type: OperationType;
+  type: string;
 }): operation is ParaswapInputBundlerOperation => {
-  return (PARASWAP_INPUT_OPERATIONS as readonly OperationType[]).includes(
+  return (PARASWAP_INPUT_OPERATIONS as readonly string[]).includes(
+    operation.type,
+  );
+};
+
+export const isRiftBundlerOperation = (
+  operation: BundlerOperation,
+): operation is RiftBundlerOperation => {
+  return (RIFT_BUNDLER_OPERATIONS as readonly string[]).includes(
+    operation.type,
+  );
+};
+
+export const isRiftInputBundlerOperation = (operation: {
+  type: string;
+}): operation is RiftBundlerOperation => {
+  return (RIFT_BUNDLER_OPERATIONS as readonly string[]).includes(
     operation.type,
   );
 };

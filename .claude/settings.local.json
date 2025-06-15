@@ -12,7 +12,11 @@
       "Bash(npx tsc:*)",
       "Bash(find:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:docs.morpho.org)"
+      "WebFetch(domain:docs.morpho.org)",
+      "Bash(pnpm build:*)",
+      "Bash(npx eslint:*)",
+      "Bash(pnpm list:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

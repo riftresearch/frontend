@@ -29,13 +29,13 @@ import {
 } from "@morpho-org/simulation-sdk";
 
 import { isAddressEqual, maxUint256 } from "viem";
-import { BundlerErrors } from "./errors.js";
+import { BundlerErrors } from "./errors";
 import type {
   BundlerOperation,
   BundlerOperations,
   CallbackBundlerOperation,
   InputBundlerOperation,
-} from "./types/index.js";
+} from "./types/index";
 
 /**
  * The default target utilization above which the shared liquidity algorithm is triggered (scaled by WAD).
