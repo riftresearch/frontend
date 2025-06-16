@@ -34,8 +34,11 @@ import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected } = useAccount();
-  const { createAuction, isLoading: isLoadingCreateAuction } =
-    useCreateAuction();
+  const {
+    createAuction,
+    isLoading: isLoadingCreateAuction,
+    txHash,
+  } = useCreateAuction();
   const [mounted, setMounted] = useState(false);
   const [inputAmount, setInputAmount] = useState("");
   const [outputAmount, setOutputAmount] = useState("");
