@@ -24,7 +24,7 @@ export type ChainScopedConfig = {
   etherscanUrl: string;
   rpcUrl: string;
   esploraUrl: string;
-  bitcoinNetwork: "mainnet" | "regtest";
+  bitcoinNetwork: "mainnet";
   dataEngineUrl: string;
   underlyingSwappingAsset: ValidAsset;
   riftExchangeAddress: string;

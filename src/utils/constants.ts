@@ -38,6 +38,8 @@ export const opaqueBackgroundColor = {
 };
 
 // TODO: Define all fields for base + mainnet
+// bc1
+// bc1qssdcp5kvwh6nghzg9tuk99xsflwkdv4hgvq58q
 export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
   // Mainnet
   1: {
@@ -96,7 +98,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     etherscanUrl: "https://etherscan.io/",
     rpcUrl: "http://0.0.0.0:50101",
     esploraUrl: "http://0.0.0.0:50103",
-    bitcoinNetwork: "regtest",
+    bitcoinNetwork: "mainnet",
     dataEngineUrl: "http://0.0.0.0:50100",
     underlyingSwappingAsset: {
       tokenAddress: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",

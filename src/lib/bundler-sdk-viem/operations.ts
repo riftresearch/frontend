@@ -60,14 +60,14 @@ export interface BundlingOptions {
     requiredTokenAmounts: {
       token: Address;
       required: bigint;
-    }[],
+    }[]
   ) => BundlerOperation[];
 }
 
 export const populateInputTransfer = (
   { address, args: { amount, from } }: Operations["Erc20_Transfer"],
   data: MaybeDraft<SimulationState>,
-  { hasSimplePermit = false }: { hasSimplePermit?: boolean } = {},
+  { hasSimplePermit = false }: { hasSimplePermit?: boolean } = {}
 ): Exclude<BundlerOperation, CallbackBundlerOperation>[] => {
   const {
     bundler3: { generalAdapter1 },
@@ -212,7 +212,7 @@ export const populateInputTransfer = (
 export const populateSubBundle = (
   inputOperation: InputBundlerOperation,
   data: MaybeDraft<SimulationState>,
-  options: BundlingOptions = {},
+  options: BundlingOptions = {}
 ) => {
   const { sender } = inputOperation;
   const {
@@ -345,7 +345,7 @@ export const populateSubBundle = (
         data.getMarketPublicReallocations(market.id, publicAllocatorOptions);
 
       const friendlyReallocationMarket = friendlyReallocationData.getMarket(
-        market.id,
+        market.id
       );
 
       if (
@@ -360,19 +360,19 @@ export const populateSubBundle = (
             ...publicAllocatorOptions,
             defaultMaxWithdrawalUtilization: MathLib.WAD,
             maxWithdrawalUtilization: {},
-          }).withdrawals,
+          }).withdrawals
         );
       }
 
       for (const { vault, ...withdrawal } of withdrawals) {
         const vaultReallocations = (reallocations[vault] ??= []);
         const vaultMarketReallocation = vaultReallocations.find(
-          (item) => item.id === withdrawal.id,
+          (item) => item.id === withdrawal.id
         );
 
         const reallocatedAssets = MathLib.min(
           withdrawal.assets,
-          requiredAssets,
+          requiredAssets
         );
 
         if (vaultMarketReallocation != null)
@@ -394,7 +394,7 @@ export const populateSubBundle = (
       const fees = keys(reallocations).reduce(
         (total, vault) =>
           total + data.getVault(vault).publicAllocatorConfig!.fee,
-        0n,
+        0n
       );
 
       // Native input transfer of all fees.
@@ -422,12 +422,12 @@ export const populateSubBundle = (
             args: {
               // Reallocation withdrawals must be sorted by market id in ascending alphabetical order.
               withdrawals: vaultWithdrawals.sort(({ id: idA }, { id: idB }) =>
-                idA > idB ? 1 : -1,
+                idA > idB ? 1 : -1
               ),
               supplyMarketId: market.id,
             },
-          }) as Operations["MetaMorpho_PublicReallocate"],
-      ),
+          }) as Operations["MetaMorpho_PublicReallocate"]
+      )
     );
   }
 
@@ -447,7 +447,7 @@ export const populateSubBundle = (
                 sender: generalAdapter1,
               },
               data,
-              options,
+              options
             );
 
             // Handle to mutate data (not simulate).
@@ -468,7 +468,7 @@ export const populateSubBundle = (
   let requiredTokenAmounts = simulateRequiredTokenAmounts(
     // Safe cast because operations do not contain callbacks.
     (operations as Operation[]).concat([simulatedOperation]),
-    data,
+    data
   );
 
   // Safe cast because operations do not contain callbacks.
@@ -498,7 +498,7 @@ export const populateSubBundle = (
     requirementOperations
       .concat(allOperations)
       .map((operation) => getSimulatedBundlerOperation(operation)),
-    data,
+    data
   );
 
   // Append required input transfers.
@@ -516,8 +516,8 @@ export const populateSubBundle = (
           },
         },
         data,
-        { hasSimplePermit: withSimplePermit.has(token) },
-      ),
+        { hasSimplePermit: withSimplePermit.has(token) }
+      )
     );
   });
 
@@ -541,7 +541,7 @@ export const finalizeBundle = (
   startData: SimulationState,
   receiver: Address,
   unwrapTokens = new Set<Address>(),
-  unwrapSlippage = DEFAULT_SLIPPAGE_TOLERANCE,
+  unwrapSlippage = DEFAULT_SLIPPAGE_TOLERANCE
 ) => {
   const nbOperations = operations.length;
   if (nbOperations === 0) return operations;
@@ -573,7 +573,7 @@ export const finalizeBundle = (
           (approval) =>
             approval.address === operation.address &&
             approval.sender === operation.sender &&
-            approval.args.spender === operation.args.spender,
+            approval.args.spender === operation.args.spender
         );
 
         if (duplicateApproval == null) return approvals.push(operation);
@@ -587,14 +587,14 @@ export const finalizeBundle = (
           (permit) =>
             permit.address === operation.address &&
             permit.sender === operation.sender &&
-            permit.args.spender === operation.args.spender,
+            permit.args.spender === operation.args.spender
         );
 
         if (duplicatePermit == null) {
           const lastPermit = permits.findLast(
             (permit) =>
               permit.address === operation.address &&
-              permit.sender === operation.sender,
+              permit.sender === operation.sender
           );
 
           if (lastPermit) operation.args.nonce = lastPermit.args.nonce + 1n;
@@ -608,14 +608,14 @@ export const finalizeBundle = (
         const duplicatePermit2 = permit2s.find(
           (permit2) =>
             permit2.address === operation.address &&
-            permit2.sender === operation.sender,
+            permit2.sender === operation.sender
         );
 
         if (duplicatePermit2 == null) {
           const lastPermit2 = permit2s.findLast(
             (permit2) =>
               permit2.address === operation.address &&
-              permit2.sender === operation.sender,
+              permit2.sender === operation.sender
           );
 
           if (lastPermit2) operation.args.nonce = lastPermit2.args.nonce + 1n;
@@ -641,7 +641,7 @@ export const finalizeBundle = (
             (transfer) =>
               transfer.address === address &&
               transfer.sender === sender &&
-              transfer.args.from === from,
+              transfer.args.from === from
           );
 
           if (
@@ -672,7 +672,7 @@ export const finalizeBundle = (
             (transfer) =>
               transfer.address === address &&
               transfer.sender === sender &&
-              transfer.args.from === from,
+              transfer.args.from === from
           );
 
           if (
@@ -727,7 +727,7 @@ export const finalizeBundle = (
       steps
         .slice(index + 2)
         .some(
-          (step) => step.getHolding(generalAdapter1, token).balance < shares,
+          (step) => step.getHolding(generalAdapter1, token).balance < shares
         )
     )
       // If the bundler's balance is at least once lower than assets, the bundler does need these assets.
@@ -766,7 +766,7 @@ export const finalizeBundle = (
       steps
         .slice(index + 2)
         .some(
-          (step) => step.getHolding(generalAdapter1, token).balance < assets,
+          (step) => step.getHolding(generalAdapter1, token).balance < assets
         )
     )
       // If the bundler's balance is at least once lower than assets, the bundler does need these assets.
@@ -794,7 +794,7 @@ export const finalizeBundle = (
         candidate.address === operation.address &&
         candidate.sender === generalAdapter1 &&
         candidate.args.to === generalAdapter1 &&
-        candidate.args.amount >= shares,
+        candidate.args.amount >= shares
     );
     if (inputTransferIndex <= 0) return;
 
@@ -821,7 +821,7 @@ export const finalizeBundle = (
       steps
         .slice(index + 2)
         .some(
-          (step) => step.getHolding(generalAdapter1, token).balance < amount,
+          (step) => step.getHolding(generalAdapter1, token).balance < amount
         )
     )
       // If the bundler's balance is at least once less than amount, the bundler does need these assets.
@@ -841,7 +841,7 @@ export const finalizeBundle = (
       ? operations.find(
           // There should exist only one dai permit operation in the bundle thanks to the first optimization step.
           (operation): operation is BundlerOperations["Erc20_Permit"] =>
-            operation.type === "Erc20_Permit" && operation.address === dai,
+            operation.type === "Erc20_Permit" && operation.address === dai
         )
       : undefined;
 
@@ -896,8 +896,7 @@ export const finalizeBundle = (
         .filter(
           ([token, holding]) =>
             holding != null &&
-            holding.balance - (startBundlerTokenData[token]?.balance ?? 0n) >
-              5n,
+            holding.balance - (startBundlerTokenData[token]?.balance ?? 0n) > 5n
         )
         .map(
           ([address]) =>
@@ -910,8 +909,8 @@ export const finalizeBundle = (
                 from: generalAdapter1,
                 to: receiver,
               },
-            }) as Erc20Operations["Erc20_Transfer"],
-        ),
+            }) as Erc20Operations["Erc20_Transfer"]
+        )
     );
   }
 
@@ -921,7 +920,7 @@ export const finalizeBundle = (
 export const populateBundle = (
   inputOperations: InputBundlerOperation[],
   data: MaybeDraft<SimulationState>,
-  options?: BundlingOptions,
+  options?: BundlingOptions
 ) => {
   const steps: SimulationResult = [data];
 
@@ -931,11 +930,11 @@ export const populateBundle = (
       const subBundleOperations = populateSubBundle(
         inputOperation,
         end,
-        options,
+        options
       );
 
       steps.push(
-        (end = getLast(simulateBundlerOperations(subBundleOperations, end))),
+        (end = getLast(simulateBundlerOperations(subBundleOperations, end)))
       );
 
       return subBundleOperations;
@@ -966,7 +965,7 @@ class VirtualHolding extends Holding {
 
 export const simulateRequiredTokenAmounts = (
   operations: Operation[],
-  data: MaybeDraft<SimulationState>,
+  data: MaybeDraft<SimulationState>
 ) => {
   const {
     bundler3: { generalAdapter1 },
@@ -997,7 +996,7 @@ export const simulateRequiredTokenAmounts = (
 
 export const getSimulatedBundlerOperation = (
   operation: Omit<BundlerOperation, "sender">,
-  { slippage }: { slippage?: bigint } = {},
+  { slippage }: { slippage?: bigint } = {}
 ) => {
   const callback = getValue(operation.args, "callback");
 
@@ -1008,7 +1007,7 @@ export const getSimulatedBundlerOperation = (
       ...(callback && {
         callback: () =>
           callback.map((operation) =>
-            getSimulatedBundlerOperation(operation, { slippage }),
+            getSimulatedBundlerOperation(operation, { slippage })
           ),
       }),
     },
@@ -1040,18 +1039,18 @@ export const handleBundlerOperation =
   (
     operation: BundlerOperation,
     startData: MaybeDraft<SimulationState>,
-    index?: number,
+    index?: number
   ) =>
     handleOperation(
       getSimulatedBundlerOperation(operation, options),
       startData,
-      index,
+      index
     );
 
 export const handleBundlerOperations = (
   operations: BundlerOperation[],
   startData: MaybeDraft<SimulationState>,
-  options?: { slippage?: bigint },
+  options?: { slippage?: bigint }
 ) => handleOperations(operations, startData, handleBundlerOperation(options));
 
 export const simulateBundlerOperation =
@@ -1059,16 +1058,16 @@ export const simulateBundlerOperation =
   (
     operation: BundlerOperation,
     startData: MaybeDraft<SimulationState>,
-    index?: number,
+    index?: number
   ) =>
     simulateOperation(
       getSimulatedBundlerOperation(operation, options),
       startData,
-      index,
+      index
     );
 
 export const simulateBundlerOperations = (
   operations: BundlerOperation[],
   startData: MaybeDraft<SimulationState>,
-  options?: { slippage?: bigint },
+  options?: { slippage?: bigint }
 ) => handleOperations(operations, startData, simulateBundlerOperation(options));

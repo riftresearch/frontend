@@ -6,8 +6,12 @@ import {
   useWalletClient,
   useBlockNumber,
   useBlock,
+  useBalance,
+  useReadContract,
+  useWriteContract,
 } from "wagmi";
-import { type Address, type Hex } from "viem";
+import { useEffect, useState, useCallback } from "react";
+import { type Address, type Hex, maxUint256 } from "viem";
 import { useStore } from "@/utils/store";
 import { useLightClientTipBlock } from "./useLightClientTipBlock";
 import { useBitcoinTipBlock } from "./useBitcoinTipBlock";
@@ -21,9 +25,35 @@ import {
   finalizeBundle,
   encodeBundle,
 } from "@/lib/bundler-sdk-viem";
-import { ChainId } from "@morpho-org/blue-sdk";
+import { ChainId, Holding } from "@morpho-org/blue-sdk";
 import { SimulationState } from "@morpho-org/simulation-sdk";
+import { useSimulationState } from "@morpho-org/simulation-sdk-wagmi";
+
 import { generatePrivateKey } from "viem/accounts";
+
+// ERC20 ABI for allowance and approve functions
+const erc20Abi = [
+  {
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    name: "allowance",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    name: "approve",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+] as const;
 
 export interface CreateAuctionParams {
   cbBTCAmount: bigint;
@@ -89,6 +119,15 @@ export function useCreateAuction() {
   const connectedChainId = useChainId();
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const { address: userAddress } = useAccount();
+  const { data: block } = useBlock();
+
+  // State to store pending bundle for execution after approval
+  const [pendingBundle, setPendingBundle] = useState<{
+    bundle: any;
+    walletClient: any;
+    requiredAmount: bigint;
+  } | null>(null);
+
   const { data: walletClient } = useWalletClient();
   const { blockLeaf: lightClientBlockLeaf, isLoading: isLightClientLoading } =
     useLightClientTipBlock();
@@ -101,13 +140,55 @@ export function useCreateAuction() {
     blockNumber: currentBlockNumber,
   });
 
+  // Get user's cbBTC balance for simulation
+  const { data: userCbBTCBalance, isLoading: isBalanceLoading } = useBalance({
+    address: userAddress,
+    token: selectedChainConfig.underlyingSwappingAsset.tokenAddress as Address,
+  });
+
+  // Check current allowance for generalAdapter1
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract(
+    {
+      address: selectedChainConfig.underlyingSwappingAsset
+        .tokenAddress as Address,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [
+        userAddress as Address,
+        selectedChainConfig.bundler3.generalAdapter1Address as Address,
+      ],
+      query: {
+        enabled: !!userAddress,
+      },
+    }
+  );
+
+  // ERC20 approval hook
+  const {
+    writeContract: writeApproval,
+    isPending: isApprovalPending,
+    data: approvalTxHash,
+  } = useWriteContract();
+
+  // Wait for approval transaction
+  const {
+    isLoading: isApprovalConfirming,
+    isSuccess: isApprovalConfirmed,
+    isError: isApprovalError,
+    error: approvalError,
+  } = useWaitForTransactionReceipt({
+    hash: approvalTxHash,
+  });
+
   const isLoading =
     isLightClientLoading ||
     isBitcoinLoading ||
     isCurrentBlockLoading ||
+    isBalanceLoading ||
     !lightClientBlockLeaf ||
     !canonicalBlockInfo ||
-    !currentBlock;
+    !currentBlock ||
+    !userCbBTCBalance;
 
   // Bundler3 contract interaction hooks
   const {
@@ -116,10 +197,211 @@ export function useCreateAuction() {
     data: bundlerTxHash,
   } = useSendTransaction();
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } =
-    useWaitForTransactionReceipt({
-      hash: bundlerTxHash,
-    });
+  const {
+    isLoading: isConfirming,
+    isSuccess: isConfirmed,
+    isError: isConfirmError,
+    error: confirmError,
+    data: receipt,
+  } = useWaitForTransactionReceipt({
+    hash: bundlerTxHash,
+  });
+
+  // Log approval process
+  useEffect(() => {
+    if (approvalTxHash) {
+      console.log("🔓 Approval transaction submitted:", {
+        txHash: approvalTxHash,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [approvalTxHash]);
+
+  useEffect(() => {
+    if (isApprovalPending) {
+      console.log("⏳ Approval pending - waiting for user signature...");
+    }
+  }, [isApprovalPending]);
+
+  useEffect(() => {
+    if (isApprovalConfirming && approvalTxHash) {
+      console.log("⏳ Approval confirming - waiting for block inclusion...", {
+        txHash: approvalTxHash,
+      });
+    }
+  }, [isApprovalConfirming, approvalTxHash]);
+
+  // Function to execute a bundle (shared between direct execution and post-approval)
+  const executeBundle = useCallback(
+    async (bundle: any, walletClient: any) => {
+      try {
+        toastInfo({
+          title: "Creating auction",
+          description: "Please confirm the transaction in your wallet",
+        });
+
+        // Execute the main bundled transaction
+        const mainTx = bundle.tx();
+        console.log("🎯 Executing main bundled transaction:", {
+          to: mainTx.to,
+          data: mainTx.data,
+          value: 0n,
+          dataLength: mainTx.data.length,
+        });
+
+        writeBundler({
+          to: mainTx.to,
+          data: mainTx.data,
+          value: 0n,
+        });
+
+        console.log(
+          "🚀 Main transaction submitted - waiting for confirmation..."
+        );
+
+        toastSuccess({
+          title: "Auction creation submitted",
+          description: "Your auction creation transaction has been submitted",
+        });
+      } catch (error) {
+        console.error("❌ Error executing bundle:", error);
+        toastError(error as Error, {
+          title: "Failed to execute auction",
+          description:
+            "There was an error executing your auction. Please try again.",
+        });
+        throw error;
+      }
+    },
+    [writeBundler]
+  );
+
+  // Function to execute the pending bundle
+  const executePendingBundle = useCallback(async () => {
+    if (!pendingBundle) return;
+
+    const { bundle, walletClient, requiredAmount } = pendingBundle;
+
+    try {
+      console.log("🚀 Executing pending bundle after approval...");
+
+      // Double-check allowance after approval
+      await refetchAllowance();
+      const updatedAllowance = currentAllowance;
+
+      if (!updatedAllowance || updatedAllowance < requiredAmount) {
+        console.error("❌ Allowance still insufficient after approval");
+        toastError(new Error("Approval failed"), {
+          title: "Approval insufficient",
+          description: "Please try again",
+        });
+        setPendingBundle(null);
+        return;
+      }
+
+      console.log("✅ Allowance confirmed - executing bundle");
+
+      // Execute the bundle
+      await executeBundle(bundle, walletClient);
+
+      // Clear pending bundle
+      setPendingBundle(null);
+    } catch (error) {
+      console.error("❌ Error executing pending bundle:", error);
+      toastError(error as Error, {
+        title: "Failed to execute auction",
+        description:
+          "There was an error executing your auction. Please try again.",
+      });
+      setPendingBundle(null);
+    }
+  }, [pendingBundle, refetchAllowance, currentAllowance, writeBundler]);
+
+  useEffect(() => {
+    if (isApprovalConfirmed) {
+      console.log("✅ Approval confirmed successfully!");
+      refetchAllowance(); // Refresh allowance data
+
+      // Execute pending bundle if it exists
+      if (pendingBundle) {
+        console.log("🎯 Triggering pending bundle execution...");
+        executePendingBundle();
+      }
+    }
+  }, [
+    isApprovalConfirmed,
+    refetchAllowance,
+    pendingBundle,
+    executePendingBundle,
+  ]);
+
+  useEffect(() => {
+    if (isApprovalError && approvalError) {
+      console.error("❌ Approval failed:", {
+        error: approvalError,
+        message: approvalError.message,
+        name: approvalError.name,
+      });
+    }
+  }, [isApprovalError, approvalError]);
+
+  // Log transaction hash when it becomes available
+  useEffect(() => {
+    if (bundlerTxHash) {
+      console.log("🚀 Transaction submitted:", {
+        txHash: bundlerTxHash,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [bundlerTxHash]);
+
+  // Log transaction status changes
+  useEffect(() => {
+    if (isBundlerPending) {
+      console.log("⏳ Transaction pending - waiting for user signature...");
+    }
+  }, [isBundlerPending]);
+
+  // Log confirmation status
+  useEffect(() => {
+    if (isConfirming && bundlerTxHash) {
+      console.log(
+        "⏳ Transaction confirming - waiting for block inclusion...",
+        {
+          txHash: bundlerTxHash,
+        }
+      );
+    }
+  }, [isConfirming, bundlerTxHash]);
+
+  // Log successful confirmation with receipt details
+  useEffect(() => {
+    if (isConfirmed && receipt) {
+      console.log("✅ Transaction confirmed successfully!", {
+        txHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber,
+        blockHash: receipt.blockHash,
+        gasUsed: receipt.gasUsed.toString(),
+        effectiveGasPrice: receipt.effectiveGasPrice?.toString(),
+        cumulativeGasUsed: receipt.cumulativeGasUsed.toString(),
+        logs: receipt.logs,
+        status: receipt.status,
+        receipt: receipt,
+      });
+    }
+  }, [isConfirmed, receipt]);
+
+  // Log transaction errors
+  useEffect(() => {
+    if (isConfirmError && confirmError) {
+      console.error("❌ Transaction failed:", {
+        error: confirmError,
+        message: confirmError.message,
+        name: confirmError.name,
+        cause: confirmError.cause,
+      });
+    }
+  }, [isConfirmError, confirmError]);
 
   const createAuction = async (params: CreateAuctionParams) => {
     if (
@@ -172,12 +454,40 @@ export function useCreateAuction() {
         description: "Fetching simulation state and building transaction",
       });
 
-      // Create simulation state with current block data
+      // Get bundler addresses for allowances
+      const { bundler3Address, generalAdapter1Address } =
+        selectedChainConfig.bundler3;
+
+      // Create simulation state with current block data and user holdings
       const simulationState = new SimulationState({
         chainId: connectedChainId as ChainId,
         block: {
           number: currentBlock.number,
           timestamp: currentBlock.timestamp,
+        },
+        holdings: {
+          [userAddress]: {
+            [selectedChainConfig.underlyingSwappingAsset.tokenAddress]:
+              new Holding({
+                user: userAddress,
+                token: selectedChainConfig.underlyingSwappingAsset
+                  .tokenAddress as Address,
+                balance: userCbBTCBalance.value,
+                erc20Allowances: {
+                  [bundler3Address]: 0n,
+                  [generalAdapter1Address]: 0n,
+                  morpho: 0n,
+                  permit2: 0n,
+                  // as far as the simulation is concerned, the generalAdapter1 has unlimited allowance
+                  "bundler3.generalAdapter1": maxUint256,
+                },
+                permit2BundlerAllowance: {
+                  amount: 0n,
+                  expiration: 0n,
+                  nonce: 0n,
+                },
+              }),
+          },
         },
       });
 
@@ -199,11 +509,10 @@ export function useCreateAuction() {
       };
 
       // Create the input operations following whitepaper section 3.1
-      // 1. ERC20 transfer (bundler SDK will automatically add permit)
+      // 1. ERC20 transfer
       // 2. Rift auction creation
       const inputOperations: InputBundlerOperation[] = [
         // Transfer cbBTC from user to RiftAuctionAdapter
-        // The bundler SDK will automatically add the permit operation
         {
           type: "Erc20_Transfer",
           sender: userAddress,
@@ -235,45 +544,104 @@ export function useCreateAuction() {
       // Use the bundler SDK to populate, finalize and encode the bundle
       let { operations } = populateBundle(inputOperations, simulationState);
 
+      console.log("📦 Input operations:", {
+        inputOperations,
+        count: inputOperations.length,
+      });
+
       operations = finalizeBundle(operations, simulationState, userAddress);
+
+      console.log("🔧 Finalized operations:", {
+        operations,
+        count: operations.length,
+      });
 
       const bundle = encodeBundle(operations, simulationState, true);
 
-      // Sign any required permits/signatures
-      await Promise.all(
-        bundle.requirements.signatures.map((requirement) =>
-          requirement.sign(walletClient, walletClient.account!)
-        )
-      );
-
-      toastInfo({
-        title: "Creating auction",
-        description: "Please confirm the transaction in your wallet",
+      console.log("💼 Bundle created:", {
+        bundle,
+        requirementsCount: {
+          signatures: bundle.requirements.signatures.length,
+          transactions: bundle.requirements.txs.length,
+        },
+        requirements: {
+          signatures: bundle.requirements.signatures.map((sig, index) => ({
+            index,
+            signature: sig,
+          })),
+          transactions: bundle.requirements.txs.map((tx, index) => ({
+            index,
+            to: tx.tx.to,
+            data: tx.tx.data,
+            value: tx.tx.value?.toString() || "0",
+          })),
+        },
+        mainTransaction: {
+          to: bundle.tx().to,
+          data: bundle.tx().data,
+          value: bundle.tx().value?.toString() || "0",
+        },
       });
 
-      // Execute any prerequisite transactions first
-      for (const { tx } of bundle.requirements.txs) {
-        await writeBundler({
-          to: tx.to,
-          data: tx.data,
-          value: tx.value,
+      // Check if approval is needed before executing bundle
+      const requiredAmount = params.cbBTCAmount;
+      const hasEnoughAllowance =
+        currentAllowance && currentAllowance >= requiredAmount;
+
+      console.log("🔍 Allowance check:", {
+        currentAllowance: currentAllowance?.toString() || "0",
+        requiredAmount: requiredAmount.toString(),
+        hasEnoughAllowance,
+        generalAdapter: selectedChainConfig.bundler3.generalAdapter1Address,
+      });
+
+      if (!hasEnoughAllowance) {
+        console.log("🔓 Insufficient allowance - requesting approval...");
+
+        // Store the bundle for execution after approval
+        setPendingBundle({
+          bundle,
+          walletClient,
+          requiredAmount,
         });
+
+        toastInfo({
+          title: "Approval required",
+          description: "Please approve cbBTC spending for the bundler",
+        });
+
+        // Request approval for maximum amount
+        writeApproval({
+          address: selectedChainConfig.underlyingSwappingAsset
+            .tokenAddress as Address,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [
+            selectedChainConfig.bundler3.generalAdapter1Address as Address,
+            maxUint256,
+          ],
+        });
+
+        console.log(
+          "⏳ Approval requested - bundle will execute automatically after confirmation..."
+        );
+        return;
       }
 
-      // Execute the main bundled transaction
-      const mainTx = bundle.tx();
-      await writeBundler({
-        to: mainTx.to,
-        data: mainTx.data,
-        value: mainTx.value,
+      console.log("✅ Sufficient allowance - proceeding with bundle execution");
+
+      // Execute the bundle directly
+      await executeBundle(bundle, walletClient);
+    } catch (error) {
+      console.error("❌ Error creating auction:", {
+        error,
+        message: (error as Error)?.message,
+        name: (error as Error)?.name,
+        stack: (error as Error)?.stack,
+        cause: (error as Error)?.cause,
+        timestamp: new Date().toISOString(),
       });
 
-      toastSuccess({
-        title: "Auction creation submitted",
-        description: "Your auction creation transaction has been submitted",
-      });
-    } catch (error) {
-      console.error("Error creating auction:", error);
       toastError(error as Error, {
         title: "Failed to create auction",
         description:
@@ -284,7 +652,12 @@ export function useCreateAuction() {
 
   return {
     createAuction,
-    isLoading: isLoading || isBundlerPending || isConfirming,
+    isLoading:
+      isLoading ||
+      isBundlerPending ||
+      isConfirming ||
+      isApprovalPending ||
+      isApprovalConfirming,
     isConfirmed,
     isPending: isBundlerPending,
     isConfirming,
@@ -295,5 +668,11 @@ export function useCreateAuction() {
       lightClientBlockLeaf && canonicalBlockInfo
         ? isLightClientSafeForOrders(lightClientBlockLeaf, canonicalBlockInfo)
         : false,
+    // Approval-related data
+    currentAllowance,
+    isApprovalPending,
+    isApprovalConfirming,
+    isApprovalConfirmed,
+    approvalTxHash,
   };
 }

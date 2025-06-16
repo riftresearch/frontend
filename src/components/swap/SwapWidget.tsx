@@ -16,6 +16,7 @@ import TokenButton from "@/components/other/TokenButton";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { InfoSVG } from "../other/SVGs";
 import {
+  convertToBitcoinLockingScript,
   validateBitcoinPayoutAddress,
   validateBitcoinPayoutAddressWithNetwork,
 } from "@/utils/bitcoinUtils";
@@ -27,11 +28,14 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { TokenStyle, ValidAsset } from "@/utils/types";
 import { useAvailableBitcoinLiquidity } from "@/hooks/useAvailableBitcoinLiquidity";
 import { useCreateAuction } from "@/hooks/useCreateAuction";
+import { Hex } from "bitcoinjs-lib/src/types";
+import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected } = useAccount();
-  useCreateAuction();
+  const { createAuction, isLoading: isLoadingCreateAuction } =
+    useCreateAuction();
   const [mounted, setMounted] = useState(false);
   const [inputAmount, setInputAmount] = useState("");
   const [outputAmount, setOutputAmount] = useState("");
@@ -148,21 +152,39 @@ export const SwapWidget = () => {
     const estimatedOutputAmountInSatoshis = BigInt(
       parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS
     );
+
+    const inputAmountInSatoshis = BigInt(
+      parseFloat(inputAmount) * 10 ** BITCOIN_DECIMALS
+    );
+
     const largestMarketMakerBalance = BigInt(
       availableBitcoinLiquidity.largestBalance
     );
     if (estimatedOutputAmountInSatoshis > largestMarketMakerBalance) {
       toastInfo({
         title: "Insufficient liquidity",
-        description: `We don't have enough liquidity to swap ${inputAmount} BTC`,
+        description: `We don't have enough liquidity to swap to ${outputAmount} BTC`,
       });
       return;
     }
 
-    // TODO: At this point, we have enough liquidity to swap
-    toastInfo({
-      title: "Swap functionality coming soon!",
-      description: "We can fill this!",
+    console.log(
+      "locking script",
+      convertToBitcoinLockingScript(payoutBTCAddress)
+    );
+
+    createAuction({
+      cbBTCAmount: inputAmountInSatoshis,
+      // Rates in WAD precision (1e18) for 1:1 to 0.99:1 ratio
+      startsBTCperBTCRate: BigInt("1000000000000000000"), // 1.0 BTC per cbBTC (WAD)
+      endcbsBTCperBTCRate: BigInt("990000000000000000"), // 0.99 BTC per cbBTC (WAD)
+      decayBlocks: BigInt(60), // TODO: Make this chain dependent
+      deadline: BigInt(Math.floor(Date.now() / 1000) + 90), // 90 seconds from now (unix timestamp)
+      fillerWhitelistContract: "0x0000000000000000000000000000000000000000", // TODO: Grab this from config (chain dependent)
+      bitcoinScriptPubKey: convertToBitcoinLockingScript(
+        payoutBTCAddress
+      ) as `0x${string}`,
+      confirmationBlocks: Number(contractConstants.minConfirmationBlocks),
     });
   };
 
