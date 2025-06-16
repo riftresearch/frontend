@@ -285,22 +285,6 @@ export function useCreateAuction() {
     try {
       console.log("🚀 Executing pending bundle after approval...");
 
-      // Double-check allowance after approval
-      await refetchAllowance();
-      const updatedAllowance = currentAllowance;
-
-      if (!updatedAllowance || updatedAllowance < requiredAmount) {
-        console.error("❌ Allowance still insufficient after approval");
-        toastError(new Error("Approval failed"), {
-          title: "Approval insufficient",
-          description: "Please try again",
-        });
-        setPendingBundle(null);
-        return;
-      }
-
-      console.log("✅ Allowance confirmed - executing bundle");
-
       // Execute the bundle
       await executeBundle(bundle, walletClient);
 
