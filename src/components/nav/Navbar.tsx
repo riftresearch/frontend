@@ -195,7 +195,7 @@ export const Navbar = ({}) => {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Image src="/images/social/x.svg" w="17px" aspectRatio={1} alt="X (Twitter)" />
+            <Image src="/images/social/x.svg" w="17px" aspectRatio={1} />
           </a>
           <Flex mt="1px">
             <a
@@ -205,9 +205,9 @@ export const Navbar = ({}) => {
             >
               <Image
                 src="/images/social/telegram.svg"
-                w="23px"
+                objectFit="contain"
+                h="24px"
                 aspectRatio={1}
-                alt="Telegram"
               />
             </a>
           </Flex>
