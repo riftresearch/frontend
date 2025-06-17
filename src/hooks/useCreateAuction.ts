@@ -436,10 +436,10 @@ export function useCreateAuction() {
     }
 
     try {
-      toastInfo({
-        title: "Preparing auction",
-        description: "Fetching simulation state and building transaction",
-      });
+      // toastInfo({
+      //   title: "Preparing auction",
+      //   description: "Fetching simulation state and building transaction",
+      // });
 
       // Get bundler addresses for allowances
       const { bundler3Address, generalAdapter1Address } =

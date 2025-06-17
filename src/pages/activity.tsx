@@ -2,7 +2,6 @@ import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { Flex, Text } from "@chakra-ui/react";
-import dynamic from "next/dynamic";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { ChartContainer } from "@/components/charts/ChartContainer";
@@ -11,16 +10,7 @@ import {
   DailyVolumeChart,
 } from "@/components/charts/SimpleCharts";
 import { SwapHistory } from "@/components/charts/SwapHistory";
-
-const SwapWidget = dynamic(
-  () =>
-    import("@/components/swap/SwapWidget").then((mod) => ({
-      default: mod.SwapWidget,
-    })),
-  {
-    ssr: false,
-  }
-);
+import { SwapWidget } from "@/components/swap/SwapWidget";
 
 export default function Home() {
   useSyncChainIdToStore();

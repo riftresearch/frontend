@@ -8,7 +8,7 @@ const theme = createSystem(defaultConfig, {
   theme: {
     tokens: {
       fonts: {
-        mono: { value: `'Menlo', monospace` },
+        mono: { value: FONT_FAMILIES.AUX_MONO },
         body: { value: FONT_FAMILIES.NOSTROMO },
         heading: { value: FONT_FAMILIES.NOSTROMO },
       },

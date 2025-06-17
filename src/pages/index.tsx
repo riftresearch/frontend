@@ -6,17 +6,7 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { FONT_FAMILIES } from "@/utils/font";
 import OrangeText from "@/components/other/OrangeText";
 import { Flex, Text, Box } from "@chakra-ui/react";
-import dynamic from "next/dynamic";
-
-const SwapWidget = dynamic(
-  () =>
-    import("@/components/swap/SwapWidget").then((mod) => ({
-      default: mod.SwapWidget,
-    })),
-  {
-    ssr: false,
-  }
-);
+import { SwapWidget } from "@/components/swap/SwapWidget";
 
 export default function Home() {
   const { isTablet, isMobile } = useWindowSize();

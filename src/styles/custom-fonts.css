@@ -1,4 +1,4 @@
-/* public/custom-fonts.css */
+/* Font Definitions with Fallbacks */
 
 @font-face {
   font-family: "Klein";
@@ -10,7 +10,7 @@
 
 @font-face {
   font-family: "Aux";
-  src: url("/fonts/AuxMono.otf") format("truetype");
+  src: url("/fonts/AuxMono.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -18,7 +18,7 @@
 
 @font-face {
   font-family: "SFPro";
-  src: url("/fonts/SF-Pro-Display-Bold.otf") format("truetype");
+  src: url("/fonts/SF-Pro-Display-Bold.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -26,8 +26,45 @@
 
 @font-face {
   font-family: "Nostromo";
-  src: url("/fonts/NostromoRegular-Bold.otf") format("truetype");
+  src: url("/fonts/NostromoRegular-Bold.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+}
+
+/* Font fallbacks - prevents FOUT by defining fallback font metrics */
+@font-face {
+  font-family: "Klein-fallback";
+  src: local("Impact"), local("Arial Black"), local("sans-serif");
+  size-adjust: 100%;
+  ascent-override: 85%;
+  descent-override: 20%;
+  line-gap-override: 10%;
+}
+
+@font-face {
+  font-family: "Aux-fallback";
+  src: local("Courier New"), local("Monaco"), local("monospace");
+  size-adjust: 95%;
+  ascent-override: 80%;
+  descent-override: 20%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "SFPro-fallback";
+  src: local("Helvetica Neue"), local("Arial"), local("sans-serif");
+  size-adjust: 100%;
+  ascent-override: 87%;
+  descent-override: 20%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Nostromo-fallback";
+  src: local("Arial"), local("Helvetica"), local("sans-serif");
+  size-adjust: 95%;
+  ascent-override: 85%;
+  descent-override: 20%;
+  line-gap-override: 0%;
 }

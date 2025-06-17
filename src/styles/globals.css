@@ -19,9 +19,10 @@ body {
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, Helvetica, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-display: swap;
 }
 
 * {
@@ -38,5 +39,28 @@ a {
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
+  }
+}
+
+/* Font optimization classes to prevent FOUT */
+.font-ready {
+  font-display: swap;
+}
+
+/* Ensure text is visible during font swap */
+.text {
+  font-display: swap;
+}
+
+/* Critical font loading optimization */
+@supports (font-display: optional) {
+  .font-nostromo {
+    font-family: Nostromo, Nostromo-fallback, Arial, Helvetica, sans-serif;
+    font-display: optional;
+  }
+
+  .font-aux {
+    font-family: Aux, Aux-fallback, "Courier New", Monaco, monospace;
+    font-display: optional;
   }
 }

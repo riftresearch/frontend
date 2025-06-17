@@ -3,12 +3,13 @@ import {
   Text,
   Input,
   Spacer,
-  Skeleton,
   Box,
   Tooltip as ChakraTooltip,
   Portal,
+  Spinner,
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent } from "react";
+import { useRouter } from "next/router";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
 import { BITCOIN_DECIMALS, opaqueBackgroundColor } from "@/utils/constants";
@@ -30,16 +31,24 @@ import { useAvailableBitcoinLiquidity } from "@/hooks/useAvailableBitcoinLiquidi
 import { useCreateAuction } from "@/hooks/useCreateAuction";
 import { Hex } from "bitcoinjs-lib/src/types";
 import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
+import { reownModal } from "@/utils/wallet";
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected } = useAccount();
+  const router = useRouter();
   const {
     createAuction,
     isLoading: isLoadingCreateAuction,
     txHash,
+    isApprovalPending,
+    isApprovalConfirming,
+    isApprovalConfirmed,
+    approvalTxHash,
+    isPending: isBundlerPending,
+    isConfirming,
+    isConfirmed,
   } = useCreateAuction();
-  const [mounted, setMounted] = useState(false);
   const [inputAmount, setInputAmount] = useState("");
   const [outputAmount, setOutputAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,6 +58,7 @@ export const SwapWidget = () => {
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }>({ isValid: false });
+
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const {
     data: availableBitcoinLiquidity,
@@ -66,12 +76,18 @@ export const SwapWidget = () => {
   const borderColor = `2px solid ${actualBorderColor}`;
 
   useEffect(() => {
-    setMounted(true);
     // Reset values on mount
     setInputAmount("");
     setOutputAmount("");
     setPayoutBTCAddress("");
   }, []);
+
+  // Redirect to swap success page when transaction is confirmed
+  useEffect(() => {
+    if (isConfirmed && txHash) {
+      router.push(`/swap/${txHash}`);
+    }
+  }, [isConfirmed, txHash, router]);
 
   // Validate Bitcoin address whenever it changes
   useEffect(() => {
@@ -98,16 +114,14 @@ export const SwapWidget = () => {
     }
   };
 
-  const handleSwap = () => {
+  const handleSwap = async () => {
     if (!isWalletConnected) {
-      toastInfo({
-        title: "Connect wallet",
-        description: "Please connect your wallet to swap",
-      });
+      // Open wallet connection modal instead of showing toast
+      await reownModal.open();
       return;
     }
 
-    if (mounted && isMobile) {
+    if (isMobile) {
       toastInfo({
         title: "Hop on your laptop",
         description:
@@ -173,20 +187,32 @@ export const SwapWidget = () => {
       return;
     }
 
-    createAuction({
-      cbBTCAmount: inputAmountInSatoshis,
-      // Rates in WAD precision (1e18) for 1:1 to 0.99:1 ratio
-      startsBTCperBTCRate: BigInt("1000000000000000000"), // 1.0 BTC per cbBTC (WAD)
-      endcbsBTCperBTCRate: BigInt("990000000000000000"), // 0.99 BTC per cbBTC (WAD)
-      decayBlocks: BigInt(60), // TODO: Make this chain dependent
-      deadline: BigInt(Math.floor(Date.now() / 1000) + 90), // 90 seconds from now (unix timestamp)
-      fillerWhitelistContract: "0x0000000000000000000000000000000000000000", // TODO: Grab this from config (chain dependent)
-      bitcoinScriptPubKey: convertToBitcoinLockingScript(
-        payoutBTCAddress
-      ) as `0x${string}`,
-      confirmationBlocks: Number(contractConstants.minConfirmationBlocks),
-    });
+    try {
+      await createAuction({
+        cbBTCAmount: inputAmountInSatoshis,
+        // Rates in WAD precision (1e18) for 1:1 to 0.99:1 ratio
+        startsBTCperBTCRate: BigInt("1000000000000000000"), // 1.0 BTC per cbBTC (WAD)
+        endcbsBTCperBTCRate: BigInt("990000000000000000"), // 0.99 BTC per cbBTC (WAD)
+        decayBlocks: BigInt(60), // TODO: Make this chain dependent
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 90), // 90 seconds from now (unix timestamp)
+        fillerWhitelistContract: "0x0000000000000000000000000000000000000000", // TODO: Grab this from config (chain dependent)
+        bitcoinScriptPubKey: convertToBitcoinLockingScript(
+          payoutBTCAddress
+        ) as `0x${string}`,
+        confirmationBlocks: Number(contractConstants.minConfirmationBlocks),
+      });
+    } catch (error) {
+      console.error("Error creating auction:", error);
+      // Error will be handled by the hook itself via toasts
+    }
   };
+
+  const isButtonLoading =
+    isApprovalPending ||
+    isApprovalConfirming ||
+    isBundlerPending ||
+    isConfirming ||
+    isConfirmed;
 
   const canSwap =
     inputAmount &&
@@ -195,7 +221,35 @@ export const SwapWidget = () => {
     payoutBTCAddress &&
     addressValidation.isValid;
 
+  // Button should be clickable if either ready to swap OR ready to connect wallet (and not loading)
+  const canClickButton =
+    !isButtonLoading &&
+    ((inputAmount &&
+      outputAmount &&
+      parseFloat(inputAmount) > 0 &&
+      payoutBTCAddress &&
+      addressValidation.isValid) ||
+      !isWalletConnected);
+
   const getButtonText = () => {
+    // Show loading states first
+    if (isApprovalPending) {
+      return "Confirm Approval...";
+    }
+    if (isApprovalConfirming) {
+      return "Approving cbBTC...";
+    }
+    if (isBundlerPending) {
+      return "Confirm Auction...";
+    }
+    if (isConfirming) {
+      return "Creating Auction...";
+    }
+    if (isConfirmed) {
+      return "Auction Created!";
+    }
+
+    // Normal validation states
     if (!inputAmount || !outputAmount || parseFloat(inputAmount) <= 0) {
       return "Enter Amount";
     }
@@ -208,54 +262,38 @@ export const SwapWidget = () => {
       }
       return "Invalid Bitcoin Address";
     }
-    return "Swap";
+    if (!isWalletConnected) {
+      return "Connect Wallet";
+    }
+    return "Approve & Swap";
   };
-
-  if (!mounted) {
-    return (
-      <Flex
-        direction="column"
-        align="center"
-        py="27px"
-        w="630px"
-        borderRadius="20px"
-        {...opaqueBackgroundColor}
-        borderBottom={borderColor}
-        borderLeft={borderColor}
-        borderTop={borderColor}
-        borderRight={borderColor}
-      >
-        <Skeleton height="400px" width="90%" borderRadius="10px" />
-      </Flex>
-    );
-  }
 
   return (
     <Flex
       direction="column"
       align="center"
-      py={mounted && isMobile ? "20px" : "27px"}
-      w={mounted && isMobile ? "100%" : "630px"}
-      borderRadius="20px"
+      py={isMobile ? "20px" : "27px"}
+      w={isMobile ? "100%" : "630px"}
+      borderRadius="30px"
       {...opaqueBackgroundColor}
       borderBottom={borderColor}
       borderLeft={borderColor}
       borderTop={borderColor}
       borderRight={borderColor}
     >
-      <Flex w="90%" direction="column">
+      <Flex w="91.5%" direction="column">
         {/* Input Asset Section */}
         <Flex w="100%" flexDir="column" position="relative">
           <Flex
             px="10px"
             bg={inputAsset?.style?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
             w="100%"
-            h="117px"
+            h="121px"
             border="2px solid"
             borderColor={inputAsset?.style?.bg_color || "#255283"}
-            borderRadius="10px"
+            borderRadius="16px"
           >
-            <Flex direction="column" py="10px" px="5px">
+            <Flex direction="column" py="12px" px="8px">
               <Text
                 color={!inputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
@@ -311,7 +349,7 @@ export const SwapWidget = () => {
             </Flex>
 
             <Spacer />
-            <Flex mr="6px">
+            <Flex mr="8px">
               <TokenButton
                 cursor="pointer"
                 asset={inputAsset}
@@ -339,13 +377,13 @@ export const SwapWidget = () => {
             onClick={() =>
               toastInfo({
                 title: "Reverse swap coming soon!",
-                description: "BTC -> Token swaps are in development",
+                description: "BTC -> ERC20 swaps are in development",
               })
             }
             position="absolute"
             bg="#161616"
             border="2px solid #323232"
-            top="34.5%"
+            top="32%"
             left="50%"
             transform="translate(-50%, -50%)"
           >
@@ -370,11 +408,11 @@ export const SwapWidget = () => {
             px="10px"
             bg="rgba(46, 29, 14, 0.66)"
             w="100%"
-            h="117px"
+            h="121px"
             border="2px solid #78491F"
-            borderRadius="10px"
+            borderRadius="16px"
           >
-            <Flex direction="column" py="10px" px="5px">
+            <Flex direction="column" py="12px" px="8px">
               <Text
                 color={!outputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
@@ -428,13 +466,70 @@ export const SwapWidget = () => {
             </Flex>
 
             <Spacer />
-            <Flex mr="6px">
+            <Flex mr="8px">
               <WebAssetTag cursor="default" asset="BTC" />
             </Flex>
           </Flex>
 
+          {/* Exchange Rate */}
+          <Flex mt="12px">
+            <Text
+              color={colors.textGray}
+              fontSize="14px"
+              ml="3px"
+              letterSpacing="-1.5px"
+              fontWeight="normal"
+              fontFamily="Aux"
+            >
+              1 cbBTC ≈ 0.999 BTC
+            </Text>
+            <Spacer />
+            <Flex
+              color={colors.textGray}
+              fontSize="13px"
+              mr="3px"
+              letterSpacing="-1.5px"
+              fontWeight="normal"
+              fontFamily="Aux"
+            >
+              <ChakraTooltip.Root>
+                <ChakraTooltip.Trigger asChild>
+                  <Flex pr="3px" mt="-2px" cursor="pointer" userSelect="none">
+                    <Text
+                      color={colors.textGray}
+                      fontSize="14px"
+                      mr="8px"
+                      mt="1px"
+                      letterSpacing="-1.5px"
+                      fontWeight="normal"
+                      fontFamily="Aux"
+                    >
+                      Includes Fees
+                    </Text>
+                    <Flex mt="0px" mr="2px">
+                      <InfoSVG width="14px" />
+                    </Flex>
+                  </Flex>
+                </ChakraTooltip.Trigger>
+                <Portal>
+                  <ChakraTooltip.Positioner>
+                    <ChakraTooltip.Content
+                      fontFamily="Aux"
+                      letterSpacing="-0.5px"
+                      color={colors.offWhite}
+                      bg="#121212"
+                      fontSize="12px"
+                    >
+                      Exchange rate includes protocol fees. No additional fees.
+                    </ChakraTooltip.Content>
+                  </ChakraTooltip.Positioner>
+                </Portal>
+              </ChakraTooltip.Root>
+            </Flex>
+          </Flex>
+
           {/* BTC Payout Address */}
-          <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="6px">
+          <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
             <Text
               fontSize="15px"
               fontFamily={FONT_FAMILIES.NOSTROMO}
@@ -473,9 +568,9 @@ export const SwapWidget = () => {
             border="2px solid #78491F"
             w="100%"
             h="60px"
-            borderRadius="10px"
+            borderRadius="16px"
           >
-            <Flex direction="row" py="6px" px="5px">
+            <Flex direction="row" py="6px" px="8px">
               <Input
                 value={payoutBTCAddress}
                 onChange={(e) => setPayoutBTCAddress(e.target.value)}
@@ -515,86 +610,39 @@ export const SwapWidget = () => {
           </Flex>
         </Flex>
 
-        {/* Exchange Rate */}
-        <Flex mt="12px">
-          <Text
-            color={colors.textGray}
-            fontSize="14px"
-            ml="3px"
-            letterSpacing="-1.5px"
-            fontWeight="normal"
-            fontFamily="Aux"
-          >
-            1 cbBTC ≈ 0.999 BTC
-          </Text>
-          <Spacer />
-          <Flex
-            color={colors.textGray}
-            fontSize="13px"
-            mr="3px"
-            letterSpacing="-1.5px"
-            fontWeight="normal"
-            fontFamily="Aux"
-          >
-            <ChakraTooltip.Root>
-              <ChakraTooltip.Trigger asChild>
-                <Flex pr="3px" mt="-2px" cursor="pointer" userSelect="none">
-                  <Text
-                    color={colors.textGray}
-                    fontSize="14px"
-                    mr="8px"
-                    mt="1px"
-                    letterSpacing="-1.5px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    Includes Fees
-                  </Text>
-                  <Flex mt="0px" mr="2px">
-                    <InfoSVG width="14px" />
-                  </Flex>
-                </Flex>
-              </ChakraTooltip.Trigger>
-              <Portal>
-                <ChakraTooltip.Positioner>
-                  <ChakraTooltip.Content
-                    fontFamily="Aux"
-                    letterSpacing="-0.5px"
-                    color={colors.offWhite}
-                    bg="#121212"
-                    fontSize="12px"
-                  >
-                    Exchange rate includes protocol fees. No additional fees.
-                  </ChakraTooltip.Content>
-                </ChakraTooltip.Positioner>
-              </Portal>
-            </ChakraTooltip.Root>
-          </Flex>
-        </Flex>
-
         {/* Swap Button */}
         <Flex
           bg={
-            canSwap ? colors.purpleBackground : colors.purpleBackgroundDisabled
+            canClickButton
+              ? colors.purpleBackground
+              : colors.purpleBackgroundDisabled
           }
           _hover={{
-            bg: canSwap ? colors.purpleHover : undefined,
+            bg:
+              canClickButton && !isButtonLoading
+                ? colors.purpleHover
+                : undefined,
           }}
           w="100%"
-          mt="15px"
+          mt="8px"
           transition="0.2s"
-          h="48px"
-          onClick={handleSwap}
-          fontSize="16px"
+          h="58px"
+          onClick={isButtonLoading ? undefined : handleSwap}
+          fontSize="18px"
           align="center"
           userSelect="none"
-          cursor={canSwap ? "pointer" : "not-allowed"}
-          borderRadius="10px"
+          cursor={
+            canClickButton && !isButtonLoading ? "pointer" : "not-allowed"
+          }
+          borderRadius="16px"
           justify="center"
-          border={canSwap ? "3px solid #445BCB" : "3px solid #3242a8"}
+          border={canClickButton ? "3px solid #445BCB" : "3px solid #3242a8"}
         >
+          {isButtonLoading && (
+            <Spinner size="sm" color={colors.offWhite} mr="10px" />
+          )}
           <Text
-            color={canSwap ? colors.offWhite : colors.darkerGray}
+            color={canClickButton ? colors.offWhite : colors.darkerGray}
             fontFamily="Nostromo"
           >
             {getButtonText()}
