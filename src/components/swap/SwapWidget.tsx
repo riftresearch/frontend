@@ -160,6 +160,8 @@ export const SwapWidget = () => {
       parseFloat(inputAmount) * 10 ** BITCOIN_DECIMALS
     );
 
+    console.log("inputAmountInSatoshis", inputAmountInSatoshis);
+
     const largestMarketMakerBalance = BigInt(
       availableBitcoinLiquidity.largestBalance
     );
@@ -170,11 +172,6 @@ export const SwapWidget = () => {
       });
       return;
     }
-
-    console.log(
-      "locking script",
-      convertToBitcoinLockingScript(payoutBTCAddress)
-    );
 
     createAuction({
       cbBTCAmount: inputAmountInSatoshis,

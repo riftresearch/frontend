@@ -409,11 +409,14 @@ export function useCreateAuction() {
       return;
     }
 
-    if (!isLightClientSafeForOrders(lightClientBlockLeaf, canonicalBlockInfo)) {
+    if (
+      selectedChainConfig.type === "Mainnet" &&
+      !isLightClientSafeForOrders(lightClientBlockLeaf, canonicalBlockInfo)
+    ) {
       toastError(new Error(), {
         title: "Light client is unsafe for orders",
         description:
-          "The Light Client is unsafe for orders. Please wait while we load the block information",
+          " A light client update proof must be sent before creating an auction",
       });
       return;
     }

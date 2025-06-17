@@ -19,5 +19,6 @@
       "Bash(node:*)"
     ],
     "deny": []
-  }
+  },
+  "includeCoAuthoredBy": false
 }

@@ -1,5 +1,99 @@
 import { Address } from "viem";
 
+/**
+ * Converts a u8 array to a hex string with 0x prefix
+ */
+export function u8ArrayToHex(arr: number[]): `0x${string}` {
+  return `0x${arr.map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Parses raw API response data containing u8 arrays into properly typed hex strings
+ */
+export function parseOTCSwapResponse(rawSwap: any): OTCSwap {
+  return {
+    order: {
+      order: {
+        ...rawSwap.order.order,
+        bitcoinScriptPubKey: Array.isArray(
+          rawSwap.order.order.bitcoinScriptPubKey
+        )
+          ? u8ArrayToHex(rawSwap.order.order.bitcoinScriptPubKey)
+          : rawSwap.order.order.bitcoinScriptPubKey,
+        salt: Array.isArray(rawSwap.order.order.salt)
+          ? u8ArrayToHex(rawSwap.order.order.salt)
+          : rawSwap.order.order.salt,
+      },
+      order_block_number: rawSwap.order.order_block_number,
+      order_block_hash: Array.isArray(rawSwap.order.order_block_hash)
+        ? u8ArrayToHex(rawSwap.order.order_block_hash)
+        : rawSwap.order.order_block_hash,
+      order_txid: Array.isArray(rawSwap.order.order_txid)
+        ? u8ArrayToHex(rawSwap.order.order_txid)
+        : rawSwap.order.order_txid,
+    },
+    payments: rawSwap.payments.map((payment: any) => ({
+      payment: {
+        ...payment.payment,
+        orderHash: Array.isArray(payment.payment.orderHash)
+          ? u8ArrayToHex(payment.payment.orderHash)
+          : payment.payment.orderHash,
+      },
+      creation: {
+        ...payment.creation,
+        txid: Array.isArray(payment.creation.txid)
+          ? u8ArrayToHex(payment.creation.txid)
+          : payment.creation.txid,
+        block_hash: Array.isArray(payment.creation.block_hash)
+          ? u8ArrayToHex(payment.creation.block_hash)
+          : payment.creation.block_hash,
+      },
+      settlement: payment.settlement
+        ? {
+            ...payment.settlement,
+            txid: Array.isArray(payment.settlement.txid)
+              ? u8ArrayToHex(payment.settlement.txid)
+              : payment.settlement.txid,
+            block_hash: Array.isArray(payment.settlement.block_hash)
+              ? u8ArrayToHex(payment.settlement.block_hash)
+              : payment.settlement.block_hash,
+          }
+        : undefined,
+    })),
+    refund: rawSwap.refund
+      ? {
+          ...rawSwap.refund,
+          txid: Array.isArray(rawSwap.refund.txid)
+            ? u8ArrayToHex(rawSwap.refund.txid)
+            : rawSwap.refund.txid,
+          block_hash: Array.isArray(rawSwap.refund.block_hash)
+            ? u8ArrayToHex(rawSwap.refund.block_hash)
+            : rawSwap.refund.block_hash,
+        }
+      : undefined,
+  };
+}
+
+/**
+ * Parses raw TipProofResponse containing u8 arrays into properly typed hex strings
+ */
+export function parseTipProofResponse(rawTipProof: any): TipProofResponse {
+  return {
+    leaf: {
+      height: rawTipProof.leaf.height,
+      block_hash: Array.isArray(rawTipProof.leaf.block_hash)
+        ? rawTipProof.leaf.block_hash
+        : rawTipProof.leaf.block_hash,
+      cumulative_chainwork: Array.isArray(rawTipProof.leaf.cumulative_chainwork)
+        ? rawTipProof.leaf.cumulative_chainwork
+        : rawTipProof.leaf.cumulative_chainwork,
+    },
+    siblings: rawTipProof.siblings,
+    peaks: rawTipProof.peaks,
+    mmr_root: rawTipProof.mmr_root,
+  };
+}
+
 // Types matching the Rust server responses
 export type SwapStatus =
   | "PaymentPending"
@@ -14,8 +108,8 @@ export type PaymentState = "Proved" | "Settled";
 export type DutchAuctionState = "Created" | "Filled" | "Refunded";
 
 export interface FinalizedTransaction {
-  txid: string; // 32-byte hex string
-  block_hash: string; // 32-byte hex string
+  txid: `0x${string}`; // 32-byte hex string
+  block_hash: `0x${string}`; // 32-byte hex string
   block_number: number;
 }
 
@@ -26,10 +120,10 @@ export interface Order {
   amount: string; // uint256 as string
   takerFee: string; // uint256 as string
   expectedSats: number;
-  bitcoinScriptPubKey: string; // hex string
+  bitcoinScriptPubKey: `0x${string}`; // hex string
   designatedReceiver: Address;
   owner: Address;
-  salt: string; // 32-byte hex string
+  salt: `0x${string}`; // 32-byte hex string
   confirmationBlocks: number;
   safeBitcoinBlockHeight: number;
   state: OrderState;
@@ -38,14 +132,14 @@ export interface Order {
 export interface ChainAwareOrder {
   order: Order;
   order_block_number: number;
-  order_block_hash: string; // 32-byte hex string
-  order_txid: string; // 32-byte hex string
+  order_block_hash: `0x${string}`; // 32-byte hex string
+  order_txid: `0x${string}`; // 32-byte hex string
 }
 
 export interface Payment {
   index: number;
   orderIndex: number;
-  orderHash: string; // 32-byte hex string
+  orderHash: `0x${string}`; // 32-byte hex string
   paymentBitcoinBlockLeaf: BlockLeaf;
   challengeExpiryTimestamp: number;
   state: PaymentState;
@@ -85,8 +179,8 @@ export interface DutchAuctionParams {
 
 export interface BaseCreateOrderParams {
   owner: Address;
-  bitcoinScriptPubKey: string; // hex string
-  salt: string; // 32-byte hex string
+  bitcoinScriptPubKey: `0x${string}`; // hex string
+  salt: `0x${string}`; // 32-byte hex string
   confirmationBlocks: number;
   safeBlockLeaf: BlockLeaf;
 }
@@ -179,14 +273,16 @@ export class DataEngineClient {
       page: query.page.toString(),
     });
 
-    return this.fetchWithTimeout<OTCSwap[]>("/swaps", params);
+    const rawSwaps = await this.fetchWithTimeout<any[]>("/swaps", params);
+    return rawSwaps.map(parseOTCSwapResponse);
   }
 
   /**
    * Get the current tip proof
    */
   async getTipProof(): Promise<TipProofResponse> {
-    return this.fetchWithTimeout<TipProofResponse>("/tip-proof");
+    const rawTipProof = await this.fetchWithTimeout<any>("/tip-proof");
+    return parseTipProofResponse(rawTipProof);
   }
 
   /**

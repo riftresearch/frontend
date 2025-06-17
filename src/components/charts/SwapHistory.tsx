@@ -1,63 +1,12 @@
 import { Flex, Text, Spacer } from "@chakra-ui/react";
+import { useCallback } from "react";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { FaRegArrowAltCircleRight } from "react-icons/fa";
 import { HiOutlineExternalLink } from "react-icons/hi";
 import { bitcoinStyle, cbBTCStyle } from "@/utils/constants";
-
-// Mock swap data for display
-const mockSwaps = [
-  {
-    id: "1",
-    amount: "0.125",
-    asset: "cbBTC",
-    outputAmount: "0.124",
-    outputAsset: "BTC",
-    status: "Completed",
-    timeAgo: "2 hours ago",
-    txHash: "0x1234567890abcdef",
-  },
-  {
-    id: "2",
-    amount: "0.089",
-    asset: "cbBTC",
-    outputAmount: "0.088",
-    outputAsset: "BTC",
-    status: "Pending",
-    timeAgo: "4 hours ago",
-    txHash: "0x8765432109fedcba",
-  },
-  {
-    id: "3",
-    amount: "0.234",
-    asset: "cbBTC",
-    outputAmount: "0.232",
-    outputAsset: "BTC",
-    status: "Completed",
-    timeAgo: "1 day ago",
-    txHash: "0x9999111122223333",
-  },
-  {
-    id: "4",
-    amount: "0.067",
-    asset: "cbBTC",
-    outputAmount: "0.066",
-    outputAsset: "BTC",
-    status: "Failed",
-    timeAgo: "2 days ago",
-    txHash: "0x2222888844446666",
-  },
-  {
-    id: "5",
-    amount: "0.156",
-    asset: "cbBTC",
-    outputAmount: "0.154",
-    outputAsset: "BTC",
-    status: "Completed",
-    timeAgo: "3 days ago",
-    txHash: "0x3333777755559999",
-  },
-];
+import { SwapHistoryItem } from "@/utils/types";
+import { useSwapHistory } from "@/hooks/useSwapHistory";
 
 const AssetTag = ({
   assetName,
@@ -88,7 +37,7 @@ const AssetTag = ({
   );
 };
 
-const SwapCard = ({ swap }: { swap: (typeof mockSwaps)[0] }) => {
+const SwapCard = ({ swap }: { swap: SwapHistoryItem }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Completed":
@@ -255,6 +204,61 @@ const SwapCard = ({ swap }: { swap: (typeof mockSwaps)[0] }) => {
 };
 
 export const SwapHistory = () => {
+  const {
+    swaps,
+    hasNextPage,
+    isLoadingMore,
+    isLoading,
+    error,
+    loadMore,
+  } = useSwapHistory();
+
+  // Handle scroll event for infinite loading
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const element = e.currentTarget;
+      const scrolledToBottom =
+        Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 10;
+      
+      if (scrolledToBottom && hasNextPage && !isLoadingMore) {
+        loadMore();
+      }
+    },
+    [hasNextPage, isLoadingMore, loadMore]
+  );
+
+  if (error) {
+    return (
+      <Flex
+        w="100%"
+        direction="column"
+        bg={colors.offBlack}
+        border={`2px solid ${colors.borderGray}`}
+        borderRadius="30px"
+        p="24px"
+        align="center"
+        justify="center"
+        minH="300px"
+      >
+        <Text
+          fontSize="16px"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          color={colors.red}
+          mb="4px"
+        >
+          Failed to load swap history
+        </Text>
+        <Text
+          fontSize="14px"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          color={colors.textGray}
+        >
+          {error.message}
+        </Text>
+      </Flex>
+    );
+  }
+
   return (
     <Flex
       w="100%"
@@ -276,28 +280,70 @@ export const SwapHistory = () => {
         </Text>
       </Flex>
 
+      {/* Loading State */}
+      {isLoading && (
+        <Flex align="center" justify="center" minH="200px">
+          <Text
+            fontSize="14px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.textGray}
+          >
+            Loading swap history...
+          </Text>
+        </Flex>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && swaps.length === 0 && (
+        <Flex align="center" justify="center" minH="200px">
+          <Text
+            fontSize="14px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.textGray}
+          >
+            No swap history found
+          </Text>
+        </Flex>
+      )}
+
       {/* Swaps List */}
-      <Flex
-        direction="column"
-        maxH="400px"
-        overflowY="auto"
-        css={{
-          "&::-webkit-scrollbar": {
-            width: "8px",
-          },
-          "&::-webkit-scrollbar-track": {
-            background: "transparent",
-          },
-          "&::-webkit-scrollbar-thumb": {
-            backgroundColor: colors.borderGray,
-            borderRadius: "6px",
-          },
-        }}
-      >
-        {mockSwaps.map((swap) => (
-          <SwapCard key={swap.id} swap={swap} />
-        ))}
-      </Flex>
+      {!isLoading && swaps.length > 0 && (
+        <Flex
+          direction="column"
+          maxH="400px"
+          overflowY="auto"
+          onScroll={handleScroll}
+          css={{
+            "&::-webkit-scrollbar": {
+              width: "8px",
+            },
+            "&::-webkit-scrollbar-track": {
+              background: "transparent",
+            },
+            "&::-webkit-scrollbar-thumb": {
+              backgroundColor: colors.borderGray,
+              borderRadius: "6px",
+            },
+          }}
+        >
+          {swaps.map((swap) => (
+            <SwapCard key={swap.id} swap={swap} />
+          ))}
+          
+          {/* Loading More Indicator */}
+          {isLoadingMore && (
+            <Flex align="center" justify="center" py="16px">
+              <Text
+                fontSize="12px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={colors.textGray}
+              >
+                Loading more...
+              </Text>
+            </Flex>
+          )}
+        </Flex>
+      )}
     </Flex>
   );
 };
