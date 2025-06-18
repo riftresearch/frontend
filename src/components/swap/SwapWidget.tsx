@@ -58,6 +58,9 @@ export const SwapWidget = () => {
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }>({ isValid: false });
+  const [lastEditedField, setLastEditedField] = useState<"input" | "output">(
+    "input"
+  );
 
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const {
@@ -102,15 +105,40 @@ export const SwapWidget = () => {
     }
   }, [payoutBTCAddress, selectedChainConfig.bitcoinNetwork]);
 
+  // Exchange rate: 1 cbBTC = 0.999 BTC (0.1% fee)
+  const EXCHANGE_RATE = 0.999;
+
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setInputAmount(value);
 
-    // Simple 1:1 conversion for demo (in real app, would use swap route)
-    if (value && !isNaN(parseFloat(value))) {
-      setOutputAmount((parseFloat(value) * 0.999).toFixed(8)); // Simple fee calculation
-    } else {
-      setOutputAmount("");
+    // Allow empty string, numbers, and decimal point
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setInputAmount(value);
+      setLastEditedField("input");
+
+      // Calculate output amount based on input
+      if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
+        setOutputAmount((parseFloat(value) * EXCHANGE_RATE).toFixed(8));
+      } else {
+        setOutputAmount("");
+      }
+    }
+  };
+
+  const handleOutputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    // Allow empty string, numbers, and decimal point
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setOutputAmount(value);
+      setLastEditedField("output");
+
+      // Calculate input amount based on output (reverse calculation)
+      if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
+        setInputAmount((parseFloat(value) / EXCHANGE_RATE).toFixed(8));
+      } else {
+        setInputAmount("");
+      }
     }
   };
 
@@ -218,6 +246,7 @@ export const SwapWidget = () => {
     inputAmount &&
     outputAmount &&
     parseFloat(inputAmount) > 0 &&
+    parseFloat(outputAmount) > 0 &&
     payoutBTCAddress &&
     addressValidation.isValid;
 
@@ -227,6 +256,7 @@ export const SwapWidget = () => {
     ((inputAmount &&
       outputAmount &&
       parseFloat(inputAmount) > 0 &&
+      parseFloat(outputAmount) > 0 &&
       payoutBTCAddress &&
       addressValidation.isValid) ||
       !isWalletConnected);
@@ -240,7 +270,7 @@ export const SwapWidget = () => {
       return "Approving cbBTC...";
     }
     if (isBundlerPending) {
-      return "Confirm Auction...";
+      return "Confirm In Wallet...";
     }
     if (isConfirming) {
       return "Creating Auction...";
@@ -250,7 +280,12 @@ export const SwapWidget = () => {
     }
 
     // Normal validation states
-    if (!inputAmount || !outputAmount || parseFloat(inputAmount) <= 0) {
+    if (
+      !inputAmount ||
+      !outputAmount ||
+      parseFloat(inputAmount) <= 0 ||
+      parseFloat(outputAmount) <= 0
+    ) {
       return "Enter Amount";
     }
     if (!payoutBTCAddress) {
@@ -409,7 +444,8 @@ export const SwapWidget = () => {
             bg="rgba(46, 29, 14, 0.66)"
             w="100%"
             h="121px"
-            border="2px solid #78491F"
+            border="2px solid"
+            borderColor="#78491F"
             borderRadius="16px"
           >
             <Flex direction="column" py="12px" px="8px">
@@ -426,7 +462,7 @@ export const SwapWidget = () => {
 
               <Input
                 value={outputAmount}
-                readOnly
+                onChange={handleOutputChange}
                 fontFamily="Aux"
                 border="none"
                 bg="transparent"
@@ -481,7 +517,9 @@ export const SwapWidget = () => {
               fontWeight="normal"
               fontFamily="Aux"
             >
-              1 cbBTC ≈ 0.999 BTC
+              {lastEditedField === "input"
+                ? `1 cbBTC = ${EXCHANGE_RATE.toFixed(3)} BTC`
+                : `1 BTC = ${(1 / EXCHANGE_RATE).toFixed(6)} cbBTC`}
             </Text>
             <Spacer />
             <Flex
