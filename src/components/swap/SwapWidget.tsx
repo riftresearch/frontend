@@ -88,9 +88,9 @@ export const SwapWidget = () => {
   // Redirect to swap success page when transaction is confirmed
   useEffect(() => {
     if (isConfirmed && txHash) {
-      router.push(`/swap/${txHash}`);
+      router.push(`/swap/${selectedChainConfig.chainId}/${txHash}`);
     }
-  }, [isConfirmed, txHash, router]);
+  }, [isConfirmed, txHash, router, selectedChainConfig.chainId]);
 
   // Validate Bitcoin address whenever it changes
   useEffect(() => {

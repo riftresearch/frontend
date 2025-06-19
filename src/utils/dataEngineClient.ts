@@ -101,11 +101,11 @@ export type SwapStatus =
   | "Completed"
   | "Refunded";
 
-export type OrderState = "Created" | "Settled" | "Refunded";
+export type OrderState = number;
 
-export type PaymentState = "Proved" | "Settled";
+export type PaymentState = number;
 
-export type DutchAuctionState = "Created" | "Filled" | "Refunded";
+export type DutchAuctionState = number;
 
 export interface FinalizedTransaction {
   txid: `0x${string}`; // 32-byte hex string
@@ -293,6 +293,18 @@ export class DataEngineClient {
   }
 
   /**
+   * Get order by order index
+   */
+  async getOrder(orderIndex: number): Promise<OTCSwap | null> {
+    const params = new URLSearchParams({
+      order_index: orderIndex.toString(),
+    });
+
+    const rawSwap = await this.fetchWithTimeout<any>("/order", params);
+    return rawSwap ? parseOTCSwapResponse(rawSwap) : null;
+  }
+
+  /**
    * Health check endpoint
    */
   async healthCheck(): Promise<string> {
@@ -332,6 +344,14 @@ export const getTipProof =
 export const getLatestContractBlock =
   (client: DataEngineClient) => (): Promise<number> =>
     client.getLatestContractBlock();
+
+/**
+ * Get order by order index (functional style)
+ */
+export const getOrder =
+  (client: DataEngineClient) =>
+  (orderIndex: number): Promise<OTCSwap | null> =>
+    client.getOrder(orderIndex);
 
 /**
  * Health check (functional style)
