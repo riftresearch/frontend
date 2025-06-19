@@ -13,18 +13,16 @@ interface SwapSuccessPageProps {
   chainId: number;
 }
 
-const SwapSuccessPage: React.FC<SwapSuccessPageProps> = ({ txHash, chainId }) => {
+const SwapSuccessPage: React.FC<SwapSuccessPageProps> = ({
+  txHash,
+  chainId,
+}) => {
   const { isMobile } = useWindowSize();
-  const {
-    state,
-    receipt,
-    validateTxHash,
-    auctionIndex,
-    order,
-  } = useSwapStatus({ 
-    txHash: txHash as `0x${string}`,
-    chainId 
-  });
+  const { state, receipt, validateTxHash, auctionIndex, otcSwap, auction } =
+    useSwapStatus({
+      txHash: txHash as `0x${string}`,
+      chainId,
+    });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -77,7 +75,7 @@ const SwapSuccessPage: React.FC<SwapSuccessPageProps> = ({ txHash, chainId }) =>
 
   const getStatusMessage = (status: string, error: string | null) => {
     if (error) return error;
-    
+
     switch (status) {
       case "validating":
         return "Checking transaction status...";
@@ -148,7 +146,7 @@ const SwapSuccessPage: React.FC<SwapSuccessPageProps> = ({ txHash, chainId }) =>
               {getStatusTitle(state.status)}
             </Text>
 
-            {(state.status === "validating" || state.status === "processing") ? (
+            {state.status === "validating" || state.status === "processing" ? (
               <Flex direction="column" align="center" mb="30px">
                 <Spinner size="lg" color={colors.greenOutline} mb="20px" />
                 <Text
