@@ -4,7 +4,7 @@ import { useAccount } from "wagmi";
 import { useStore } from "../utils/store";
 import { DataEngineClient, OTCSwap } from "../utils/dataEngineClient";
 import { SwapHistoryItem } from "../utils/types";
-import { Address } from "viem";
+import { Address, formatUnits } from "viem";
 
 interface SwapHistoryState {
   /** Array of all swap history items loaded so far */
@@ -31,18 +31,23 @@ const convertOTCSwapToHistoryItem = (otcSwap: OTCSwap): SwapHistoryItem => {
 
   // Determine status based on order state and payments
   let status: "Completed" | "Pending" | "Failed" = "Pending";
-  if (order.order.state === "Settled") {
+  if (order.order.state === 2) {
     status = "Completed";
-  } else if (order.order.state === "Refunded") {
+  } else if (order.order.state === 3) {
     status = "Failed";
   }
 
   // Calculate time ago from timestamp
   const timeAgo = new Date(order.order.timestamp * 1000).toLocaleString();
 
-  // Format amounts - convert from wei to readable format
-  const amount = (Number(order.order.amount) / 1e8).toFixed(8); // Assuming 8 decimals for cbBTC
-  const outputAmount = (order.order.expectedSats / 1e8).toFixed(8); // Convert sats to BTC
+  const startingAmount =
+    BigInt(order.order.amount) + BigInt(order.order.takerFee);
+
+  // Format amounts using viem's formatUnits
+  const amount = parseFloat(formatUnits(startingAmount, 8)).toFixed(8);
+  const outputAmount = parseFloat(
+    formatUnits(BigInt(order.order.expectedSats), 8)
+  ).toFixed(8);
 
   return {
     id: `${order.order_txid}-${order.order.index}`,

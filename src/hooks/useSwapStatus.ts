@@ -168,6 +168,8 @@ export function useSwapStatus({
           ? scriptPubKey.slice(2)
           : scriptPubKey;
 
+        // TODO: We have to validate if all this actually works.
+
         console.log("scriptHex", scriptHex);
 
         // Esplora expects the script hash as a reversed SHA256 hash of the script
