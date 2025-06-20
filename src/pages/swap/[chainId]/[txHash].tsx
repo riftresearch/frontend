@@ -146,7 +146,7 @@ const SwapSuccessPage: React.FC<SwapSuccessPageProps> = ({
               {getStatusTitle(state.status)}
             </Text>
 
-            {state.status === "validating" || state.status === "processing" ? (
+            {state.status === "validating_tx" ? (
               <Flex direction="column" align="center" mb="30px">
                 <Spinner size="lg" color={colors.greenOutline} mb="20px" />
                 <Text

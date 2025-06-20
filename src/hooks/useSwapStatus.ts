@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useWaitForTransactionReceipt, usePublicClient } from "wagmi";
-import { parseEventLogs } from "viem";
+import { parseEventLogs, keccak256 } from "viem";
 import { useQuery } from "@tanstack/react-query";
+import esplora from "@interlay/esplora-btc-api";
+import { sha256 } from "viem";
 import {
   btcDutchAuctionHouseAbi,
   useReadBtcDutchAuctionHouseAuctionHashes,
@@ -18,7 +20,7 @@ interface UseSwapStatusParams {
 }
 
 type SwapStatus =
-  | "validating" // Checking if transaction exists
+  | "validating_tx" // Checking if transaction exists
   | "invalid_tx" // Auction transaction hash format is invalid
   | "tx_not_found" // Auction transaction doesn't exist
   | "tx_pending" // Auction transaction is pending
@@ -28,8 +30,9 @@ type SwapStatus =
   | "auction_refunded" // Auction was refunded
   | "order_created" // Order was created (auction was filled)
   | "order_refunded" // Order was refunded
-  | "order_settled" // Order was settled
-  | "processing"; // Processing auction/order status
+  | "payment_observed_on_bitcoin" // Bitcoin payment was sent to the order (observed on bitcoin, no proof of this on the EVM side yet)
+  | "payment_proof_submitted" // Bitcoin payment was sent to the order (implying challenge period is active)
+  | "order_settled"; // Order was settled
 
 interface SwapState {
   status: SwapStatus;
@@ -97,7 +100,7 @@ export function useSwapStatus({
     "created" | "filled" | "refunded" | "expired" | null
   >(null);
   const [state, setState] = useState<SwapState>({
-    status: "validating",
+    status: "validating_tx",
     error: null,
   });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -139,6 +142,86 @@ export function useSwapStatus({
     refetchInterval: 5000, // Refetch every 5 seconds
     staleTime: 0, // Always consider data stale to ensure fresh queries
   });
+
+  // Query for Bitcoin payment UTXOs
+  const { data: bitcoinPaymentDetected, isLoading: isBitcoinPaymentLoading } =
+    useQuery({
+      queryKey: [
+        "bitcoin-payment-utxos",
+        order?.order?.bitcoinScriptPubKey,
+        order?.order?.expectedSats.toString(),
+        chainConfig?.esploraUrl,
+      ],
+      queryFn: async () => {
+        console.log("[useSwapStatus] Checking for Bitcoin payment", {
+          scriptPubKey: order.order.bitcoinScriptPubKey,
+          expectedSats: order.order.expectedSats,
+          esploraUrl: chainConfig?.esploraUrl,
+        });
+
+        const scriptPubKey = order.order.bitcoinScriptPubKey;
+        const expectedSats = order.order.expectedSats;
+
+        // Convert hex script pub key to script hash for esplora
+        // Script pub key is a hex string like "0x...", we need to remove the 0x prefix
+        const scriptHex = scriptPubKey.startsWith("0x")
+          ? scriptPubKey.slice(2)
+          : scriptPubKey;
+
+        console.log("scriptHex", scriptHex);
+
+        // Esplora expects the script hash as a reversed SHA256 hash of the script
+        // Use viem's sha256 function which returns a hex string
+        const hash = sha256(`0x${scriptHex}`);
+        // Remove 0x prefix and reverse the bytes
+        const hashWithoutPrefix = hash.slice(2);
+        const reversedHash =
+          hashWithoutPrefix.match(/.{2}/g)?.reverse().join("") || "";
+        const scriptHash = reversedHash;
+
+        const scripthashApi = new esplora.ScripthashApi({
+          basePath: chainConfig!.esploraUrl,
+          isJsonMime: (mime) => mime.startsWith("application/json"),
+        });
+
+        try {
+          console.log("scriptHash", scriptHash);
+          // Get UTXOs for the script hash
+          const { data: utxos } =
+            await scripthashApi.getTxsByScripthash(scriptHash);
+
+          console.log("[useSwapStatus] UTXOs found:", {
+            count: utxos.length,
+            utxos,
+            expectedSats,
+          });
+
+          // Check if any UTXO has the exact expected amount
+          const paymentFound = utxos.some((utxo) =>
+            utxo.vout?.some((vout) => vout.value === expectedSats)
+          );
+
+          console.log("[useSwapStatus] Payment detection result:", {
+            paymentFound,
+            expectedSats,
+          });
+
+          return paymentFound;
+        } catch (error) {
+          console.error(
+            "[useSwapStatus] Error checking Bitcoin payment:",
+            error
+          );
+          return false;
+        }
+      },
+      enabled:
+        !!order &&
+        order.order.state === 0 /* Created */ &&
+        !!chainConfig?.esploraUrl,
+      refetchInterval: 10000, // Check every 10 seconds
+      staleTime: 0, // Always consider data stale
+    });
 
   // Read auction hash from contract
   const {
@@ -273,7 +356,7 @@ export function useSwapStatus({
     // Reset error if validation passes
     if (state.status === "invalid_tx") {
       console.log("[useSwapStatus] Validation passed, resetting to validating");
-      setState({ status: "validating", error: null });
+      setState({ status: "validating_tx", error: null });
     }
   }, [chainConfig, chainId, isProperlyFormatted, state.status]);
 
@@ -291,7 +374,7 @@ export function useSwapStatus({
 
     if (isWagmiLoading && !hasTimedOut) {
       console.log("[useSwapStatus] Setting status to validating");
-      setState({ status: "validating", error: null });
+      setState({ status: "validating_tx", error: null });
     } else if (hasTimedOut) {
       console.log("[useSwapStatus] Transaction lookup timed out");
       setState({
@@ -336,14 +419,6 @@ export function useSwapStatus({
     } else if (receipt.status === "reverted") {
       console.log("[useSwapStatus] Transaction reverted");
       setState({ status: "tx_failed", error: "Transaction was reverted" });
-    } else if (receiptSuccess) {
-      // Transaction successful - check if we have auction data
-      if (!auctionData) {
-        console.log(
-          "[useSwapStatus] Transaction successful, processing auction data"
-        );
-        setState({ status: "processing", error: null });
-      }
     }
   }, [receipt, receiptSuccess, chainConfig, isProperlyFormatted, auctionData]);
 
@@ -381,10 +456,7 @@ export function useSwapStatus({
         setState({ status: "auction_refunded", error: "Auction was refunded" });
         break;
       case "filled":
-        setState({ status: "processing", error: null });
-        break;
-      default:
-        setState({ status: "processing", error: null });
+        setState({ status: "order_created", error: null });
         break;
     }
   }, [auctionData, order, auctionStatus, receiptSuccess, receipt]);
@@ -668,6 +740,10 @@ export function useSwapStatus({
     });
 
     console.log("orderData.order.order.state", orderData.order.order.state);
+    if (orderData.payments.length > 0 && orderData.order.order.state === 0) {
+      // only set this state if the order is created and a payment was sent
+      setState({ status: "payment_proof_submitted", error: null });
+    }
 
     // Update order state if it has changed
     if (orderData.order.order.state !== order.order?.state) {
@@ -692,6 +768,20 @@ export function useSwapStatus({
       }
     }
   }, [orderData, order]);
+
+  // Handle Bitcoin payment detection
+  useEffect(() => {
+    if (
+      bitcoinPaymentDetected &&
+      order &&
+      order.order.state === 0 &&
+      state.status !== "payment_proof_submitted" &&
+      state.status !== "payment_observed_on_bitcoin"
+    ) {
+      console.log("[useSwapStatus] Bitcoin payment detected on chain");
+      setState({ status: "payment_observed_on_bitcoin", error: null });
+    }
+  }, [bitcoinPaymentDetected, order, state.status]);
 
   return {
     state,
