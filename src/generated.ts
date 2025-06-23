@@ -14,7 +14,7 @@ export const btcDutchAuctionHouseAbi = [
     type: 'constructor',
     inputs: [
       { name: '_mmrRoot', internalType: 'bytes32', type: 'bytes32' },
-      { name: '_syntheticBitcoin', internalType: 'address', type: 'address' },
+      { name: '_tokenizedBitcoin', internalType: 'address', type: 'address' },
       {
         name: '_circuitVerificationKey',
         internalType: 'bytes32',
@@ -49,6 +49,13 @@ export const btcDutchAuctionHouseAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: '_hypernode', internalType: 'address', type: 'address' }],
+    name: 'addHypernode',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     inputs: [{ name: '_feeRouter', internalType: 'address', type: 'address' }],
     name: 'adminSetFeeRouter',
     outputs: [],
@@ -66,6 +73,13 @@ export const btcDutchAuctionHouseAbi = [
     inputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     name: 'auctionHashes',
     outputs: [{ name: '', internalType: 'bytes32', type: 'bytes32' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'blockFinalityTime',
+    outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
     stateMutability: 'view',
   },
   {
@@ -223,6 +237,13 @@ export const btcDutchAuctionHouseAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: '', internalType: 'address', type: 'address' }],
+    name: 'hypernodes',
+    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [],
     name: 'lightClientHeight',
     outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
@@ -375,6 +396,13 @@ export const btcDutchAuctionHouseAbi = [
       },
     ],
     name: 'refundOrder',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: '_hypernode', internalType: 'address', type: 'address' }],
+    name: 'removeHypernode',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -747,15 +775,15 @@ export const btcDutchAuctionHouseAbi = [
   {
     type: 'function',
     inputs: [],
-    name: 'syntheticBitcoin',
-    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    name: 'takerFeeBips',
+    outputs: [{ name: '', internalType: 'uint16', type: 'uint16' }],
     stateMutability: 'view',
   },
   {
     type: 'function',
     inputs: [],
-    name: 'takerFeeBips',
-    outputs: [{ name: '', internalType: 'uint16', type: 'uint16' }],
+    name: 'tokenizedBitcoin',
+    outputs: [{ name: '', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
   },
   {
@@ -1241,6 +1269,7 @@ export const btcDutchAuctionHouseAbi = [
   { type: 'error', inputs: [], name: 'DutchAuctionDoesNotExist' },
   { type: 'error', inputs: [], name: 'FillerNotWhitelisted' },
   { type: 'error', inputs: [], name: 'InvalidAuctionRange' },
+  { type: 'error', inputs: [], name: 'InvalidConfirmations' },
   { type: 'error', inputs: [], name: 'InvalidDeadline' },
   {
     type: 'error',
@@ -1265,6 +1294,7 @@ export const btcDutchAuctionHouseAbi = [
   { type: 'error', inputs: [], name: 'NoHandoverRequest' },
   { type: 'error', inputs: [], name: 'NoPaymentsToSubmit' },
   { type: 'error', inputs: [], name: 'NotEnoughConfirmationBlocks' },
+  { type: 'error', inputs: [], name: 'NotHypernode' },
   { type: 'error', inputs: [], name: 'OrderDoesNotExist' },
   { type: 'error', inputs: [], name: 'OrderNotLive' },
   { type: 'error', inputs: [], name: 'OrderStillActive' },
@@ -1881,19 +1911,13 @@ export const libExposerAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: 'blocksElapsed', internalType: 'uint64', type: 'uint64' }],
+    inputs: [
+      { name: 'blocksElapsed', internalType: 'uint64', type: 'uint64' },
+      { name: 'blockFinalityTime', internalType: 'uint64', type: 'uint64' },
+    ],
     name: 'calculateChallengePeriod',
     outputs: [
       { name: 'challengePeriod', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'confirmations', internalType: 'uint8', type: 'uint8' }],
-    name: 'calculateDepositLockupPeriod',
-    outputs: [
-      { name: 'depositLockupPeriod', internalType: 'uint64', type: 'uint64' },
     ],
     stateMutability: 'pure',
   },
@@ -1911,25 +1935,21 @@ export const libExposerAbi = [
   },
   {
     type: 'function',
+    inputs: [
+      { name: 'confirmations', internalType: 'uint8', type: 'uint8' },
+      { name: 'blockFinalityTime', internalType: 'uint64', type: 'uint64' },
+    ],
+    name: 'calculateLockupPeriod',
+    outputs: [{ name: '', internalType: 'uint64', type: 'uint64' }],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     inputs: [{ name: 'takerFeeBips', internalType: 'uint16', type: 'uint16' }],
     name: 'calculateMinDepositAmount',
     outputs: [
       { name: 'minDepositAmount', internalType: 'uint256', type: 'uint256' },
     ],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getChallengePeriodBuffer',
-    outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getDepositLockupPeriodScalar',
-    outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
     stateMutability: 'pure',
   },
   {
@@ -1944,27 +1964,6 @@ export const libExposerAbi = [
     inputs: [],
     name: 'getMinOutputSats',
     outputs: [{ name: '', internalType: 'uint16', type: 'uint16' }],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getProofGenScalingFactor',
-    outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getScaledProofGenIntercept',
-    outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getScaledProofGenSlope',
-    outputs: [{ name: '', internalType: 'uint32', type: 'uint32' }],
     stateMutability: 'pure',
   },
   {
@@ -2187,6 +2186,7 @@ export const libExposerAbi = [
     outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
     stateMutability: 'pure',
   },
+  { type: 'error', inputs: [], name: 'InvalidConfirmations' },
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2449,7 +2449,7 @@ export const riftAuctionAdaptorAbi = [
   {
     type: 'function',
     inputs: [],
-    name: 'syntheticBitcoin',
+    name: 'tokenizedBitcoin',
     outputs: [{ name: '', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
   },
@@ -2500,6 +2500,15 @@ export const useReadBtcDutchAuctionHouseAuctionHashes =
   /*#__PURE__*/ createUseReadContract({
     abi: btcDutchAuctionHouseAbi,
     functionName: 'auctionHashes',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"blockFinalityTime"`
+ */
+export const useReadBtcDutchAuctionHouseBlockFinalityTime =
+  /*#__PURE__*/ createUseReadContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'blockFinalityTime',
   })
 
 /**
@@ -2557,6 +2566,15 @@ export const useReadBtcDutchAuctionHouseGetTotalPayments =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"hypernodes"`
+ */
+export const useReadBtcDutchAuctionHouseHypernodes =
+  /*#__PURE__*/ createUseReadContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'hypernodes',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"lightClientHeight"`
  */
 export const useReadBtcDutchAuctionHouseLightClientHeight =
@@ -2611,21 +2629,21 @@ export const useReadBtcDutchAuctionHousePaymentHashes =
   })
 
 /**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"syntheticBitcoin"`
- */
-export const useReadBtcDutchAuctionHouseSyntheticBitcoin =
-  /*#__PURE__*/ createUseReadContract({
-    abi: btcDutchAuctionHouseAbi,
-    functionName: 'syntheticBitcoin',
-  })
-
-/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"takerFeeBips"`
  */
 export const useReadBtcDutchAuctionHouseTakerFeeBips =
   /*#__PURE__*/ createUseReadContract({
     abi: btcDutchAuctionHouseAbi,
     functionName: 'takerFeeBips',
+  })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"tokenizedBitcoin"`
+ */
+export const useReadBtcDutchAuctionHouseTokenizedBitcoin =
+  /*#__PURE__*/ createUseReadContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'tokenizedBitcoin',
   })
 
 /**
@@ -2660,6 +2678,15 @@ export const useReadBtcDutchAuctionHouseVerifyProof =
  */
 export const useWriteBtcDutchAuctionHouse =
   /*#__PURE__*/ createUseWriteContract({ abi: btcDutchAuctionHouseAbi })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"addHypernode"`
+ */
+export const useWriteBtcDutchAuctionHouseAddHypernode =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'addHypernode',
+  })
 
 /**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"adminSetFeeRouter"`
@@ -2722,6 +2749,15 @@ export const useWriteBtcDutchAuctionHouseRefundOrder =
   /*#__PURE__*/ createUseWriteContract({
     abi: btcDutchAuctionHouseAbi,
     functionName: 'refundOrder',
+  })
+
+/**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"removeHypernode"`
+ */
+export const useWriteBtcDutchAuctionHouseRemoveHypernode =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'removeHypernode',
   })
 
 /**
@@ -2812,6 +2848,15 @@ export const useSimulateBtcDutchAuctionHouse =
   /*#__PURE__*/ createUseSimulateContract({ abi: btcDutchAuctionHouseAbi })
 
 /**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"addHypernode"`
+ */
+export const useSimulateBtcDutchAuctionHouseAddHypernode =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'addHypernode',
+  })
+
+/**
  * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"adminSetFeeRouter"`
  */
 export const useSimulateBtcDutchAuctionHouseAdminSetFeeRouter =
@@ -2872,6 +2917,15 @@ export const useSimulateBtcDutchAuctionHouseRefundOrder =
   /*#__PURE__*/ createUseSimulateContract({
     abi: btcDutchAuctionHouseAbi,
     functionName: 'refundOrder',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link btcDutchAuctionHouseAbi}__ and `functionName` set to `"removeHypernode"`
+ */
+export const useSimulateBtcDutchAuctionHouseRemoveHypernode =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: btcDutchAuctionHouseAbi,
+    functionName: 'removeHypernode',
   })
 
 /**
@@ -3735,15 +3789,6 @@ export const useReadLibExposerCalculateChallengePeriod =
   })
 
 /**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"calculateDepositLockupPeriod"`
- */
-export const useReadLibExposerCalculateDepositLockupPeriod =
-  /*#__PURE__*/ createUseReadContract({
-    abi: libExposerAbi,
-    functionName: 'calculateDepositLockupPeriod',
-  })
-
-/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"calculateFeeFromDeposit"`
  */
 export const useReadLibExposerCalculateFeeFromDeposit =
@@ -3753,30 +3798,21 @@ export const useReadLibExposerCalculateFeeFromDeposit =
   })
 
 /**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"calculateLockupPeriod"`
+ */
+export const useReadLibExposerCalculateLockupPeriod =
+  /*#__PURE__*/ createUseReadContract({
+    abi: libExposerAbi,
+    functionName: 'calculateLockupPeriod',
+  })
+
+/**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"calculateMinDepositAmount"`
  */
 export const useReadLibExposerCalculateMinDepositAmount =
   /*#__PURE__*/ createUseReadContract({
     abi: libExposerAbi,
     functionName: 'calculateMinDepositAmount',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"getChallengePeriodBuffer"`
- */
-export const useReadLibExposerGetChallengePeriodBuffer =
-  /*#__PURE__*/ createUseReadContract({
-    abi: libExposerAbi,
-    functionName: 'getChallengePeriodBuffer',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"getDepositLockupPeriodScalar"`
- */
-export const useReadLibExposerGetDepositLockupPeriodScalar =
-  /*#__PURE__*/ createUseReadContract({
-    abi: libExposerAbi,
-    functionName: 'getDepositLockupPeriodScalar',
   })
 
 /**
@@ -3795,33 +3831,6 @@ export const useReadLibExposerGetMinOutputSats =
   /*#__PURE__*/ createUseReadContract({
     abi: libExposerAbi,
     functionName: 'getMinOutputSats',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"getProofGenScalingFactor"`
- */
-export const useReadLibExposerGetProofGenScalingFactor =
-  /*#__PURE__*/ createUseReadContract({
-    abi: libExposerAbi,
-    functionName: 'getProofGenScalingFactor',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"getScaledProofGenIntercept"`
- */
-export const useReadLibExposerGetScaledProofGenIntercept =
-  /*#__PURE__*/ createUseReadContract({
-    abi: libExposerAbi,
-    functionName: 'getScaledProofGenIntercept',
-  })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link libExposerAbi}__ and `functionName` set to `"getScaledProofGenSlope"`
- */
-export const useReadLibExposerGetScaledProofGenSlope =
-  /*#__PURE__*/ createUseReadContract({
-    abi: libExposerAbi,
-    functionName: 'getScaledProofGenSlope',
   })
 
 /**
@@ -4051,12 +4060,12 @@ export const useReadRiftAuctionAdaptorBtcAuctionHouse =
   })
 
 /**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link riftAuctionAdaptorAbi}__ and `functionName` set to `"syntheticBitcoin"`
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link riftAuctionAdaptorAbi}__ and `functionName` set to `"tokenizedBitcoin"`
  */
-export const useReadRiftAuctionAdaptorSyntheticBitcoin =
+export const useReadRiftAuctionAdaptorTokenizedBitcoin =
   /*#__PURE__*/ createUseReadContract({
     abi: riftAuctionAdaptorAbi,
-    functionName: 'syntheticBitcoin',
+    functionName: 'tokenizedBitcoin',
   })
 
 /**
