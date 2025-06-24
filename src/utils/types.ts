@@ -1,3 +1,5 @@
+import { Address } from "viem";
+
 export type TokenStyle = {
   name: string;
   symbol: string;
@@ -12,7 +14,7 @@ export type TokenStyle = {
 };
 
 export type ValidAsset = {
-  tokenAddress: string;
+  tokenAddress: Address;
   decimals: number;
   style: TokenStyle;
 };

@@ -89,7 +89,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     },
     marketMakers: [],
   },
-  // Devnet
+  // Devnet (fork of base)
   // cargo run --release --bin devnet -- --fund-address 0x82bdA835Ab91D3F38Cb291030A5B0e6Dff086d44 --fund-address 0xb0D3EE0B9d205aa52b7e59adC61df39f80963413
   1337: {
     name: "Devnet",
@@ -105,12 +105,12 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
       decimals: 8,
       style: cbBTCStyle,
     },
-    riftExchangeAddress: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    riftExchangeAddress: "0x5Ae1f4bB68f8EAC39CFDbdFdA2b7344Ccbd80fAf",
     bundler3: {
-      bundler3Address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      generalAdapter1Address: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-      paraswapAdapterAddress: "0x0000000000000000000000000000000000000000",
-      riftcbBTCAdapterAddress: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+      bundler3Address: "0x6BFd8137e702540E7A42B74178A4a49Ba43920C4",
+      generalAdapter1Address: "0xb98c948CFA24072e58935BC004a8A7b376AE746A",
+      paraswapAdapterAddress: "0x6abE8ABd0275E5564ed1336F0243A52C32562F71",
+      riftcbBTCAdapterAddress: "0xb97C59331F89a852Ae21aee215Da28820c533649",
     },
     marketMakers: [
       {

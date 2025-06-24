@@ -26,10 +26,14 @@ import {
   encodeBundle,
 } from "@/lib/bundler-sdk-viem";
 import { ChainId, Holding } from "@morpho-org/blue-sdk";
-import { SimulationState } from "@morpho-org/simulation-sdk";
+import {
+  paraswapContractMethodOffsets,
+  SimulationState,
+} from "@morpho-org/simulation-sdk";
 import { useSimulationState } from "@morpho-org/simulation-sdk-wagmi";
 
 import { generatePrivateKey } from "viem/accounts";
+// import { useParaswapRouting } from "./useParaswapRouting";
 
 // ERC20 ABI for allowance and approve functions
 const erc20Abi = [
@@ -55,8 +59,8 @@ const erc20Abi = [
   },
 ] as const;
 
-export interface CreateAuctionParams {
-  cbBTCAmount: bigint;
+// Params for creating + sending off the bundler3 tx
+export interface TriggerExecuteParams {
   startsBTCperBTCRate: bigint;
   endcbsBTCperBTCRate: bigint;
   decayBlocks: bigint;
@@ -91,6 +95,11 @@ function generateSecureRandomSalt(): RandomSalt {
   return `0x${hexString}` as RandomSalt;
 }
 
+export interface CreateAuctionParams {
+  inputTokenAmount: bigint | undefined;
+  inputTokenAddress: Address;
+}
+
 /**
  * Custom hook to create an auction using the RiftAuctionAdaptor contract
  * Uses the bundler SDK for proper contract encoding and execution
@@ -115,7 +124,7 @@ function generateSecureRandomSalt(): RandomSalt {
  * };
  * ```
  */
-export function useCreateAuction() {
+export function useCreateAuction(hookParams: CreateAuctionParams) {
   const connectedChainId = useChainId();
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const { address: userAddress } = useAccount();
@@ -139,6 +148,17 @@ export function useCreateAuction() {
   const { data: currentBlock, isLoading: isCurrentBlockLoading } = useBlock({
     blockNumber: currentBlockNumber,
   });
+
+  /*
+  const { quote: paraswapQuote, isLoading: isParaswapLoading } =
+    useParaswapRouting({
+      sellAmount: hookParams.inputTokenAmount,
+      sellToken: hookParams.inputTokenAddress,
+      buyToken: selectedChainConfig.underlyingSwappingAsset.tokenAddress,
+      beneficiary: userAddress, // TODO: use the riftcbBTCAdapterAddress?
+      chainId: connectedChainId,
+    });
+  */
 
   // Get user's cbBTC balance for simulation
   const { data: userCbBTCBalance, isLoading: isBalanceLoading } = useBalance({
@@ -387,7 +407,7 @@ export function useCreateAuction() {
     }
   }, [isConfirmError, confirmError]);
 
-  const createAuction = async (params: CreateAuctionParams) => {
+  const createAuction = async (params: TriggerExecuteParams) => {
     if (
       !userAddress ||
       !selectedChainConfig ||
@@ -397,6 +417,14 @@ export function useCreateAuction() {
       toastError(new Error(), {
         title: "Wallet not connected",
         description: "Please connect your wallet to create an auction",
+      });
+      return;
+    }
+
+    if (!hookParams.inputTokenAmount) {
+      toastError(new Error(), {
+        title: "Input token amount is required",
+        description: "Please enter an input token amount",
       });
       return;
     }
@@ -503,10 +531,9 @@ export function useCreateAuction() {
         {
           type: "Erc20_Transfer",
           sender: userAddress,
-          address: selectedChainConfig.underlyingSwappingAsset
-            .tokenAddress as Address,
+          address: hookParams.inputTokenAddress,
           args: {
-            amount: params.cbBTCAmount,
+            amount: hookParams.inputTokenAmount,
             from: userAddress,
             to: riftcbBTCAdapterAddress as Address,
           },
@@ -571,7 +598,7 @@ export function useCreateAuction() {
       });
 
       // Check if approval is needed before executing bundle
-      const requiredAmount = params.cbBTCAmount;
+      const requiredAmount = hookParams.inputTokenAmount;
       const hasEnoughAllowance =
         currentAllowance && currentAllowance >= requiredAmount;
 

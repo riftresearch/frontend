@@ -32,24 +32,15 @@ import { useCreateAuction } from "@/hooks/useCreateAuction";
 import { Hex } from "bitcoinjs-lib/src/types";
 import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
 import { reownModal } from "@/utils/wallet";
+import { Address, parseUnits } from "viem";
 
 export const SwapWidget = () => {
+  const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected } = useAccount();
   const router = useRouter();
-  const {
-    createAuction,
-    isLoading: isLoadingCreateAuction,
-    txHash,
-    isApprovalPending,
-    isApprovalConfirming,
-    isApprovalConfirmed,
-    approvalTxHash,
-    isPending: isBundlerPending,
-    isConfirming,
-    isConfirmed,
-  } = useCreateAuction();
-  const [inputAmount, setInputAmount] = useState("");
+  const [rawInputAmount, setRawInputAmount] = useState("");
+  const [inputTokenAmount, setInputTokenAmount] = useState<bigint>(0n);
   const [outputAmount, setOutputAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [payoutBTCAddress, setPayoutBTCAddress] = useState("");
@@ -62,15 +53,51 @@ export const SwapWidget = () => {
     "input"
   );
 
-  const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const {
     data: availableBitcoinLiquidity,
     isLoading: isLoadingAvailableBitcoinLiquidity,
   } = useAvailableBitcoinLiquidity();
 
   const [inputAsset, setInputAsset] = useState<ValidAsset>(
-    selectedChainConfig.underlyingSwappingAsset
+    //    selectedChainConfig.underlyingSwappingAsset
+    {
+      tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      decimals: 6,
+      style: {
+        name: "USDC",
+        symbol: "USDC",
+        bg_color: "#234C79",
+        border_color: "#2775CA",
+        dark_bg_color: "#234C79",
+        light_text_color: "#2775CA",
+      },
+    }
   );
+
+  const convertInputAmountToFullDecimals = (): bigint | undefined => {
+    try {
+      return parseUnits(rawInputAmount, inputAsset.decimals);
+    } catch (error) {
+      console.error("Error converting input amount to full decimals:", error);
+      return undefined;
+    }
+  };
+
+  const {
+    createAuction,
+    isLoading: isLoadingCreateAuction,
+    txHash,
+    isApprovalPending,
+    isApprovalConfirming,
+    isApprovalConfirmed,
+    approvalTxHash,
+    isPending: isBundlerPending,
+    isConfirming,
+    isConfirmed,
+  } = useCreateAuction({
+    inputTokenAmount: convertInputAmountToFullDecimals(),
+    inputTokenAddress: inputAsset.tokenAddress,
+  });
 
   // Store hooks
 
@@ -80,7 +107,7 @@ export const SwapWidget = () => {
 
   useEffect(() => {
     // Reset values on mount
-    setInputAmount("");
+    setRawInputAmount("");
     setOutputAmount("");
     setPayoutBTCAddress("");
   }, []);
@@ -113,10 +140,10 @@ export const SwapWidget = () => {
 
     // Allow empty string, numbers, and decimal point
     if (value === "" || /^\d*\.?\d*$/.test(value)) {
-      setInputAmount(value);
+      setRawInputAmount(value);
       setLastEditedField("input");
 
-      // Calculate output amount based on input
+      // Calculate output amount based on input, also set the input token amount
       if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
         setOutputAmount((parseFloat(value) * EXCHANGE_RATE).toFixed(8));
       } else {
@@ -135,9 +162,9 @@ export const SwapWidget = () => {
 
       // Calculate input amount based on output (reverse calculation)
       if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
-        setInputAmount((parseFloat(value) / EXCHANGE_RATE).toFixed(8));
+        setRawInputAmount((parseFloat(value) / EXCHANGE_RATE).toFixed(8));
       } else {
-        setInputAmount("");
+        setRawInputAmount("");
       }
     }
   };
@@ -158,7 +185,7 @@ export const SwapWidget = () => {
       return;
     }
 
-    if (!inputAmount || !outputAmount) {
+    if (!rawInputAmount || !outputAmount) {
       toastInfo({
         title: "Enter amounts",
         description: "Please enter an amount to swap",
@@ -195,12 +222,10 @@ export const SwapWidget = () => {
     }
 
     const estimatedOutputAmountInSatoshis = BigInt(
-      parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS
+      Math.round(parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS)
     );
 
-    const inputAmountInSatoshis = BigInt(
-      parseFloat(inputAmount) * 10 ** BITCOIN_DECIMALS
-    );
+    const inputAmountInSatoshis = convertInputAmountToFullDecimals();
 
     console.log("inputAmountInSatoshis", inputAmountInSatoshis);
 
@@ -217,7 +242,6 @@ export const SwapWidget = () => {
 
     try {
       await createAuction({
-        cbBTCAmount: inputAmountInSatoshis,
         // Rates in WAD precision (1e18) for 1:1 to 0.99:1 ratio
         startsBTCperBTCRate: BigInt("1000000000000000000"), // 1.0 BTC per cbBTC (WAD)
         endcbsBTCperBTCRate: BigInt("990000000000000000"), // 0.99 BTC per cbBTC (WAD)
@@ -243,9 +267,9 @@ export const SwapWidget = () => {
     isConfirmed;
 
   const canSwap =
-    inputAmount &&
+    rawInputAmount &&
     outputAmount &&
-    parseFloat(inputAmount) > 0 &&
+    parseFloat(rawInputAmount) > 0 &&
     parseFloat(outputAmount) > 0 &&
     payoutBTCAddress &&
     addressValidation.isValid;
@@ -253,9 +277,9 @@ export const SwapWidget = () => {
   // Button should be clickable if either ready to swap OR ready to connect wallet (and not loading)
   const canClickButton =
     !isButtonLoading &&
-    ((inputAmount &&
+    ((rawInputAmount &&
       outputAmount &&
-      parseFloat(inputAmount) > 0 &&
+      parseFloat(rawInputAmount) > 0 &&
       parseFloat(outputAmount) > 0 &&
       payoutBTCAddress &&
       addressValidation.isValid) ||
@@ -281,9 +305,9 @@ export const SwapWidget = () => {
 
     // Normal validation states
     if (
-      !inputAmount ||
+      !rawInputAmount ||
       !outputAmount ||
-      parseFloat(inputAmount) <= 0 ||
+      parseFloat(rawInputAmount) <= 0 ||
       parseFloat(outputAmount) <= 0
     ) {
       return "Enter Amount";
@@ -330,7 +354,7 @@ export const SwapWidget = () => {
           >
             <Flex direction="column" py="12px" px="8px">
               <Text
-                color={!inputAmount ? colors.offWhite : colors.textGray}
+                color={!rawInputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
                 letterSpacing="-1px"
                 fontWeight="normal"
@@ -341,7 +365,7 @@ export const SwapWidget = () => {
               </Text>
 
               <Input
-                value={inputAmount}
+                value={rawInputAmount}
                 onChange={handleInputChange}
                 fontFamily="Aux"
                 border="none"
@@ -368,7 +392,7 @@ export const SwapWidget = () => {
               />
 
               <Text
-                color={!inputAmount ? colors.offWhite : colors.textGray}
+                color={!rawInputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
                 mt="6px"
                 ml="1px"

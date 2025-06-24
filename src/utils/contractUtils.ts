@@ -128,51 +128,6 @@ export const calculateFeeFromDeposit = async (
 //                              PERIOD CALCULATIONS
 // =============================================================================
 
-export const getDepositLockupPeriodScalar = async () => {
-  return await client.readContract({
-    address: await getDeployedLibExposer(),
-    abi: LibExposer.abi,
-    functionName: "getDepositLockupPeriodScalar",
-    args: [],
-  });
-};
-
-export const getChallengePeriodBuffer = async () => {
-  return await client.readContract({
-    address: await getDeployedLibExposer(),
-    abi: LibExposer.abi,
-    functionName: "getChallengePeriodBuffer",
-    args: [],
-  });
-};
-
-export const getScaledProofGenSlope = async () => {
-  return await client.readContract({
-    address: await getDeployedLibExposer(),
-    abi: LibExposer.abi,
-    functionName: "getScaledProofGenSlope",
-    args: [],
-  });
-};
-
-export const getScaledProofGenIntercept = async () => {
-  return await client.readContract({
-    address: await getDeployedLibExposer(),
-    abi: LibExposer.abi,
-    functionName: "getScaledProofGenIntercept",
-    args: [],
-  });
-};
-
-export const getProofGenScalingFactor = async () => {
-  return await client.readContract({
-    address: await getDeployedLibExposer(),
-    abi: LibExposer.abi,
-    functionName: "getProofGenScalingFactor",
-    args: [],
-  });
-};
-
 export const calculateChallengePeriod = async (blocksElapsed: bigint) => {
   return await client.readContract({
     address: await getDeployedLibExposer(),
@@ -310,32 +265,12 @@ const initializeContractConstants = async (): Promise<void> => {
 
   try {
     // Load all parameterless constants in parallel
-    const [
-      depositLockupPeriodScalar,
-      challengePeriodBuffer,
-      scaledProofGenSlope,
-      scaledProofGenIntercept,
-      proofGenScalingFactor,
-      minOutputSats,
-      minConfirmationBlocks,
-    ] = await Promise.all([
-      getDepositLockupPeriodScalar(),
-      getChallengePeriodBuffer(),
-      getScaledProofGenSlope(),
-      getScaledProofGenIntercept(),
-      getProofGenScalingFactor(),
+    const [minOutputSats, minConfirmationBlocks] = await Promise.all([
       getMinOutputSats(),
       getMinConfirmationBlocks(),
     ]);
 
     // Assign to constants object
-    contractConstants.depositLockupPeriodScalar =
-      depositLockupPeriodScalar as bigint;
-    contractConstants.challengePeriodBuffer = challengePeriodBuffer as bigint;
-    contractConstants.scaledProofGenSlope = scaledProofGenSlope as bigint;
-    contractConstants.scaledProofGenIntercept =
-      scaledProofGenIntercept as bigint;
-    contractConstants.proofGenScalingFactor = proofGenScalingFactor as bigint;
     contractConstants.minOutputSats = minOutputSats as bigint;
     contractConstants.minConfirmationBlocks = minConfirmationBlocks as bigint;
 
