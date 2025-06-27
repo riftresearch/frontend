@@ -46,10 +46,6 @@ const getDeployedLibExposer = async (): Promise<`0x${string}`> => {
   return deployedLibExposerAddress;
 };
 
-// =============================================================================
-//                              BITCOIN SCRIPT UTILITIES
-// =============================================================================
-
 export const validateScriptPubKey = async (scriptPubKey: `0x${string}`) => {
   return await client.readContract({
     address: await getDeployedLibExposer(),
@@ -58,10 +54,6 @@ export const validateScriptPubKey = async (scriptPubKey: `0x${string}`) => {
     args: [scriptPubKey],
   });
 };
-
-// =============================================================================
-//                              HASH UTILITIES
-// =============================================================================
 
 export const hashOrder = async (order: any) => {
   return await client.readContract({
@@ -99,10 +91,6 @@ export const hashDutchAuction = async (dutchAuction: any) => {
   });
 };
 
-// =============================================================================
-//                              FEE CALCULATIONS
-// =============================================================================
-
 export const calculateMinDepositAmount = async (takerFeeBips: number) => {
   return await client.readContract({
     address: await getDeployedLibExposer(),
@@ -124,10 +112,6 @@ export const calculateFeeFromDeposit = async (
   });
 };
 
-// =============================================================================
-//                              PERIOD CALCULATIONS
-// =============================================================================
-
 export const calculateChallengePeriod = async (blocksElapsed: bigint) => {
   return await client.readContract({
     address: await getDeployedLibExposer(),
@@ -145,10 +129,6 @@ export const calculateDepositLockupPeriod = async (confirmations: number) => {
     args: [confirmations],
   });
 };
-
-// =============================================================================
-//                              DUTCH DECAY CALCULATIONS
-// =============================================================================
 
 export const linearDecayUint = async (
   startPoint: bigint,
@@ -180,10 +160,6 @@ export const linearDecayInt = async (
   });
 };
 
-// =============================================================================
-//                              MMR PROOF VERIFICATION
-// =============================================================================
-
 export const verifyMMRProof = async (
   leafHash: `0x${string}`,
   leafIndex: bigint,
@@ -209,10 +185,6 @@ export const bagPeaks = async (peaks: `0x${string}`[]) => {
   });
 };
 
-// =============================================================================
-//                              ORDER VALIDATION CONSTANTS
-// =============================================================================
-
 export const getMinOutputSats = async () => {
   return await client.readContract({
     address: await getDeployedLibExposer(),
@@ -230,10 +202,6 @@ export const getMinConfirmationBlocks = async () => {
     args: [],
   });
 };
-
-// =============================================================================
-//                              RUNTIME CONSTANTS
-// =============================================================================
 
 interface ContractConstants {
   depositLockupPeriodScalar: bigint | null;

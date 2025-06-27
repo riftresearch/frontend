@@ -60,18 +60,6 @@ export const SwapWidget = () => {
 
   const [inputAsset, setInputAsset] = useState<ValidAsset>(
     selectedChainConfig.underlyingSwappingAsset
-    // {
-    //   tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    //   decimals: 6,
-    //   style: {
-    //     name: "USDC",
-    //     symbol: "USDC",
-    //     bg_color: "#234C79",
-    //     border_color: "#2775CA",
-    //     dark_bg_color: "#234C79",
-    //     light_text_color: "#2775CA",
-    //   },
-    // }
   );
 
   const convertInputAmountToFullDecimals = (): bigint | undefined => {

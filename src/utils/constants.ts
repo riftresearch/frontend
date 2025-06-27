@@ -90,7 +90,7 @@ export const CHAIN_SCOPED_CONFIGS: Record<number, ChainScopedConfig> = {
     marketMakers: [],
   },
   // Devnet (fork of base)
-  // cargo run --release --bin devnet -- --fund-address 0x82bdA835Ab91D3F38Cb291030A5B0e6Dff086d44 --fund-address 0xb0D3EE0B9d205aa52b7e59adC61df39f80963413
+  // RUST_LOG=info cargo run --release --bin devnet -- --fund-address 0x82bdA835Ab91D3F38Cb291030A5B0e6Dff086d44 --fund-address 0x8206bC387D672267E3e3e64253d93b0ED7B27FaD --fork-url https://base0.riftnodes.com --fork-block-number 31956985
   1337: {
     name: "Devnet",
     type: "Testnet",

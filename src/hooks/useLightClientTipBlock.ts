@@ -70,6 +70,7 @@ export function useLightClientTipBlock(): TipBlockInfo {
       enabled: !!riftExchangeAddress,
     },
   });
+  console.log("🔍 contract active mmrRoot", mmrRoot);
 
   // Fetch the checkpoint data for the current MMR root
   const {
@@ -99,6 +100,7 @@ export function useLightClientTipBlock(): TipBlockInfo {
     queryKey: ["dataEngine", "tipProof", mmrRoot],
     queryFn: async () => {
       const tipProof = await dataEngineClient.getTipProof();
+      console.log("🔍 tipProof", tipProof);
 
       // Check if MMR roots match
       // Convert contract MMR root (hex string) to bytes for comparison
@@ -167,12 +169,17 @@ export function useLightClientTipBlock(): TipBlockInfo {
   const isInSync =
     tipProofData?.isInSync && blockLeaf?.height === contractHeight;
 
+  console.log("contractHeight", contractHeight);
+  console.log("blockLeaf.height", blockLeaf?.height);
+
   // Combined refetch function
   const refetch = () => {
     refetchMmrRoot();
     refetchCheckpoint();
     refetchTipProof();
   };
+
+  console.log("🔍 tipProofData", tipProofData);
 
   return {
     mmrRoot,
