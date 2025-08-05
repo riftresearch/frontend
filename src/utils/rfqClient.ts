@@ -1,0 +1,318 @@
+/**
+ * TypeScript client for the RFQ (Request for Quote) server API
+ * Provides async/functional/declarative access to quote aggregation services
+ */
+
+// Types matching the Rust server responses
+export type ChainType = "bitcoin" | "ethereum";
+
+export type TokenIdentifier =
+  | { type: "Native" }
+  | { type: "Address"; data: string };
+
+export interface Currency {
+  chain: ChainType;
+  token: TokenIdentifier;
+  amount: string; // U256 as string
+  decimals: number;
+}
+
+export interface Quote {
+  id: string; // UUID as string
+  market_maker_id: string; // UUID as string
+  from: Currency;
+  to: Currency;
+  expires_at: string; // ISO 8601 datetime string
+  created_at: string; // ISO 8601 datetime string
+}
+
+export interface QuoteRequest {
+  from: Currency;
+  to: Currency;
+}
+
+export interface QuoteResponse {
+  request_id: string; // UUID as string
+  quote: Quote;
+  total_quotes_received: number;
+  market_makers_contacted: number;
+}
+
+export interface Status {
+  status: string;
+  version: string;
+  connected_market_makers: number;
+}
+
+export interface ConnectedMarketMakersResponse {
+  market_makers: string[]; // Array of UUIDs as strings
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export interface RfqClientConfig {
+  baseUrl: string;
+  timeout?: number;
+  apiKeyId?: string;
+  apiKey?: string;
+}
+
+/**
+ * Error class for RFQ client operations
+ */
+export class RfqClientError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode?: number,
+    public readonly response?: ErrorResponse
+  ) {
+    super(message);
+    this.name = "RfqClientError";
+  }
+}
+
+/**
+ * TypeScript client for the RFQ server API
+ * Provides access to quote aggregation and market maker information
+ */
+export class RfqClient {
+  private readonly baseUrl: string;
+  private readonly timeout: number;
+  private readonly headers: Record<string, string>;
+
+  constructor(config: RfqClientConfig) {
+    this.baseUrl = config.baseUrl.replace(/\/$/, ""); // Remove trailing slash
+    this.timeout = config.timeout ?? 10000; // 10s default timeout
+
+    this.headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+
+    // Add authentication headers if provided
+    if (config.apiKeyId) {
+      this.headers["X-API-Key-ID"] = config.apiKeyId;
+    }
+    if (config.apiKey) {
+      this.headers["X-API-Key"] = config.apiKey;
+    }
+  }
+
+  /**
+   * Performs a fetch request with timeout and error handling
+   */
+  private async fetchWithTimeout<T>(
+    endpoint: string,
+    options?: {
+      method?: string;
+      body?: any;
+      params?: URLSearchParams;
+    }
+  ): Promise<T> {
+    const url = options?.params
+      ? `${this.baseUrl}${endpoint}?${options.params.toString()}`
+      : `${this.baseUrl}${endpoint}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(url, {
+        method: options?.method ?? "GET",
+        signal: controller.signal,
+        headers: this.headers,
+        body: options?.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      if (!response.ok) {
+        let errorResponse: ErrorResponse | undefined;
+        try {
+          errorResponse = await response.json();
+        } catch {
+          // If response is not JSON, use status text
+          errorResponse = { error: response.statusText };
+        }
+
+        throw new RfqClientError(
+          errorResponse?.error ?? `HTTP ${response.status}`,
+          response.status,
+          errorResponse
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (error instanceof RfqClientError) {
+        throw error;
+      }
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new RfqClientError(`Request timeout after ${this.timeout}ms`);
+      }
+      throw new RfqClientError(
+        error instanceof Error ? error.message : "Unknown error occurred"
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * Get server status and version information
+   */
+  async getStatus(): Promise<Status> {
+    return this.fetchWithTimeout<Status>("/status");
+  }
+
+  /**
+   * Request quotes from connected market makers
+   */
+  async requestQuotes(request: QuoteRequest): Promise<QuoteResponse> {
+    return this.fetchWithTimeout<QuoteResponse>("/api/v1/quotes/request", {
+      method: "POST",
+      body: request,
+    });
+  }
+
+  /**
+   * Get list of connected market makers
+   */
+  async getConnectedMarketMakers(): Promise<ConnectedMarketMakersResponse> {
+    return this.fetchWithTimeout<ConnectedMarketMakersResponse>(
+      "/api/v1/market-makers/connected"
+    );
+  }
+
+  /**
+   * Health check endpoint (alias for getStatus)
+   */
+  async healthCheck(): Promise<boolean> {
+    try {
+      const status = await this.getStatus();
+      return status.status === "ok";
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * Functional API helpers for common operations
+ */
+
+/**
+ * Create a configured RFQ client
+ */
+export const createRfqClient = (config: RfqClientConfig): RfqClient =>
+  new RfqClient(config);
+
+/**
+ * Get server status (functional style)
+ */
+export const getStatus = (client: RfqClient) => (): Promise<Status> =>
+  client.getStatus();
+
+/**
+ * Request quotes (functional style)
+ */
+export const requestQuotes =
+  (client: RfqClient) =>
+  (request: QuoteRequest): Promise<QuoteResponse> =>
+    client.requestQuotes(request);
+
+/**
+ * Get connected market makers (functional style)
+ */
+export const getConnectedMarketMakers =
+  (client: RfqClient) => (): Promise<ConnectedMarketMakersResponse> =>
+    client.getConnectedMarketMakers();
+
+/**
+ * Health check (functional style)
+ */
+export const healthCheck = (client: RfqClient) => (): Promise<boolean> =>
+  client.healthCheck();
+
+/**
+ * Helper function to create a native token currency
+ */
+export const createNativeCurrency = (
+  chain: ChainType,
+  amount: string,
+  decimals: number = 18
+): Currency => ({
+  chain,
+  token: { type: "Native" },
+  amount,
+  decimals,
+});
+
+/**
+ * Helper function to create a token currency with address
+ */
+export const createTokenCurrency = (
+  chain: ChainType,
+  tokenAddress: string,
+  amount: string,
+  decimals: number = 18
+): Currency => ({
+  chain,
+  token: { type: "Address", data: tokenAddress },
+  amount,
+  decimals,
+});
+
+/**
+ * Helper function to check if a quote has expired
+ */
+export const isQuoteExpired = (quote: Quote): boolean => {
+  const now = new Date();
+  const expiresAt = new Date(quote.expires_at);
+  return now > expiresAt;
+};
+
+/**
+ * Helper function to get time until quote expiration in milliseconds
+ */
+export const getQuoteTimeToExpiration = (quote: Quote): number => {
+  const now = new Date();
+  const expiresAt = new Date(quote.expires_at);
+  return Math.max(0, expiresAt.getTime() - now.getTime());
+};
+
+/**
+ * Helper function to format currency amount with decimals
+ */
+export const formatCurrencyAmount = (currency: Currency): string => {
+  const amount = BigInt(currency.amount);
+  const divisor = BigInt(10 ** currency.decimals);
+  const wholePart = amount / divisor;
+  const fractionalPart = amount % divisor;
+
+  if (fractionalPart === 0n) {
+    return wholePart.toString();
+  }
+
+  const fractionalStr = fractionalPart
+    .toString()
+    .padStart(currency.decimals, "0");
+  const trimmedFractional = fractionalStr.replace(/0+$/, "");
+
+  return `${wholePart}.${trimmedFractional}`;
+};
+
+/**
+ * Helper function to parse amount string to base units
+ */
+export const parseAmountToBaseUnits = (
+  amount: string,
+  decimals: number
+): string => {
+  const [wholePart, fractionalPart = ""] = amount.split(".");
+  const paddedFractional = fractionalPart
+    .padEnd(decimals, "0")
+    .slice(0, decimals);
+  const baseUnits = wholePart + paddedFractional;
+  return BigInt(baseUnits).toString();
+};

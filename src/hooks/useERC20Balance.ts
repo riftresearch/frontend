@@ -1,6 +1,5 @@
 import { useReadContract } from "wagmi";
-import { type Address, formatUnits } from "viem";
-import { ERC20 } from "@/utils/contractArtifacts";
+import { type Address, formatUnits, erc20Abi } from "viem";
 
 interface UseERC20BalanceParams {
   /** The user's wallet address */
@@ -48,7 +47,7 @@ export function useERC20Balance({
   // Fetch the token's decimal places
   const { data: decimals, isLoading: decimalsLoading } = useReadContract({
     address: tokenAddress,
-    abi: ERC20.abi,
+    abi: erc20Abi,
     functionName: "decimals",
     query: {
       enabled: enabled && !!tokenAddress,
@@ -64,7 +63,7 @@ export function useERC20Balance({
     refetch,
   } = useReadContract({
     address: tokenAddress,
-    abi: ERC20.abi,
+    abi: erc20Abi,
     functionName: "balanceOf",
     args: userAddress ? [userAddress] : undefined,
     query: {

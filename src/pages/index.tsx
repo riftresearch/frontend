@@ -50,7 +50,7 @@ export default function Home() {
             gap={"0px"}
           >
             <Text mt="15px" mb="25px">
-              The first trustless <OrangeText>Bitcoin</OrangeText> exchange. See{" "}
+              The first trustless <OrangeText>Bitcoin</OrangeText> bridge. See{" "}
               <Box
                 as="span"
                 // go to https://rift.exchange

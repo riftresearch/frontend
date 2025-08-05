@@ -6,30 +6,10 @@ import { NetworkIcon } from "./NetworkIcon";
 import { reownModal } from "@/utils/wallet";
 import { useStore } from "@/utils/store";
 import { useAccount } from "wagmi";
-import { useERC20Balance } from "@/hooks/useERC20Balance";
 
 export const AssetBalanceDisplay = () => {
   const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const appKitChainId = reownModal.getChainId();
-
-  const { address } = useAccount();
-  const { formattedBalance, isLoading } = useERC20Balance({
-    userAddress: address,
-    tokenAddress: selectedChainConfig.underlyingSwappingAsset
-      .tokenAddress as `0x${string}`,
-  });
-
-  // Format balance for display
-  const formatBalance = () => {
-    if (formattedBalance === undefined || formattedBalance === null) return "0";
-    const num = parseFloat(formattedBalance.toString());
-    if (isNaN(num)) return "0";
-
-    return new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: BITCOIN_DECIMALS,
-    }).format(num);
-  };
 
   return (
     <Box
@@ -66,7 +46,7 @@ export const AssetBalanceDisplay = () => {
         fontFamily={"aux"}
         flexShrink={0}
       >
-        {formatBalance()}
+        {/* {formatBalance()} */}
         <Text color={colors.offWhite} ml="8px" whiteSpace="nowrap">
           {selectedChainConfig.underlyingSwappingAsset.style.display_name}
         </Text>

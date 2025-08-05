@@ -27,8 +27,6 @@ import { useStore } from "@/utils/store";
 import { toastInfo } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { TokenStyle, ValidAsset } from "@/utils/types";
-import { useAvailableBitcoinLiquidity } from "@/hooks/useAvailableBitcoinLiquidity";
-import { useCreateAuction } from "@/hooks/useCreateAuction";
 import { Hex } from "bitcoinjs-lib/src/types";
 import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
 import { reownModal } from "@/utils/wallet";
@@ -61,10 +59,12 @@ export const SwapWidget = () => {
   const [isReversed, setIsReversed] = useState(false);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
 
-  const {
-    data: availableBitcoinLiquidity,
-    isLoading: isLoadingAvailableBitcoinLiquidity,
-  } = useAvailableBitcoinLiquidity();
+  // const {
+  //   data: availableBitcoinLiquidity,
+  //   isLoading: isLoadingAvailableBitcoinLiquidity,
+  // } = useAvailableBitcoinLiquidity();
+  const [canClickButton, setCanClickButton] = useState(false);
+  const [isButtonLoading, setIsButtonLoading] = useState(false);
 
   // Define the assets based on swap direction
   const cbBTCAsset = selectedChainConfig.underlyingSwappingAsset;
@@ -109,25 +109,6 @@ export const SwapWidget = () => {
     }
   };
 
-  const {
-    createAuction,
-    isLoading: isLoadingCreateAuction,
-    txHash,
-    isApprovalPending,
-
-    isApprovalConfirming,
-    isApprovalConfirmed,
-    approvalTxHash,
-    isPending: isBundlerPending,
-    isConfirming,
-    isConfirmed,
-  } = useCreateAuction({
-    inputTokenAmount: convertInputAmountToFullDecimals(),
-    inputTokenAddress: currentInputAsset.tokenAddress,
-  });
-
-  // Store hooks
-
   // Styling constants
   const actualBorderColor = "#323232";
   const borderColor = `2px solid ${actualBorderColor}`;
@@ -139,13 +120,6 @@ export const SwapWidget = () => {
     setPayoutAddress("");
     setRefundAddress("");
   }, []);
-
-  // Redirect to swap success page when transaction is confirmed
-  useEffect(() => {
-    if (isConfirmed && txHash) {
-      router.push(`/swap/${selectedChainConfig.chainId}/${txHash}`);
-    }
-  }, [isConfirmed, txHash, router, selectedChainConfig.chainId]);
 
   // Validate payout address whenever it changes (Bitcoin or Ethereum based on swap direction)
   useEffect(() => {
@@ -306,14 +280,6 @@ export const SwapWidget = () => {
       return;
     }
 
-    if (isLoadingAvailableBitcoinLiquidity || !availableBitcoinLiquidity) {
-      toastInfo({
-        title: "Loading...",
-        description: "Searching for available Bitcoin liquidity",
-      });
-      return;
-    }
-
     const estimatedOutputAmountInSatoshis = BigInt(
       Math.round(parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS)
     );
@@ -321,43 +287,7 @@ export const SwapWidget = () => {
     const inputAmountInSatoshis = convertInputAmountToFullDecimals();
 
     console.log("inputAmountInSatoshis", inputAmountInSatoshis);
-
-    const largestMarketMakerBalance = BigInt(
-      availableBitcoinLiquidity.largestBalance
-    );
-    if (estimatedOutputAmountInSatoshis > largestMarketMakerBalance) {
-      toastInfo({
-        title: "Insufficient liquidity",
-        description: `We don't have enough liquidity to swap to ${outputAmount} BTC`,
-      });
-      return;
-    }
-
-    try {
-      await createAuction({
-        // Rates in WAD precision (1e18) for 1:1 to 0.99:1 ratio
-        startsBTCperBTCRate: BigInt("1000000000000000000"), // 1.0 BTC per cbBTC (WAD)
-        endcbsBTCperBTCRate: BigInt("990000000000000000"), // 0.99 BTC per cbBTC (WAD)
-        decayBlocks: BigInt(60), // TODO: Make this chain dependent
-        deadline: BigInt(Math.floor(Date.now() / 1000) + 90), // 90 seconds from now (unix timestamp)
-        fillerWhitelistContract: "0x0000000000000000000000000000000000000000", // TODO: Grab this from config (chain dependent)
-        bitcoinScriptPubKey: convertToBitcoinLockingScript(
-          payoutAddress
-        ) as `0x${string}`,
-        confirmationBlocks: Number(contractConstants.minConfirmationBlocks),
-      });
-    } catch (error) {
-      console.error("Error creating auction:", error);
-      // Error will be handled by the hook itself via toasts
-    }
   };
-
-  const isButtonLoading =
-    isApprovalPending ||
-    isApprovalConfirming ||
-    isBundlerPending ||
-    isConfirming ||
-    isConfirmed;
 
   const canSwap =
     rawInputAmount &&
@@ -368,76 +298,6 @@ export const SwapWidget = () => {
     addressValidation.isValid &&
     refundAddress &&
     refundAddressValidation.isValid;
-
-  // Button should be clickable if either ready to swap OR ready to connect wallet (and not loading)
-  const canClickButton =
-    !isButtonLoading &&
-    ((rawInputAmount &&
-      outputAmount &&
-      parseFloat(rawInputAmount) > 0 &&
-      parseFloat(outputAmount) > 0 &&
-      payoutAddress &&
-      addressValidation.isValid &&
-      refundAddress &&
-      refundAddressValidation.isValid) ||
-      !isWalletConnected);
-
-  const getButtonText = () => {
-    // Show loading states first
-    if (isApprovalPending) {
-      return "Confirm Approval...";
-    }
-    if (isApprovalConfirming) {
-      return `Approving ${currentInputAsset?.style?.symbol}...`;
-    }
-    if (isBundlerPending) {
-      return "Confirm In Wallet...";
-    }
-    if (isConfirming) {
-      return "Creating Auction...";
-    }
-    if (isConfirmed) {
-      return "Auction Created!";
-    }
-
-    // Normal validation states
-    if (
-      !rawInputAmount ||
-      !outputAmount ||
-      parseFloat(rawInputAmount) <= 0 ||
-      parseFloat(outputAmount) <= 0
-    ) {
-      return "Enter Amount";
-    }
-    if (!refundAddress) {
-      return isReversed
-        ? "Enter Bitcoin Refund Address"
-        : "Enter cbBTC Refund Address";
-    }
-    if (refundAddress && !refundAddressValidation.isValid) {
-      if (isReversed && refundAddressValidation.networkMismatch) {
-        return `Wrong Network (${refundAddressValidation.detectedNetwork})`;
-      }
-      return isReversed
-        ? "Invalid Bitcoin Refund Address"
-        : "Invalid Ethereum Refund Address";
-    }
-    if (!payoutAddress) {
-      return isReversed ? "Enter Ethereum Address" : "Enter Bitcoin Address";
-    }
-    if (payoutAddress && !addressValidation.isValid) {
-      if (!isReversed && addressValidation.networkMismatch) {
-        return `Wrong Network (${addressValidation.detectedNetwork})`;
-      }
-      return isReversed
-        ? "Invalid Ethereum Address"
-        : "Invalid Bitcoin Address";
-    }
-    if (!isWalletConnected) {
-      return "Connect Wallet";
-    }
-    return "Approve & Swap";
-  };
 
   return (
     <Flex
@@ -717,6 +577,7 @@ export const SwapWidget = () => {
             transition="all 0.8s cubic-bezier(0.16, 1, 0.3, 1)"
             transitionDelay={hasStartedTyping ? "0.1s" : "0s"}
             pointerEvents={hasStartedTyping ? "auto" : "none"}
+            mb="-10px"
             overflow="hidden"
             maxHeight={hasStartedTyping ? "200px" : "0px"}
           >
@@ -853,6 +714,7 @@ export const SwapWidget = () => {
           <Flex
             direction="column"
             w="100%"
+            mb="5px"
             opacity={hasStartedTyping ? 1 : 0}
             transform={
               hasStartedTyping ? "translateY(0px)" : "translateY(30px)"
@@ -1027,7 +889,7 @@ export const SwapWidget = () => {
             color={canClickButton ? colors.offWhite : colors.darkerGray}
             fontFamily="Nostromo"
           >
-            {getButtonText()}
+            {isButtonLoading ? "Loading..." : "Swap"}
           </Text>
         </Flex>
       </Flex>
