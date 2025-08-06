@@ -245,7 +245,7 @@ export const Navbar = ({}) => {
           {isConnected && <AssetBalanceDisplay />}
         </Flex>
         <Flex mb="-5px" pr="5px" alignItems="center" gap="10px">
-          {isLocalhost && router.pathname === "/swap/[chainId]/[txHash]" && (
+          {isLocalhost && (
             <Flex
               userSelect={"none"}
               zIndex={1000}

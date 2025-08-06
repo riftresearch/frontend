@@ -28,7 +28,6 @@ import { toastInfo } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { TokenStyle, ValidAsset } from "@/utils/types";
 import { Hex } from "bitcoinjs-lib/src/types";
-import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
 import { reownModal } from "@/utils/wallet";
 import { Address, parseUnits } from "viem";
 
