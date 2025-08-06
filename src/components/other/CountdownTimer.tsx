@@ -13,14 +13,19 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   const [smoothProgress, setSmoothProgress] = useState(100);
   const [isAnimatingToZero, setIsAnimatingToZero] = useState(false);
   const [previousState, setPreviousState] = useState("0-not-started");
+  const [showTimer, setShowTimer] = useState(false);
+  const [hideNumber, setHideNumber] = useState(false);
 
   useEffect(() => {
     // Reset progress only when starting fresh from state 0
     if (
-      depositFlowState === "1-finding-liquidity" &&
+      depositFlowState === "1-WaitingUserDepositInitiated" &&
       previousState === "0-not-started" &&
       countdownValue === 10
     ) {
+      // Trigger entrance animation
+      setShowTimer(true);
+      setHideNumber(false); // Reset number visibility
       setSmoothProgress(100);
       const interval = setInterval(() => {
         setCountdownValue(countdownValue - 1);
@@ -28,6 +33,14 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
 
       return () => clearInterval(interval);
     }
+
+    // Show timer for any active state
+    if (depositFlowState !== "0-not-started") {
+      setShowTimer(true);
+    } else {
+      setShowTimer(false);
+    }
+
     setPreviousState(depositFlowState);
   }, [depositFlowState, countdownValue, setCountdownValue, previousState]);
 
@@ -79,6 +92,10 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
       } else if (countdownValue <= 0) {
         // Animation to zero is complete
         setIsAnimatingToZero(false);
+        // Delay the number fade-out slightly after circle disappears
+        setTimeout(() => {
+          setHideNumber(true);
+        }, 200);
       }
     };
 
@@ -98,6 +115,10 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
       display="flex"
       alignItems="center"
       justifyContent="center"
+      opacity={showTimer ? 1 : 0}
+      transform={showTimer ? "translateY(0px)" : "translateY(30px)"}
+      transition="all 1.2s cubic-bezier(0.16, 1, 0.3, 1)"
+      transitionDelay={showTimer ? "0.3s" : "0s"}
     >
       {/* SVG Circle Progress - 80% of 80% of 2.5x size */}
       <svg width="192" height="192" style={{ transform: "rotate(-90deg)" }}>
@@ -134,6 +155,9 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
         color="white"
         dropShadow="0 0 100px rgba(255, 255, 255, 0.5)"
         fontFamily="Proto Mono"
+        opacity={hideNumber ? 0 : 1}
+        transform={hideNumber ? "translateY(30px)" : "translateY(0px)"}
+        transition="all 0.8s cubic-bezier(0.16, 1, 0.3, 1)"
       >
         {countdownValue}
       </Text>
