@@ -92,18 +92,33 @@ export const Navbar = ({}) => {
     stateNumber: number
   ):
     | "0-not-started"
-    | "1-finding-liquidity"
-    | "2-awaiting-payment"
-    | "3-payment-recieved" => {
+    | "1-WaitingUserDepositInitiated"
+    | "2-WaitingUserDepositConfirmed"
+    | "3-WaitingMMDepositInitiated"
+    | "4-WaitingMMDepositConfirmed"
+    | "5-Settled"
+    | "6-RefundingUser"
+    | "7-RefundingMM"
+    | "8-Failed" => {
     switch (stateNumber) {
       case 0:
         return "0-not-started";
       case 1:
-        return "1-finding-liquidity";
+        return "1-WaitingUserDepositInitiated";
       case 2:
-        return "2-awaiting-payment";
+        return "2-WaitingUserDepositConfirmed";
       case 3:
-        return "3-payment-recieved";
+        return "3-WaitingMMDepositInitiated";
+      case 4:
+        return "4-WaitingMMDepositConfirmed";
+      case 5:
+        return "5-Settled";
+      case 6:
+        return "6-RefundingUser";
+      case 7:
+        return "7-RefundingMM";
+      case 8:
+        return "8-Failed";
       default:
         return "0-not-started"; // Default case
     }

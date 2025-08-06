@@ -22,7 +22,7 @@ export default function Home() {
   // Reset countdown only when starting deposit flow (0 -> 1)
   React.useEffect(() => {
     if (
-      depositFlowState === "1-finding-liquidity" &&
+      depositFlowState === "1-WaitingUserDepositInitiated" &&
       previousState === "0-not-started"
     ) {
       setCountdownValue(10);

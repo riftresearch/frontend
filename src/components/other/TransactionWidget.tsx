@@ -2,21 +2,35 @@ import { Box, Text } from "@chakra-ui/react";
 import { CountdownTimer } from "./CountdownTimer";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useStore } from "@/utils/store";
+import { useState, useEffect } from "react";
 
 export function TransactionWidget() {
   const { isMobile } = useWindowSize();
   const depositFlowState = useStore((state) => state.depositFlowState);
+  const [showStepsText, setShowStepsText] = useState(false);
+  const [showCheckmark, setShowCheckmark] = useState(false);
+  const [hideTimer, setHideTimer] = useState(false);
 
   const getDisplayText = () => {
     switch (depositFlowState) {
       case "0-not-started":
         return "Ready to Begin";
-      case "1-finding-liquidity":
+      case "1-WaitingUserDepositInitiated":
+        return "Initiating Deposit";
+      case "2-WaitingUserDepositConfirmed":
+        return "Confirming Deposit";
+      case "3-WaitingMMDepositInitiated":
         return "Finding Liquidity";
-      case "2-awaiting-payment":
-        return "Awaiting Payment";
-      case "3-payment-recieved":
-        return "Payment Received";
+      case "4-WaitingMMDepositConfirmed":
+        return "Processing";
+      case "5-Settled":
+        return "Complete";
+      case "6-RefundingUser":
+        return "Refunding";
+      case "7-RefundingMM":
+        return "Refunding";
+      case "8-Failed":
+        return "Failed";
       default:
         return "Deposit Flow Active";
     }

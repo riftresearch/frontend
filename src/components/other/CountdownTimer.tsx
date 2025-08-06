@@ -19,7 +19,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   useEffect(() => {
     // Reset progress only when starting fresh from state 0
     if (
-      depositFlowState === "1-finding-liquidity" &&
+      depositFlowState === "1-WaitingUserDepositInitiated" &&
       previousState === "0-not-started" &&
       countdownValue === 10
     ) {
