@@ -276,7 +276,7 @@ export const SwapWidget = () => {
     }
     console.log("Returned swap request", swap);
     // hex to string bigint
-    let amount = BigInt(swap.expected_amount);
+    const amount = BigInt(swap.expected_amount);
     console.log("amount", amount);
     // okay, now we need to request money to be sent from the user to the created swap
     try {
@@ -301,7 +301,7 @@ export const SwapWidget = () => {
       setLastEditedField("input");
       setHasStartedTyping(true);
 
-      let from_amount = convertInputAmountToFullDecimals(value);
+      const from_amount = convertInputAmountToFullDecimals(value);
       console.log("value", value);
       console.log("from_amount", from_amount);
       if (from_amount && from_amount > 0n) {
