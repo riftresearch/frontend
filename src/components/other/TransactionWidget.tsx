@@ -1,16 +1,34 @@
 import { Box, Text } from "@chakra-ui/react";
 import { CountdownTimer } from "./CountdownTimer";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useStore } from "@/utils/store";
 
 export function TransactionWidget() {
   const { isMobile } = useWindowSize();
+  const depositFlowState = useStore((state) => state.depositFlowState);
+
+  const getDisplayText = () => {
+    switch (depositFlowState) {
+      case "0-not-started":
+        return "Ready to Begin";
+      case "1-finding-liquidity":
+        return "Finding Liquidity";
+      case "2-awaiting-payment":
+        return "Awaiting Payment";
+      case "3-payment-recieved":
+        return "Payment Received";
+      default:
+        return "Deposit Flow Active";
+    }
+  };
 
   return (
     <Box
-      w={isMobile ? "100%" : "930px"}
-      h="600px"
+      w={isMobile ? "100%" : "810px"}
+      h="510px"
       borderRadius="40px"
-      boxShadow="0 9px 31.3px #42285B"
+      mt="70px"
+      boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
       backdropFilter="blur(9px)"
       display="flex"
       alignItems="center"
@@ -24,9 +42,9 @@ export function TransactionWidget() {
         right: 0,
         bottom: 0,
         borderRadius: "40px",
-        padding: "5px",
+        padding: "3px",
         background:
-          "linear-gradient(100deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+          "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
         mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
         maskComposite: "xor",
         WebkitMask:
@@ -40,8 +58,9 @@ export function TransactionWidget() {
         borderRadius="40px"
         position="absolute"
         top="0px"
-        background="linear-gradient(100deg, rgba(171, 125, 255, 0.32) 1.46%, rgba(0, 26, 144, 0.30) 98.72%)"
+        background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
         display="flex"
+        backdropFilter="blur(20px)"
         alignItems="center"
         justifyContent="center"
         _before={{
@@ -52,9 +71,9 @@ export function TransactionWidget() {
           right: 0,
           bottom: 0,
           borderRadius: "40px",
-          padding: "5px",
+          padding: "3px",
           background:
-            "linear-gradient(100deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+            "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           maskComposite: "xor",
           WebkitMask:
@@ -70,8 +89,10 @@ export function TransactionWidget() {
       </Box>
       <Box
         h="50%"
+        bottom="0px"
+        position="absolute"
+        padding="20px"
         w="100%"
-        bg="white"
         display="flex"
         alignItems="center"
         justifyContent="center"
@@ -83,7 +104,7 @@ export function TransactionWidget() {
           position="relative"
           zIndex={1}
         >
-          Deposit Flow Active
+          {getDisplayText()}
         </Text>
       </Box>
     </Box>

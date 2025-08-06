@@ -15,14 +15,20 @@ export default function Home() {
   const { isTablet, isMobile } = useWindowSize();
   const depositFlowState = useStore((state) => state.depositFlowState);
   const setCountdownValue = useStore((state) => state.setCountdownValue);
+  const [previousState, setPreviousState] =
+    React.useState<string>("0-not-started");
   useSyncChainIdToStore();
 
-  // Reset countdown when deposit flow starts
+  // Reset countdown only when starting deposit flow (0 -> 1)
   React.useEffect(() => {
-    if (depositFlowState !== "0-not-started") {
+    if (
+      depositFlowState === "1-finding-liquidity" &&
+      previousState === "0-not-started"
+    ) {
       setCountdownValue(10);
     }
-  }, [depositFlowState, setCountdownValue]);
+    setPreviousState(depositFlowState);
+  }, [depositFlowState, setCountdownValue, previousState]);
 
   return (
     <>
