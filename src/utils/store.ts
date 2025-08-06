@@ -31,7 +31,7 @@ export const useStore = create<{
     set({ evmConnectWalletChainId: chainId }),
   depositFlowState: "0-not-started",
   setDepositFlowState: (s: DepositFlowState) => set({ depositFlowState: s }),
-  countdownValue: 10,
+  countdownValue: 60,
   setCountdownValue: (value: number) => set({ countdownValue: value }),
   swapResponse: null,
   setSwapResponse: (response: CreateSwapResponse | null) =>

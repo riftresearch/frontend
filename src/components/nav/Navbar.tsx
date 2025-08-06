@@ -30,6 +30,7 @@ export const Navbar = ({}) => {
   const { address, isConnected } = useAccount();
 
   const depositFlowState = useStore((state) => state.depositFlowState);
+  const transactionConfirmed = useStore((state) => state.transactionConfirmed);
 
   const [displayWarning, setDisplayWarning] = useState<boolean | undefined>(
     undefined
@@ -200,7 +201,7 @@ export const Navbar = ({}) => {
       <Flex direction="row" w="100%" px={"30px"} pt="25px" zIndex={400}>
         <Flex gap="12px">
           {navItem("Swap", "/")}
-          {navItem("Activity", "/activity")}
+          {/* {navItem("Activity", "/activity")} */}
           {/* {navItem('OTC', '/otc')} */}
         </Flex>
         <Flex ml="25px" gap="30px" align="center">
@@ -237,7 +238,7 @@ export const Navbar = ({}) => {
           left={0}
           right={0}
         >
-          {depositFlowState !== "0-not-started" && (
+          {depositFlowState !== "0-not-started" && transactionConfirmed && (
             <Flex justify="center" align="center" mt="25px">
               <svg
                 width={isTablet ? "70" : "112"}
@@ -256,7 +257,7 @@ export const Navbar = ({}) => {
         </Flex>
         <Spacer />
         <Flex mb="-5px" pr="5px" alignItems="center" gap="10px">
-          {isLocalhost && (
+          {/* {isLocalhost && (
             <Flex
               userSelect={"none"}
               zIndex={1000}
@@ -308,7 +309,7 @@ export const Navbar = ({}) => {
                 }}
               />
             </Flex>
-          )}
+          )} */}
           <ConnectWalletButton />
         </Flex>
       </Flex>

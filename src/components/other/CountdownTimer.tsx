@@ -15,23 +15,20 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   const [previousState, setPreviousState] = useState("0-not-started");
   const [showTimer, setShowTimer] = useState(false);
   const [hideNumber, setHideNumber] = useState(false);
+  const [initialCountdownValue, setInitialCountdownValue] = useState(60); // Track the starting value
 
   useEffect(() => {
     // Reset progress only when starting fresh from state 0
     if (
       depositFlowState === "1-WaitingUserDepositInitiated" &&
-      previousState === "0-not-started" &&
-      countdownValue === 10
+      previousState === "0-not-started"
     ) {
+      // Capture the initial countdown value for progress calculations
+      setInitialCountdownValue(countdownValue);
       // Trigger entrance animation
       setShowTimer(true);
       setHideNumber(false); // Reset number visibility
       setSmoothProgress(100);
-      const interval = setInterval(() => {
-        setCountdownValue(countdownValue - 1);
-      }, 1000);
-
-      return () => clearInterval(interval);
     }
 
     // Show timer for any active state
@@ -42,32 +39,38 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
     }
 
     setPreviousState(depositFlowState);
-  }, [depositFlowState, countdownValue, setCountdownValue, previousState]);
+  }, [depositFlowState, previousState]);
 
   useEffect(() => {
-    // Handle countdown completion
-    if (countdownValue <= 0) {
-      // Don't immediately set progress to 0, let the animation handle it
-      onComplete?.();
+    // Only run countdown if we're in an active state and countdown > 0
+    if (depositFlowState === "0-not-started" || countdownValue <= 0) {
+      if (countdownValue <= 0) {
+        onComplete?.();
+      }
       return;
     }
 
     // Continue countdown
     const interval = setInterval(() => {
-      setCountdownValue(countdownValue - 1);
+      if (countdownValue <= 1) {
+        // Will trigger onComplete in the next cycle
+        setCountdownValue(0);
+      } else {
+        setCountdownValue(countdownValue - 1);
+      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [countdownValue, setCountdownValue, onComplete]);
+  }, [countdownValue, setCountdownValue, onComplete, depositFlowState]);
 
   // Smooth progress animation
   useEffect(() => {
     const targetProgress =
-      countdownValue <= 0 ? 0 : (countdownValue / 10) * 100;
+      countdownValue <= 0 ? 0 : (countdownValue / initialCountdownValue) * 100;
     const startProgress =
       countdownValue <= 0
-        ? (1 / 10) * 100 // Start from 1 when going to 0
-        : ((countdownValue + 1) / 10) * 100;
+        ? (1 / initialCountdownValue) * 100 // Start from 1 when going to 0
+        : ((countdownValue + 1) / initialCountdownValue) * 100;
     const startTime = Date.now();
 
     // Mark that we're animating to zero
@@ -145,13 +148,14 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
         </defs>
       </svg>
 
-      {/* Countdown number - 2.5x bigger */}
+      {/* Countdown number */}
       <Text
         position="absolute"
         fontSize="88px"
-        letterSpacing="-16px"
+        textAlign="center"
+        letterSpacing="-13px"
         mt="-5px"
-        ml={countdownValue > 9 ? "-21px" : "-16px"}
+        ml={countdownValue > 9 ? "-16px" : "-16px"}
         color="white"
         dropShadow="0 0 100px rgba(255, 255, 255, 0.5)"
         fontFamily="Proto Mono"

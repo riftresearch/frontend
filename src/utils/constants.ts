@@ -15,10 +15,10 @@ export const bitcoinStyle: TokenStyle = {
   display_name: "BTC",
   symbol: "BTC",
   icon_svg: null,
-  bg_color: "#c26920",
+  bg_color: "#9B602F",
   border_color: "#FFA04C",
   border_color_light: "#FFA04F",
-  dark_bg_color: "#372412",
+  dark_bg_color: "#291B0D",
   light_text_color: "#7d572e",
 };
 

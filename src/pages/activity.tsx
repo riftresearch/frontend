@@ -9,7 +9,7 @@ import {
   CumulativeVolumeChart,
   DailyVolumeChart,
 } from "@/components/charts/SimpleCharts";
-import { SwapHistory } from "@/components/charts/SwapHistory";
+// import { SwapHistory } from "@/components/charts/SwapHistory";
 import { SwapWidget } from "@/components/swap/SwapWidget";
 
 export default function Home() {
@@ -56,7 +56,7 @@ export default function Home() {
             justify={"center"}
             mt="18px"
           >
-            <SwapHistory />
+            {/* <SwapHistory /> */}
           </Flex>
         </Flex>
       </Flex>

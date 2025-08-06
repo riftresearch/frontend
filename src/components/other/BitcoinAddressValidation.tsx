@@ -16,8 +16,8 @@ const BitcoinAddressValidation = ({
   const isValid = validation?.isValid ?? false;
   const isNetworkMismatch = validation?.networkMismatch ?? false;
 
-  const getBackgroundColor = () => {
-    if (isValid) return "#4CAF50"; // Green for valid
+  const getIconColor = () => {
+    if (isValid) return "white"; // White checkmark for valid
     if (isNetworkMismatch) return "#FF9800"; // Orange for network mismatch
     return "#f44336"; // Red for invalid
   };
@@ -38,16 +38,8 @@ const BitcoinAddressValidation = ({
   };
 
   return (
-    <Flex
-      w="24px"
-      h="24px"
-      borderRadius="50%"
-      align="center"
-      justify="center"
-      bg={getBackgroundColor()}
-      alignSelf="center"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+    <Flex w="24px" h="24px" align="center" justify="center" alignSelf="center">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill={getIconColor()}>
         {getIcon()}
       </svg>
     </Flex>

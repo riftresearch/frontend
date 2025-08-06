@@ -69,7 +69,7 @@ export default function Home() {
       depositFlowState === "1-WaitingUserDepositInitiated" &&
       previousState === "0-not-started"
     ) {
-      setCountdownValue(10);
+      setCountdownValue(60);
     }
     setPreviousState(depositFlowState);
   }, [depositFlowState, setCountdownValue, previousState]);

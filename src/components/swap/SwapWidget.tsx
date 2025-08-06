@@ -8,7 +8,7 @@ import {
   Portal,
   Spinner,
 } from "@chakra-ui/react";
-import { useState, useEffect, ChangeEvent } from "react";
+import { useState, useEffect, ChangeEvent, useCallback } from "react";
 import { useRouter } from "next/router";
 import {
   useAccount,
@@ -23,7 +23,6 @@ import {
   otcClient,
   rfqClient,
 } from "@/utils/constants";
-import TokenButton from "@/components/other/TokenButton";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { InfoSVG } from "../other/SVGs";
 import {
@@ -34,7 +33,7 @@ import {
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
-import { toastInfo } from "@/utils/toast";
+import { toastInfo, toastWarning, toastSuccess } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { Asset } from "@/utils/types";
 import { TokenStyle } from "@/utils/types";
@@ -74,13 +73,21 @@ export const SwapWidget = () => {
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const { swapResponse, setSwapResponse, setTransactionConfirmed } = useStore();
-  const { data: hash, writeContract, isPending } = useWriteContract();
+  const {
+    data: hash,
+    writeContract,
+    isPending,
+    error: writeError,
+  } = useWriteContract();
 
   // Wait for transaction confirmation
-  const { isLoading: isConfirming, isSuccess: isConfirmed } =
-    useWaitForTransactionReceipt({
-      hash,
-    });
+  const {
+    isLoading: isConfirming,
+    isSuccess: isConfirmed,
+    error: txError,
+  } = useWaitForTransactionReceipt({
+    hash,
+  });
 
   // Update store when transaction is confirmed
   useEffect(() => {
@@ -88,6 +95,36 @@ export const SwapWidget = () => {
       setTransactionConfirmed(true);
     }
   }, [isConfirmed, setTransactionConfirmed]);
+
+  // Handle writeContract errors (user declined in wallet)
+  useEffect(() => {
+    if (writeError) {
+      console.error("Write contract error:", writeError);
+      // Custom BTC orange toast for transaction declined
+      toastInfo({
+        title: "Transaction Declined",
+        description: "The user declined the transaction request",
+        customStyle: {
+          background: `linear-gradient(155deg, ${colors.currencyCard.btc.background} 0%, ${colors.assetTag.btc.background} 42%, ${colors.RiftOrange} 100%)`,
+        },
+      });
+    }
+  }, [writeError]);
+
+  // Handle transaction receipt errors
+  useEffect(() => {
+    if (txError) {
+      console.error("Transaction error:", txError);
+      // Custom BTC orange toast for transaction failed
+      toastInfo({
+        title: "Transaction Failed",
+        description: "The transaction failed on the network",
+        customStyle: {
+          background: `linear-gradient(155deg, ${colors.currencyCard.btc.background} 0%, ${colors.assetTag.btc.background} 42%, ${colors.RiftOrange} 100%)`,
+        },
+      });
+    }
+  }, [txError]);
 
   // const {
   //   data: availableBitcoinLiquidity,
@@ -242,12 +279,17 @@ export const SwapWidget = () => {
     let amount = BigInt(swap.expected_amount);
     console.log("amount", amount);
     // okay, now we need to request money to be sent from the user to the created swap
-    writeContract({
-      address: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [swap.deposit_address as `0x${string}`, amount],
-    });
+    try {
+      writeContract({
+        address: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [swap.deposit_address as `0x${string}`, amount],
+      });
+    } catch (error) {
+      console.error("writeContract error caught:", error);
+      // Error will be handled by the writeError useEffect
+    }
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -296,112 +338,148 @@ export const SwapWidget = () => {
   };
 
   const handleSwap = async () => {
-    if (!isWalletConnected) {
-      // Open wallet connection modal instead of showing toast
-      await reownModal.open();
-      return;
-    }
-
-    if (isMobile) {
-      toastInfo({
-        title: "Hop on your laptop",
-        description:
-          "This app is too cool for small screens, mobile coming soon!",
-      });
-      return;
-    }
-
-    // Check input amount
-    if (
-      !rawInputAmount ||
-      !outputAmount ||
-      parseFloat(rawInputAmount) <= 0 ||
-      parseFloat(outputAmount) <= 0
-    ) {
-      toastInfo({
-        title: "Enter Amount",
-        description: "Please enter a valid amount to swap",
-      });
-      return;
-    }
-
-    // Check payout address
-    if (!payoutAddress) {
-      toastInfo({
-        title: isReversed ? "Enter Ethereum Address" : "Enter Bitcoin Address",
-        description: isReversed
-          ? "Please enter your Ethereum address to receive cbBTC"
-          : "Please enter your Bitcoin address to receive BTC",
-      });
-      return;
-    }
-
-    if (!addressValidation.isValid) {
-      let description = isReversed
-        ? "Please enter a valid Ethereum address"
-        : "Please enter a valid Bitcoin payout address";
-      if (!isReversed && addressValidation.networkMismatch) {
-        description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${addressValidation.detectedNetwork}`;
+    try {
+      if (!isWalletConnected) {
+        // Open wallet connection modal instead of showing toast
+        await reownModal.open();
+        return;
       }
-      toastInfo({
-        title: isReversed
-          ? "Invalid Ethereum Address"
-          : "Invalid Bitcoin Address",
-        description,
-      });
-      return;
-    }
 
-    // Check refund address for BTC->cbBTC swaps only
-    if (isReversed) {
-      if (!refundAddress) {
+      if (isMobile) {
         toastInfo({
-          title: "Enter Refund Address",
+          title: "Hop on your laptop",
           description:
-            "Please enter your Bitcoin refund address in case the swap fails",
+            "This app is too cool for small screens, mobile coming soon!",
         });
         return;
       }
 
-      if (!refundAddressValidation.isValid) {
-        let description = "Please enter a valid Bitcoin refund address";
-        if (refundAddressValidation.networkMismatch) {
-          description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
+      // Check input amount
+      if (
+        !rawInputAmount ||
+        !outputAmount ||
+        parseFloat(rawInputAmount) <= 0 ||
+        parseFloat(outputAmount) <= 0
+      ) {
+        toastInfo({
+          title: "Enter Amount",
+          description: "Please enter a valid amount to swap",
+        });
+        return;
+      }
+
+      // Check payout address
+      if (!payoutAddress) {
+        toastInfo({
+          title: isReversed
+            ? "Enter Ethereum Address"
+            : "Enter Bitcoin Address",
+          description: isReversed
+            ? "Please enter your Ethereum address to receive cbBTC"
+            : "Please enter your Bitcoin address to receive BTC",
+        });
+        return;
+      }
+
+      if (!addressValidation.isValid) {
+        let description = isReversed
+          ? "Please enter a valid Ethereum address"
+          : "Please enter a valid Bitcoin payout address";
+        if (!isReversed && addressValidation.networkMismatch) {
+          description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${addressValidation.detectedNetwork}`;
         }
         toastInfo({
-          title: "Invalid Refund Address",
+          title: isReversed
+            ? "Invalid Ethereum Address"
+            : "Invalid Bitcoin Address",
           description,
         });
         return;
       }
-    }
 
-    if (
-      !isReversed &&
-      currentInputAsset.style.symbol.toLowerCase() !== "cbbtc"
-    ) {
-      toastInfo({
-        title: "Not supported",
-        description: "[TODO: Add support for other tokens]",
-      });
-      return;
-    }
+      // Check refund address for BTC->cbBTC swaps only
+      if (isReversed) {
+        if (!refundAddress) {
+          toastInfo({
+            title: "Enter Refund Address",
+            description:
+              "Please enter your Bitcoin refund address in case the swap fails",
+          });
+          return;
+        }
 
-    const estimatedOutputAmountInSatoshis = BigInt(
-      Math.round(parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS)
-    );
+        if (!refundAddressValidation.isValid) {
+          let description = "Please enter a valid Bitcoin refund address";
+          if (refundAddressValidation.networkMismatch) {
+            description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
+          }
+          toastInfo({
+            title: "Invalid Refund Address",
+            description,
+          });
+          return;
+        }
+      }
 
-    const inputAmountInSatoshis = convertInputAmountToFullDecimals();
+      if (
+        !isReversed &&
+        currentInputAsset.style.symbol.toLowerCase() !== "cbbtc"
+      ) {
+        toastInfo({
+          title: "Not supported",
+          description: "[TODO: Add support for other tokens]",
+        });
+        return;
+      }
 
-    console.log("inputAmountInSatoshis", inputAmountInSatoshis);
-    if (quote && inputAmountInSatoshis) {
-      console.log("sending swap request");
-      sendOTCRequest(quote, payoutAddress, refundAddress);
+      const estimatedOutputAmountInSatoshis = BigInt(
+        Math.round(parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS)
+      );
+
+      const inputAmountInSatoshis = convertInputAmountToFullDecimals();
+
+      console.log("inputAmountInSatoshis", inputAmountInSatoshis);
+      if (quote && inputAmountInSatoshis) {
+        console.log("sending swap request");
+        await sendOTCRequest(quote, payoutAddress, refundAddress);
+      }
+    } catch (error) {
+      console.error("handleSwap error caught:", error);
+      // Errors will be handled by the writeError useEffect
     }
   };
 
   // Always enable the button visually, handle validation in handleSwap
   const canSwap = true;
+
+  // Check if all required fields are filled
+  const allFieldsFilled =
+    rawInputAmount &&
+    outputAmount &&
+    parseFloat(rawInputAmount) > 0 &&
+    parseFloat(outputAmount) > 0 &&
+    payoutAddress &&
+    addressValidation.isValid &&
+    (!isReversed || (refundAddress && refundAddressValidation.isValid));
+
+  // Handle keyboard events
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === "Enter" && allFieldsFilled && !isButtonLoading) {
+        event.preventDefault();
+        handleSwap();
+      }
+    },
+    [allFieldsFilled, isButtonLoading]
+  );
+
+  // Add keyboard event listener
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleKeyDown]);
 
   return (
     <Flex
@@ -791,32 +869,33 @@ export const SwapWidget = () => {
                           validation={refundAddressValidation}
                         />
                       ) : (
-                        // Ethereum address validation indicator - styled like BitcoinAddressValidation
+                        // Ethereum address validation indicator - white checkmark only
                         <Flex
                           w="24px"
                           h="24px"
-                          borderRadius="50%"
                           align="center"
                           justify="center"
-                          bg={
-                            refundAddressValidation.isValid
-                              ? "#4CAF50"
-                              : "#f44336"
-                          }
                           alignSelf="center"
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="white"
-                          >
-                            {refundAddressValidation.isValid ? (
+                          {refundAddressValidation.isValid ? (
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="white"
+                            >
                               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                            ) : (
+                            </svg>
+                          ) : (
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="#f44336"
+                            >
                               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                            )}
-                          </svg>
+                            </svg>
+                          )}
                         </Flex>
                       )}
                     </Flex>
@@ -939,28 +1018,33 @@ export const SwapWidget = () => {
                         validation={addressValidation}
                       />
                     ) : (
-                      // Ethereum address validation indicator - styled like BitcoinAddressValidation
+                      // Ethereum address validation indicator - white checkmark only
                       <Flex
                         w="24px"
                         h="24px"
-                        borderRadius="50%"
                         align="center"
                         justify="center"
-                        bg={addressValidation.isValid ? "#4CAF50" : "#f44336"}
                         alignSelf="center"
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="white"
-                        >
-                          {addressValidation.isValid ? (
+                        {addressValidation.isValid ? (
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="white"
+                          >
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                          ) : (
+                          </svg>
+                        ) : (
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="#f44336"
+                          >
                             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                          )}
-                        </svg>
+                          </svg>
+                        )}
                       </Flex>
                     )}
                   </Flex>
@@ -988,6 +1072,8 @@ export const SwapWidget = () => {
           borderRadius="16px"
           justify="center"
           border="3px solid #445BCB"
+          opacity={isButtonLoading ? 0.7 : 1}
+          pointerEvents={isButtonLoading ? "none" : "auto"}
         >
           {isButtonLoading && (
             <Spinner size="sm" color={colors.offWhite} mr="10px" />
