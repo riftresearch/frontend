@@ -107,9 +107,12 @@ export const SwapWidget = () => {
     // setRefundAddressValidation({ isValid: false });
   };
 
-  const convertInputAmountToFullDecimals = (): bigint | undefined => {
+  const convertInputAmountToFullDecimals = (
+    amount?: string
+  ): bigint | undefined => {
     try {
-      return parseUnits(rawInputAmount, currentInputAsset.currency.decimals);
+      const inputAmount = amount || rawInputAmount;
+      return parseUnits(inputAmount, currentInputAsset.currency.decimals);
     } catch (error) {
       console.error("Error converting input amount to full decimals:", error);
       return undefined;
@@ -225,7 +228,9 @@ export const SwapWidget = () => {
       setLastEditedField("input");
       setHasStartedTyping(true);
 
-      let from_amount = convertInputAmountToFullDecimals();
+      let from_amount = convertInputAmountToFullDecimals(value);
+      console.log("value", value);
+      console.log("from_amount", from_amount);
       if (from_amount && from_amount > 0n) {
         // call RFQ
         sendRFQRequest(from_amount);
@@ -241,6 +246,7 @@ export const SwapWidget = () => {
   };
 
   const handleOutputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    return; // TODO: remove this
     const value = e.target.value;
 
     // Allow empty string, numbers, and decimal point
