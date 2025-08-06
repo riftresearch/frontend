@@ -40,6 +40,7 @@ import { Address, erc20Abi, parseUnits } from "viem";
 import { Quote } from "@/utils/backendTypes";
 import { CreateSwapResponse } from "@/utils/otcClient";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
+const BTC_USD_EXCHANGE_RATE = 115611.06;
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
@@ -188,7 +189,7 @@ export const SwapWidget = () => {
   }, [refundAddress, btcAsset.currency.chain, isReversed]);
 
   // Exchange rate: 1 cbBTC = 0.999 BTC (0.1% fee)
-  const EXCHANGE_RATE = 0.999; // TODO: make this based on real RFQ quote rate
+  const EXCHANGE_RATE = 1; // TODO: make this based on real RFQ quote rate
 
   const sendRFQRequest = async (from_amount: bigint) => {
     const currentTime = new Date().getTime();
@@ -261,7 +262,7 @@ export const SwapWidget = () => {
 
       // Calculate output amount based on input, also set the input token amount
       if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
-        setOutputAmount((parseFloat(value) * EXCHANGE_RATE).toFixed(8));
+        setOutputAmount(value);
       } else {
         setOutputAmount("");
       }
@@ -472,7 +473,10 @@ export const SwapWidget = () => {
                 fontWeight="normal"
                 fontFamily="Aux"
               >
-                {(0).toLocaleString("en-US", {
+                {(!isNaN(parseFloat(rawInputAmount)) && rawInputAmount
+                  ? parseFloat(rawInputAmount) * BTC_USD_EXCHANGE_RATE
+                  : 0
+                ).toLocaleString("en-US", {
                   style: "currency",
                   currency: "USD",
                 })}
@@ -590,7 +594,10 @@ export const SwapWidget = () => {
                 fontWeight="normal"
                 fontFamily="Aux"
               >
-                {(0).toLocaleString("en-US", {
+                {(!isNaN(parseFloat(outputAmount)) && outputAmount
+                  ? parseFloat(outputAmount) * BTC_USD_EXCHANGE_RATE
+                  : 0
+                ).toLocaleString("en-US", {
                   style: "currency",
                   currency: "USD",
                 })}
