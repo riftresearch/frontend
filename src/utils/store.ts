@@ -2,9 +2,14 @@ import { create } from "zustand";
 
 type DepositFlowState =
   | "0-not-started"
-  | "1-finding-liquidity"
-  | "2-awaiting-payment"
-  | "3-payment-recieved";
+  | "WaitingUserDepositInitiated"
+  | "WaitingUserDepositConfirmed"
+  | "WaitingMMDepositInitiated"
+  | "WaitingMMDepositConfirmed"
+  | "Settled"
+  | "RefundingUser"
+  | "RefundingMM"
+  | "Failed";
 
 export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
 

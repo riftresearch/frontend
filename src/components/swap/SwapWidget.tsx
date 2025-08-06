@@ -10,7 +10,7 @@ import {
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent } from "react";
 import { useRouter } from "next/router";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
 import { colors } from "@/utils/colors";
 import {
   BITCOIN_DECIMALS,
@@ -35,8 +35,8 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { Asset } from "@/utils/types";
 import { TokenStyle } from "@/utils/types";
 import { Hex } from "bitcoinjs-lib/src/types";
-import { reownModal } from "@/utils/wallet";
-import { Address, parseUnits } from "viem";
+import { reownModal, wagmiAdapter } from "@/utils/wallet";
+import { Address, erc20Abi, parseUnits } from "viem";
 import { Quote } from "@/utils/backendTypes";
 import { CreateSwapResponse } from "@/utils/otcClient";
 
@@ -70,6 +70,7 @@ export const SwapWidget = () => {
   const [swapResponse, setSwapResponse] = useState<CreateSwapResponse | null>(
     null
   );
+  const { data: hash, writeContract } = useWriteContract();
 
   // const {
   //   data: availableBitcoinLiquidity,
@@ -217,6 +218,17 @@ export const SwapWidget = () => {
     if (swap) {
       setSwapResponse(swap);
     }
+    console.log("Returned swap request", swap);
+    // hex to string bigint
+    let amount = BigInt(swap.expected_amount);
+    console.log("amount", amount);
+    // okay, now we need to request money to be sent from the user to the created swap
+    writeContract({
+      address: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [swap.deposit_address as `0x${string}`, amount],
+    });
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
