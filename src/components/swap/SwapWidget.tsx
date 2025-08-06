@@ -39,6 +39,7 @@ import { reownModal, wagmiAdapter } from "@/utils/wallet";
 import { Address, erc20Abi, parseUnits } from "viem";
 import { Quote } from "@/utils/backendTypes";
 import { CreateSwapResponse } from "@/utils/otcClient";
+import { useSwapStatus } from "@/hooks/useSwapStatus";
 
 export const SwapWidget = () => {
   const { isMobile } = useWindowSize();
@@ -70,7 +71,17 @@ export const SwapWidget = () => {
   const [swapResponse, setSwapResponse] = useState<CreateSwapResponse | null>(
     null
   );
+  const {
+    data: swapStatusInfo,
+    isLoading: isLoadingSwapStatus,
+    isError: isErrorSwapStatus,
+  } = useSwapStatus(swapResponse?.swap_id);
   const { data: hash, writeContract } = useWriteContract();
+
+  useEffect(() => {
+    console.log("Current time", new Date().toISOString());
+    console.log("New Swap status", swapStatusInfo);
+  }, [swapStatusInfo]);
 
   // const {
   //   data: availableBitcoinLiquidity,
