@@ -33,6 +33,13 @@ export default function Document() {
           type="font/ttf"
           crossOrigin="anonymous"
         />
+        <link
+          rel="preload"
+          href="/fonts/ProtoMono-Regular.otf"
+          as="font"
+          type="font/ttf"
+          crossOrigin="anonymous"
+        />
         {/* Preload critical background image */}
         <link
           rel="preload"
