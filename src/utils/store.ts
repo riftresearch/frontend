@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { CreateSwapResponse } from "./otcClient";
 
 type DepositFlowState =
   | "0-not-started"
@@ -20,6 +21,10 @@ export const useStore = create<{
   setDepositFlowState: (s: DepositFlowState) => void;
   countdownValue: number;
   setCountdownValue: (value: number) => void;
+  swapResponse: CreateSwapResponse | null;
+  setSwapResponse: (response: CreateSwapResponse | null) => void;
+  transactionConfirmed: boolean;
+  setTransactionConfirmed: (confirmed: boolean) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) =>
@@ -28,4 +33,10 @@ export const useStore = create<{
   setDepositFlowState: (s: DepositFlowState) => set({ depositFlowState: s }),
   countdownValue: 10,
   setCountdownValue: (value: number) => set({ countdownValue: value }),
+  swapResponse: null,
+  setSwapResponse: (response: CreateSwapResponse | null) =>
+    set({ swapResponse: response }),
+  transactionConfirmed: false,
+  setTransactionConfirmed: (confirmed: boolean) =>
+    set({ transactionConfirmed: confirmed }),
 }));

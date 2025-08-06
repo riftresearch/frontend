@@ -6,18 +6,62 @@ import { OpenGraph } from "@/components/other/OpenGraph";
 import { RiftLogo } from "@/components/other/RiftLogo";
 import { TransactionWidget } from "@/components/other/TransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
+import { useSwapStatus } from "@/hooks/useSwapStatus";
 import useWindowSize from "@/hooks/useWindowSize";
 import { FONT_FAMILIES } from "@/utils/font";
 import OrangeText from "@/components/other/OrangeText";
 import { useStore } from "@/utils/store";
 
+// Map API status to deposit flow state
+const mapStatusToDepositFlowState = (status: string) => {
+  const statusMap: Record<string, string> = {
+    "not-started": "0-not-started",
+    WaitingUserDepositInitiated: "1-WaitingUserDepositInitiated",
+    WaitingUserDepositConfirmed: "2-WaitingUserDepositConfirmed",
+    WaitingMMDepositInitiated: "3-WaitingMMDepositInitiated",
+    WaitingMMDepositConfirmed: "4-WaitingMMDepositConfirmed",
+    Settled: "5-Settled",
+    RefundingUser: "6-RefundingUser",
+    RefundingMM: "7-RefundingMM",
+    Failed: "8-Failed",
+  };
+
+  return statusMap[status] || "0-not-started";
+};
+
 export default function Home() {
   const { isTablet, isMobile } = useWindowSize();
-  const depositFlowState = useStore((state) => state.depositFlowState);
-  const setCountdownValue = useStore((state) => state.setCountdownValue);
+  const {
+    depositFlowState,
+    setDepositFlowState,
+    swapResponse,
+    setCountdownValue,
+    transactionConfirmed,
+    setTransactionConfirmed,
+  } = useStore();
+
   const [previousState, setPreviousState] =
     React.useState<string>("0-not-started");
   useSyncChainIdToStore();
+
+  // Use swap status hook
+  const {
+    data: swapStatusInfo,
+    isLoading: isLoadingSwapStatus,
+    isError: isErrorSwapStatus,
+  } = useSwapStatus(swapResponse?.swap_id);
+
+  // Update deposit flow state based on swap status
+  React.useEffect(() => {
+    if (swapStatusInfo?.status) {
+      const newDepositFlowState = mapStatusToDepositFlowState(
+        swapStatusInfo.status
+      );
+      if (newDepositFlowState !== depositFlowState) {
+        setDepositFlowState(newDepositFlowState as any);
+      }
+    }
+  }, [swapStatusInfo?.status, depositFlowState, setDepositFlowState]);
 
   // Reset countdown only when starting deposit flow (0 -> 1)
   React.useEffect(() => {
@@ -29,6 +73,21 @@ export default function Home() {
     }
     setPreviousState(depositFlowState);
   }, [depositFlowState, setCountdownValue, previousState]);
+
+  // Reset transaction confirmed state when going back to not-started
+  React.useEffect(() => {
+    if (depositFlowState === "0-not-started") {
+      setTransactionConfirmed(false);
+    }
+  }, [depositFlowState, setTransactionConfirmed]);
+
+  // Debug logging
+  React.useEffect(() => {
+    if (swapStatusInfo) {
+      console.log("Current time", new Date().toISOString());
+      console.log("New Swap status", swapStatusInfo);
+    }
+  }, [swapStatusInfo]);
 
   return (
     <>
@@ -50,7 +109,7 @@ export default function Home() {
           minH="calc(100vh - 80px)"
           p="4"
         >
-          {depositFlowState === "0-not-started" ? (
+          {depositFlowState === "0-not-started" || !transactionConfirmed ? (
             <>
               <Flex mt="15px"></Flex>
               <RiftLogo

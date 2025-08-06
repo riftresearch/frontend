@@ -3,6 +3,7 @@ import { otcClient } from "@/utils/constants";
 import { SwapResponse } from "@/utils/otcClient";
 
 export function useSwapStatus(swapId: string | undefined) {
+  console.log("swapId", swapId);
   const query = useQuery<SwapResponse>({
     queryKey: ["swap", swapId],
     queryFn: async () => {

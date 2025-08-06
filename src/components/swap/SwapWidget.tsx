@@ -10,7 +10,11 @@ import {
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent } from "react";
 import { useRouter } from "next/router";
-import { useAccount, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { colors } from "@/utils/colors";
 import {
   BITCOIN_DECIMALS,
@@ -69,27 +73,30 @@ export const SwapWidget = () => {
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
 
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [swapResponse, setSwapResponse] = useState<CreateSwapResponse | null>(
-    null
-  );
-  const {
-    data: swapStatusInfo,
-    isLoading: isLoadingSwapStatus,
-    isError: isErrorSwapStatus,
-  } = useSwapStatus(swapResponse?.swap_id);
-  const { data: hash, writeContract } = useWriteContract();
+  const { swapResponse, setSwapResponse, setTransactionConfirmed } = useStore();
+  const { data: hash, writeContract, isPending } = useWriteContract();
 
+  // Wait for transaction confirmation
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
+      hash,
+    });
+
+  // Update store when transaction is confirmed
   useEffect(() => {
-    console.log("Current time", new Date().toISOString());
-    console.log("New Swap status", swapStatusInfo);
-  }, [swapStatusInfo]);
+    if (isConfirmed) {
+      setTransactionConfirmed(true);
+    }
+  }, [isConfirmed, setTransactionConfirmed]);
 
   // const {
   //   data: availableBitcoinLiquidity,
   //   isLoading: isLoadingAvailableBitcoinLiquidity,
   // } = useAvailableBitcoinLiquidity();
   const [canClickButton, setCanClickButton] = useState(false);
-  const [isButtonLoading, setIsButtonLoading] = useState(false);
+
+  // Button loading state combines pending transaction and confirmation waiting
+  const isButtonLoading = isPending || isConfirming;
 
   // Define the assets based on swap direction
   const cbBTCAsset = GLOBAL_CONFIG.underlyingSwappingAssets[1];
@@ -986,7 +993,11 @@ export const SwapWidget = () => {
             <Spinner size="sm" color={colors.offWhite} mr="10px" />
           )}
           <Text color={colors.offWhite} fontFamily="Nostromo">
-            {isButtonLoading ? "Loading..." : "Swap"}
+            {isPending
+              ? "Confirm in Wallet..."
+              : isConfirming
+                ? "Confirming..."
+                : "Swap"}
           </Text>
         </Flex>
       </Flex>
