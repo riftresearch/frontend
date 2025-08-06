@@ -1,8 +1,8 @@
-export type ChainType = "Bitcoin" | "Ethereum";
+export type ChainType = "bitcoin" | "ethereum";
 
 export type TokenIdentifier =
   | { type: "Native" }
-  | { type: "Address"; address: string };
+  | { type: "Address"; data: string };
 
 export type SwapStatus =
   | "pending_deposits"
@@ -16,7 +16,7 @@ export type SwapStatus =
 export interface Currency {
   chain: ChainType;
   token: TokenIdentifier;
-  amount: string; // U256 as string
+  amount?: string; // U256 as string
   decimals: number;
 }
 
@@ -32,17 +32,22 @@ export interface Quote {
 /**
  * Helper to create a currency object
  */
-export const createCurrency = (
-  chain: ChainType,
-  amount: string | number | bigint,
-  decimals: number,
-  tokenAddress?: string
-): Currency => ({
+export const createCurrency = ({
+  chain,
+  decimals,
+  tokenAddress,
+  amount,
+}: {
+  chain: ChainType;
+  decimals: number;
+  tokenAddress?: string;
+  amount?: string | number | bigint;
+}): Currency => ({
   chain,
   token: tokenAddress
-    ? { type: "Address", address: tokenAddress }
+    ? { type: "Address", data: tokenAddress }
     : { type: "Native" },
-  amount: amount.toString(),
+  amount: amount?.toString(),
   decimals,
 });
 

@@ -12,7 +12,13 @@ import { useState, useEffect, ChangeEvent } from "react";
 import { useRouter } from "next/router";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
-import { BITCOIN_DECIMALS, opaqueBackgroundColor } from "@/utils/constants";
+import {
+  BITCOIN_DECIMALS,
+  GLOBAL_CONFIG,
+  opaqueBackgroundColor,
+  otcClient,
+  rfqClient,
+} from "@/utils/constants";
 import TokenButton from "@/components/other/TokenButton";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { InfoSVG } from "../other/SVGs";
@@ -26,14 +32,13 @@ import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
 import { toastInfo } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { TokenStyle, ValidAsset } from "@/utils/types";
-import { Hex } from "bitcoinjs-lib/src/types";
-import { contractConstants, validateScriptPubKey } from "@/utils/contractUtils";
+import { Asset } from "@/utils/types";
 import { reownModal } from "@/utils/wallet";
 import { Address, parseUnits } from "viem";
+import { Quote } from "@/utils/backendTypes";
+import { CreateSwapResponse } from "@/utils/otcClient";
 
 export const SwapWidget = () => {
-  const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected } = useAccount();
   const router = useRouter();
@@ -59,6 +64,11 @@ export const SwapWidget = () => {
   const [isReversed, setIsReversed] = useState(false);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
 
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [swapResponse, setSwapResponse] = useState<CreateSwapResponse | null>(
+    null
+  );
+
   // const {
   //   data: availableBitcoinLiquidity,
   //   isLoading: isLoadingAvailableBitcoinLiquidity,
@@ -67,20 +77,8 @@ export const SwapWidget = () => {
   const [isButtonLoading, setIsButtonLoading] = useState(false);
 
   // Define the assets based on swap direction
-  const cbBTCAsset = selectedChainConfig.underlyingSwappingAsset;
-  const btcAsset: ValidAsset = {
-    style: {
-      name: "Bitcoin",
-      symbol: "BTC",
-      dark_bg_color: "rgba(46, 29, 14, 0.66)",
-      bg_color: "#78491F",
-      light_text_color: "#805530",
-      logoURI:
-        "https://assets.coingecko.com/coins/images/1/standard/bitcoin.png",
-    },
-    decimals: 8,
-    tokenAddress: "0x0000000000000000000000000000000000000000" as Address, // BTC doesn't have a token address
-  };
+  const cbBTCAsset = GLOBAL_CONFIG.underlyingSwappingAssets[1];
+  const btcAsset = GLOBAL_CONFIG.underlyingSwappingAssets[0];
 
   const currentInputAsset = isReversed ? btcAsset : cbBTCAsset;
   const currentOutputAsset = isReversed ? cbBTCAsset : btcAsset;
@@ -102,7 +100,7 @@ export const SwapWidget = () => {
 
   const convertInputAmountToFullDecimals = (): bigint | undefined => {
     try {
-      return parseUnits(rawInputAmount, currentInputAsset.decimals);
+      return parseUnits(rawInputAmount, currentInputAsset.currency.decimals);
     } catch (error) {
       console.error("Error converting input amount to full decimals:", error);
       return undefined;
@@ -134,14 +132,14 @@ export const SwapWidget = () => {
         // For cbBTC -> BTC swaps, validate Bitcoin address for payout
         const validation = validateBitcoinPayoutAddressWithNetwork(
           payoutAddress,
-          selectedChainConfig.bitcoinNetwork
+          "mainnet"
         );
         setAddressValidation(validation);
       }
     } else {
       setAddressValidation({ isValid: false });
     }
-  }, [payoutAddress, selectedChainConfig.bitcoinNetwork, isReversed]);
+  }, [payoutAddress, btcAsset.currency.chain, isReversed]);
 
   // Validate refund address whenever it changes (opposite of payout address validation)
   useEffect(() => {
@@ -156,17 +154,58 @@ export const SwapWidget = () => {
         // For BTC -> cbBTC swaps, validate Bitcoin address for refund (BTC)
         const validation = validateBitcoinPayoutAddressWithNetwork(
           refundAddress,
-          selectedChainConfig.bitcoinNetwork
+          "mainnet"
         );
         setRefundAddressValidation(validation);
       }
     } else {
       setRefundAddressValidation({ isValid: false });
     }
-  }, [refundAddress, selectedChainConfig.bitcoinNetwork, isReversed]);
+  }, [refundAddress, btcAsset.currency.chain, isReversed]);
 
   // Exchange rate: 1 cbBTC = 0.999 BTC (0.1% fee)
   const EXCHANGE_RATE = 0.999; // TODO: make this based on real RFQ quote rate
+
+  const sendRFQRequest = async (from_amount: bigint) => {
+    const currentTime = new Date().getTime();
+    const quote = await rfqClient.requestQuotes({
+      from: {
+        chain: currentInputAsset.currency.chain,
+        token: currentInputAsset.currency.token,
+        amount: from_amount.toString(),
+        decimals: currentInputAsset.currency.decimals,
+      },
+      to: {
+        chain: currentOutputAsset.currency.chain,
+        token: currentOutputAsset.currency.token,
+        amount: "0",
+        decimals: currentOutputAsset.currency.decimals,
+      },
+    });
+    const timeTaken = new Date().getTime() - currentTime;
+
+    console.log("got quote from RFQ", quote, "in", timeTaken, "ms");
+    setQuote(quote.quote);
+  };
+
+  const sendOTCRequest = async (
+    quote: Quote,
+    user_destination_address: string,
+    user_refund_address: string
+  ) => {
+    const currentTime = new Date().getTime();
+    const swap = await otcClient.createSwap({
+      quote,
+      user_destination_address,
+      user_refund_address,
+    });
+    const timeTaken = new Date().getTime() - currentTime;
+
+    console.log("got swap from OTC", swap, "in", timeTaken, "ms");
+    if (swap) {
+      setSwapResponse(swap);
+    }
+  };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -176,6 +215,12 @@ export const SwapWidget = () => {
       setRawInputAmount(value);
       setLastEditedField("input");
       setHasStartedTyping(true);
+
+      let from_amount = convertInputAmountToFullDecimals();
+      if (from_amount && from_amount > 0n) {
+        // call RFQ
+        sendRFQRequest(from_amount);
+      }
 
       // Calculate output amount based on input, also set the input token amount
       if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
@@ -233,7 +278,7 @@ export const SwapWidget = () => {
         ? "Please enter a valid Ethereum address"
         : "Please enter a valid Bitcoin payout address";
       if (!isReversed && addressValidation.networkMismatch) {
-        description = `Wrong network: expected ${selectedChainConfig.bitcoinNetwork} but detected ${addressValidation.detectedNetwork}`;
+        description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${addressValidation.detectedNetwork}`;
       }
       toastInfo({
         title: isReversed
@@ -249,7 +294,7 @@ export const SwapWidget = () => {
         ? "Please enter a valid Bitcoin refund address"
         : "Please enter a valid Ethereum refund address";
       if (isReversed && refundAddressValidation.networkMismatch) {
-        description = `Wrong network: expected ${selectedChainConfig.bitcoinNetwork} but detected ${refundAddressValidation.detectedNetwork}`;
+        description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
       }
       toastInfo({
         title: isReversed
@@ -271,15 +316,6 @@ export const SwapWidget = () => {
       return;
     }
 
-    if (isReversed) {
-      toastInfo({
-        title: "BTC → cbBTC swaps coming soon!",
-        description:
-          "Native Bitcoin to cbBTC swaps are currently in development",
-      });
-      return;
-    }
-
     const estimatedOutputAmountInSatoshis = BigInt(
       Math.round(parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS)
     );
@@ -287,6 +323,10 @@ export const SwapWidget = () => {
     const inputAmountInSatoshis = convertInputAmountToFullDecimals();
 
     console.log("inputAmountInSatoshis", inputAmountInSatoshis);
+    if (quote && inputAmountInSatoshis) {
+      console.log("sending swap request");
+      sendOTCRequest(quote, payoutAddress, refundAddress);
+    }
   };
 
   const canSwap =

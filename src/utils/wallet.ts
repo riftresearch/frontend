@@ -8,7 +8,7 @@ import {
 } from "@reown/appkit/networks";
 import { createStorage, cookieStorage, http } from "wagmi";
 import { QueryClient } from "@tanstack/react-query";
-import { CHAIN_SCOPED_CONFIGS } from "./constants";
+import { GLOBAL_CONFIG } from "./constants";
 
 // Define a custom Anvil network for local development
 export const anvilNetwork: AppKitNetwork = {
@@ -39,13 +39,14 @@ export const anvilNetwork: AppKitNetwork = {
 
 // Change this to your actual project ID from Reown Cloud
 export const projectId =
-  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "YOUR_PROJECT_ID";
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
+  "03057a73ca14c5d45baef6dfe54a15ee";
 
 // Define the networks your app will support - add anvilNetwork as the first network
 // TODO: Disable anvilNetwork in production
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
-  anvilNetwork,
-  base,
+  //anvilNetwork,
+  //base,
   mainnet,
 ];
 
@@ -57,11 +58,11 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   networks,
   projectId,
-  chains: [mainnet, base, anvilNetwork],
+  chains: [mainnet /*base, anvilNetwork*/],
   transports: {
-    [base.id]: http(CHAIN_SCOPED_CONFIGS[base.id].rpcUrl),
-    [mainnet.id]: http(CHAIN_SCOPED_CONFIGS[mainnet.id].rpcUrl),
-    [anvilNetwork.id]: http(CHAIN_SCOPED_CONFIGS[anvilNetwork.id].rpcUrl),
+    //[base.id]: http(CHAIN_SCOPED_CONFIGS[base.id].rpcUrl),
+    [mainnet.id]: http(GLOBAL_CONFIG.mainnetRpcUrl),
+    //[anvilNetwork.id]: http(CHAIN_SCOPED_CONFIGS[anvilNetwork.id].rpcUrl),
   },
 });
 

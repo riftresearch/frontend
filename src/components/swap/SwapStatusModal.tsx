@@ -7,6 +7,7 @@ import { IoIosCheckmarkCircle, IoMdAlert, IoMdClose } from "react-icons/io";
 import { MdList } from "react-icons/md";
 import { useStore } from "@/utils/store";
 import { useRouter } from "next/router";
+import { GLOBAL_CONFIG } from "@/utils/constants";
 
 export enum SwapStatus {
   WaitingForApprovalConfirmation = "WaitingForApprovalConfirmation",
@@ -39,7 +40,6 @@ const SwapStatusModal: React.FC<SwapStatusModalProps> = ({
   const isCompleted = status === SwapStatus.Confirmed;
   const isError = status === SwapStatus.Error;
   const isLoading = !isCompleted && !isError;
-  const selectedChainConfig = useStore((state) => state.selectedChainConfig);
   const router = useRouter();
   const [isLoadingRedirect, setIsLoadingRedirect] = React.useState(false);
 
@@ -94,10 +94,7 @@ const SwapStatusModal: React.FC<SwapStatusModalProps> = ({
     if (!txHash) return "#";
 
     // Use basic explorer URL - can be made configurable later
-    const baseUrl =
-      selectedChainConfig?.chainId === 1
-        ? "https://etherscan.io"
-        : "https://sepolia.etherscan.io";
+    const baseUrl = GLOBAL_CONFIG.etherscanUrl;
     return `${baseUrl}/tx/${txHash}`;
   };
 

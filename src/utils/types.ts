@@ -1,4 +1,5 @@
 import { Address } from "viem";
+import { Currency } from "./backendTypes";
 
 export type TokenStyle = {
   name: string;
@@ -13,32 +14,42 @@ export type TokenStyle = {
   logoURI?: string;
 };
 
-export type ValidAsset = {
-  tokenAddress: Address;
-  decimals: number;
+export type Asset = {
+  currency: Currency;
   style: TokenStyle;
 };
 
-export type ChainScopedConfig = {
-  name: string;
-  type: "Mainnet" | "Testnet";
+export type EVM = {
+  name: "EVM";
   chainId: number;
+};
+
+export type Bitcoin = {
+  name: "Bitcoin";
+  network: "mainnet" | "testnet";
+};
+
+export type SVM = {
+  name: "SVM";
+};
+
+export type VirtualMachine = EVM | Bitcoin | SVM;
+
+export type SupportedChain = {
+  name: string;
+  explorerUrl: string;
+  chainId?: number;
+  vm: VirtualMachine;
+  assets: Asset[];
+};
+
+export type Config = {
   etherscanUrl: string;
-  rpcUrl: string;
+  mainnetRpcUrl: string;
   esploraUrl: string;
-  bitcoinNetwork: "mainnet";
-  dataEngineUrl: string;
-  underlyingSwappingAsset: ValidAsset;
-  riftExchangeAddress: string;
-  bundler3: {
-    bundler3Address: string;
-    generalAdapter1Address: string;
-    paraswapAdapterAddress: string;
-    riftcbBTCAdapterAddress: string;
-  };
-  marketMakers: Array<{
-    bitcoinAddress: string;
-  }>;
+  rfqServerUrl: string;
+  otcServerUrl: string;
+  underlyingSwappingAssets: Asset[];
 };
 
 export type RouteButton = "Swap" | "Manage" | "About";

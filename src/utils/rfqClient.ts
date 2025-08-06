@@ -3,28 +3,9 @@
  * Provides async/functional/declarative access to quote aggregation services
  */
 
+import { ChainType, Currency, Quote } from "./backendTypes";
+
 // Types matching the Rust server responses
-export type ChainType = "bitcoin" | "ethereum";
-
-export type TokenIdentifier =
-  | { type: "Native" }
-  | { type: "Address"; data: string };
-
-export interface Currency {
-  chain: ChainType;
-  token: TokenIdentifier;
-  amount: string; // U256 as string
-  decimals: number;
-}
-
-export interface Quote {
-  id: string; // UUID as string
-  market_maker_id: string; // UUID as string
-  from: Currency;
-  to: Currency;
-  expires_at: string; // ISO 8601 datetime string
-  created_at: string; // ISO 8601 datetime string
-}
 
 export interface QuoteRequest {
   from: Currency;
@@ -55,8 +36,6 @@ export interface ErrorResponse {
 export interface RfqClientConfig {
   baseUrl: string;
   timeout?: number;
-  apiKeyId?: string;
-  apiKey?: string;
 }
 
 /**
@@ -90,14 +69,6 @@ export class RfqClient {
       Accept: "application/json",
       "Content-Type": "application/json",
     };
-
-    // Add authentication headers if provided
-    if (config.apiKeyId) {
-      this.headers["X-API-Key-ID"] = config.apiKeyId;
-    }
-    if (config.apiKey) {
-      this.headers["X-API-Key"] = config.apiKey;
-    }
   }
 
   /**
@@ -285,7 +256,7 @@ export const getQuoteTimeToExpiration = (quote: Quote): number => {
  * Helper function to format currency amount with decimals
  */
 export const formatCurrencyAmount = (currency: Currency): string => {
-  const amount = BigInt(currency.amount);
+  const amount = BigInt(currency.amount ?? "0");
   const divisor = BigInt(10 ** currency.decimals);
   const wholePart = amount / divisor;
   const fractionalPart = amount % divisor;

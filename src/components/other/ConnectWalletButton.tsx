@@ -14,7 +14,7 @@ const getCustomChainName = (chainId: number): string => {
 
 export const ConnectWalletButton: React.FC = () => {
   const { address, isConnected } = useAccount();
-  const chainId = useStore((state) => state.connectedChainId);
+  const chainId = useStore((state) => state.evmConnectWalletChainId);
   const chains = useChains();
 
   // Format the user's address for display

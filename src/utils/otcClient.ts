@@ -3,6 +3,8 @@
  * Provides typed access to swap creation and management endpoints
  */
 
+import { Quote } from "./backendTypes";
+
 // Types matching the Rust server structures
 
 export interface CreateSwapRequest {
@@ -212,7 +214,7 @@ export class OTCServerClient {
 /**
  * Create a configured OTC server client
  */
-export const createOTCServerClient = (
+export const createOTCClient = (
   config: OTCServerClientConfig
 ): OTCServerClient => new OTCServerClient(config);
 

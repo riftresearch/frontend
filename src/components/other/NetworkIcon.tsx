@@ -47,8 +47,10 @@ export const NetworkIcon: React.FC<NetworkIconProps> = ({
   mr,
 }) => {
   // Use provided chainId or get from context
-  const connectedChainId = useStore((state) => state.connectedChainId);
-  const chainId = providedChainId || connectedChainId;
+  const evmConnectWalletChainId = useStore(
+    (state) => state.evmConnectWalletChainId
+  );
+  const chainId = providedChainId || evmConnectWalletChainId;
 
   // Get the icon with width/height applied
   const icon = getNetworkIcon(chainId, width, height);

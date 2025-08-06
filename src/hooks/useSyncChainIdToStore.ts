@@ -8,11 +8,13 @@ import { useStore } from "../utils/store";
  */
 export function useSyncChainIdToStore() {
   const chainId = useChainId();
-  const setConnectedChainId = useStore((state) => state.setConnectedChainId);
+  const setEvmConnectWalletChainId = useStore(
+    (state) => state.setEvmConnectWalletChainId
+  );
 
   useEffect(() => {
     if (chainId) {
-      setConnectedChainId(chainId);
+      setEvmConnectWalletChainId(chainId);
     }
-  }, [chainId, setConnectedChainId]);
+  }, [chainId, setEvmConnectWalletChainId]);
 }

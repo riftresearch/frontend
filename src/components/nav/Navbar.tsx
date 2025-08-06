@@ -15,7 +15,6 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { useRouter } from "next/router";
 import { IoChevronBack, IoChevronForward } from "react-icons/io5";
 import { ConnectWalletButton } from "@/components/other/ConnectWalletButton";
-import { AssetBalanceDisplay } from "@/components/other/AssetBalanceDisplay";
 import { FONT_FAMILIES } from "@/utils/font";
 import { useStore } from "@/utils/store";
 import React, { useEffect, useState } from "react";
@@ -241,9 +240,6 @@ export const Navbar = ({}) => {
           )}
         </Flex>
         <Spacer />
-        <Flex mb="-5px" pr="5px" gap="8px" alignItems="center">
-          {isConnected && <AssetBalanceDisplay />}
-        </Flex>
         <Flex mb="-5px" pr="5px" alignItems="center" gap="10px">
           {isLocalhost && router.pathname === "/swap/[chainId]/[txHash]" && (
             <Flex
