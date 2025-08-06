@@ -274,15 +274,32 @@ export const SwapWidget = () => {
       return;
     }
 
-    if (!rawInputAmount || !outputAmount) {
+    // Check input amount
+    if (
+      !rawInputAmount ||
+      !outputAmount ||
+      parseFloat(rawInputAmount) <= 0 ||
+      parseFloat(outputAmount) <= 0
+    ) {
       toastInfo({
-        title: "Enter amounts",
-        description: "Please enter an amount to swap",
+        title: "Enter Amount",
+        description: "Please enter a valid amount to swap",
       });
       return;
     }
 
-    if (!payoutAddress || !addressValidation.isValid) {
+    // Check payout address
+    if (!payoutAddress) {
+      toastInfo({
+        title: isReversed ? "Enter Ethereum Address" : "Enter Bitcoin Address",
+        description: isReversed
+          ? "Please enter your Ethereum address to receive cbBTC"
+          : "Please enter your Bitcoin address to receive BTC",
+      });
+      return;
+    }
+
+    if (!addressValidation.isValid) {
       let description = isReversed
         ? "Please enter a valid Ethereum address"
         : "Please enter a valid Bitcoin payout address";
@@ -291,24 +308,35 @@ export const SwapWidget = () => {
       }
       toastInfo({
         title: isReversed
-          ? "Invalid Ethereum address"
-          : "Invalid Bitcoin address",
+          ? "Invalid Ethereum Address"
+          : "Invalid Bitcoin Address",
         description,
       });
       return;
     }
 
-    // Only validate refund address for BTC->cbBTC swaps (when isReversed is true)
-    if (isReversed && (!refundAddress || !refundAddressValidation.isValid)) {
-      let description = "Please enter a valid Bitcoin refund address";
-      if (refundAddressValidation.networkMismatch) {
-        description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
+    // Check refund address for BTC->cbBTC swaps only
+    if (isReversed) {
+      if (!refundAddress) {
+        toastInfo({
+          title: "Enter Refund Address",
+          description:
+            "Please enter your Bitcoin refund address in case the swap fails",
+        });
+        return;
       }
-      toastInfo({
-        title: "Invalid Bitcoin refund address",
-        description,
-      });
-      return;
+
+      if (!refundAddressValidation.isValid) {
+        let description = "Please enter a valid Bitcoin refund address";
+        if (refundAddressValidation.networkMismatch) {
+          description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
+        }
+        toastInfo({
+          title: "Invalid Refund Address",
+          description,
+        });
+        return;
+      }
     }
 
     if (
@@ -335,15 +363,8 @@ export const SwapWidget = () => {
     }
   };
 
-  const canSwap =
-    rawInputAmount &&
-    outputAmount &&
-    parseFloat(rawInputAmount) > 0 &&
-    parseFloat(outputAmount) > 0 &&
-    payoutAddress &&
-    addressValidation.isValid &&
-    // Only require refund address for BTC->cbBTC swaps
-    (isReversed ? refundAddress && refundAddressValidation.isValid : true);
+  // Always enable the button visually, handle validation in handleSwap
+  const canSwap = true;
 
   return (
     <Flex
@@ -720,7 +741,7 @@ export const SwapWidget = () => {
                   />
 
                   {refundAddress.length > 0 && (
-                    <Flex ml="-5px">
+                    <Flex ml="0px">
                       {isReversed ? (
                         <BitcoinAddressValidation
                           address={refundAddress}
@@ -838,7 +859,7 @@ export const SwapWidget = () => {
                   mr="15px"
                   ml="-4px"
                   p="0px"
-                  w="485px"
+                  w="500px"
                   letterSpacing="-5px"
                   color={colors.offWhite}
                   _active={{
@@ -868,7 +889,7 @@ export const SwapWidget = () => {
                 />
 
                 {payoutAddress.length > 0 && (
-                  <Flex ml="-5px">
+                  <Flex ml="0px">
                     {!isReversed ? (
                       <BitcoinAddressValidation
                         address={payoutAddress}
@@ -908,16 +929,9 @@ export const SwapWidget = () => {
 
         {/* Swap Button */}
         <Flex
-          bg={
-            canClickButton
-              ? colors.purpleBackground
-              : colors.purpleBackgroundDisabled
-          }
+          bg={colors.purpleBackground}
           _hover={{
-            bg:
-              canClickButton && !isButtonLoading
-                ? colors.purpleHover
-                : undefined,
+            bg: !isButtonLoading ? colors.purpleHover : undefined,
           }}
           w="100%"
           mt="8px"
@@ -927,20 +941,15 @@ export const SwapWidget = () => {
           fontSize="18px"
           align="center"
           userSelect="none"
-          cursor={
-            canClickButton && !isButtonLoading ? "pointer" : "not-allowed"
-          }
+          cursor={!isButtonLoading ? "pointer" : "not-allowed"}
           borderRadius="16px"
           justify="center"
-          border={canClickButton ? "3px solid #445BCB" : "3px solid #3242a8"}
+          border="3px solid #445BCB"
         >
           {isButtonLoading && (
             <Spinner size="sm" color={colors.offWhite} mr="10px" />
           )}
-          <Text
-            color={canClickButton ? colors.offWhite : colors.darkerGray}
-            fontFamily="Nostromo"
-          >
+          <Text color={colors.offWhite} fontFamily="Nostromo">
             {isButtonLoading ? "Loading..." : "Swap"}
           </Text>
         </Flex>

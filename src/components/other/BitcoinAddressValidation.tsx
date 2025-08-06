@@ -9,7 +9,10 @@ interface BitcoinAddressValidationProps {
   };
 }
 
-const BitcoinAddressValidation = ({ address, validation }: BitcoinAddressValidationProps) => {
+const BitcoinAddressValidation = ({
+  address,
+  validation,
+}: BitcoinAddressValidationProps) => {
   const isValid = validation?.isValid ?? false;
   const isNetworkMismatch = validation?.networkMismatch ?? false;
 
@@ -29,7 +32,9 @@ const BitcoinAddressValidation = ({ address, validation }: BitcoinAddressValidat
       return <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />;
     }
     // X mark
-    return <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />;
+    return (
+      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+    );
   };
 
   return (
@@ -42,12 +47,7 @@ const BitcoinAddressValidation = ({ address, validation }: BitcoinAddressValidat
       bg={getBackgroundColor()}
       alignSelf="center"
     >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="white"
-      >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
         {getIcon()}
       </svg>
     </Flex>
