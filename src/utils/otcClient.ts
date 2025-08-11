@@ -110,6 +110,7 @@ export class OTCServerClient {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.log("OTC Server Error:", errorText); // TODO: auto refresh the MM quote if this happens
         throw new OTCServerError(
           response.status,
           response.statusText,
