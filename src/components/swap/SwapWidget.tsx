@@ -99,7 +99,7 @@ export const SwapWidget = () => {
   // Handle writeContract errors (user declined in wallet)
   useEffect(() => {
     if (writeError) {
-      console.error("Write contract error:", writeError);
+      console.warn("Write contract error:", writeError);
       // Custom BTC orange toast for transaction declined
       toastInfo({
         title: "Transaction Declined",

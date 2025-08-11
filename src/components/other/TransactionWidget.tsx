@@ -31,14 +31,17 @@ const steps = [
   },
 ];
 
-function StepCarousel() {
+function StepCarousel({ swapId }: { swapId?: string }) {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const swapResponse = useStore((state) => state.swapResponse);
-  const { data: swapStatusInfo } = useSwapStatus(swapResponse?.swap_id);
+  // Use provided swapId prop, fallback to store value
+  const currentSwapId = swapId || swapResponse?.swap_id;
+  const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [slideOffset, setSlideOffset] = useState(0);
   const [previousStepIndex, setPreviousStepIndex] = useState(-1);
   const [showButtons, setShowButtons] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Check if we're in the settled state (step 4 or 5)
   const isSettled =
@@ -50,44 +53,89 @@ function StepCarousel() {
     (step) => step.id === depositFlowState
   );
 
-  // Handle step transitions
+  // Initialize carousel state based on current step (for direct page loads)
+  useEffect(() => {
+    if (currentStepIndex !== -1 && !isInitialized) {
+      // Set completed steps for all steps before the current one
+      const completedStepIds = new Set<string>();
+      for (let i = 0; i < currentStepIndex; i++) {
+        completedStepIds.add(steps[i].id);
+      }
+
+      // If we're on the settled step, mark it as completed too
+      if (isSettled) {
+        completedStepIds.add(steps[currentStepIndex].id);
+        setShowButtons(true);
+      }
+
+      setCompletedSteps(completedStepIds);
+
+      // Set slide offset to position the current step at the top
+      setSlideOffset(-currentStepIndex * 86);
+
+      setIsInitialized(true);
+      setPreviousStepIndex(currentStepIndex);
+    }
+  }, [currentStepIndex, isInitialized, isSettled]);
+
+  // Handle step transitions (now works for any step-to-step transition)
   useEffect(() => {
     if (
+      isInitialized &&
       currentStepIndex !== previousStepIndex &&
       previousStepIndex >= 0 &&
-      currentStepIndex > previousStepIndex
+      currentStepIndex !== -1
     ) {
-      const prevStep = steps[previousStepIndex];
-      const currentStep = steps[currentStepIndex];
+      const stepDifference = currentStepIndex - previousStepIndex;
 
-      if (prevStep) {
-        // Step 1: Show checkmark for previous step
-        setCompletedSteps((prev) => new Set([...prev, prevStep.id]));
+      // Handle forward progression
+      if (stepDifference > 0) {
+        // Mark all previous steps as completed
+        const newCompletedSteps = new Set(completedSteps);
+        for (let i = previousStepIndex; i < currentStepIndex; i++) {
+          newCompletedSteps.add(steps[i].id);
+        }
+        setCompletedSteps(newCompletedSteps);
 
-        // For the final step (4 or 5), wait longer to show checkmark after slide completes
-        const isSettledStep =
-          currentStep?.id === "4-WaitingMMDepositConfirmed" ||
-          currentStep?.id === "5-Settled";
-
+        // Animate slide to new position
         setTimeout(() => {
-          // Step 2: Slide everything up
-          setSlideOffset((prev) => prev - 86); // Updated to match new step height of 86px
+          setSlideOffset(-currentStepIndex * 86);
 
-          // Step 3: For settled step, mark it complete after slide animation finishes
-          if (isSettledStep) {
+          // For settled step, mark it complete after slide animation
+          if (isSettled) {
             setTimeout(() => {
-              setCompletedSteps((prev) => new Set([...prev, currentStep.id]));
-              // Show buttons after checkmark appears
+              setCompletedSteps(
+                (prev) => new Set([...prev, steps[currentStepIndex].id])
+              );
               setTimeout(() => {
                 setShowButtons(true);
-              }, 500); // Additional delay for checkmark animation
-            }, 800); // Wait for slide animation to complete
+              }, 500);
+            }, 800);
           }
         }, 500);
       }
+      // Handle backward progression (in case of step reversals)
+      else if (stepDifference < 0) {
+        // Remove completed status from steps that are now in the future
+        const newCompletedSteps = new Set(completedSteps);
+        for (let i = currentStepIndex + 1; i < steps.length; i++) {
+          newCompletedSteps.delete(steps[i].id);
+        }
+        setCompletedSteps(newCompletedSteps);
+        setShowButtons(false);
+
+        // Animate slide to new position
+        setSlideOffset(-currentStepIndex * 86);
+      }
     }
     setPreviousStepIndex(currentStepIndex);
-  }, [currentStepIndex, previousStepIndex]);
+  }, [
+    currentStepIndex,
+    previousStepIndex,
+    isInitialized,
+    completedSteps,
+    isSettled,
+  ]);
 
   if (currentStepIndex === -1) return null;
 
@@ -427,12 +475,14 @@ function StepCarousel() {
   );
 }
 
-export function TransactionWidget() {
+export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
   const { isMobile } = useWindowSize();
   const depositFlowState = useStore((state) => state.depositFlowState);
   const countdownValue = useStore((state) => state.countdownValue);
   const swapResponse = useStore((state) => state.swapResponse);
-  const { data: swapStatusInfo } = useSwapStatus(swapResponse?.swap_id);
+  // Use provided swapId prop, fallback to store value
+  const currentSwapId = swapId || swapResponse?.swap_id;
+  const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" ||
     depositFlowState === "5-Settled";
@@ -632,7 +682,7 @@ export function TransactionWidget() {
         alignItems="center"
         justifyContent="center"
       >
-        <StepCarousel />
+        <StepCarousel swapId={currentSwapId} />
       </Box>
     </Box>
   );

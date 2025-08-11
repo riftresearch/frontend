@@ -46,6 +46,15 @@ export const Navbar = ({}) => {
   }, []);
 
   const handleNavigation = (route: string) => {
+    // If navigating to "/" from a swap page, reset swap state
+    if (route === "/" && router.pathname.includes("/swap")) {
+      // Clear swap state when navigating back to main page
+      const { setSwapResponse, setDepositFlowState, setTransactionConfirmed } =
+        useStore.getState();
+      setSwapResponse(null);
+      setDepositFlowState("0-not-started");
+      setTransactionConfirmed(false);
+    }
     router.push(route);
   };
 
@@ -68,7 +77,7 @@ export const Navbar = ({}) => {
         alignItems="center"
       >
         <Text
-          color={router.pathname == route ? colors.offWhite : "#ccc"}
+          color={router.pathname == route ? "white" : "white"}
           fontSize={isTablet ? "0.9rem" : "19px"}
           fontFamily="Nostromo"
         >
