@@ -1,6 +1,5 @@
 import { Config, TokenStyle } from "./types";
-import { createCurrency } from "./backendTypes";
-import { createRfqClient } from "./rfqClient";
+import { createRfqClient, Currency } from "./rfqClient";
 import { createOTCClient } from "./otcClient";
 
 export const IS_FRONTEND_PAUSED =
@@ -47,18 +46,25 @@ export const GLOBAL_CONFIG: Config = {
   otcServerUrl: "https://hypernode-eth0.tail0a0b83.ts.net/otc-server",
   underlyingSwappingAssets: [
     {
-      currency: createCurrency({
+      currency: {
         chain: "bitcoin",
         decimals: 8,
-      }),
+        token: {
+          type: "Native",
+        },
+      },
       style: bitcoinStyle,
     },
     {
-      currency: createCurrency({
+      currency: {
         chain: "ethereum",
         decimals: 8,
-        tokenAddress: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
-      }),
+        token: {
+          type: "Address",
+          // NOTE: Addresses right now need to be checksummed
+          data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+        },
+      },
       style: cbBTCStyle,
     },
   ],

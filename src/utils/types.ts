@@ -1,5 +1,5 @@
 import { Address } from "viem";
-import { Currency } from "./backendTypes";
+import { Currency } from "./rfqClient";
 
 export type TokenStyle = {
   name: string;

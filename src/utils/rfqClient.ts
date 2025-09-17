@@ -3,13 +3,42 @@
  * Provides async/functional/declarative access to quote aggregation services
  */
 
-import { ChainType, Currency, Quote } from "./backendTypes";
-
 // Types matching the Rust server responses
 
+export type ChainType = "bitcoin" | "ethereum";
+
+export interface TokenIdentifier {
+  type: "Native" | "Address";
+  data?: string; // Only present when type is "Address"
+}
+
+export interface Currency {
+  chain: ChainType;
+  token: TokenIdentifier;
+  decimals: number;
+}
+
+export interface Lot {
+  currency: Currency;
+  amount: string; // U256 as string
+}
+
+export interface Quote {
+  id: string; // UUID as string
+  market_maker_id: string; // UUID as string
+  from: Lot;
+  to: Lot;
+  expires_at: string; // ISO 8601 datetime
+  created_at: string; // ISO 8601 datetime
+}
+
+export type QuoteMode = "ExactInput" | "ExactOutput";
+
 export interface QuoteRequest {
+  mode: QuoteMode;
   from: Currency;
   to: Currency;
+  amount: string; // U256 as string
 }
 
 export interface QuoteResponse {
@@ -140,6 +169,7 @@ export class RfqClient {
    * Request quotes from connected market makers
    */
   async requestQuotes(request: QuoteRequest): Promise<QuoteResponse> {
+    console.log("requestQuotes", request);
     return this.fetchWithTimeout<QuoteResponse>("/api/v1/quotes/request", {
       method: "POST",
       body: request,
@@ -206,32 +236,11 @@ export const healthCheck = (client: RfqClient) => (): Promise<boolean> =>
   client.healthCheck();
 
 /**
- * Helper function to create a native token currency
+ * Helper function to create a Lot (currency with amount)
  */
-export const createNativeCurrency = (
-  chain: ChainType,
-  amount: string,
-  decimals: number = 18
-): Currency => ({
-  chain,
-  token: { type: "Native" },
+export const createLot = (currency: Currency, amount: string): Lot => ({
+  currency,
   amount,
-  decimals,
-});
-
-/**
- * Helper function to create a token currency with address
- */
-export const createTokenCurrency = (
-  chain: ChainType,
-  tokenAddress: string,
-  amount: string,
-  decimals: number = 18
-): Currency => ({
-  chain,
-  token: { type: "Address", data: tokenAddress },
-  amount,
-  decimals,
 });
 
 /**
@@ -253,11 +262,11 @@ export const getQuoteTimeToExpiration = (quote: Quote): number => {
 };
 
 /**
- * Helper function to format currency amount with decimals
+ * Helper function to format lot amount with decimals
  */
-export const formatCurrencyAmount = (currency: Currency): string => {
-  const amount = BigInt(currency.amount ?? "0");
-  const divisor = BigInt(10 ** currency.decimals);
+export const formatLotAmount = (lot: Lot): string => {
+  const amount = BigInt(lot.amount);
+  const divisor = BigInt(10 ** lot.currency.decimals);
   const wholePart = amount / divisor;
   const fractionalPart = amount % divisor;
 
@@ -267,7 +276,7 @@ export const formatCurrencyAmount = (currency: Currency): string => {
 
   const fractionalStr = fractionalPart
     .toString()
-    .padStart(currency.decimals, "0");
+    .padStart(lot.currency.decimals, "0");
   const trimmedFractional = fractionalStr.replace(/0+$/, "");
 
   return `${wholePart}.${trimmedFractional}`;
@@ -287,3 +296,39 @@ export const parseAmountToBaseUnits = (
   const baseUnits = wholePart + paddedFractional;
   return BigInt(baseUnits).toString();
 };
+
+/**
+ * Helper to create a quote request
+ */
+export const createQuoteRequest = (
+  mode: QuoteMode,
+  fromCurrency: Currency,
+  toCurrency: Currency,
+  amount: string
+): QuoteRequest => ({
+  mode,
+  from: fromCurrency,
+  to: toCurrency,
+  amount,
+});
+
+/**
+ * Example usage:
+ *
+ * const client = createRfqClient({ baseUrl: "http://localhost:8080" });
+ *
+ * // Request a quote for swapping 1 ETH to BTC
+ * const ethCurrency = createNativeCurrency("ethereum", 18);
+ * const btcCurrency = createNativeCurrency("bitcoin", 8);
+ * const amount = parseAmountToBaseUnits("1.0", 18);
+ *
+ * const request = createQuoteRequest(
+ *   "ExactInput",
+ *   ethCurrency,
+ *   btcCurrency,
+ *   amount
+ * );
+ *
+ * const response = await client.requestQuotes(request);
+ * console.log(`Best quote: ${formatLotAmount(response.quote.to)} BTC`);
+ */

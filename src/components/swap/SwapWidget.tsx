@@ -34,14 +34,14 @@ import {
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
-import { toastInfo, toastWarning, toastSuccess } from "@/utils/toast";
+import { toastInfo, toastWarning, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { Asset } from "@/utils/types";
 import { TokenStyle } from "@/utils/types";
 import { Hex } from "bitcoinjs-lib/src/types";
 import { reownModal, wagmiAdapter } from "@/utils/wallet";
 import { Address, erc20Abi, parseUnits } from "viem";
-import { Quote } from "@/utils/backendTypes";
+import { Quote, formatLotAmount } from "@/utils/rfqClient";
 import { CreateSwapResponse } from "@/utils/otcClient";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 const BTC_USD_EXCHANGE_RATE = 115611.06;
@@ -244,29 +244,46 @@ export const SwapWidget = () => {
     }
   }, [refundAddress, btcAsset.currency.chain, isReversed]);
 
-  // Exchange rate: 1 cbBTC = 0.999 BTC (0.1% fee)
-  const EXCHANGE_RATE = 1; // TODO: make this based on real RFQ quote rate
 
   const sendRFQRequest = async (from_amount: bigint) => {
-    const currentTime = new Date().getTime();
-    const quote = await rfqClient.requestQuotes({
-      from: {
-        chain: currentInputAsset.currency.chain,
-        token: currentInputAsset.currency.token,
+    try {
+      const currentTime = new Date().getTime();
+      console.log("currentInputAsset", currentInputAsset);
+      const quoteResponse = await rfqClient.requestQuotes({
+        mode: "ExactInput",
         amount: from_amount.toString(),
-        decimals: currentInputAsset.currency.decimals,
-      },
-      to: {
-        chain: currentOutputAsset.currency.chain,
-        token: currentOutputAsset.currency.token,
-        amount: "0",
-        decimals: currentOutputAsset.currency.decimals,
-      },
-    });
-    const timeTaken = new Date().getTime() - currentTime;
+        from: {
+          chain: currentInputAsset.currency.chain,
+          token: currentInputAsset.currency.token,
+          decimals: currentInputAsset.currency.decimals,
+        },
+        to: {
+          chain: currentOutputAsset.currency.chain,
+          token: currentOutputAsset.currency.token,
+          decimals: currentOutputAsset.currency.decimals,
+        },
+      });
+      const timeTaken = new Date().getTime() - currentTime;
 
-    console.log("got quote from RFQ", quote, "in", timeTaken, "ms");
-    setQuote(quote.quote);
+      console.log("got quote from RFQ", quoteResponse, "in", timeTaken, "ms");
+      setQuote(quoteResponse.quote);
+      
+      // Populate output field with the quote's output amount
+      const formattedOutputAmount = formatLotAmount(quoteResponse.quote.to);
+      setOutputAmount(formattedOutputAmount);
+    } catch (error: any) {
+      console.error("RFQ request failed:", error);
+      
+      // Show error toast with the error message
+      toastError(error, {
+        title: "Quote Request Failed",
+        description: error?.response?.data?.error || error?.message || "No quotes available"
+      });
+      
+      // Clear the output amount on error
+      setOutputAmount("");
+      setQuote(null);
+    }
   };
 
   const sendOTCRequest = async (
@@ -293,7 +310,7 @@ export const SwapWidget = () => {
     // okay, now we need to request money to be sent from the user to the created swap
     try {
       writeContract({
-        address: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+        address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
         abi: erc20Abi,
         functionName: "transfer",
         args: [swap.deposit_address as `0x${string}`, amount],
@@ -317,14 +334,10 @@ export const SwapWidget = () => {
       console.log("value", value);
       console.log("from_amount", from_amount);
       if (from_amount && from_amount > 0n) {
-        // call RFQ
+        // call RFQ - this will update the output amount
         sendRFQRequest(from_amount);
-      }
-
-      // Calculate output amount based on input, also set the input token amount
-      if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
-        setOutputAmount(value);
       } else {
+        // Clear output if input is empty or 0
         setOutputAmount("");
       }
     }
@@ -717,9 +730,9 @@ export const SwapWidget = () => {
               fontWeight="normal"
               fontFamily="Aux"
             >
-              {lastEditedField === "input"
-                ? `1 ${currentInputAsset?.style?.symbol} = ${EXCHANGE_RATE.toFixed(3)} ${currentOutputAsset?.style?.symbol}`
-                : `1 ${currentOutputAsset?.style?.symbol} = ${(1 / EXCHANGE_RATE).toFixed(6)} ${currentInputAsset?.style?.symbol}`}
+              {quote && quote.from.amount && quote.to.amount
+                ? `1 ${currentInputAsset?.style?.symbol} = ${(parseFloat(formatLotAmount(quote.to)) / parseFloat(formatLotAmount(quote.from))).toFixed(6)} ${currentOutputAsset?.style?.symbol}`
+                : `1 ${currentInputAsset?.style?.symbol} = 1 ${currentOutputAsset?.style?.symbol}`}
             </Text>
             <Spacer />
             <Flex

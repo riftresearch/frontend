@@ -3,7 +3,7 @@
  * Provides typed access to swap creation and management endpoints
  */
 
-import { Quote } from "./backendTypes";
+import { Quote } from "./rfqClient";
 
 // Types matching the Rust server structures
 
