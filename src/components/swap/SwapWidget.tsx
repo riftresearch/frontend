@@ -60,18 +60,12 @@ export const SwapWidget = () => {
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }>({ isValid: false });
-  const [refundAddress, setRefundAddress] = useState("");
-  const [refundAddressValidation, setRefundAddressValidation] = useState<{
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }>({ isValid: false });
+
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">(
     "input"
   );
   const [isReversed, setIsReversed] = useState(false);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
-  const [showRefundSection, setShowRefundSection] = useState(false);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const { swapResponse, setSwapResponse, setTransactionConfirmed } = useStore();
@@ -159,8 +153,6 @@ export const SwapWidget = () => {
     // Keep input/output amounts when reversing
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
-    setRefundAddress("");
-    setRefundAddressValidation({ isValid: false });
     // Don't reset hasStartedTyping if we have amounts, so sections stay visible
     if (!rawInputAmount && !outputAmount) {
       setHasStartedTyping(false);
@@ -183,21 +175,11 @@ export const SwapWidget = () => {
   const actualBorderColor = "#323232";
   const borderColor = `2px solid ${actualBorderColor}`;
 
-  // Handle refund section visibility with smooth animation
-  useEffect(() => {
-    if (isReversed && hasStartedTyping) {
-      setShowRefundSection(true);
-    } else {
-      setShowRefundSection(false);
-    }
-  }, [isReversed, hasStartedTyping]);
-
   useEffect(() => {
     // Reset values on mount
     setRawInputAmount("");
     setOutputAmount("");
     setPayoutAddress("");
-    setRefundAddress("");
   }, []);
 
   // Validate payout address whenever it changes (Bitcoin or Ethereum based on swap direction)
@@ -221,28 +203,6 @@ export const SwapWidget = () => {
       setAddressValidation({ isValid: false });
     }
   }, [payoutAddress, btcAsset.currency.chain, isReversed]);
-
-  // Validate refund address whenever it changes (opposite of payout address validation)
-  useEffect(() => {
-    if (refundAddress) {
-      if (!isReversed) {
-        // For cbBTC -> BTC swaps, validate Ethereum address for refund (cbBTC)
-        const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-        setRefundAddressValidation({
-          isValid: ethAddressRegex.test(refundAddress),
-        });
-      } else {
-        // For BTC -> cbBTC swaps, validate Bitcoin address for refund (BTC)
-        const validation = validateBitcoinPayoutAddressWithNetwork(
-          refundAddress,
-          "mainnet"
-        );
-        setRefundAddressValidation(validation);
-      }
-    } else {
-      setRefundAddressValidation({ isValid: false });
-    }
-  }, [refundAddress, btcAsset.currency.chain, isReversed]);
 
   // Exchange rate: 1 cbBTC = 0.999 BTC (0.1% fee)
   const EXCHANGE_RATE = 1; // TODO: make this based on real RFQ quote rate
@@ -271,14 +231,13 @@ export const SwapWidget = () => {
 
   const sendOTCRequest = async (
     quote: Quote,
-    user_destination_address: string,
-    user_refund_address: string
+    user_destination_address: string
   ) => {
     const currentTime = new Date().getTime();
     const swap = await otcClient.createSwap({
       quote,
       user_destination_address,
-      user_refund_address,
+      user_refund_address: "", // No longer using refund addresses
     });
     const timeTaken = new Date().getTime() - currentTime;
 
@@ -409,30 +368,6 @@ export const SwapWidget = () => {
         return;
       }
 
-      // Check refund address for BTC->cbBTC swaps only
-      if (isReversed) {
-        if (!refundAddress) {
-          toastInfo({
-            title: "Enter Refund Address",
-            description:
-              "Please enter your Bitcoin refund address in case the swap fails",
-          });
-          return;
-        }
-
-        if (!refundAddressValidation.isValid) {
-          let description = "Please enter a valid Bitcoin refund address";
-          if (refundAddressValidation.networkMismatch) {
-            description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
-          }
-          toastInfo({
-            title: "Invalid Refund Address",
-            description,
-          });
-          return;
-        }
-      }
-
       if (
         !isReversed &&
         currentInputAsset.style.symbol.toLowerCase() !== "cbbtc"
@@ -453,7 +388,7 @@ export const SwapWidget = () => {
       console.log("inputAmountInSatoshis", inputAmountInSatoshis);
       if (quote && inputAmountInSatoshis) {
         console.log("sending swap request");
-        await sendOTCRequest(quote, payoutAddress, refundAddress);
+        await sendOTCRequest(quote, payoutAddress);
       }
     } catch (error) {
       console.error("handleSwap error caught:", error);
@@ -471,8 +406,7 @@ export const SwapWidget = () => {
     parseFloat(rawInputAmount) > 0 &&
     parseFloat(outputAmount) > 0 &&
     payoutAddress &&
-    addressValidation.isValid &&
-    (!isReversed || (refundAddress && refundAddressValidation.isValid));
+    addressValidation.isValid;
 
   // Handle keyboard events
   const handleKeyDown = useCallback(
@@ -766,175 +700,7 @@ export const SwapWidget = () => {
             </Flex>
           </Flex>
 
-          {/* Refund Address - Animated (appears first) - Only show for BTC->cbBTC swaps */}
-          <AnimatePresence>
-            {showRefundSection && (
-              <motion.div
-                initial={{ opacity: 0, y: -30, maxHeight: 0 }}
-                animate={{ opacity: 1, y: 0, maxHeight: 200 }}
-                exit={{ opacity: 0, y: -30, maxHeight: 0 }}
-                transition={{
-                  duration: 0.6,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                  delay: 0.1,
-                }}
-                style={{
-                  overflow: "hidden",
-                  marginBottom: "-10px",
-                  width: "100%",
-                }}
-              >
-                <Flex direction="column" w="100%">
-                  {/* Refund Address */}
-                  <Flex
-                    ml="8px"
-                    alignItems="center"
-                    mt="18px"
-                    w="100%"
-                    mb="10px"
-                  >
-                    <Text
-                      fontSize="15px"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.offWhite}
-                    >
-                      {isReversed
-                        ? "Bitcoin Refund Address"
-                        : "cbBTC Refund Address"}
-                    </Text>
-                    <ChakraTooltip.Root>
-                      <ChakraTooltip.Trigger asChild>
-                        <Flex
-                          pl="5px"
-                          mt="-2px"
-                          cursor="pointer"
-                          userSelect="none"
-                        >
-                          <Flex mt="0px" mr="2px">
-                            <InfoSVG width="12px" />
-                          </Flex>
-                        </Flex>
-                      </ChakraTooltip.Trigger>
-                      <Portal>
-                        <ChakraTooltip.Positioner>
-                          <ChakraTooltip.Content
-                            fontFamily="Aux"
-                            letterSpacing="-0.5px"
-                            color={colors.offWhite}
-                            bg="#121212"
-                            fontSize="12px"
-                          >
-                            Paste an refund address in the case that a market
-                            maker is unable to fill your order
-                          </ChakraTooltip.Content>
-                        </ChakraTooltip.Positioner>
-                      </Portal>
-                    </ChakraTooltip.Root>
-                  </Flex>
-                  <Flex
-                    mt="-4px"
-                    mb="10px"
-                    px="10px"
-                    bg={
-                      currentInputAsset?.style?.dark_bg_color ||
-                      "rgba(37, 82, 131, 0.66)"
-                    }
-                    border={`2px solid ${currentInputAsset?.style?.bg_color || "#255283"}`}
-                    w="100%"
-                    h="60px"
-                    borderRadius="16px"
-                  >
-                    <Flex direction="row" py="6px" px="8px">
-                      <Input
-                        value={refundAddress}
-                        onChange={(e) => setRefundAddress(e.target.value)}
-                        fontFamily="Aux"
-                        border="none"
-                        bg="transparent"
-                        outline="none"
-                        mt="3.5px"
-                        mr="15px"
-                        ml="-4px"
-                        p="0px"
-                        w="485px"
-                        letterSpacing="-5px"
-                        color={colors.offWhite}
-                        _active={{
-                          border: "none",
-                          boxShadow: "none",
-                          outline: "none",
-                        }}
-                        _focus={{
-                          border: "none",
-                          boxShadow: "none",
-                          outline: "none",
-                        }}
-                        _selected={{
-                          border: "none",
-                          boxShadow: "none",
-                          outline: "none",
-                        }}
-                        fontSize="28px"
-                        placeholder={
-                          isReversed
-                            ? "bc1q5d7rjq7g6rd2d..."
-                            : "0x742d35cc6bf4532..."
-                        }
-                        _placeholder={{
-                          color:
-                            currentInputAsset?.style?.light_text_color ||
-                            "#4A90E2",
-                        }}
-                        spellCheck={false}
-                      />
-
-                      {refundAddress.length > 0 && (
-                        <Flex ml="0px">
-                          {isReversed ? (
-                            <BitcoinAddressValidation
-                              address={refundAddress}
-                              validation={refundAddressValidation}
-                            />
-                          ) : (
-                            // Ethereum address validation indicator - white checkmark only
-                            <Flex
-                              w="24px"
-                              h="24px"
-                              align="center"
-                              justify="center"
-                              alignSelf="center"
-                            >
-                              {refundAddressValidation.isValid ? (
-                                <svg
-                                  width="18"
-                                  height="18"
-                                  viewBox="0 0 24 24"
-                                  fill="white"
-                                >
-                                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                                </svg>
-                              ) : (
-                                <svg
-                                  width="18"
-                                  height="18"
-                                  viewBox="0 0 24 24"
-                                  fill="#f44336"
-                                >
-                                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                                </svg>
-                              )}
-                            </Flex>
-                          )}
-                        </Flex>
-                      )}
-                    </Flex>
-                  </Flex>
-                </Flex>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Recipient Address - Animated (appears second) */}
+          {/* Recipient Address - Animated */}
           <Flex
             direction="column"
             w="100%"
@@ -943,10 +709,8 @@ export const SwapWidget = () => {
             transform={
               hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"
             }
-            transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-            transitionDelay={
-              hasStartedTyping ? (isReversed ? "0.35s" : "0.2s") : "0s"
-            }
+            transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+            transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
             pointerEvents={hasStartedTyping ? "auto" : "none"}
             overflow="hidden"
             maxHeight={hasStartedTyping ? "200px" : "0px"}
