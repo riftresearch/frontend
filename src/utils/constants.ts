@@ -40,10 +40,11 @@ export const opaqueBackgroundColor = {
 
 export const GLOBAL_CONFIG: Config = {
   etherscanUrl: "https://etherscan.io",
-  mainnetRpcUrl: "https://eth0.riftnodes.com", // TODO: Replace with actual RPC
+  mainnetRpcUrl: "https://eth0.riftnodes.com",
   esploraUrl: "https://blockstream.info/api",
-  rfqServerUrl: "https://hypernode-eth0.tail0a0b83.ts.net/rfq-server",
-  otcServerUrl: "https://hypernode-eth0.tail0a0b83.ts.net/otc-server",
+  rfqServerUrl: "https://rfq-server-production.up.railway.app",
+  otcServerUrl:
+    "https://1b33795a2f06f8b0fe5a148cc69eb33cb2a3e7c0-4422.dstack-pha-prod7.phala.network",
   underlyingSwappingAssets: [
     {
       currency: {

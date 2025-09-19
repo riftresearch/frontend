@@ -278,6 +278,37 @@ export function convertLockingScriptToBitcoinAddress(
   }
 }
 
+/**
+ * Generates a Bitcoin URI for payment requests
+ * @param address - The Bitcoin address to send to
+ * @param amount - The amount in BTC (as a decimal number)
+ * @param label - Optional label for the payment
+ * @returns Bitcoin URI string
+ */
+export function generateBitcoinURI(
+  address: string,
+  amount: number,
+  label?: string
+): string {
+  let uri = `bitcoin:${address}`;
+  const params = new URLSearchParams();
+
+  if (amount > 0) {
+    params.append("amount", amount.toFixed(8)); // Bitcoin uses 8 decimal places
+  }
+
+  if (label) {
+    params.append("label", encodeURIComponent(label));
+  }
+
+  const paramString = params.toString();
+  if (paramString) {
+    uri += `?${paramString}`;
+  }
+
+  return uri;
+}
+
 export function convertToBitcoinLockingScript(address: string): string {
   try {
     let script: Buffer | undefined;

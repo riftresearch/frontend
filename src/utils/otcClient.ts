@@ -3,6 +3,7 @@
  * Provides typed access to swap creation and management endpoints
  */
 
+import { randomBytes } from "crypto";
 import { Quote } from "./rfqClient";
 
 // Types matching the Rust server structures
@@ -10,7 +11,7 @@ import { Quote } from "./rfqClient";
 export interface CreateSwapRequest {
   quote: Quote;
   user_destination_address: string;
-  user_refund_address: string;
+  user_evm_account_address: string;
 }
 
 export interface CreateSwapResponse {
@@ -53,6 +54,18 @@ export interface OTCServerClientConfig {
   baseUrl: string;
   timeout?: number;
   headers?: Record<string, string>;
+}
+
+export interface TDXQuoteResponse {
+  // The attestation quote in hexadecimal format
+  quote: string;
+  // The event log associated with the quote
+  event_log: string;
+}
+
+export interface FullyQualifiedTDXQuote {
+  challenge_hex: string;
+  tdx_response: TDXQuoteResponse;
 }
 
 export class OTCServerError extends Error {
@@ -160,6 +173,16 @@ export class OTCServerClient {
    */
   async getSwap(swapId: string): Promise<SwapResponse> {
     return this.fetchWithTimeout<SwapResponse>(`/api/v1/swaps/${swapId}`);
+  }
+
+  async getTDXQoute(): Promise<FullyQualifiedTDXQuote> {
+    const challengeHex = randomBytes(32).toString("hex");
+    return {
+      challenge_hex: challengeHex,
+      tdx_response: await this.fetchWithTimeout<TDXQuoteResponse>(
+        `/api/v1/tdx/quote?challenge_hex=${challengeHex}`
+      ),
+    };
   }
 
   /**

@@ -25,30 +25,40 @@ import {
   rfqClient,
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
+import { BitcoinQRCode } from "@/components/other/BitcoinQRCode";
 import { InfoSVG } from "../other/SVGs";
 import {
   convertToBitcoinLockingScript,
   validateBitcoinPayoutAddress,
   validateBitcoinPayoutAddressWithNetwork,
+  generateBitcoinURI,
 } from "@/utils/bitcoinUtils";
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
-import { toastInfo, toastWarning, toastSuccess, toastError } from "@/utils/toast";
+import {
+  toastInfo,
+  toastWarning,
+  toastSuccess,
+  toastError,
+} from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { Asset } from "@/utils/types";
 import { TokenStyle } from "@/utils/types";
 import { Hex } from "bitcoinjs-lib/src/types";
 import { reownModal, wagmiAdapter } from "@/utils/wallet";
 import { Address, erc20Abi, parseUnits } from "viem";
-import { Quote, formatLotAmount } from "@/utils/rfqClient";
+import { Quote, formatLotAmount, RfqClientError } from "@/utils/rfqClient";
 import { CreateSwapResponse } from "@/utils/otcClient";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
+import { useTDXAttestation } from "@/hooks/useTDXAttestation";
 const BTC_USD_EXCHANGE_RATE = 115611.06;
 
 export const SwapWidget = () => {
+  const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
   const { isMobile } = useWindowSize();
-  const { isConnected: isWalletConnected } = useAccount();
+  const { isConnected: isWalletConnected, address: userEvmAccountAddress } =
+    useAccount();
   const router = useRouter();
   const [rawInputAmount, setRawInputAmount] = useState("");
   const [inputTokenAmount, setInputTokenAmount] = useState<bigint>(0n);
@@ -60,18 +70,17 @@ export const SwapWidget = () => {
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }>({ isValid: false });
-  const [refundAddress, setRefundAddress] = useState("");
-  const [refundAddressValidation, setRefundAddressValidation] = useState<{
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }>({ isValid: false });
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">(
     "input"
   );
   const [isReversed, setIsReversed] = useState(false);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [showRefundSection, setShowRefundSection] = useState(false);
+  const [bitcoinDepositInfo, setBitcoinDepositInfo] = useState<{
+    address: string;
+    amount: number;
+    uri: string;
+  } | null>(null);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const { swapResponse, setSwapResponse, setTransactionConfirmed } = useStore();
@@ -159,8 +168,7 @@ export const SwapWidget = () => {
     // Keep input/output amounts when reversing
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
-    setRefundAddress("");
-    setRefundAddressValidation({ isValid: false });
+    setBitcoinDepositInfo(null); // Clear Bitcoin deposit info when switching directions
     // Don't reset hasStartedTyping if we have amounts, so sections stay visible
     if (!rawInputAmount && !outputAmount) {
       setHasStartedTyping(false);
@@ -197,7 +205,7 @@ export const SwapWidget = () => {
     setRawInputAmount("");
     setOutputAmount("");
     setPayoutAddress("");
-    setRefundAddress("");
+    setBitcoinDepositInfo(null);
   }, []);
 
   // Validate payout address whenever it changes (Bitcoin or Ethereum based on swap direction)
@@ -222,65 +230,88 @@ export const SwapWidget = () => {
     }
   }, [payoutAddress, btcAsset.currency.chain, isReversed]);
 
-  // Validate refund address whenever it changes (opposite of payout address validation)
-  useEffect(() => {
-    if (refundAddress) {
-      if (!isReversed) {
-        // For cbBTC -> BTC swaps, validate Ethereum address for refund (cbBTC)
-        const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
-        setRefundAddressValidation({
-          isValid: ethAddressRegex.test(refundAddress),
-        });
-      } else {
-        // For BTC -> cbBTC swaps, validate Bitcoin address for refund (BTC)
-        const validation = validateBitcoinPayoutAddressWithNetwork(
-          refundAddress,
-          "mainnet"
-        );
-        setRefundAddressValidation(validation);
-      }
-    } else {
-      setRefundAddressValidation({ isValid: false });
-    }
-  }, [refundAddress, btcAsset.currency.chain, isReversed]);
-
-
   const sendRFQRequest = async (from_amount: bigint) => {
     try {
       const currentTime = new Date().getTime();
       console.log("currentInputAsset", currentInputAsset);
-      const quoteResponse = await rfqClient.requestQuotes({
-        mode: "ExactInput",
-        amount: from_amount.toString(),
-        from: {
-          chain: currentInputAsset.currency.chain,
-          token: currentInputAsset.currency.token,
-          decimals: currentInputAsset.currency.decimals,
-        },
-        to: {
-          chain: currentOutputAsset.currency.chain,
-          token: currentOutputAsset.currency.token,
-          decimals: currentOutputAsset.currency.decimals,
-        },
-      });
+      let quoteResponse: any;
+      try {
+        quoteResponse = await rfqClient.requestQuotes({
+          mode: "ExactInput",
+          amount: from_amount.toString(),
+          from: {
+            chain: currentInputAsset.currency.chain,
+            token: currentInputAsset.currency.token,
+            decimals: currentInputAsset.currency.decimals,
+          },
+          to: {
+            chain: currentOutputAsset.currency.chain,
+            token: currentOutputAsset.currency.token,
+            decimals: currentOutputAsset.currency.decimals,
+          },
+        });
+      } catch (error) {
+        console.error("RFQ request failed:", error);
+        toastInfo({
+          title: "Quote Request Failed",
+        });
+        return;
+      }
       const timeTaken = new Date().getTime() - currentTime;
 
+      const quoteType = (quoteResponse as any)?.quote?.type;
+
+      if (quoteType !== "success") {
+        if (from_amount < 2500n) {
+          // this is probably just too small so no one quoted
+          toastInfo({
+            title: "Amount too little",
+            description: "The amount is too little to be quoted",
+          });
+          return;
+        } else {
+          toastInfo({
+            title: "Insufficient liquidity",
+            description:
+              "No market makers have sufficient liquidity to quote this swap",
+          });
+          return;
+        }
+      }
+
+      // if we're here, we have a success quote
+      const quote = (quoteResponse as any).quote.data.quote;
+      const feeSchedule = (quoteResponse as any).quote.data.fees;
+
       console.log("got quote from RFQ", quoteResponse, "in", timeTaken, "ms");
-      setQuote(quoteResponse.quote);
-      
+      setQuote(quote);
+
       // Populate output field with the quote's output amount
-      const formattedOutputAmount = formatLotAmount(quoteResponse.quote.to);
+      const formattedOutputAmount = formatLotAmount(quote.to);
       setOutputAmount(formattedOutputAmount);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("RFQ request failed:", error);
-      
-      // Show error toast with the error message
+
+      // Normalize error message
+      const description = (() => {
+        if (error instanceof RfqClientError) {
+          return error.response?.error ?? error.message;
+        }
+        if (typeof error === "object" && error !== null) {
+          const maybeMsg = (error as { message?: unknown }).message;
+          if (typeof maybeMsg === "string" && maybeMsg.length > 0) {
+            return maybeMsg;
+          }
+        }
+        return "Service temporarily unavailable";
+      })();
+
       toastError(error, {
         title: "Quote Request Failed",
-        description: error?.response?.data?.error || error?.message || "No quotes available"
+        description,
       });
-      
-      // Clear the output amount on error
+
+      // Reset quote/output gracefully; do not rethrow
       setOutputAmount("");
       setQuote(null);
     }
@@ -289,13 +320,13 @@ export const SwapWidget = () => {
   const sendOTCRequest = async (
     quote: Quote,
     user_destination_address: string,
-    user_refund_address: string
+    user_evm_account_address: string
   ) => {
     const currentTime = new Date().getTime();
     const swap = await otcClient.createSwap({
       quote,
       user_destination_address,
-      user_refund_address,
+      user_evm_account_address,
     });
     const timeTaken = new Date().getTime() - currentTime;
 
@@ -308,16 +339,44 @@ export const SwapWidget = () => {
     const amount = BigInt(swap.expected_amount);
     console.log("amount", amount);
     // okay, now we need to request money to be sent from the user to the created swap
-    try {
-      writeContract({
-        address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [swap.deposit_address as `0x${string}`, amount],
+    if (swap.deposit_chain === "Ethereum") {
+      try {
+        writeContract({
+          address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [swap.deposit_address as `0x${string}`, amount],
+        });
+      } catch (error) {
+        console.error("writeContract error caught:", error);
+        // Error will be handled by the writeError useEffect
+      }
+    } else if (swap.deposit_chain === "Bitcoin") {
+      // Generate Bitcoin URI and show QR code
+      const amountInBTC = Number(amount) / Math.pow(10, swap.decimals);
+      const bitcoinUri = generateBitcoinURI(
+        swap.deposit_address,
+        amountInBTC,
+        "Rift Exchange Swap"
+      );
+
+      setBitcoinDepositInfo({
+        address: swap.deposit_address,
+        amount: amountInBTC,
+        uri: bitcoinUri,
       });
-    } catch (error) {
-      console.error("writeContract error caught:", error);
-      // Error will be handled by the writeError useEffect
+
+      // Show success toast for Bitcoin deposit setup
+      toastSuccess({
+        title: "Bitcoin Deposit Ready",
+        description: "Scan the QR code or send Bitcoin to the address below",
+      });
+    } else {
+      toastInfo({
+        title: "Invalid deposit chain",
+        description: "Frontend does not not support this deposit chain",
+      });
+      return;
     }
   };
 
@@ -343,6 +402,16 @@ export const SwapWidget = () => {
     }
   };
 
+  useEffect(() => {
+    console.log("teeAttestationLoading", teeAttestationLoading);
+    console.log("isValidTEE", isValidTEE);
+    if (!teeAttestationLoading && !isValidTEE) {
+      toastInfo({
+        title: "TEE Attestation Failed",
+      });
+    }
+  }, [isValidTEE, teeAttestationLoading]);
+
   const handleOutputChange = (e: ChangeEvent<HTMLInputElement>) => {
     return; // TODO: remove this
     const value = e.target.value;
@@ -353,12 +422,14 @@ export const SwapWidget = () => {
       setLastEditedField("output");
       setHasStartedTyping(true);
 
+      /*
       // Calculate input amount based on output (reverse calculation)
       if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
         setRawInputAmount((parseFloat(value) / EXCHANGE_RATE).toFixed(8));
       } else {
         setRawInputAmount("");
       }
+        */
     }
   };
 
@@ -422,30 +493,6 @@ export const SwapWidget = () => {
         return;
       }
 
-      // Check refund address for BTC->cbBTC swaps only
-      if (isReversed) {
-        if (!refundAddress) {
-          toastInfo({
-            title: "Enter Refund Address",
-            description:
-              "Please enter your Bitcoin refund address in case the swap fails",
-          });
-          return;
-        }
-
-        if (!refundAddressValidation.isValid) {
-          let description = "Please enter a valid Bitcoin refund address";
-          if (refundAddressValidation.networkMismatch) {
-            description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${refundAddressValidation.detectedNetwork}`;
-          }
-          toastInfo({
-            title: "Invalid Refund Address",
-            description,
-          });
-          return;
-        }
-      }
-
       if (
         !isReversed &&
         currentInputAsset.style.symbol.toLowerCase() !== "cbbtc"
@@ -466,7 +513,7 @@ export const SwapWidget = () => {
       console.log("inputAmountInSatoshis", inputAmountInSatoshis);
       if (quote && inputAmountInSatoshis) {
         console.log("sending swap request");
-        await sendOTCRequest(quote, payoutAddress, refundAddress);
+        await sendOTCRequest(quote, payoutAddress, userEvmAccountAddress!);
       }
     } catch (error) {
       console.error("handleSwap error caught:", error);
@@ -484,8 +531,7 @@ export const SwapWidget = () => {
     parseFloat(rawInputAmount) > 0 &&
     parseFloat(outputAmount) > 0 &&
     payoutAddress &&
-    addressValidation.isValid &&
-    (!isReversed || (refundAddress && refundAddressValidation.isValid));
+    addressValidation.isValid;
 
   // Handle keyboard events
   const handleKeyDown = useCallback(
@@ -779,174 +825,6 @@ export const SwapWidget = () => {
             </Flex>
           </Flex>
 
-          {/* Refund Address - Animated (appears first) - Only show for BTC->cbBTC swaps */}
-          <AnimatePresence>
-            {showRefundSection && (
-              <motion.div
-                initial={{ opacity: 0, y: -30, maxHeight: 0 }}
-                animate={{ opacity: 1, y: 0, maxHeight: 200 }}
-                exit={{ opacity: 0, y: -30, maxHeight: 0 }}
-                transition={{
-                  duration: 0.6,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                  delay: 0.1,
-                }}
-                style={{
-                  overflow: "hidden",
-                  marginBottom: "-10px",
-                  width: "100%",
-                }}
-              >
-                <Flex direction="column" w="100%">
-                  {/* Refund Address */}
-                  <Flex
-                    ml="8px"
-                    alignItems="center"
-                    mt="18px"
-                    w="100%"
-                    mb="10px"
-                  >
-                    <Text
-                      fontSize="15px"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.offWhite}
-                    >
-                      {isReversed
-                        ? "Bitcoin Refund Address"
-                        : "cbBTC Refund Address"}
-                    </Text>
-                    <ChakraTooltip.Root>
-                      <ChakraTooltip.Trigger asChild>
-                        <Flex
-                          pl="5px"
-                          mt="-2px"
-                          cursor="pointer"
-                          userSelect="none"
-                        >
-                          <Flex mt="0px" mr="2px">
-                            <InfoSVG width="12px" />
-                          </Flex>
-                        </Flex>
-                      </ChakraTooltip.Trigger>
-                      <Portal>
-                        <ChakraTooltip.Positioner>
-                          <ChakraTooltip.Content
-                            fontFamily="Aux"
-                            letterSpacing="-0.5px"
-                            color={colors.offWhite}
-                            bg="#121212"
-                            fontSize="12px"
-                          >
-                            Paste an refund address in the case that a market
-                            maker is unable to fill your order
-                          </ChakraTooltip.Content>
-                        </ChakraTooltip.Positioner>
-                      </Portal>
-                    </ChakraTooltip.Root>
-                  </Flex>
-                  <Flex
-                    mt="-4px"
-                    mb="10px"
-                    px="10px"
-                    bg={
-                      currentInputAsset?.style?.dark_bg_color ||
-                      "rgba(37, 82, 131, 0.66)"
-                    }
-                    border={`2px solid ${currentInputAsset?.style?.bg_color || "#255283"}`}
-                    w="100%"
-                    h="60px"
-                    borderRadius="16px"
-                  >
-                    <Flex direction="row" py="6px" px="8px">
-                      <Input
-                        value={refundAddress}
-                        onChange={(e) => setRefundAddress(e.target.value)}
-                        fontFamily="Aux"
-                        border="none"
-                        bg="transparent"
-                        outline="none"
-                        mt="3.5px"
-                        mr="15px"
-                        ml="-4px"
-                        p="0px"
-                        w="485px"
-                        letterSpacing="-5px"
-                        color={colors.offWhite}
-                        _active={{
-                          border: "none",
-                          boxShadow: "none",
-                          outline: "none",
-                        }}
-                        _focus={{
-                          border: "none",
-                          boxShadow: "none",
-                          outline: "none",
-                        }}
-                        _selected={{
-                          border: "none",
-                          boxShadow: "none",
-                          outline: "none",
-                        }}
-                        fontSize="28px"
-                        placeholder={
-                          isReversed
-                            ? "bc1q5d7rjq7g6rd2d..."
-                            : "0x742d35cc6bf4532..."
-                        }
-                        _placeholder={{
-                          color:
-                            currentInputAsset?.style?.light_text_color ||
-                            "#4A90E2",
-                        }}
-                        spellCheck={false}
-                      />
-
-                      {refundAddress.length > 0 && (
-                        <Flex ml="0px">
-                          {isReversed ? (
-                            <BitcoinAddressValidation
-                              address={refundAddress}
-                              validation={refundAddressValidation}
-                            />
-                          ) : (
-                            // Ethereum address validation indicator - white checkmark only
-                            <Flex
-                              w="24px"
-                              h="24px"
-                              align="center"
-                              justify="center"
-                              alignSelf="center"
-                            >
-                              {refundAddressValidation.isValid ? (
-                                <svg
-                                  width="18"
-                                  height="18"
-                                  viewBox="0 0 24 24"
-                                  fill="white"
-                                >
-                                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                                </svg>
-                              ) : (
-                                <svg
-                                  width="18"
-                                  height="18"
-                                  viewBox="0 0 24 24"
-                                  fill="#f44336"
-                                >
-                                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                                </svg>
-                              )}
-                            </Flex>
-                          )}
-                        </Flex>
-                      )}
-                    </Flex>
-                  </Flex>
-                </Flex>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Recipient Address - Animated (appears second) */}
           <Flex
             direction="column"
@@ -1130,6 +1008,58 @@ export const SwapWidget = () => {
                 : "Swap"}
           </Text>
         </Flex>
+
+        {/* Bitcoin QR Code Display - Animated (appears after swap initiation) */}
+        {bitcoinDepositInfo && (
+          <Flex
+            direction="column"
+            w="100%"
+            mt="20px"
+            p="20px"
+            bg="rgba(46, 29, 14, 0.66)"
+            border="2px solid #78491F"
+            borderRadius="16px"
+            opacity={bitcoinDepositInfo ? 1 : 0}
+            transform={
+              bitcoinDepositInfo ? "translateY(0px)" : "translateY(-20px)"
+            }
+            transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+          >
+            <Text
+              fontSize="18px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              color={colors.offWhite}
+              mb="15px"
+              textAlign="center"
+            >
+              Send Bitcoin to Complete Swap
+            </Text>
+            <Text
+              fontSize="14px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              color={colors.textGray}
+              mb="20px"
+              textAlign="center"
+            >
+              Scan the QR code or copy the address and amount below
+            </Text>
+            <BitcoinQRCode
+              bitcoinUri={bitcoinDepositInfo.uri}
+              address={bitcoinDepositInfo.address}
+              amount={bitcoinDepositInfo.amount}
+            />
+            <Text
+              fontWeight="normal"
+              fontSize="13px"
+              mt="20px"
+              color={colors.textGray}
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              textAlign="center"
+            >
+              WARNING: Send the exact amount shown above to complete the swap.
+            </Text>
+          </Flex>
+        )}
       </Flex>
     </Flex>
   );
