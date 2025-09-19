@@ -191,15 +191,6 @@ export const SwapWidget = () => {
   const actualBorderColor = "#323232";
   const borderColor = `2px solid ${actualBorderColor}`;
 
-  // Handle refund section visibility with smooth animation
-  useEffect(() => {
-    if (isReversed && hasStartedTyping) {
-      setShowRefundSection(true);
-    } else {
-      setShowRefundSection(false);
-    }
-  }, [isReversed, hasStartedTyping]);
-
   useEffect(() => {
     // Reset values on mount
     setRawInputAmount("");
@@ -834,10 +825,8 @@ export const SwapWidget = () => {
             transform={
               hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"
             }
-            transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-            transitionDelay={
-              hasStartedTyping ? (isReversed ? "0.35s" : "0.2s") : "0s"
-            }
+            transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+            transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
             pointerEvents={hasStartedTyping ? "auto" : "none"}
             overflow="hidden"
             maxHeight={hasStartedTyping ? "200px" : "0px"}

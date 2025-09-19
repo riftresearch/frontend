@@ -15,8 +15,18 @@ export default function Home() {
   const { isTablet, isMobile } = useWindowSize();
   const { swapResponse, transactionConfirmed } = useStore();
   const router = useRouter();
+  const [isLocalhost, setIsLocalhost] = React.useState(false);
 
   useSyncChainIdToStore();
+
+  // Check if we're on localhost
+  React.useEffect(() => {
+    setIsLocalhost(
+      typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1")
+    );
+  }, []);
 
   // Redirect to swap page when swap response is available AND transaction is confirmed
   React.useEffect(() => {
@@ -25,6 +35,41 @@ export default function Home() {
     }
   }, [swapResponse?.swap_id, transactionConfirmed, router]);
 
+  // Coming soon page for non-localhost
+  if (!isLocalhost) {
+    return (
+      <>
+        <OpenGraph />
+        <Flex
+          h="100vh"
+          width="100%"
+          justify="center"
+          align="center"
+          direction="column"
+          backgroundImage="url('/images/rift_background_low.webp')"
+          backgroundSize="cover"
+          backgroundPosition="center"
+        >
+          <RiftLogo
+            width={isTablet ? "70" : "390"}
+            height={isTablet ? "30" : "70"}
+          />
+          <Text
+            mt="40px"
+            fontSize={isTablet ? "24px" : "22px"}
+            fontFamily={FONT_FAMILIES.NOSTROMO}
+            color="#fff"
+            fontWeight="bold"
+            textAlign="center"
+          >
+            LIVE SWAPPING COMING SOON
+          </Text>
+        </Flex>
+      </>
+    );
+  }
+
+  // Full application for localhost
   return (
     <>
       <OpenGraph />
