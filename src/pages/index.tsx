@@ -109,11 +109,11 @@ export default function Home() {
             gap={"0px"}
           >
             <Text mt="15px" mb="25px">
-              The first trustless <OrangeText>Bitcoin</OrangeText> bridge. See{" "}
+              The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
               <Box
                 as="span"
-                // go to https://rift.exchange
-                onClick={() => (window.location.href = "https://rift.exchange")}
+                // TODO: go to tech architecture thread
+                onClick={() => (window.location.href = "https://rift.trade")}
                 style={{
                   textDecoration: "underline",
                   cursor: "pointer !important",

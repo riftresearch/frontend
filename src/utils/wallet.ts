@@ -71,10 +71,10 @@ export const queryClient = new QueryClient();
 
 // Set up metadata for your app
 const metadata = {
-  name: "Rift Exchange",
-  description: "Rift Hyperbridge - Exchange",
-  url: "https://exchange.rift.exchange",
-  icons: ["https://exchange.rift.exchange/icon.png"],
+  name: "Rift",
+  description: "Rift",
+  url: "https://app.rift.trade",
+  icons: ["https://app.rift.trade/icon.png"],
 };
 
 // Create the modal

@@ -9,7 +9,6 @@ import {
   Spinner,
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/router";
 import {
   useAccount,
@@ -26,6 +25,7 @@ import {
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { BitcoinQRCode } from "@/components/other/BitcoinQRCode";
+import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
 import { InfoSVG } from "../other/SVGs";
 import {
   convertToBitcoinLockingScript,
@@ -73,8 +73,9 @@ export const SwapWidget = () => {
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">(
     "input"
   );
-  const [isReversed, setIsReversed] = useState(false);
+  const [isSwappingForBTC, setIsSwappingForBTC] = useState(true);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
+  const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
   const [showRefundSection, setShowRefundSection] = useState(false);
   const [bitcoinDepositInfo, setBitcoinDepositInfo] = useState<{
     address: string;
@@ -150,21 +151,32 @@ export const SwapWidget = () => {
   const cbBTCAsset = GLOBAL_CONFIG.underlyingSwappingAssets[1];
   const btcAsset = GLOBAL_CONFIG.underlyingSwappingAssets[0];
 
-  const currentInputAsset = isReversed ? btcAsset : cbBTCAsset;
-  const currentOutputAsset = isReversed ? cbBTCAsset : btcAsset;
+  const currentInputAsset = isSwappingForBTC ? cbBTCAsset : btcAsset;
+  const currentOutputAsset = isSwappingForBTC ? btcAsset : cbBTCAsset;
 
   // For WebAssetTag, we need to pass the right string identifiers
-  const inputAssetIdentifier = isReversed ? "BTC" : "CoinbaseBTC";
-  const outputAssetIdentifier = isReversed ? "CoinbaseBTC" : "BTC";
+  const inputAssetIdentifier = isSwappingForBTC ? "CoinbaseBTC" : "BTC";
+  const outputAssetIdentifier = isSwappingForBTC ? "BTC" : "CoinbaseBTC";
+
+  const openAssetSelector = () => {
+    setIsAssetSelectorOpen(true);
+  };
+
+  const closeAssetSelector = () => {
+    setIsAssetSelectorOpen(false);
+  };
+
+  const handleAssetSelect = (selectedAsset: string) => {
+    // For now, we'll just show a toast since we only support cbBTC -> BTC swaps
+    toastInfo({
+      title: "Token Selection",
+      description: `${selectedAsset} selection coming soon! Currently only cbBTC is supported.`,
+    });
+  };
 
   const handleSwapReverse = () => {
-    // toastInfo({
-    //   title: "Coming Soon",
-    //   description: "BTC → ERC20 swaps are coming soon!",
-    // });
-    // return;
 
-    setIsReversed(!isReversed);
+    setIsSwappingForBTC(!isSwappingForBTC);
     // Keep input/output amounts when reversing
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
@@ -202,7 +214,7 @@ export const SwapWidget = () => {
   // Validate payout address whenever it changes (Bitcoin or Ethereum based on swap direction)
   useEffect(() => {
     if (payoutAddress) {
-      if (isReversed) {
+      if (!isSwappingForBTC) {
         // For BTC -> cbBTC swaps, validate Ethereum address for payout
         const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
         setAddressValidation({
@@ -219,7 +231,7 @@ export const SwapWidget = () => {
     } else {
       setAddressValidation({ isValid: false });
     }
-  }, [payoutAddress, btcAsset.currency.chain, isReversed]);
+  }, [payoutAddress, btcAsset.currency.chain, isSwappingForBTC]);
 
   const sendRFQRequest = async (from_amount: bigint) => {
     try {
@@ -458,39 +470,28 @@ export const SwapWidget = () => {
       // Check payout address
       if (!payoutAddress) {
         toastInfo({
-          title: isReversed
-            ? "Enter Ethereum Address"
-            : "Enter Bitcoin Address",
-          description: isReversed
-            ? "Please enter your Ethereum address to receive cbBTC"
-            : "Please enter your Bitcoin address to receive BTC",
+          title: isSwappingForBTC
+            ? "Enter Bitcoin Address"
+            : "Enter Ethereum Address",
+          description: isSwappingForBTC
+            ? "Please enter your Bitcoin address to receive BTC"
+            : "Please enter your Ethereum address to receive cbBTC",
         });
         return;
       }
 
       if (!addressValidation.isValid) {
-        let description = isReversed
-          ? "Please enter a valid Ethereum address"
-          : "Please enter a valid Bitcoin payout address";
-        if (!isReversed && addressValidation.networkMismatch) {
+        let description = isSwappingForBTC
+          ? "Please enter a valid Bitcoin payout address"
+          : "Please enter a valid Ethereum address";
+        if (isSwappingForBTC && addressValidation.networkMismatch) {
           description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${addressValidation.detectedNetwork}`;
         }
         toastInfo({
-          title: isReversed
-            ? "Invalid Ethereum Address"
-            : "Invalid Bitcoin Address",
+          title: isSwappingForBTC
+            ? "Invalid Bitcoin Address"
+            : "Invalid Ethereum Address",
           description,
-        });
-        return;
-      }
-
-      if (
-        !isReversed &&
-        currentInputAsset.style.symbol.toLowerCase() !== "cbbtc"
-      ) {
-        toastInfo({
-          title: "Not supported",
-          description: "[TODO: Add support for other tokens]",
         });
         return;
       }
@@ -635,12 +636,7 @@ export const SwapWidget = () => {
               <WebAssetTag
                 cursor="pointer"
                 asset={inputAssetIdentifier}
-                // onDropDown={() => {
-                //   toastInfo({
-                //     title: "Token selection coming soon!",
-                //     description: "Currently defaulted to Coinbase BTC",
-                //   });
-                // }}
+                onDropDown={openAssetSelector}
               />
             </Flex>
           </Flex>
@@ -838,9 +834,9 @@ export const SwapWidget = () => {
                 fontFamily={FONT_FAMILIES.NOSTROMO}
                 color={colors.offWhite}
               >
-                {isReversed
-                  ? "cbBTC Recipient Address"
-                  : "Bitcoin Recipient Address"}
+                {isSwappingForBTC
+                  ? "Bitcoin Recipient Address"
+                  : "cbBTC Recipient Address"}
               </Text>
               <ChakraTooltip.Root>
                 <ChakraTooltip.Trigger asChild>
@@ -859,9 +855,9 @@ export const SwapWidget = () => {
                       bg="#121212"
                       fontSize="12px"
                     >
-                      {isReversed
-                        ? "Enter your Ethereum address to receive cbBTC tokens."
-                        : "Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported."}
+                      {isSwappingForBTC
+                        ? "Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported."
+                        : "Enter your Ethereum address to receive cbBTC tokens."}
                     </ChakraTooltip.Content>
                   </ChakraTooltip.Positioner>
                 </Portal>
@@ -912,7 +908,7 @@ export const SwapWidget = () => {
                   }}
                   fontSize="28px"
                   placeholder={
-                    isReversed ? "0x742d35cc6bf4532..." : "bc1q5d7rjq7g6rd2d..."
+                    isSwappingForBTC ? "bc1q5d7rjq7g6rd2d..." : "0x742d35cc6bf4532..."
                   }
                   _placeholder={{
                     color:
@@ -923,7 +919,7 @@ export const SwapWidget = () => {
 
                 {payoutAddress.length > 0 && (
                   <Flex ml="0px">
-                    {!isReversed ? (
+                    {isSwappingForBTC ? (
                       <BitcoinAddressValidation
                         address={payoutAddress}
                         validation={addressValidation}
@@ -1050,6 +1046,14 @@ export const SwapWidget = () => {
           </Flex>
         )}
       </Flex>
+
+      {/* Asset Selector Modal */}
+      <AssetSelectorModal
+        isOpen={isAssetSelectorOpen}
+        onClose={closeAssetSelector}
+        onSelectAsset={handleAssetSelect}
+        currentAsset={inputAssetIdentifier}
+      />
     </Flex>
   );
 };

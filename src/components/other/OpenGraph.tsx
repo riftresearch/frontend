@@ -18,18 +18,18 @@ export const OpenGraph: NextPage<Props> = ({ title, description = DESCRIPTION, o
     if (!description) description = DESCRIPTION;
     return (
         <Header>
-            {title ? <title>{title} • Rift HyperBridge</title> : <title>Rift HyperBridge</title>}
+            {title ? <title>{title} • Rift</title> : <title>Rift</title>}
             <meta name='description' content={description} />
             {owner ? <meta name='author' content={owner} /> : ''}
-            <meta name='keywords' content={`Rift, HyperBridge, Ethereum, Bitcoin, Swap, Decentralized Exchange, DEX, ${additionalKeywords?.map((k) => `, ${k}`)}`} />
+            <meta name='keywords' content={`Rift, Bridge, Ethereum, Bitcoin, Swap, Decentralized Exchange, DEX, ${additionalKeywords?.map((k) => `, ${k}`)}`} />
             <meta name='theme-color' content={colors.RiftOrange} />
             {embed ? (
                 <>
-                    <meta name='og:title' content={title || 'Rift HyperBridge'} />
+                    <meta name='og:title' content={title || 'Rift'} />
                     <meta name='og:type' content='website' />
                     {owner ? <meta name='music:creator' content={owner} /> : ''}
                     <meta name='og:description' content={description} />
-                    <meta name='og:site_name' content='Rift HyperBridge' />
+                    <meta name='og:site_name' content='Rift' />
                     <meta name='og:image' content={embed ? embed.image : DEFAULT_IMAGE} />
                 </>
             ) : (
