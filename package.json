@@ -33,6 +33,7 @@
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
     "react-tsparticles": "^2.12.2",
+    "recharts": "^3.2.1",
     "styled-components": "^6.1.18",
     "tevm": "1.0.0-next.147",
     "tsparticles-slim": "^2.12.0",

@@ -28,6 +28,13 @@ export default function Document() {
         />
         <link
           rel="preload"
+          href="/fonts/SF-Pro.ttf"
+          as="font"
+          type="font/otf"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
           href="/fonts/KleinHeadline-BoldOblique.ttf"
           as="font"
           type="font/ttf"

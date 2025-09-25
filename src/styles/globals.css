@@ -64,3 +64,18 @@ a {
     font-display: optional;
   }
 }
+
+/* Hide Reown AppKit elements on admin page */
+body[data-admin-page="true"] w3m-modal,
+body[data-admin-page="true"] w3m-network-button,
+body[data-admin-page="true"] w3m-account-button,
+body[data-admin-page="true"] w3m-connect-button,
+body[data-admin-page="true"] [data-testid="w3m-modal"],
+body[data-admin-page="true"] [data-testid="w3m-network-button"],
+body[data-admin-page="true"] [data-testid="w3m-account-button"],
+body[data-admin-page="true"] [data-testid="w3m-connect-button"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

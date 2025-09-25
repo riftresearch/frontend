@@ -18,7 +18,7 @@
 
 @font-face {
   font-family: "SFPro";
-  src: url("/fonts/SF-Pro-Display-Bold.otf") format("opentype");
+  src: url("/fonts/SF-Pro.ttf") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;

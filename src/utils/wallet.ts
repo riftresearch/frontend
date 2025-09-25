@@ -87,3 +87,14 @@ export const reownModal = createAppKit({
     analytics: true,
   },
 });
+
+// Override the modal open method to prevent it from opening on admin page
+const originalOpen = reownModal.open;
+reownModal.open = (options?: any) => {
+  // Check if we're on admin page
+  if (typeof window !== "undefined" && window.location.pathname === "/admin") {
+    console.warn("Reown modal blocked on admin page");
+    return Promise.resolve();
+  }
+  return originalOpen.call(reownModal, options);
+};
