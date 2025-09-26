@@ -39,7 +39,7 @@ export const GridFlex = forwardRef<HTMLDivElement, GridFlexProps>(
   ) => {
     const GRID_FLEX_COLORS = {
       background: "#090909",
-      gridLine: "#191919",
+      gridLine: "#202020",
       borderGradient:
         "linear-gradient(to bottom, #242424 0%, #4E4E4E 56%, #252525 100%)",
     } as const;

@@ -90,10 +90,10 @@ export function useAnalyticsSeries(timeframe: Timeframe) {
     const totalVolume = bucketed.reduce((a, b) => a + b.volumeUsd, 0);
     const totalTxns = bucketed.reduce((a, b) => a + b.txns, 0);
 
-    // Normalize txn bar heights relative to volume so txns never exceed volume
+    // Normalize txn bar heights so tallest txn is never more than 1/5th of max volume
     const maxVolume = Math.max(1, ...bucketed.map((p) => p.volumeUsd));
     const maxTxns = Math.max(1, ...bucketed.map((p) => p.txns));
-    const txnScale = (0.9 * maxVolume) / maxTxns; // keep a bit below max volume
+    const txnScale = (0.2 * maxVolume) / maxTxns; // scale to 1/5th (20%) of max volume
 
     const normalized = bucketed.map((p) => ({
       ...p,
@@ -105,6 +105,7 @@ export function useAnalyticsSeries(timeframe: Timeframe) {
       totalVolume,
       totalTxns,
       maxVolume,
+      maxTxns,
     };
   }, [timeframe]);
 }

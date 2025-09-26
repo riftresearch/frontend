@@ -24,7 +24,7 @@ function formatUSD(n: number) {
 
 export const VolumeTxnChart: React.FC = () => {
   const [timeframe, setTimeframe] = React.useState<Timeframe>("1d");
-  const { points, totalVolume, totalTxns, maxVolume } =
+  const { points, totalVolume, totalTxns, maxVolume, maxTxns } =
     useAnalyticsSeries(timeframe);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -118,59 +118,95 @@ export const VolumeTxnChart: React.FC = () => {
         </select>
       </Flex>
 
-      <Box flex="1" position="relative" px="8px" pb="10px">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={data}
-            margin={{ top: 4, right: 16, left: 8, bottom: 0 }}
-            barCategoryGap="2px"
-            barGap="-100%"
-          >
-            <defs>
-              <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#FFB076" />
-                <stop offset="100%" stopColor="#D06A2F" />
-              </linearGradient>
-              <linearGradient id="txnGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#FFD0A8" />
-                <stop offset="100%" stopColor="#F28A40" />
-              </linearGradient>
-            </defs>
+      <Box
+        flex="1"
+        position="relative"
+        px="8px"
+        mt="-20px"
+        pb="10px"
+        // @ts-ignore
+        sx={{
+          fontFamily: FONT_FAMILIES.SF_PRO,
+        }}
+      >
+        {/* Lighting overlay: above GridFlex, below chart; non-interactive */}
+        <Box
+          position="absolute"
+          top={-32}
+          left={0}
+          right={0}
+          bottom={20}
+          zIndex={1}
+          pointerEvents="none"
+          style={{
+            backgroundImage:
+              "linear-gradient(-45deg, rgba(0, 0, 0, 0) 35%, rgb(255, 128, 0, 0.13) 47%, rgb(255, 128, 0, 0.13) 52%, rgb(0, 0, 0, 0) 60%)",
+          }}
+        />
+        <Box position="relative" zIndex={2} w="100%" h="100%">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={data}
+              margin={{ top: 4, right: 34, left: 8, bottom: 0 }}
+              barCategoryGap="0%"
+              barGap="-100%"
+            >
+              <defs>
+                <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#FFB276" />
+                  <stop offset="68%" stopColor="#E55A1C" />
+                  <stop offset="89%" stopColor="#913D08" />
+                  <stop offset="100%" stopColor="#76371A" />
+                </linearGradient>
+                <linearGradient id="txnGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#FFD0A8" />
+                  <stop offset="100%" stopColor="#F28A40" />
+                </linearGradient>
+              </defs>
 
-            <CartesianGrid stroke="transparent" />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: colorsAnalytics.textGray, fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-              interval="preserveEnd"
-              minTickGap={24}
-            />
-            <YAxis
-              hide
-              domain={[0, Math.max(1, Math.round(maxVolume * 1.05))]}
-            />
-            <Tooltip
-              content={<CustomTooltip />}
-              cursor={{ fill: "rgba(255,255,255,0.04)" }}
-            />
+              <CartesianGrid stroke="transparent" />
+              <XAxis
+                dataKey="label"
+                style={{ fontFamily: FONT_FAMILIES.SF_PRO, fontSize: "14px" }}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveEnd"
+                minTickGap={24}
+              />
+              <YAxis
+                yAxisId="volume"
+                orientation="right"
+                style={{ fontFamily: FONT_FAMILIES.SF_PRO, fontSize: "14px" }}
+                tickLine={false}
+                axisLine={false}
+                domain={[0, Math.max(1, Math.round(maxVolume * 1.05))]}
+                tickFormatter={(value) => formatUSD(value)}
+              />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              />
 
-            <Bar
-              dataKey="volume"
-              fill="url(#volGrad)"
-              radius={[8, 8, 8, 8]}
-              isAnimationActive
-              animationDuration={500}
-            />
-            <Bar
-              dataKey="txnsNorm"
-              fill="url(#txnGrad)"
-              radius={[8, 8, 8, 8]}
-              isAnimationActive
-              animationDuration={500}
-            />
-          </BarChart>
-        </ResponsiveContainer>
+              <Bar
+                yAxisId="volume"
+                dataKey="volume"
+                fill="url(#volGrad)"
+                radius={[8, 8, 8, 8]}
+                isAnimationActive
+                animationDuration={500}
+              />
+              <Bar
+                yAxisId="volume"
+                dataKey="txnsNorm"
+                fill="url(#txnGrad)"
+                radius={[8, 8, 8, 8]}
+                isAnimationActive
+                animationDuration={500}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </Box>
       </Box>
     </Flex>
   );

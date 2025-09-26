@@ -143,7 +143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </GridFlex>
         </Flex>
         {/* VOLUME CHART */}
-        <GridFlex width="100%" heightBlocks={12} mt="30px">
+        <GridFlex width="100%" heightBlocks={13} mt="30px">
           <VolumeTxnChart />
         </GridFlex>
       </Flex>

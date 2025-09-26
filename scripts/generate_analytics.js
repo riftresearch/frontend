@@ -40,41 +40,12 @@ function generate({ days }) {
   const volumeUsd = new Array(minutes);
   const txns = new Array(minutes);
 
-  // Base scales
-  const baseDailyUsd = 48_000_000 / 30; // average daily volume ≈ $1.6M
-  const perMinuteBase = baseDailyUsd / (24 * 60);
-
-  // Weekly seasonality factors (Sun..Sat)
-  const dowFactor = [0.9, 0.95, 1.05, 1.1, 1.15, 1.1, 0.98];
-
   for (let i = 0; i < minutes; i++) {
-    const t = start + i * 60 * 1000;
-    const d = new Date(t);
+    // Volume: random between 0 and 1000
+    volumeUsd[i] = Math.round(Math.random() * 1000 * 100) / 100; // Round to 2 decimal places
 
-    const minuteOfDay = d.getHours() * 60 + d.getMinutes();
-    const dayOfWeek = d.getDay();
-
-    // Diurnal cycle (peaks midday/evening)
-    const diurnal =
-      0.6 +
-      0.35 * Math.sin((2 * Math.PI * (minuteOfDay - 11 * 60)) / (24 * 60)) +
-      0.15 * Math.sin((4 * Math.PI * (minuteOfDay - 19 * 60)) / (24 * 60));
-
-    // Long-term drift (slow 2% monthly trend approximation)
-    const monthlyDrift = 1 + 0.02 * (i / (30 * 24 * 60));
-
-    // Random noise
-    const noise = 0.85 + Math.random() * 0.3; // 0.85..1.15
-
-    // Compose volume
-    const usd =
-      perMinuteBase * diurnal * dowFactor[dayOfWeek] * monthlyDrift * noise;
-    volumeUsd[i] = Math.round(clamp(usd, 50, 250_000));
-
-    // Transactions correlate with USD volume but are integers with smaller variance
-    // Assume avg order size ≈ $1,200 and cap extreme outliers
-    const estTx = volumeUsd[i] / (900 + Math.random() * 900);
-    txns[i] = Math.max(1, Math.round(clamp(estTx, 1, 600)));
+    // Transactions: random between 0 and 50
+    txns[i] = Math.round(Math.random() * 50);
   }
 
   return {
