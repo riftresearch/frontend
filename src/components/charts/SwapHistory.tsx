@@ -1,349 +1,369 @@
-// import { Flex, Text, Spacer } from "@chakra-ui/react";
-// import { useCallback } from "react";
-// import { colors } from "@/utils/colors";
-// import { FONT_FAMILIES } from "@/utils/font";
-// import { FaRegArrowAltCircleRight } from "react-icons/fa";
-// import { HiOutlineExternalLink } from "react-icons/hi";
-// import { bitcoinStyle, cbBTCStyle } from "@/utils/constants";
-// import { SwapHistoryItem } from "@/utils/types";
-// // import { useSwapHistory } from "@/hooks/useSwapHistory";
+import React from "react";
+import Image from "next/image";
+import { Box, Flex, Text, Spinner } from "@chakra-ui/react";
+import { GridFlex } from "@/components/other/GridFlex";
+import { useAnalyticsStore } from "@/utils/analyticsStore";
+import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
+import { FONT_FAMILIES } from "@/utils/font";
+import { colorsAnalytics } from "@/utils/colorsAnalytics";
+import { FiClock, FiCheck } from "react-icons/fi";
 
-// const AssetTag = ({
-//   assetName,
-//   width,
-// }: {
-//   assetName: string;
-//   width: string;
-// }) => {
-//   const style = assetName === "cbBTC" ? cbBTCStyle : bitcoinStyle;
-//   return (
-//     <Flex
-//       w={width}
-//       h="32px"
-//       bg={style.bg_color}
-//       borderRadius="8px"
-//       align="center"
-//       justify="center"
-//     >
-//       <Text
-//         fontSize="14px"
-//         fontFamily={FONT_FAMILIES.AUX_MONO}
-//         color={colors.offWhite}
-//         fontWeight="bold"
-//       >
-//         {assetName}
-//       </Text>
-//     </Flex>
-//   );
-// };
+function displayShortAddress(addr: string): string {
+  if (!addr || addr.length < 8) return addr;
+  const prefix = addr.startsWith("0x") ? "0x" : "";
+  const hex = addr.replace(/^0x/, "");
+  return `${prefix}${hex.slice(0, 3)}...${hex.slice(-3)}`;
+}
 
-// const SwapCard = ({ swap }: { swap: SwapHistoryItem }) => {
-//   const getStatusColor = (status: string) => {
-//     switch (status) {
-//       case "Completed":
-//         return colors.greenOutline;
-//       case "Pending":
-//         return colors.RiftOrange;
-//       case "Failed":
-//         return colors.red;
-//       default:
-//         return colors.textGray;
-//     }
-//   };
+function formatUSD(n: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(n);
+}
 
-//   return (
-//     <Flex w="100%">
-//       <Flex
-//         bg={colors.offBlack}
-//         w="100%"
-//         mb="10px"
-//         fontSize="18px"
-//         px="16px"
-//         py="12px"
-//         align="flex-start"
-//         justify="flex-start"
-//         borderRadius="12px"
-//         border="2px solid"
-//         color={colors.textGray}
-//         borderColor={colors.borderGray}
-//         gap="12px"
-//         flexDirection="row"
-//         letterSpacing="-2px"
-//       >
-//         {/* TIMESTAMP */}
-//         <Flex w="100%" align="center" direction="row">
-//           <Text
-//             width="130px"
-//             pr="10px"
-//             fontSize="14px"
-//             fontFamily={FONT_FAMILIES.AUX_MONO}
-//             fontWeight="normal"
-//           >
-//             {swap.timeAgo}
-//           </Text>
+function formatBTC(n: number) {
+  // Show up to 8 decimals, trimming trailing zeros
+  return `${Number(n)
+    .toFixed(8)
+    .replace(/\.0+$/, "")
+    .replace(/(\.[0-9]*?)0+$/, "$1")} BTC`;
+}
 
-//           {/* SWAP INPUT & SWAP OUTPUT */}
-//           <Flex align="center" mt="-5px">
-//             <Flex direction="column">
-//               <Flex
-//                 h="50px"
-//                 mt="6px"
-//                 mr="40px"
-//                 w="100%"
-//                 bg={cbBTCStyle.dark_bg_color}
-//                 border="3px solid"
-//                 borderColor={cbBTCStyle.bg_color}
-//                 borderRadius="14px"
-//                 pl="15px"
-//                 pr="10px"
-//                 align="center"
-//               >
-//                 <Text
-//                   fontSize="16px"
-//                   color={colors.offWhite}
-//                   letterSpacing="-1px"
-//                   fontFamily={FONT_FAMILIES.AUX_MONO}
-//                 >
-//                   {swap.amount}
-//                 </Text>
-//                 <Spacer />
-//                 <AssetTag assetName="cbBTC" width="110px" />
-//               </Flex>
-//             </Flex>
+function parseDurationToSeconds(duration?: string): number {
+  if (!duration) return 0;
+  const parts = duration.split(":");
+  if (parts.length !== 2) return 0;
+  const m = Number(parts[0]);
+  const s = Number(parts[1]);
+  if (Number.isNaN(m) || Number.isNaN(s)) return 0;
+  return m * 60 + s;
+}
 
-//             <Text
-//               mt="7px"
-//               mx="12px"
-//               fontSize="20px"
-//               opacity={0.9}
-//               fontWeight="bold"
-//               color={colors.offWhite}
-//               letterSpacing="-1px"
-//               fontFamily={FONT_FAMILIES.AUX_MONO}
-//             >
-//               <FaRegArrowAltCircleRight color={colors.RiftOrange} />
-//             </Text>
+function formatSecondsToMinSec(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.max(0, Math.floor(seconds % 60));
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
-//             <Flex direction="column">
-//               <Flex
-//                 h="50px"
-//                 mr="55px"
-//                 mt="6px"
-//                 w="100%"
-//                 bg={bitcoinStyle.dark_bg_color}
-//                 border="3px solid"
-//                 borderColor={bitcoinStyle.bg_color}
-//                 borderRadius="14px"
-//                 pl="15px"
-//                 pr="10px"
-//                 align="center"
-//               >
-//                 <Text
-//                   fontSize="16px"
-//                   color={colors.offWhite}
-//                   letterSpacing="-1px"
-//                   fontFamily={FONT_FAMILIES.AUX_MONO}
-//                 >
-//                   {swap.outputAmount}
-//                 </Text>
-//                 <Spacer />
-//                 <AssetTag assetName="BTC" width="84px" />
-//               </Flex>
-//             </Flex>
-//           </Flex>
+const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
+  if (!badge) return null;
+  const src =
+    badge === "BTC" ? "/images/BTC_icon.svg" : "/images/cbBTC_icon.svg";
+  return (
+    <Image
+      src={src}
+      alt={badge}
+      width={18}
+      height={18}
+      style={{ opacity: 0.9 }}
+    />
+  );
+};
 
-//           <Spacer />
+const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
+  const displayedLabel = step.kind === "swap_created" ? "Created" : step.label;
+  const styleByState = () => {
+    if (step.state === "completed")
+      return {
+        bg: colorsAnalytics.greenBackground,
+        border: colorsAnalytics.greenOutline,
+        text: colorsAnalytics.offWhite,
+      };
+    if (step.state === "inProgress")
+      return {
+        bg: colorsAnalytics.offBlackLighter,
+        border: colorsAnalytics.borderGrayLight,
+        text: colorsAnalytics.offWhite,
+      };
+    return {
+      bg: "transparent",
+      border: colorsAnalytics.borderGrayLight,
+      text: colorsAnalytics.textGray,
+    };
+  };
+  const s = styleByState();
+  return (
+    <Flex
+      align="center"
+      bg={s.bg}
+      borderRadius="14px"
+      border={`2px solid ${s.border}`}
+      color={s.text}
+      px="15px"
+      py="5px"
+      gap="8px"
+    >
+      <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO} fontWeight="bold">
+        {displayedLabel}
+      </Text>
+      {(step.kind === "user_sent" || step.kind === "mm_sent") && (
+        <AssetIcon badge={step.badge} />
+      )}
+    </Flex>
+  );
+};
 
-//           {/* TXID */}
-//           <Flex
-//             mx="40px"
-//             align="center"
-//             cursor="pointer"
-//             onClick={(e) => {
-//               e.stopPropagation();
-//               window.open(`https://basescan.org/tx/${swap.txHash}`, "_blank");
-//             }}
-//             _hover={{ bg: "rgba(255, 255, 255, 0.1)" }}
-//             p="8px"
-//             borderRadius="8px"
-//           >
-//             <Text
-//               mr="8px"
-//               fontFamily={FONT_FAMILIES.AUX_MONO}
-//               fontSize="15px"
-//               color={colors.textGray}
-//             >
-//               {swap.txHash.slice(0, 6)}...{swap.txHash.slice(-6)}
-//             </Text>
-//             <HiOutlineExternalLink color={colors.textGray} />
-//           </Flex>
+const StepWithTime: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
+  const timeRowHeight = 22; // reserve consistent space above every pill
+  return (
+    <Flex direction="column" align="center" justify="flex-start" minW="auto">
+      <Flex
+        align="center"
+        justify="center"
+        gap="6px"
+        mb="6px"
+        h={`${timeRowHeight}px`}
+        visibility={step.duration ? "visible" : "hidden"}
+      >
+        <FiClock color={colorsAnalytics.textGray} size={14} />
+        <Text
+          fontSize="13px"
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {step.duration || "0:00"}
+        </Text>
+      </Flex>
+      <Pill step={step} />
+    </Flex>
+  );
+};
 
-//           {/* STATUS */}
-//           <Flex align="center" mt="10px" justify="center">
-//             <Flex
-//               bg={getStatusColor(swap.status)}
-//               borderRadius="6px"
-//               px="12px"
-//               py="4px"
-//               mr="30px"
-//             >
-//               <Text
-//                 fontFamily={FONT_FAMILIES.AUX_MONO}
-//                 fontSize="12px"
-//                 color={colors.offBlack}
-//                 fontWeight="bold"
-//               >
-//                 {swap.status.toUpperCase()}
-//               </Text>
-//             </Flex>
-//           </Flex>
-//         </Flex>
-//       </Flex>
-//     </Flex>
-//   );
-// };
+const FinalTime: React.FC<{ totalSeconds: number; completed: boolean }> = ({
+  totalSeconds,
+  completed,
+}) => {
+  const color = completed
+    ? colorsAnalytics.greenOutline
+    : colorsAnalytics.textGray;
+  return (
+    <Flex direction="column" align="center" justify="center" minW="60px">
+      {completed ? (
+        <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+      ) : (
+        <FiClock color={colorsAnalytics.textGray} size={12} />
+      )}
+      <Text
+        mt="6px"
+        fontSize="14px"
+        color={color}
+        fontFamily={FONT_FAMILIES.SF_PRO}
+      >
+        {formatSecondsToMinSec(totalSeconds)}
+      </Text>
+    </Flex>
+  );
+};
 
-// export const SwapHistory = () => {
-//   const {
-//     swaps,
-//     hasNextPage,
-//     isLoadingMore,
-//     isLoading,
-//     error,
-//     loadMore,
-//   } = useSwapHistory();
+const Row: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
+  const filteredFlow = React.useMemo(
+    () => swap.flow.filter((s) => s.kind !== "settled"),
+    [swap.flow]
+  );
+  const totalSeconds = React.useMemo(
+    () =>
+      swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
+    [swap.flow]
+  );
+  const isCompleted = React.useMemo(() => {
+    return filteredFlow.every((s) => s.state === "completed");
+  }, [filteredFlow]);
 
-//   // Handle scroll event for infinite loading
-//   const handleScroll = useCallback(
-//     (e: React.UIEvent<HTMLDivElement>) => {
-//       const element = e.currentTarget;
-//       const scrolledToBottom =
-//         Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 10;
+  const impliedUsdPerBtc =
+    swap.swapInitialAmountBtc > 0
+      ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc
+      : 0;
+  const riftFeeUsd = swap.riftFeeBtc * impliedUsdPerBtc;
 
-//       if (scrolledToBottom && hasNextPage && !isLoadingMore) {
-//         loadMore();
-//       }
-//     },
-//     [hasNextPage, isLoadingMore, loadMore]
-//   );
+  return (
+    <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
+      <Box w="128px">
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {timeAgoFrom(swapsNowRef.current, swap.swapCreationTimestamp)}
+        </Text>
+      </Box>
+      <Box w="105px">
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.offerWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {displayShortAddress(swap.evmAccountAddress)}
+        </Text>
+      </Box>
+      <Box w="60px">
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {swap.chain}
+        </Text>
+      </Box>
+      <Box w="150px">
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {formatUSD(swap.swapInitialAmountUsd)}
+        </Text>
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {formatBTC(swap.swapInitialAmountBtc)}
+        </Text>
+      </Box>
+      <Box w="130px">
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {formatUSD(riftFeeUsd)}
+        </Text>
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          {formatBTC(swap.riftFeeBtc)}
+        </Text>
+      </Box>
+      <Box w="110px">
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          MM - {formatUSD(swap.mmFeeUsd)}
+        </Text>
+        <Text
+          fontSize="14px"
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          GAS - {formatUSD(swap.networkFeeUsd)}
+        </Text>
+      </Box>
+      <Flex flex="1" gap="10px" wrap="wrap" align="center">
+        {filteredFlow.map((step, idx) => (
+          <StepWithTime key={`${step.kind}-${idx}`} step={step} />
+        ))}
+        <FinalTime totalSeconds={totalSeconds} completed={isCompleted} />
+      </Flex>
+    </Flex>
+  );
+};
 
-//   if (error) {
-//     return (
-//       <Flex
-//         w="100%"
-//         direction="column"
-//         bg={colors.offBlack}
-//         border={`2px solid ${colors.borderGray}`}
-//         borderRadius="30px"
-//         p="24px"
-//         align="center"
-//         justify="center"
-//         minH="300px"
-//       >
-//         <Text
-//           fontSize="16px"
-//           fontFamily={FONT_FAMILIES.AUX_MONO}
-//           color={colors.red}
-//           mb="4px"
-//         >
-//           Failed to load swap history
-//         </Text>
-//         <Text
-//           fontSize="14px"
-//           fontFamily={FONT_FAMILIES.AUX_MONO}
-//           color={colors.textGray}
-//         >
-//           {error.message}
-//         </Text>
-//       </Flex>
-//     );
-//   }
+const swapsNowRef = { current: Date.now() };
+function timeAgoFrom(nowMs: number, tsMs: number): string {
+  const diff = Math.max(0, nowMs - tsMs);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} minute${min === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(min / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+}
 
-//   return (
-//     <Flex
-//       w="100%"
-//       direction="column"
-//       bg={colors.offBlack}
-//       border={`2px solid ${colors.borderGray}`}
-//       borderRadius="30px"
-//       p="24px"
-//     >
-//       {/* Header */}
-//       <Flex direction="column" align="center" mb="20px">
-//         <Text
-//           fontSize="16px"
-//           fontFamily={FONT_FAMILIES.AUX_MONO}
-//           color={colors.textGray}
-//           mb="4px"
-//         >
-//           RECENT SWAP HISTORY
-//         </Text>
-//       </Flex>
+export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
+  heightBlocks = 13,
+}) => {
+  const swaps = useAnalyticsStore((s) => s.adminSwaps);
+  const [visible, setVisible] = React.useState(10);
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const sorted = React.useMemo(
+    () =>
+      [...swaps].sort(
+        (a, b) => b.swapCreationTimestamp - a.swapCreationTimestamp
+      ),
+    [swaps]
+  );
+  const visibleSwaps = sorted.slice(0, visible);
+  const canLoadMore = visible < sorted.length;
 
-//       {/* Loading State */}
-//       {isLoading && (
-//         <Flex align="center" justify="center" minH="200px">
-//           <Text
-//             fontSize="14px"
-//             fontFamily={FONT_FAMILIES.AUX_MONO}
-//             color={colors.textGray}
-//           >
-//             Loading swap history...
-//           </Text>
-//         </Flex>
-//       )}
+  const handleScroll = React.useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (isLoadingMore || !canLoadMore) return;
+      const el = e.currentTarget;
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceFromBottom < 24) {
+        setIsLoadingMore(true);
+        setTimeout(() => {
+          setVisible((v) => Math.min(sorted.length, v + 10));
+          setIsLoadingMore(false);
+        }, 450);
+      }
+    },
+    [isLoadingMore, canLoadMore, sorted.length]
+  );
 
-//       {/* Empty State */}
-//       {!isLoading && swaps.length === 0 && (
-//         <Flex align="center" justify="center" minH="200px">
-//           <Text
-//             fontSize="14px"
-//             fontFamily={FONT_FAMILIES.AUX_MONO}
-//             color={colors.textGray}
-//           >
-//             No swap history found
-//           </Text>
-//         </Flex>
-//       )}
+  return (
+    <Box position="relative" w="100%">
+      <GridFlex width="100%" heightBlocks={heightBlocks} contentPadding={0}>
+        <Flex direction="column" w="100%" h="100%">
+          {/* Header Row */}
+          <Flex
+            px="16px"
+            pt="16px"
+            pb="8px"
+            fontSize="15px"
+            align="center"
+            fontWeight="bold"
+            color={colorsAnalytics.textGray}
+          >
+            <Box w="128px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Created</Text>
+            </Box>
+            <Box w="105px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Account</Text>
+            </Box>
+            <Box w="60px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Chain</Text>
+            </Box>
+            <Box w="150px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Amount</Text>
+            </Box>
+            <Box w="130px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
+            </Box>
+            <Box w="110px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Other Fees</Text>
+            </Box>
+            <Flex flex="1">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Flow Tracker</Text>
+            </Flex>
+          </Flex>
 
-//       {/* Swaps List */}
-//       {!isLoading && swaps.length > 0 && (
-//         <Flex
-//           direction="column"
-//           maxH="400px"
-//           overflowY="auto"
-//           onScroll={handleScroll}
-//           css={{
-//             "&::-webkit-scrollbar": {
-//               width: "8px",
-//             },
-//             "&::-webkit-scrollbar-track": {
-//               background: "transparent",
-//             },
-//             "&::-webkit-scrollbar-thumb": {
-//               backgroundColor: colors.borderGray,
-//               borderRadius: "6px",
-//             },
-//           }}
-//         >
-//           {swaps.map((swap) => (
-//             <SwapCard key={swap.id} swap={swap} />
-//           ))}
+          {/* Rows */}
+          <Flex
+            direction="column"
+            flex="1"
+            overflowY="auto"
+            onScroll={handleScroll}
+          >
+            {visibleSwaps.map((s) => (
+              <Row key={s.id} swap={s} />
+            ))}
+            {isLoadingMore && (
+              <Flex justify="center" py="12px">
+                <Spinner size="sm" color={colorsAnalytics.offWhite} />
+              </Flex>
+            )}
+          </Flex>
+        </Flex>
+      </GridFlex>
+    </Box>
+  );
+};
 
-//           {/* Loading More Indicator */}
-//           {isLoadingMore && (
-//             <Flex align="center" justify="center" py="16px">
-//               <Text
-//                 fontSize="12px"
-//                 fontFamily={FONT_FAMILIES.AUX_MONO}
-//                 color={colors.textGray}
-//               >
-//                 Loading more...
-//               </Text>
-//             </Flex>
-//           )}
-//         </Flex>
-//       )}
-//     </Flex>
-//   );
-// };
+export default SwapHistory;

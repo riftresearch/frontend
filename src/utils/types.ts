@@ -86,3 +86,50 @@ export interface SwapHistoryItem {
  * Type for an array of swap history items
  */
 export type SwapHistory = SwapHistoryItem[];
+
+// Admin dashboard swap history types
+export type AdminSwapFlowKind =
+  | "swap_created"
+  | "user_sent"
+  | "user_confs"
+  | "mm_sent"
+  | "mm_confs"
+  | "settled";
+
+export interface AdminSwapFlowStep {
+  kind: AdminSwapFlowKind;
+  /** Display label for the step, e.g. "Swap Created", "3 Confs" */
+  label: string;
+  /** Optional short duration display like "0:54" */
+  duration?: string;
+  /** Optional badge to hint chain/asset shown in the UI */
+  badge?: "BTC" | "cbBTC";
+  /** Visual/logic state for the step */
+  state: "notStarted" | "inProgress" | "completed";
+}
+
+export type SwapDirection = "BTC_TO_EVM" | "EVM_TO_BTC";
+
+export interface AdminSwapItem {
+  id: string;
+  /** Unix ms timestamp when swap was created */
+  swapCreationTimestamp: number;
+  /** EVM account that initiated the swap */
+  evmAccountAddress: string;
+  /** Which EVM chain the swap is on */
+  chain: "ETH" | "BASE";
+  /** Direction of the swap */
+  direction: SwapDirection;
+  /** Initial amount in BTC */
+  swapInitialAmountBtc: number;
+  /** Initial amount in USD */
+  swapInitialAmountUsd: number;
+  /** Rift fee in BTC */
+  riftFeeBtc: number;
+  /** Network/gas fee in USD */
+  networkFeeUsd: number;
+  /** Market maker fee in USD */
+  mmFeeUsd: number;
+  /** Ordered list of flow steps for the visual tracker */
+  flow: AdminSwapFlowStep[];
+}

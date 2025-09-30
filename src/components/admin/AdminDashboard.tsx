@@ -5,6 +5,7 @@ import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { RiftLogo } from "@/components/other/RiftLogo";
 import { GridFlex } from "../other/GridFlex";
 import { VolumeTxnChart } from "@/components/charts/VolumeTxnChart";
+import { SwapHistory } from "@/components/charts/SwapHistory";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 
 interface AdminDashboardProps {
@@ -17,6 +18,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const totalFeesCollected = useAnalyticsStore((s) => s.totalFeesCollected);
   const totalSwaps = useAnalyticsStore((s) => s.totalSwaps);
   const totalUsers = useAnalyticsStore((s) => s.totalUsers);
+  const adminSwaps = useAnalyticsStore((s) => s.adminSwaps);
+  const inProgressCount = React.useMemo(
+    () =>
+      adminSwaps.filter((sw) => sw.flow.some((st) => st.state === "inProgress"))
+        .length,
+    [adminSwaps]
+  );
 
   return (
     <Flex minHeight="100vh" bg={"#000000"} justifyContent="center">
@@ -146,6 +154,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         <GridFlex width="100%" heightBlocks={13} mt="30px">
           <VolumeTxnChart />
         </GridFlex>
+
+        {/* SWAP HISTORY */}
+        <Flex mt="34px" direction="column">
+          <Text
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="bold"
+            mt="18px"
+            fontSize="35px"
+            style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+          >
+            Swap History
+          </Text>
+          <Text
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontSize="14px"
+            mt="4px"
+            mb="16px"
+          >
+            {new Intl.NumberFormat("en-US").format(totalSwaps)} Total Swaps |{" "}
+            {new Intl.NumberFormat("en-US").format(inProgressCount)} In-Progress
+            Swaps
+          </Text>
+          <SwapHistory />
+        </Flex>
       </Flex>
     </Flex>
   );
