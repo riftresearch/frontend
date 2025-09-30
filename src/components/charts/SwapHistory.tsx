@@ -15,6 +15,12 @@ function displayShortAddress(addr: string): string {
   return `${prefix}${hex.slice(0, 3)}...${hex.slice(-3)}`;
 }
 
+function explorerUrl(chain: "ETH" | "BASE", address: string): string {
+  const base =
+    chain === "ETH" ? "https://etherscan.io" : "https://basescan.org";
+  return `${base}/address/${address}`;
+}
+
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -188,14 +194,32 @@ const Row: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
           {timeAgoFrom(swapsNowRef.current, swap.swapCreationTimestamp)}
         </Text>
       </Box>
-      <Box w="105px">
-        <Text
-          fontSize="14px"
-          color={colorsAnalytics.offerWhite}
-          fontFamily={FONT_FAMILIES.SF_PRO}
+      <Box w="115px">
+        <Flex
+          as="button"
+          onClick={() =>
+            window.open(
+              explorerUrl(swap.chain, swap.evmAccountAddress),
+              "_blank"
+            )
+          }
+          bg="#1D1D1D"
+          px="8px"
+          py="6px"
+          borderRadius="10px"
+          _hover={{ filter: "brightness(1.1)" }}
+          cursor="pointer"
+          justifyContent="center"
+          alignItems="center"
         >
-          {displayShortAddress(swap.evmAccountAddress)}
-        </Text>
+          <Text
+            fontSize="14px"
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            {displayShortAddress(swap.evmAccountAddress)}
+          </Text>
+        </Flex>
       </Box>
       <Box w="60px">
         <Text
@@ -324,7 +348,7 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
             <Box w="128px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Created</Text>
             </Box>
-            <Box w="105px">
+            <Box w="115px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Account</Text>
             </Box>
             <Box w="60px">
