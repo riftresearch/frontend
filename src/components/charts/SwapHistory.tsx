@@ -101,7 +101,7 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       py="5px"
       gap="8px"
     >
-      <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO} fontWeight="bold">
+      <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayedLabel}
       </Text>
       {(step.kind === "user_sent" || step.kind === "mm_sent") && (
@@ -114,7 +114,13 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
 const StepWithTime: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
   const timeRowHeight = 22; // reserve consistent space above every pill
   return (
-    <Flex direction="column" align="center" justify="flex-start" minW="auto">
+    <Flex
+      direction="column"
+      align="center"
+      justify="flex-start"
+      minW="auto"
+      letterSpacing={"0px"}
+    >
       <Flex
         align="center"
         justify="center"

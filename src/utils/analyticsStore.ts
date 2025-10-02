@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { AdminSwapItem, SwapDirection } from "./types";
+import {
+  AdminSwapItem,
+  SwapDirection,
+  MarketMaker,
+  ErrorLogItem,
+} from "./types";
 
 function randomHex(len: number) {
   const chars = "abcdef0123456789";
@@ -93,6 +98,53 @@ function generateDummyAdminSwaps(count: number): AdminSwapItem[] {
   return list.sort((a, b) => b.swapCreationTimestamp - a.swapCreationTimestamp);
 }
 
+function generateDummyMMs(): MarketMaker[] {
+  return [
+    {
+      mmName: "Rift MM Alpha",
+      currentEthBalance: 134.2183,
+      currentCbbtcBalance: 14.478334,
+      currentBtcBalance: 13.478334,
+    },
+    {
+      mmName: "Rift MM Beta",
+      currentEthBalance: 89.1234,
+      currentCbbtcBalance: 7.5567,
+      currentBtcBalance: 5.6789,
+    },
+    {
+      mmName: "Rift MM Gamma",
+      currentEthBalance: 210.005,
+      currentCbbtcBalance: 24.0012,
+      currentBtcBalance: 18.3345,
+    },
+  ];
+}
+
+function generateDummyErrorLogs(): ErrorLogItem[] {
+  const now = Date.now();
+  return [
+    {
+      timestamp: now - 20 * 60 * 1000,
+      title: "ATTESTATION_ERROR",
+      message:
+        "qtt.rs – line 344 – The frontend attestation has failed, please check attestor service.",
+    },
+    {
+      timestamp: now - 20 * 60 * 1000,
+      title: "ATTESTATION_ERROR",
+      message:
+        "qtt.rs – line 344 – The frontend attestation has failed, please check attestor service.",
+    },
+    {
+      timestamp: now - 20 * 60 * 1000,
+      title: "QUOTE_ERROR",
+      message:
+        "LOG: The frontend quote has failed, please check the RFQ server.",
+    },
+  ];
+}
+
 export const useAnalyticsStore = create<{
   totalVolume: number;
   setTotalVolume: (value: number) => void;
@@ -104,6 +156,10 @@ export const useAnalyticsStore = create<{
   setTotalUsers: (value: number) => void;
   adminSwaps: AdminSwapItem[];
   setAdminSwaps: (items: AdminSwapItem[]) => void;
+  marketMakers: MarketMaker[];
+  setMarketMakers: (mms: MarketMaker[]) => void;
+  errorLogs: ErrorLogItem[];
+  setErrorLogs: (logs: ErrorLogItem[]) => void;
 }>((set) => ({
   totalVolume: 43243243224,
   setTotalVolume: (value: number) => set({ totalVolume: value }),
@@ -115,4 +171,8 @@ export const useAnalyticsStore = create<{
   setTotalUsers: (value: number) => set({ totalUsers: value }),
   adminSwaps: generateDummyAdminSwaps(45),
   setAdminSwaps: (items: AdminSwapItem[]) => set({ adminSwaps: items }),
+  marketMakers: generateDummyMMs(),
+  setMarketMakers: (mms: MarketMaker[]) => set({ marketMakers: mms }),
+  errorLogs: generateDummyErrorLogs(),
+  setErrorLogs: (logs: ErrorLogItem[]) => set({ errorLogs: logs }),
 }));

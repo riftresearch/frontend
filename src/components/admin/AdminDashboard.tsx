@@ -6,6 +6,8 @@ import { RiftLogo } from "@/components/other/RiftLogo";
 import { GridFlex } from "../other/GridFlex";
 import { VolumeTxnChart } from "@/components/charts/VolumeTxnChart";
 import { SwapHistory } from "@/components/charts/SwapHistory";
+import { MarketMakers } from "../other/MarketMakers";
+import { ErrorLogs } from "../other/ErrorLogs";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 
 interface AdminDashboardProps {
@@ -156,8 +158,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         </GridFlex>
 
         {/* SWAP HISTORY */}
-        <Flex mt="34px" direction="column">
+        <Flex mt="30px" mb="20px" direction="column">
           <Text
+            ml="5px"
             color={colorsAnalytics.offWhite}
             fontFamily={FONT_FAMILIES.SF_PRO}
             fontWeight="bold"
@@ -172,13 +175,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             fontFamily={FONT_FAMILIES.SF_PRO}
             fontSize="14px"
             mt="4px"
-            mb="16px"
+            ml="5px"
+            mb="28px"
           >
             {new Intl.NumberFormat("en-US").format(totalSwaps)} Total Swaps |{" "}
             {new Intl.NumberFormat("en-US").format(inProgressCount)} In-Progress
             Swaps
           </Text>
           <SwapHistory />
+        </Flex>
+
+        {/* MARKET MAKERS */}
+        <Flex mt="20px" mb="20px" direction="column">
+          <Text
+            ml="5px"
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="bold"
+            mt="18px"
+            fontSize="35px"
+            style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+          >
+            Market Makers
+          </Text>
+          <MarketMakers />
+        </Flex>
+
+        {/* ERROR LOGS */}
+        <Flex mt="20px" mb="40px" direction="column">
+          <Text
+            ml="5px"
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="bold"
+            mt="18px"
+            fontSize="35px"
+            style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+          >
+            Error Logs
+          </Text>
+          <ErrorLogs />
         </Flex>
       </Flex>
     </Flex>

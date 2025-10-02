@@ -60,6 +60,24 @@ export const ROUTES: { [k in RouteButton]: string } = {
   About: "/about",
 };
 
+/** Market Maker */
+export interface MarketMaker {
+  mmName: string;
+  currentEthBalance: number;
+  currentCbbtcBalance: number;
+  currentBtcBalance: number;
+}
+
+/** Error Log item */
+export interface ErrorLogItem {
+  /** unix ms timestamp */
+  timestamp: number;
+  /** Short uppercase error title like QUOTE_ERROR */
+  title: string;
+  /** Full error message */
+  message: string;
+}
+
 /**
  * Represents a swap transaction in the user's history
  */
