@@ -8,6 +8,7 @@ import { VolumeTxnChart } from "@/components/charts/VolumeTxnChart";
 import { SwapHistory } from "@/components/charts/SwapHistory";
 import { MarketMakers } from "../other/MarketMakers";
 import { ErrorLogs } from "../other/ErrorLogs";
+import { useSwapsFromDb } from "@/hooks/useSwapsFromDb";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 
 interface AdminDashboardProps {
@@ -18,7 +19,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // data from analytics store
   const totalVolume = useAnalyticsStore((s) => s.totalVolume);
   const totalFeesCollected = useAnalyticsStore((s) => s.totalFeesCollected);
-  const totalSwaps = useAnalyticsStore((s) => s.totalSwaps);
+  const totalSwaps = useAnalyticsStore((s) => s.adminSwaps.length);
   const totalUsers = useAnalyticsStore((s) => s.totalUsers);
   const adminSwaps = useAnalyticsStore((s) => s.adminSwaps);
   const inProgressCount = React.useMemo(
@@ -27,6 +28,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         .length,
     [adminSwaps]
   );
+
+  // Populate swaps from DB and keep in sync
+  useSwapsFromDb();
 
   return (
     <Flex minHeight="100vh" bg={"#000000"} justifyContent="center">

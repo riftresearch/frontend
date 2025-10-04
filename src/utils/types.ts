@@ -105,17 +105,17 @@ export interface SwapHistoryItem {
  */
 export type SwapHistory = SwapHistoryItem[];
 
-// Admin dashboard swap history types
-export type AdminSwapFlowKind =
-  | "swap_created"
-  | "user_sent"
-  | "user_confs"
-  | "mm_sent"
-  | "mm_confs"
+// Admin dashboard swap history types - aligned to OTC DB statuses
+export type AdminSwapFlowStatus =
+  | "pending" // swap created
+  | "waiting_user_deposit_initiated"
+  | "waiting_user_deposit_confirmed"
+  | "waiting_mm_deposit_initiated"
+  | "waiting_mm_deposit_confirmed"
   | "settled";
 
 export interface AdminSwapFlowStep {
-  kind: AdminSwapFlowKind;
+  status: AdminSwapFlowStatus;
   /** Display label for the step, e.g. "Swap Created", "3 Confs" */
   label: string;
   /** Optional short duration display like "0:54" */
@@ -129,6 +129,8 @@ export interface AdminSwapFlowStep {
 export type SwapDirection = "BTC_TO_EVM" | "EVM_TO_BTC";
 
 export interface AdminSwapItem {
+  statusTesting?: any;
+
   id: string;
   /** Unix ms timestamp when swap was created */
   swapCreationTimestamp: number;
@@ -144,6 +146,10 @@ export interface AdminSwapItem {
   swapInitialAmountUsd: number;
   /** Rift fee in BTC */
   riftFeeBtc: number;
+  /** Observed user confirmations (for averages) */
+  userConfs?: number;
+  /** Observed mm confirmations (for averages) */
+  mmConfs?: number;
   /** Network/gas fee in USD */
   networkFeeUsd: number;
   /** Market maker fee in USD */

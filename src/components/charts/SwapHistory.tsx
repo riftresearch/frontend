@@ -3,7 +3,7 @@ import Image from "next/image";
 import { Box, Flex, Text, Spinner } from "@chakra-ui/react";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
-import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
+import { AdminSwapItem, AdminSwapFlowStep, SwapDirection } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { FiClock, FiCheck } from "react-icons/fi";
@@ -69,7 +69,7 @@ const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
 };
 
 const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
-  const displayedLabel = step.kind === "swap_created" ? "Created" : step.label;
+  const displayedLabel = step.label;
   const styleByState = () => {
     if (step.state === "completed")
       return {
@@ -104,7 +104,8 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayedLabel}
       </Text>
-      {(step.kind === "user_sent" || step.kind === "mm_sent") && (
+      {(step.status === "waiting_user_deposit_initiated" ||
+        step.status === "waiting_mm_deposit_initiated") && (
         <AssetIcon badge={step.badge} />
       )}
     </Flex>
@@ -170,10 +171,7 @@ const FinalTime: React.FC<{ totalSeconds: number; completed: boolean }> = ({
 };
 
 const Row: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
-  const filteredFlow = React.useMemo(
-    () => swap.flow.filter((s) => s.kind !== "settled"),
-    [swap.flow]
-  );
+  const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
   const totalSeconds = React.useMemo(
     () =>
       swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
@@ -233,9 +231,11 @@ const Row: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
           color={colorsAnalytics.offWhite}
           fontFamily={FONT_FAMILIES.SF_PRO}
         >
-          {swap.chain}
+          {/* {swap.chain} */}
+          {swap.statusTesting}
         </Text>
       </Box>
+
       <Box w="150px">
         <Text
           fontSize="14px"
@@ -286,7 +286,7 @@ const Row: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
       </Box>
       <Flex flex="1" gap="10px" wrap="wrap" align="center">
         {filteredFlow.map((step, idx) => (
-          <StepWithTime key={`${step.kind}-${idx}`} step={step} />
+          <StepWithTime key={`${step.status}-${idx}`} step={step} />
         ))}
         <FinalTime totalSeconds={totalSeconds} completed={isCompleted} />
       </Flex>
@@ -308,6 +308,59 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
   heightBlocks = 13,
 }) => {
   const swaps = useAnalyticsStore((s) => s.adminSwaps);
+  const averages = React.useMemo(() => {
+    const byDir: Record<SwapDirection, AdminSwapItem[]> = {
+      BTC_TO_EVM: [],
+      EVM_TO_BTC: [],
+    };
+    for (const s of swaps) byDir[s.direction].push(s);
+    function avg(nums: number[]) {
+      if (!nums.length) return 0;
+      return nums.reduce((a, b) => a + b, 0) / nums.length;
+    }
+    const build = (dir: SwapDirection) => {
+      const list = byDir[dir];
+      const avgUsd = avg(list.map((s) => s.swapInitialAmountUsd));
+      const avgBtc = avg(list.map((s) => s.swapInitialAmountBtc));
+      const avgRiftFeeBtc = avg(list.map((s) => s.riftFeeBtc));
+      const avgUserConfs = Math.round(avg(list.map((s) => s.userConfs || 0)));
+      const avgMmConfs = Math.round(avg(list.map((s) => s.mmConfs || 0)));
+      const flow: AdminSwapFlowStep[] = [
+        { status: "pending", label: "Swap Created", state: "completed" },
+        {
+          status: "waiting_user_deposit_initiated",
+          label: `User Sent ${dir === "BTC_TO_EVM" ? "BTC" : "cbBTC"}`,
+          state: "completed",
+          badge: dir === "BTC_TO_EVM" ? "BTC" : "cbBTC",
+        },
+        {
+          status: "waiting_user_deposit_confirmed",
+          label: `${Math.max(avgUserConfs, 0)}+ Confs`,
+          state: "completed",
+        },
+        {
+          status: "waiting_mm_deposit_initiated",
+          label: `MM Sent ${dir === "BTC_TO_EVM" ? "cbBTC" : "BTC"}`,
+          state: "completed",
+          badge: dir === "BTC_TO_EVM" ? "cbBTC" : "BTC",
+        },
+        {
+          status: "waiting_mm_deposit_confirmed",
+          label: `${Math.max(avgMmConfs, 0)}+ Confs`,
+          state: "completed",
+        },
+      ];
+      return {
+        dir,
+        count: list.length,
+        avgUsd,
+        avgBtc,
+        avgRiftFeeBtc,
+        flow,
+      };
+    };
+    return [build("BTC_TO_EVM"), build("EVM_TO_BTC")];
+  }, [swaps]);
   const [visible, setVisible] = React.useState(10);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const sorted = React.useMemo(
@@ -381,8 +434,58 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
             overflowY="auto"
             onScroll={handleScroll}
           >
-            {visibleSwaps.map((s) => (
-              <Row key={s.id} swap={s} />
+            {/* Averages blocks */}
+            <Flex direction="column" px="16px" pt="12px" pb="4px" gap="12px">
+              {averages.map((a) => (
+                <GridFlex
+                  key={a.dir}
+                  width="100%"
+                  heightBlocks={3}
+                  contentPadding={12}
+                >
+                  <Flex w="100%" align="center" gap="16px">
+                    <Text
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      color={colorsAnalytics.offWhite}
+                      fontWeight="bold"
+                    >
+                      {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages
+                      ({new Intl.NumberFormat("en-US").format(a.count)} Swaps):
+                    </Text>
+                    <Text
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      color={colorsAnalytics.offWhite}
+                    >
+                      {formatUSD(a.avgUsd)}
+                    </Text>
+                    <Text
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      color={colorsAnalytics.offWhite}
+                    >
+                      {formatUSD(
+                        a.avgRiftFeeBtc * (a.avgUsd / Math.max(a.avgBtc, 1e-9))
+                      )}
+                    </Text>
+                    <Flex flex="1" gap="10px" align="center">
+                      {a.flow.map((step, idx) => (
+                        <Pill key={`${step.status}-${idx}`} step={step} />
+                      ))}
+                    </Flex>
+                  </Flex>
+                </GridFlex>
+              ))}
+            </Flex>
+
+            {visibleSwaps.map((s, idx) => (
+              <Flex
+                key={s.id}
+                w="100%"
+                overflow="hidden"
+                transition="all 300ms ease"
+                animation={idx === 0 ? "slideDown 300ms ease" : undefined}
+              >
+                <Row swap={s} />
+              </Flex>
             ))}
             {isLoadingMore && (
               <Flex justify="center" py="12px">
@@ -392,6 +495,18 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
           </Flex>
         </Flex>
       </GridFlex>
+      <style jsx global>{`
+        @keyframes slideDown {
+          from {
+            transform: translateY(-8px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </Box>
   );
 };
