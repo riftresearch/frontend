@@ -434,47 +434,7 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
             overflowY="auto"
             onScroll={handleScroll}
           >
-            {/* Averages blocks */}
-            <Flex direction="column" px="16px" pt="12px" pb="4px" gap="12px">
-              {averages.map((a) => (
-                <GridFlex
-                  key={a.dir}
-                  width="100%"
-                  heightBlocks={3}
-                  contentPadding={12}
-                >
-                  <Flex w="100%" align="center" gap="16px">
-                    <Text
-                      fontFamily={FONT_FAMILIES.SF_PRO}
-                      color={colorsAnalytics.offWhite}
-                      fontWeight="bold"
-                    >
-                      {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages
-                      ({new Intl.NumberFormat("en-US").format(a.count)} Swaps):
-                    </Text>
-                    <Text
-                      fontFamily={FONT_FAMILIES.SF_PRO}
-                      color={colorsAnalytics.offWhite}
-                    >
-                      {formatUSD(a.avgUsd)}
-                    </Text>
-                    <Text
-                      fontFamily={FONT_FAMILIES.SF_PRO}
-                      color={colorsAnalytics.offWhite}
-                    >
-                      {formatUSD(
-                        a.avgRiftFeeBtc * (a.avgUsd / Math.max(a.avgBtc, 1e-9))
-                      )}
-                    </Text>
-                    <Flex flex="1" gap="10px" align="center">
-                      {a.flow.map((step, idx) => (
-                        <Pill key={`${step.status}-${idx}`} step={step} />
-                      ))}
-                    </Flex>
-                  </Flex>
-                </GridFlex>
-              ))}
-            </Flex>
+            {/* Averages are now outside the scroll area */}
 
             {visibleSwaps.map((s, idx) => (
               <Flex
@@ -495,6 +455,47 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
           </Flex>
         </Flex>
       </GridFlex>
+      {/* Averages blocks below the container */}
+      <Flex direction="column" px="16px" pt="12px" gap="12px">
+        {averages.map((a) => (
+          <GridFlex
+            key={a.dir}
+            width="100%"
+            heightBlocks={3}
+            contentPadding={12}
+          >
+            <Flex w="100%" align="center" gap="16px">
+              <Text
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                color={colorsAnalytics.offWhite}
+                fontWeight="bold"
+              >
+                {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages (
+                {new Intl.NumberFormat("en-US").format(a.count)} Swaps):
+              </Text>
+              <Text
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                color={colorsAnalytics.offWhite}
+              >
+                {formatUSD(a.avgUsd)}
+              </Text>
+              <Text
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                color={colorsAnalytics.offWhite}
+              >
+                {formatUSD(
+                  a.avgRiftFeeBtc * (a.avgUsd / Math.max(a.avgBtc, 1e-9))
+                )}
+              </Text>
+              <Flex flex="1" gap="10px" align="center">
+                {a.flow.map((step, idx) => (
+                  <Pill key={`${step.status}-${idx}`} step={step} />
+                ))}
+              </Flex>
+            </Flex>
+          </GridFlex>
+        ))}
+      </Flex>
       <style jsx global>{`
         @keyframes slideDown {
           from {
