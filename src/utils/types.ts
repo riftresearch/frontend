@@ -124,6 +124,10 @@ export interface AdminSwapFlowStep {
   badge?: "BTC" | "cbBTC";
   /** Visual/logic state for the step */
   state: "notStarted" | "inProgress" | "completed";
+  /** Transaction hash for this step */
+  txHash?: string;
+  /** Chain for the transaction (for proper explorer link) */
+  txChain?: "ETH" | "BTC";
 }
 
 export type SwapDirection = "BTC_TO_EVM" | "EVM_TO_BTC";

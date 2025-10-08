@@ -8,7 +8,7 @@ import { VolumeTxnChart } from "@/components/charts/VolumeTxnChart";
 import { SwapHistory } from "@/components/charts/SwapHistory";
 import { MarketMakers } from "../other/MarketMakers";
 import { ErrorLogs } from "../other/ErrorLogs";
-import { useSwapsFromDb } from "@/hooks/useSwapsFromDb";
+import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 
 interface AdminDashboardProps {
@@ -29,8 +29,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     [adminSwaps]
   );
 
-  // Populate swaps from DB and keep in sync
-  useSwapsFromDb();
+  // Fetch and update BTC price
+  useBtcPrice();
 
   return (
     <Flex minHeight="100vh" bg={"#000000"} justifyContent="center">

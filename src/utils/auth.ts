@@ -1,28 +1,96 @@
-import crypto from "crypto";
+const ANALYTICS_API_URL =
+  process.env.NEXT_PUBLIC_ANALYTICS_API_URL || "http://localhost:3000";
 
-// Stored hash for password "rift"
-// Generated using: crypto.createHash('sha256').update('rift').digest('hex')
-const ADMIN_PASSWORD_HASH =
-  "168ee09f96df4c38849d14d6b72b238995289c6014d8602d1c0b71f0db58c429";
+const ADMIN_PASSWORD_COOKIE = "admin_api_key";
+
+export type AuthVerificationResult = {
+  success: boolean;
+  error?: "NETWORK_ERROR" | "SERVER_ERROR" | "INVALID_PASSWORD";
+  message?: string;
+};
 
 /**
- * Hash a password using SHA-256
+ * Verify admin password with the backend analytics server
  */
-export function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
+export async function verifyAdminPassword(
+  password: string
+): Promise<AuthVerificationResult> {
+  try {
+    const response = await fetch(`${ANALYTICS_API_URL}/api/auth/verify`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${password}`,
+      },
+    });
+
+    if (response.status === 404) {
+      return {
+        success: false,
+        error: "SERVER_ERROR",
+        message: "Analytics server endpoint not found",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: "INVALID_PASSWORD",
+        message: "Invalid password",
+      };
+    }
+
+    const data = await response.json();
+    if (data.success === true) {
+      return { success: true };
+    }
+
+    return {
+      success: false,
+      error: "INVALID_PASSWORD",
+      message: "Invalid password",
+    };
+  } catch (error) {
+    console.error("Auth error:", error);
+    return {
+      success: false,
+      error: "NETWORK_ERROR",
+      message: "Could not connect to analytics server",
+    };
+  }
 }
 
 /**
- * Verify if the provided password matches the stored admin password
+ * Store admin password in cookies
  */
-export function verifyAdminPassword(password: string): boolean {
-  const hashedInput = hashPassword(password);
-  return hashedInput === ADMIN_PASSWORD_HASH;
+export function setAdminPasswordCookie(password: string): void {
+  if (typeof document === "undefined") return;
+
+  // Set cookie with 7 day expiry, secure, httpOnly flags
+  const maxAge = 60 * 60 * 24 * 7; // 7 days in seconds
+  document.cookie = `${ADMIN_PASSWORD_COOKIE}=${password}; path=/; max-age=${maxAge}; SameSite=Strict`;
 }
 
 /**
- * Generate the actual hash for "rift" (for reference)
+ * Get admin password from cookies
  */
-export function generateRiftHash(): string {
-  return hashPassword("rift");
+export function getAdminPasswordFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+
+  const cookies = document.cookie.split(";");
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split("=");
+    if (name === ADMIN_PASSWORD_COOKIE) {
+      return value;
+    }
+  }
+  return null;
+}
+
+/**
+ * Remove admin password from cookies (logout)
+ */
+export function clearAdminPasswordCookie(): void {
+  if (typeof document === "undefined") return;
+
+  document.cookie = `${ADMIN_PASSWORD_COOKIE}=; path=/; max-age=0`;
 }

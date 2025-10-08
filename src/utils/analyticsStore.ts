@@ -107,18 +107,18 @@ function generateDummyMMs(): MarketMaker[] {
       currentCbbtcBalance: 14.478334,
       currentBtcBalance: 13.478334,
     },
-    {
-      mmName: "Rift MM Beta",
-      currentEthBalance: 89.1234,
-      currentCbbtcBalance: 7.5567,
-      currentBtcBalance: 5.6789,
-    },
-    {
-      mmName: "Rift MM Gamma",
-      currentEthBalance: 210.005,
-      currentCbbtcBalance: 24.0012,
-      currentBtcBalance: 18.3345,
-    },
+    // {
+    //   mmName: "Rift MM Beta",
+    //   currentEthBalance: 89.1234,
+    //   currentCbbtcBalance: 7.5567,
+    //   currentBtcBalance: 5.6789,
+    // },
+    // {
+    //   mmName: "Rift MM Gamma",
+    //   currentEthBalance: 210.005,
+    //   currentCbbtcBalance: 24.0012,
+    //   currentBtcBalance: 18.3345,
+    // },
   ];
 }
 
@@ -153,6 +153,8 @@ export const useAnalyticsStore = create<{
   setTotalFeesCollected: (value: number) => void;
   totalUsers: number;
   setTotalUsers: (value: number) => void;
+  btcPriceUsd: number;
+  setBtcPriceUsd: (price: number) => void;
   adminSwaps: AdminSwapItem[];
   setAdminSwaps: (items: AdminSwapItem[]) => void;
   addAdminSwap: (item: AdminSwapItem) => void;
@@ -167,6 +169,8 @@ export const useAnalyticsStore = create<{
   setTotalFeesCollected: (value: number) => set({ totalFeesCollected: value }),
   totalUsers: 2382,
   setTotalUsers: (value: number) => set({ totalUsers: value }),
+  btcPriceUsd: 64000, // Default price, will be updated on load
+  setBtcPriceUsd: (price: number) => set({ btcPriceUsd: price }),
   // Start with no swaps; they will be populated by the DB hook
   adminSwaps: [],
   setAdminSwaps: (items: AdminSwapItem[]) => set({ adminSwaps: items }),

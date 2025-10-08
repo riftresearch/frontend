@@ -3,6 +3,11 @@ import { NextPage } from "next";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { PasswordGate } from "@/components/admin/PasswordGate";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import {
+  getAdminPasswordFromCookie,
+  setAdminPasswordCookie,
+  clearAdminPasswordCookie,
+} from "@/utils/auth";
 
 const AdminPage: NextPage = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -10,8 +15,8 @@ const AdminPage: NextPage = () => {
 
   // Check for existing authentication on mount
   useEffect(() => {
-    const authStatus = localStorage.getItem("admin_authenticated");
-    if (authStatus === "true") {
+    const apiKey = getAdminPasswordFromCookie();
+    if (apiKey) {
       setIsAuthenticated(true);
     }
     setIsLoading(false);
@@ -25,14 +30,14 @@ const AdminPage: NextPage = () => {
     };
   }, []);
 
-  const handleAuthenticated = () => {
+  const handleAuthenticated = (password: string) => {
+    setAdminPasswordCookie(password);
     setIsAuthenticated(true);
-    localStorage.setItem("admin_authenticated", "true");
   };
 
   const handleLogout = () => {
+    clearAdminPasswordCookie();
     setIsAuthenticated(false);
-    localStorage.removeItem("admin_authenticated");
   };
 
   if (isLoading) {

@@ -1,13 +1,16 @@
 import { useEffect } from "react";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { AdminSwapItem, SwapDirection, AdminSwapFlowStep } from "@/utils/types";
+import { getSwaps } from "@/utils/analyticsClient";
 
-// Basic Postgres listener using WebSocket relay (server required). For demo purposes,
-// we'll poll + use server-sent events if available.
+function formatDuration(startMs: number, endMs: number): string {
+  const diffSeconds = Math.floor((endMs - startMs) / 1000);
+  const minutes = Math.floor(diffSeconds / 60);
+  const seconds = diffSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
 
-const DB_URL = process.env.NEXT_PUBLIC_OTC_DB_URL || "";
-
-function mapDbRowToAdminSwap(row: any): AdminSwapItem {
+function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
   const createdAtMs = new Date(row.created_at).getTime();
   const direction: SwapDirection = "EVM_TO_BTC";
 
@@ -26,11 +29,76 @@ function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   const userConfs = Number(row?.user_deposit_status?.confirmations || 0);
   const mmConfs = Number(row?.mm_deposit_status?.confirmations || 0);
 
+  // Parse timestamps for duration calculations
+  const createdAt = createdAtMs;
+  const userDepositDetectedAt = row?.user_deposit_status?.deposit_detected_at
+    ? new Date(row.user_deposit_status.deposit_detected_at).getTime()
+    : null;
+  const userConfirmedAt = row?.user_deposit_status?.confirmed_at
+    ? new Date(row.user_deposit_status.confirmed_at).getTime()
+    : null;
+  const mmDepositDetectedAt = row?.mm_deposit_status?.deposit_detected_at
+    ? new Date(row.mm_deposit_status.deposit_detected_at).getTime()
+    : null;
+  const mmPrivateKeySentAt = row?.mm_private_key_sent_at
+    ? new Date(row.mm_private_key_sent_at).getTime()
+    : null;
+
+  // Calculate durations for each step
+  // created -> user sent
+  const durationCreatedToUserSent =
+    userDepositDetectedAt && createdAt
+      ? formatDuration(createdAt, userDepositDetectedAt)
+      : undefined;
+
+  // user sent -> confs
+  const durationUserSentToConfs =
+    userConfirmedAt && userDepositDetectedAt
+      ? formatDuration(userDepositDetectedAt, userConfirmedAt)
+      : undefined;
+
+  // user confs -> mm sent
+  const durationUserConfsToMmSent =
+    mmDepositDetectedAt && userConfirmedAt
+      ? formatDuration(userConfirmedAt, mmDepositDetectedAt)
+      : undefined;
+
+  // mm sent -> mm confs
+  const durationMmSentToMmConfs =
+    mmPrivateKeySentAt && mmDepositDetectedAt
+      ? formatDuration(mmDepositDetectedAt, mmPrivateKeySentAt)
+      : undefined;
+
+  // Extract transaction hashes
+  const userTxHash = row?.user_deposit_status?.tx_hash;
+  const mmTxHash = row?.mm_deposit_status?.tx_hash;
+
+  // Extract amounts - user_deposit_status.amount is in hex (wei for ETH tokens)
+  // For cbBTC, it's 8 decimals like BTC
+  const userDepositAmountHex = row?.user_deposit_status?.amount || "0x0";
+  const mmDepositAmountHex = row?.mm_deposit_status?.amount || "0x0";
+
+  // Convert hex to decimal and adjust for 8 decimals (cbBTC/BTC standard)
+  const userDepositAmount = parseInt(userDepositAmountHex, 16) / 1e8;
+  const mmDepositAmount = parseInt(mmDepositAmountHex, 16) / 1e8;
+
+  // Use the user's deposit amount as the swap amount (in BTC)
+  const swapAmountBtc = userDepositAmount || 0.001;
+  const swapAmountUsd = btcPriceUsd
+    ? swapAmountBtc * btcPriceUsd
+    : swapAmountBtc * 64000;
+
+  // Estimate fees (these could come from the quote data if available)
+  const riftFeeBtc = swapAmountBtc * 0.001; // 0.1% fee estimate
+  const networkFeeUsd = 1.5; // Rough estimate
+  const mmFeeUsd = swapAmountUsd * 0.002; // 0.2% MM fee estimate
+
   const steps: AdminSwapFlowStep[] = [
     {
       status: "pending",
       label: "Created",
       state: currentIndex > 0 ? "completed" : "inProgress",
+      // No duration - this is the starting point
     },
     {
       status: "waiting_user_deposit_initiated",
@@ -42,6 +110,9 @@ function mapDbRowToAdminSwap(row: any): AdminSwapItem {
             ? "inProgress"
             : "notStarted",
       badge: "cbBTC",
+      duration: durationCreatedToUserSent, // Time from created -> user sent
+      txHash: userTxHash,
+      txChain: "ETH", // User sends cbBTC on ETH
     },
     {
       status: "waiting_user_deposit_confirmed",
@@ -52,6 +123,7 @@ function mapDbRowToAdminSwap(row: any): AdminSwapItem {
           : currentIndex === 2
             ? "inProgress"
             : "notStarted",
+      duration: durationUserSentToConfs, // Time from user sent -> confs
     },
     {
       status: "waiting_mm_deposit_initiated",
@@ -63,6 +135,9 @@ function mapDbRowToAdminSwap(row: any): AdminSwapItem {
             ? "inProgress"
             : "notStarted",
       badge: "BTC",
+      duration: durationUserConfsToMmSent, // Time from user confs -> mm sent
+      txHash: mmTxHash,
+      txChain: "BTC", // MM sends BTC
     },
     {
       status: "waiting_mm_deposit_confirmed",
@@ -73,11 +148,13 @@ function mapDbRowToAdminSwap(row: any): AdminSwapItem {
           : currentIndex === 4
             ? "inProgress"
             : "notStarted",
+      duration: durationMmSentToMmConfs, // Time from mm sent -> mm confs
     },
     {
       status: "settled",
       label: "Settled",
       state: currentIndex >= 5 ? "completed" : "notStarted",
+      // No duration shown for final step
     },
   ];
 
@@ -91,58 +168,19 @@ function mapDbRowToAdminSwap(row: any): AdminSwapItem {
       "0x0000000000000000000000000000000000000000",
     chain: "ETH",
     direction,
-    swapInitialAmountBtc: 0.001,
-    swapInitialAmountUsd: 64,
-    riftFeeBtc: 0.00001,
+    swapInitialAmountBtc: swapAmountBtc,
+    swapInitialAmountUsd: swapAmountUsd,
+    riftFeeBtc,
     userConfs,
     mmConfs,
-    networkFeeUsd: 1.23,
-    mmFeeUsd: 4.86,
+    networkFeeUsd,
+    mmFeeUsd,
     flow: steps,
   };
 }
 
 export function useSwapsFromDb() {
-  const setAdminSwaps = useAnalyticsStore((s) => s.setAdminSwaps);
-  const addAdminSwap = useAnalyticsStore((s) => s.addAdminSwap);
-
-  useEffect(() => {
-    if (!DB_URL) return;
-
-    let stop = false;
-
-    async function initialFetch() {
-      try {
-        const res = await fetch(`/api/swaps?db=${encodeURIComponent(DB_URL)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const mapped: AdminSwapItem[] = (data || []).map(mapDbRowToAdminSwap);
-        if (!stop) setAdminSwaps(mapped);
-      } catch (e) {
-        // silent
-      }
-    }
-
-    let pollId: any;
-    function startPolling() {
-      pollId = setInterval(async () => {
-        try {
-          const res = await fetch(
-            `/api/swaps/latest?db=${encodeURIComponent(DB_URL)}`
-          );
-          if (!res.ok) return;
-          const latest = await res.json();
-          if (latest) addAdminSwap(mapDbRowToAdminSwap(latest));
-        } catch {}
-      }, 1000); // poll every second
-    }
-
-    initialFetch();
-    startPolling();
-
-    return () => {
-      stop = true;
-      if (pollId) clearInterval(pollId);
-    };
-  }, [setAdminSwaps, addAdminSwap]);
+  // Hook is currently unused - SwapHistory handles initial load
+  // This hook is kept for potential future use (e.g., WebSocket connections)
+  // Polling has been removed to avoid overloading the backend
 }

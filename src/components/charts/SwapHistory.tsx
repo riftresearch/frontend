@@ -1,12 +1,15 @@
 import React from "react";
 import Image from "next/image";
-import { Box, Flex, Text, Spinner } from "@chakra-ui/react";
+import { Box, Flex, Text, Spinner, Tooltip } from "@chakra-ui/react";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { AdminSwapItem, AdminSwapFlowStep, SwapDirection } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { FiClock, FiCheck } from "react-icons/fi";
+import { getSwaps } from "@/utils/analyticsClient";
+import { toastError } from "@/utils/toast";
+import { useSwapStream } from "@/hooks/useSwapStream";
 
 function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
@@ -70,6 +73,29 @@ const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
 
 const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
   const displayedLabel = step.label;
+  const hasTx = step.txHash && step.txChain;
+  const isClickable =
+    hasTx &&
+    (step.status === "waiting_user_deposit_initiated" ||
+      step.status === "waiting_mm_deposit_initiated");
+
+  const handleClick = () => {
+    if (!step.txHash || !step.txChain) {
+      toastError(null, {
+        title: "Transaction Not Available",
+        description: "Transaction hash not available yet",
+      });
+      return;
+    }
+
+    const url =
+      step.txChain === "ETH"
+        ? `https://etherscan.io/tx/${step.txHash}`
+        : `https://mempool.space/tx/${step.txHash}`;
+
+    window.open(url, "_blank");
+  };
+
   const styleByState = () => {
     if (step.state === "completed")
       return {
@@ -90,7 +116,8 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
     };
   };
   const s = styleByState();
-  return (
+
+  const pillContent = (
     <Flex
       align="center"
       bg={s.bg}
@@ -100,6 +127,14 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       px="15px"
       py="5px"
       gap="8px"
+      cursor={isClickable ? "pointer" : "default"}
+      onClick={isClickable ? handleClick : undefined}
+      _hover={
+        isClickable
+          ? { filter: "brightness(1.1)", transform: "scale(1.02)" }
+          : undefined
+      }
+      transition="all 150ms ease"
     >
       <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayedLabel}
@@ -109,6 +144,31 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
         <AssetIcon badge={step.badge} />
       )}
     </Flex>
+  );
+
+  if (!isClickable || !step.txHash) {
+    return pillContent;
+  }
+
+  const truncatedHash = `${step.txHash.slice(0, 6)}...${step.txHash.slice(-4)}`;
+
+  return (
+    <Tooltip.Root openDelay={200} closeDelay={0}>
+      <Tooltip.Trigger asChild>{pillContent}</Tooltip.Trigger>
+      <Tooltip.Positioner>
+        <Tooltip.Content
+          bg={colorsAnalytics.offBlackLighter}
+          color={colorsAnalytics.offWhite}
+          borderRadius="8px"
+          px="12px"
+          py="6px"
+          fontSize="12px"
+        >
+          <Tooltip.Arrow />
+          <Text>Open transaction: {truncatedHash}</Text>
+        </Tooltip.Content>
+      </Tooltip.Positioner>
+    </Tooltip.Root>
   );
 };
 
@@ -231,8 +291,8 @@ const Row: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
           color={colorsAnalytics.offWhite}
           fontFamily={FONT_FAMILIES.SF_PRO}
         >
-          {/* {swap.chain} */}
-          {swap.statusTesting}
+          {swap.chain}
+          {/* {swap.statusTesting} */}
         </Text>
       </Box>
 
@@ -304,10 +364,214 @@ function timeAgoFrom(nowMs: number, tsMs: number): string {
   return `${hours} hour${hours === 1 ? "" : "s"} ago`;
 }
 
+function formatDuration(startMs: number, endMs: number): string {
+  const diffSeconds = Math.floor((endMs - startMs) / 1000);
+  const minutes = Math.floor(diffSeconds / 60);
+  const seconds = diffSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
+  const createdAtMs = new Date(row.created_at).getTime();
+  const direction: SwapDirection = "EVM_TO_BTC";
+  const status: string = (row.status || "pending") as string;
+  const order: Array<AdminSwapFlowStep["status"]> = [
+    "pending",
+    "waiting_user_deposit_initiated",
+    "waiting_user_deposit_confirmed",
+    "waiting_mm_deposit_initiated",
+    "waiting_mm_deposit_confirmed",
+    "settled",
+  ];
+  const currentIndex = Math.max(0, order.indexOf(status as any));
+  const userConfs = Number(row?.user_deposit_status?.confirmations || 0);
+  const mmConfs = Number(row?.mm_deposit_status?.confirmations || 0);
+
+  // Parse timestamps for duration calculations
+  const createdAt = createdAtMs;
+  const userDepositDetectedAt = row?.user_deposit_status?.deposit_detected_at
+    ? new Date(row.user_deposit_status.deposit_detected_at).getTime()
+    : null;
+  const userConfirmedAt = row?.user_deposit_status?.confirmed_at
+    ? new Date(row.user_deposit_status.confirmed_at).getTime()
+    : null;
+  const mmDepositDetectedAt = row?.mm_deposit_status?.deposit_detected_at
+    ? new Date(row.mm_deposit_status.deposit_detected_at).getTime()
+    : null;
+  const mmPrivateKeySentAt = row?.mm_private_key_sent_at
+    ? new Date(row.mm_private_key_sent_at).getTime()
+    : null;
+
+  // Calculate durations for each step
+  // created -> user sent
+  const durationCreatedToUserSent =
+    userDepositDetectedAt && createdAt
+      ? formatDuration(createdAt, userDepositDetectedAt)
+      : undefined;
+
+  // user sent -> confs
+  const durationUserSentToConfs =
+    userConfirmedAt && userDepositDetectedAt
+      ? formatDuration(userDepositDetectedAt, userConfirmedAt)
+      : undefined;
+
+  // user confs -> mm sent
+  const durationUserConfsToMmSent =
+    mmDepositDetectedAt && userConfirmedAt
+      ? formatDuration(userConfirmedAt, mmDepositDetectedAt)
+      : undefined;
+
+  // mm sent -> mm confs
+  const durationMmSentToMmConfs =
+    mmPrivateKeySentAt && mmDepositDetectedAt
+      ? formatDuration(mmDepositDetectedAt, mmPrivateKeySentAt)
+      : undefined;
+
+  // Extract transaction hashes
+  const userTxHash = row?.user_deposit_status?.tx_hash;
+  const mmTxHash = row?.mm_deposit_status?.tx_hash;
+
+  // Extract amounts - user_deposit_status.amount is in hex (wei for ETH tokens)
+  // For cbBTC, it's 8 decimals like BTC
+  const userDepositAmountHex = row?.user_deposit_status?.amount || "0x0";
+  const mmDepositAmountHex = row?.mm_deposit_status?.amount || "0x0";
+
+  // Convert hex to decimal and adjust for 8 decimals (cbBTC/BTC standard)
+  const userDepositAmount = parseInt(userDepositAmountHex, 16) / 1e8;
+  const mmDepositAmount = parseInt(mmDepositAmountHex, 16) / 1e8;
+
+  // Use the user's deposit amount as the swap amount (in BTC)
+  const swapAmountBtc = userDepositAmount || 0.001;
+  const swapAmountUsd = btcPriceUsd
+    ? swapAmountBtc * btcPriceUsd
+    : swapAmountBtc * 64000;
+
+  // Estimate fees (these could come from the quote data if available)
+  const riftFeeBtc = swapAmountBtc * 0.001; // 0.1% fee estimate
+  const networkFeeUsd = 1.5; // Rough estimate
+  const mmFeeUsd = swapAmountUsd * 0.002; // 0.2% MM fee estimate
+
+  const steps: AdminSwapFlowStep[] = [
+    {
+      status: "pending",
+      label: "Created",
+      state: currentIndex > 0 ? "completed" : "inProgress",
+      // No duration - this is the starting point
+    },
+    {
+      status: "waiting_user_deposit_initiated",
+      label: "User Sent",
+      state:
+        currentIndex > 1
+          ? "completed"
+          : currentIndex === 1
+            ? "inProgress"
+            : "notStarted",
+      badge: "cbBTC",
+      duration: durationCreatedToUserSent, // Time from created -> user sent
+      txHash: userTxHash,
+      txChain: "ETH", // User sends cbBTC on ETH
+    },
+    {
+      status: "waiting_user_deposit_confirmed",
+      label: `${userConfs} Confs`,
+      state:
+        currentIndex > 2
+          ? "completed"
+          : currentIndex === 2
+            ? "inProgress"
+            : "notStarted",
+      duration: durationUserSentToConfs, // Time from user sent -> confs
+    },
+    {
+      status: "waiting_mm_deposit_initiated",
+      label: "MM Sent",
+      state:
+        currentIndex > 3
+          ? "completed"
+          : currentIndex === 3
+            ? "inProgress"
+            : "notStarted",
+      badge: "BTC",
+      duration: durationUserConfsToMmSent, // Time from user confs -> mm sent
+      txHash: mmTxHash,
+      txChain: "BTC", // MM sends BTC
+    },
+    {
+      status: "waiting_mm_deposit_confirmed",
+      label: `${mmConfs}+ Confs`,
+      state:
+        currentIndex > 4
+          ? "completed"
+          : currentIndex === 4
+            ? "inProgress"
+            : "notStarted",
+      duration: durationMmSentToMmConfs, // Time from mm sent -> mm confs
+    },
+    {
+      status: "settled",
+      label: "Settled",
+      state: currentIndex >= 5 ? "completed" : "notStarted",
+      // No duration shown for final step
+    },
+  ];
+
+  return {
+    statusTesting: status,
+    id: row.id,
+    swapCreationTimestamp: createdAtMs,
+    evmAccountAddress:
+      row.user_evm_account_address ||
+      row.user_deposit_address ||
+      "0x0000000000000000000000000000000000000000",
+    chain: "ETH",
+    direction,
+    swapInitialAmountBtc: swapAmountBtc,
+    swapInitialAmountUsd: swapAmountUsd,
+    riftFeeBtc,
+    userConfs,
+    mmConfs,
+    networkFeeUsd,
+    mmFeeUsd,
+    flow: steps,
+  };
+}
+
 export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
   heightBlocks = 13,
 }) => {
-  const swaps = useAnalyticsStore((s) => s.adminSwaps);
+  const storeSwaps = useAnalyticsStore((s) => s.adminSwaps);
+  const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
+  const [allSwaps, setAllSwaps] = React.useState<AdminSwapItem[]>([]);
+  const [page, setPage] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(true);
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+  const [newSwapId, setNewSwapId] = React.useState<string | null>(null);
+  const pageSize = 20;
+
+  // Connect to real-time swap stream
+  const { latestSwap, isConnected } = useSwapStream();
+
+  // Merge store swaps (live updates) with fetched swaps (pagination)
+  const swaps = React.useMemo(() => {
+    const mergedMap = new Map<string, AdminSwapItem>();
+
+    // Add all fetched swaps
+    allSwaps.forEach((swap) => mergedMap.set(swap.id, swap));
+
+    // Overlay store swaps (for live updates from polling)
+    // Only add store swaps that are newer than our latest fetched swap
+    const latestFetchedTime = allSwaps[0]?.swapCreationTimestamp || 0;
+    storeSwaps
+      .filter((swap) => swap.swapCreationTimestamp > latestFetchedTime)
+      .forEach((swap) => mergedMap.set(swap.id, swap));
+
+    return Array.from(mergedMap.values()).sort(
+      (a, b) => b.swapCreationTimestamp - a.swapCreationTimestamp
+    );
+  }, [allSwaps, storeSwaps]);
+
   const averages = React.useMemo(() => {
     const byDir: Record<SwapDirection, AdminSwapItem[]> = {
       BTC_TO_EVM: [],
@@ -318,6 +582,28 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
       if (!nums.length) return 0;
       return nums.reduce((a, b) => a + b, 0) / nums.length;
     }
+
+    // Helper to calculate average duration from flow steps
+    function avgDuration(
+      swaps: AdminSwapItem[],
+      stepIndex: number
+    ): string | undefined {
+      const durations = swaps
+        .map((s) => s.flow[stepIndex]?.duration)
+        .filter((d): d is string => !!d)
+        .map((d) => {
+          const [min, sec] = d.split(":").map(Number);
+          return min * 60 + sec;
+        });
+
+      if (durations.length === 0) return undefined;
+
+      const avgSeconds = Math.round(avg(durations));
+      const minutes = Math.floor(avgSeconds / 60);
+      const seconds = avgSeconds % 60;
+      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    }
+
     const build = (dir: SwapDirection) => {
       const list = byDir[dir];
       const avgUsd = avg(list.map((s) => s.swapInitialAmountUsd));
@@ -325,69 +611,124 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
       const avgRiftFeeBtc = avg(list.map((s) => s.riftFeeBtc));
       const avgUserConfs = Math.round(avg(list.map((s) => s.userConfs || 0)));
       const avgMmConfs = Math.round(avg(list.map((s) => s.mmConfs || 0)));
-      const flow: AdminSwapFlowStep[] = [
-        { status: "pending", label: "Swap Created", state: "completed" },
+
+      const filteredFlow: AdminSwapFlowStep[] = [
+        {
+          status: "pending",
+          label: "Created",
+          state: "completed",
+        },
         {
           status: "waiting_user_deposit_initiated",
-          label: `User Sent ${dir === "BTC_TO_EVM" ? "BTC" : "cbBTC"}`,
+          label: "User Sent",
           state: "completed",
           badge: dir === "BTC_TO_EVM" ? "BTC" : "cbBTC",
+          duration: avgDuration(list, 1),
         },
         {
           status: "waiting_user_deposit_confirmed",
-          label: `${Math.max(avgUserConfs, 0)}+ Confs`,
+          label: `${Math.max(avgUserConfs, 0)} Confs`,
           state: "completed",
+          duration: avgDuration(list, 2),
         },
         {
           status: "waiting_mm_deposit_initiated",
-          label: `MM Sent ${dir === "BTC_TO_EVM" ? "cbBTC" : "BTC"}`,
+          label: "MM Sent",
           state: "completed",
           badge: dir === "BTC_TO_EVM" ? "cbBTC" : "BTC",
+          duration: avgDuration(list, 3),
         },
         {
           status: "waiting_mm_deposit_confirmed",
           label: `${Math.max(avgMmConfs, 0)}+ Confs`,
           state: "completed",
+          duration: avgDuration(list, 4),
         },
       ];
+
       return {
         dir,
         count: list.length,
         avgUsd,
         avgBtc,
         avgRiftFeeBtc,
-        flow,
+        flow: filteredFlow,
       };
     };
     return [build("BTC_TO_EVM"), build("EVM_TO_BTC")];
   }, [swaps]);
-  const [visible, setVisible] = React.useState(10);
-  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
-  const sorted = React.useMemo(
-    () =>
-      [...swaps].sort(
-        (a, b) => b.swapCreationTimestamp - a.swapCreationTimestamp
-      ),
-    [swaps]
-  );
-  const visibleSwaps = sorted.slice(0, visible);
-  const canLoadMore = visible < sorted.length;
+
+  // Fetch next page from analytics server
+  const fetchNextPage = React.useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    try {
+      console.log(`Fetching page ${page} (${pageSize} swaps)...`);
+      const data = await getSwaps(page, pageSize);
+      const mapped = (data?.swaps || []).map((row: any) =>
+        mapDbRowToAdminSwap(row, btcPriceUsd)
+      );
+
+      console.log(`Received ${mapped.length} swaps from page ${page}`);
+
+      if (mapped.length < pageSize) {
+        setHasMore(false);
+      }
+
+      setAllSwaps((prev) => {
+        const existing = new Set(prev.map((s) => s.id));
+        const newSwaps = mapped.filter((s) => !existing.has(s.id));
+        console.log(
+          `Added ${newSwaps.length} new swaps (${existing.size} existing)`
+        );
+        return [...prev, ...newSwaps];
+      });
+
+      setPage((p) => p + 1);
+    } catch (error) {
+      console.error("Error fetching swaps:", error);
+    } finally {
+      setIsLoadingMore(false);
+      setIsInitialLoad(false);
+    }
+  }, [page, pageSize, isLoadingMore, hasMore, btcPriceUsd]);
+
+  // Initial load
+  React.useEffect(() => {
+    fetchNextPage();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle new swap from SSE stream
+  React.useEffect(() => {
+    if (latestSwap) {
+      const mapped = mapDbRowToAdminSwap(latestSwap, btcPriceUsd);
+
+      // Add to the list if not already present
+      setAllSwaps((prev) => {
+        if (prev.some((s) => s.id === mapped.id)) {
+          return prev;
+        }
+        return [mapped, ...prev];
+      });
+
+      // Trigger animation
+      setNewSwapId(mapped.id);
+      setTimeout(() => setNewSwapId(null), 1000);
+    }
+  }, [latestSwap, btcPriceUsd]);
 
   const handleScroll = React.useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
-      if (isLoadingMore || !canLoadMore) return;
+      if (isLoadingMore || !hasMore) return;
       const el = e.currentTarget;
       const distanceFromBottom =
         el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom < 24) {
-        setIsLoadingMore(true);
-        setTimeout(() => {
-          setVisible((v) => Math.min(sorted.length, v + 10));
-          setIsLoadingMore(false);
-        }, 450);
+      if (distanceFromBottom < 100) {
+        fetchNextPage();
       }
     },
-    [isLoadingMore, canLoadMore, sorted.length]
+    [isLoadingMore, hasMore, fetchNextPage]
   );
 
   return (
@@ -403,6 +744,7 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
             align="center"
             fontWeight="bold"
             color={colorsAnalytics.textGray}
+            flexShrink={0}
           >
             <Box w="128px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Created</Text>
@@ -428,73 +770,165 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
           </Flex>
 
           {/* Rows */}
-          <Flex
-            direction="column"
+          <Box
             flex="1"
             overflowY="auto"
+            overflowX="hidden"
             onScroll={handleScroll}
+            mr="8px"
+            css={{
+              "&::-webkit-scrollbar": {
+                width: "8px",
+              },
+              "&::-webkit-scrollbar-track": {
+                background: "transparent",
+              },
+              "&::-webkit-scrollbar-thumb": {
+                background: "#333",
+                borderRadius: "4px",
+              },
+              "&::-webkit-scrollbar-thumb:hover": {
+                background: "#444",
+              },
+            }}
+            minHeight="0"
           >
-            {/* Averages are now outside the scroll area */}
-
-            {visibleSwaps.map((s, idx) => (
-              <Flex
-                key={s.id}
-                w="100%"
-                overflow="hidden"
-                transition="all 300ms ease"
-                animation={idx === 0 ? "slideDown 300ms ease" : undefined}
-              >
-                <Row swap={s} />
-              </Flex>
-            ))}
-            {isLoadingMore && (
-              <Flex justify="center" py="12px">
-                <Spinner size="sm" color={colorsAnalytics.offWhite} />
-              </Flex>
-            )}
-          </Flex>
+            <Flex direction="column" w="100%">
+              {isInitialLoad && swaps.length === 0 ? (
+                <Flex justify="center" align="center" py="40px">
+                  <Spinner size="md" color={colorsAnalytics.offWhite} />
+                </Flex>
+              ) : (
+                <>
+                  {swaps.map((s, idx) => (
+                    <Flex
+                      key={s.id}
+                      w="100%"
+                      flexShrink={0}
+                      transition="all 300ms ease"
+                      animation={
+                        newSwapId === s.id
+                          ? "slideDownGreen 600ms ease"
+                          : undefined
+                      }
+                    >
+                      <Row swap={s} />
+                    </Flex>
+                  ))}
+                  {isLoadingMore && (
+                    <Flex justify="center" py="12px" flexShrink={0}>
+                      <Spinner size="sm" color={colorsAnalytics.offWhite} />
+                    </Flex>
+                  )}
+                  {!hasMore && swaps.length > 0 && (
+                    <Flex justify="center" py="12px" flexShrink={0}>
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.textGray}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        No more swaps to load
+                      </Text>
+                    </Flex>
+                  )}
+                </>
+              )}
+            </Flex>
+          </Box>
         </Flex>
       </GridFlex>
-      {/* Averages blocks below the container */}
-      <Flex direction="column" px="16px" pt="12px" gap="12px">
-        {averages.map((a) => (
-          <GridFlex
-            key={a.dir}
-            width="100%"
-            heightBlocks={3}
-            contentPadding={12}
-          >
-            <Flex w="100%" align="center" gap="16px">
-              <Text
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                color={colorsAnalytics.offWhite}
-                fontWeight="bold"
-              >
-                {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages (
-                {new Intl.NumberFormat("en-US").format(a.count)} Swaps):
-              </Text>
-              <Text
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                color={colorsAnalytics.offWhite}
-              >
-                {formatUSD(a.avgUsd)}
-              </Text>
-              <Text
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                color={colorsAnalytics.offWhite}
-              >
-                {formatUSD(
-                  a.avgRiftFeeBtc * (a.avgUsd / Math.max(a.avgBtc, 1e-9))
-                )}
-              </Text>
-              <Flex flex="1" gap="10px" align="center">
-                {a.flow.map((step, idx) => (
-                  <Pill key={`${step.status}-${idx}`} step={step} />
-                ))}
-              </Flex>
-            </Flex>
-          </GridFlex>
-        ))}
+      {/* Averages block below the container */}
+      <Flex pt="12px" w="100%">
+        <GridFlex width="100%" heightBlocks={4.57} contentPadding={0}>
+          <Flex direction="column" pt="10px" w="100%">
+            {averages.map((a) => {
+              const impliedUsdPerBtc = a.avgBtc > 0 ? a.avgUsd / a.avgBtc : 0;
+              const riftFeeUsd = a.avgRiftFeeBtc * impliedUsdPerBtc;
+
+              return (
+                <Flex
+                  key={a.dir}
+                  w="100%"
+                  py="14px"
+                  px="16px"
+                  align="center"
+                  letterSpacing={"-0.8px"}
+                >
+                  {/* Direction Label - aligned with "Swap Created" column */}
+                  <Box w="128px" ml="16px" mr="-16px">
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      fontWeight="bold"
+                    >
+                      {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages
+                    </Text>
+                    <Text
+                      fontSize="13px"
+                      color={colorsAnalytics.textGray}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {new Intl.NumberFormat("en-US").format(a.count)} Swaps
+                    </Text>
+                  </Box>
+
+                  {/* Account column - skip */}
+                  <Box w="115px" />
+
+                  {/* Chain column - skip */}
+                  <Box w="60px" />
+
+                  {/* Swap Amount - aligned with amount column */}
+                  <Box w="150px">
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {formatUSD(a.avgUsd)}
+                    </Text>
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.textGray}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {formatBTC(a.avgBtc)}
+                    </Text>
+                  </Box>
+
+                  {/* Rift Fee - aligned with fee column */}
+                  <Box w="130px">
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {formatUSD(riftFeeUsd)}
+                    </Text>
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.textGray}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {formatBTC(a.avgRiftFeeBtc)}
+                    </Text>
+                  </Box>
+
+                  {/* Other Fees column - skip */}
+                  <Box w="110px" />
+
+                  {/* Swap Flow Tracker - aligned with flow pills */}
+                  <Flex flex="1" gap="10px" wrap="wrap" align="center">
+                    {a.flow.map((step, idx) => (
+                      <StepWithTime key={`${step.status}-${idx}`} step={step} />
+                    ))}
+                  </Flex>
+                </Flex>
+              );
+            })}
+          </Flex>
+        </GridFlex>
       </Flex>
       <style jsx global>{`
         @keyframes slideDown {
@@ -505,6 +939,22 @@ export const SwapHistory: React.FC<{ heightBlocks?: number }> = ({
           to {
             transform: translateY(0);
             opacity: 1;
+          }
+        }
+
+        @keyframes slideDownGreen {
+          0% {
+            transform: translateY(-12px);
+            opacity: 0;
+            background-color: rgba(34, 197, 94, 0.15);
+          }
+          20% {
+            background-color: rgba(34, 197, 94, 0.15);
+          }
+          100% {
+            transform: translateY(0);
+            opacity: 1;
+            background-color: transparent;
           }
         }
       `}</style>

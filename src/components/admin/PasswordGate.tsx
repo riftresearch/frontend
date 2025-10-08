@@ -3,30 +3,47 @@ import { Box, Input, Button, Text, Flex, VStack } from "@chakra-ui/react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
 import { verifyAdminPassword } from "@/utils/auth";
+import { toastError } from "@/utils/toast";
 
 interface PasswordGateProps {
-  onAuthenticated: () => void;
+  onAuthenticated: (password: string) => void;
 }
 
 export const PasswordGate: React.FC<PasswordGateProps> = ({
   onAuthenticated,
 }) => {
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
 
-    // Small delay to prevent timing attacks
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const result = await verifyAdminPassword(password);
 
-    if (verifyAdminPassword(password)) {
-      onAuthenticated();
+    if (result.success) {
+      onAuthenticated(password);
     } else {
-      setError("Invalid password");
+      // Show appropriate error toast based on error type
+      if (result.error === "NETWORK_ERROR") {
+        toastError(null, {
+          title: "Analytics Server Down",
+          description:
+            "Could not connect to the analytics server. Please try again later.",
+        });
+      } else if (result.error === "SERVER_ERROR") {
+        toastError(null, {
+          title: "Analytics Server Error",
+          description:
+            result.message ||
+            "Server endpoint not found. Please contact support.",
+        });
+      } else {
+        toastError(null, {
+          title: "Invalid Password",
+          description: "Please check your password and try again.",
+        });
+      }
       setPassword("");
     }
 
@@ -38,20 +55,20 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({
       minHeight="100vh"
       align="center"
       justify="center"
-      bg={colors.offBlack}
+      bg={"#000000"}
       px={4}
     >
       <Box
-        bg={colors.offBlackLighter}
+        bg={"#151515"}
         p={8}
-        borderRadius="lg"
+        borderRadius="20px"
         borderWidth={2}
         borderColor={colors.borderGray}
         boxShadow="xl"
-        maxWidth="400px"
+        maxWidth="450px"
         width="100%"
       >
-        <VStack spacing={6}>
+        <VStack gap={6}>
           <Text
             fontSize="2xl"
             fontWeight="bold"
@@ -62,23 +79,29 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({
           </Text>
 
           <Text
-            fontSize="sm"
+            fontSize="14px"
+            mt="-7px"
             color={colors.textGray}
             textAlign="center"
             fontFamily={FONT_FAMILIES.AUX_MONO}
           >
-            Enter the admin password to continue
+            Enter your admin password to continue
           </Text>
 
           <Box as="form" onSubmit={handleSubmit} width="100%">
-            <VStack spacing={4}>
+            <VStack gap={4}>
               <Input
+                pl="13px"
+                height="50px"
                 type="password"
+                mb="8px"
+                borderRadius="10px"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 bg={colors.offBlack}
                 border="2px solid"
+                fontSize="16px"
                 borderColor={colors.borderGray}
                 color={colors.offWhite}
                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -90,38 +113,21 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({
                 size="lg"
               />
 
-              {error && (
-                <Box
-                  p={3}
-                  bg={colors.red + "20"}
-                  border="1px solid"
-                  borderColor={colors.red}
-                  borderRadius="md"
-                  width="100%"
-                >
-                  <Text
-                    color={colors.red}
-                    fontSize="sm"
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                    textAlign="center"
-                  >
-                    {error}
-                  </Text>
-                </Box>
-              )}
-
               <Button
                 type="submit"
+                // @ts-ignore
                 isLoading={isLoading}
                 loadingText="Verifying..."
-                bg={colors.purpleBackground}
+                bg={colors.currencyCard.btc.background}
                 borderWidth="2px"
-                borderColor={colors.purpleBorder}
+                borderColor={colors.RiftOrange}
                 color={colors.offWhite}
                 fontFamily={FONT_FAMILIES.NOSTROMO}
                 _hover={{ bg: colors.purpleHover }}
                 _active={{ bg: colors.purpleHover }}
                 size="lg"
+                height="50px"
+                borderRadius="10px"
                 width="100%"
                 isDisabled={!password.trim()}
               >
