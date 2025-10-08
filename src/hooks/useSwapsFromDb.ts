@@ -93,6 +93,12 @@ function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
   const networkFeeUsd = 1.5; // Rough estimate
   const mmFeeUsd = swapAmountUsd * 0.002; // 0.2% MM fee estimate
 
+  // Format confirmation labels based on asset type
+  // cbBTC (EVM) needs fewer confirmations, cap at 4+
+  // BTC needs more confirmations, cap at 2+ (but show actual until then)
+  const userConfsLabel = userConfs >= 4 ? "4+ Confs" : `${userConfs} Confs`;
+  const mmConfsLabel = mmConfs >= 2 ? "2+ Confs" : `${mmConfs} Confs`;
+
   const steps: AdminSwapFlowStep[] = [
     {
       status: "pending",
@@ -116,7 +122,7 @@ function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
     },
     {
       status: "waiting_user_deposit_confirmed",
-      label: `${userConfs} Confs`,
+      label: userConfsLabel,
       state:
         currentIndex > 2
           ? "completed"
@@ -141,7 +147,7 @@ function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
     },
     {
       status: "waiting_mm_deposit_confirmed",
-      label: `${mmConfs}+ Confs`,
+      label: mmConfsLabel,
       state:
         currentIndex > 4
           ? "completed"
@@ -176,6 +182,13 @@ function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
     networkFeeUsd,
     mmFeeUsd,
     flow: steps,
+    stepTimestamps: {
+      created: createdAtMs,
+      userDepositDetected: userDepositDetectedAt || undefined,
+      userConfirmed: userConfirmedAt || undefined,
+      mmDepositDetected: mmDepositDetectedAt || undefined,
+      mmPrivateKeySent: mmPrivateKeySentAt || undefined,
+    },
   };
 }
 

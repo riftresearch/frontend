@@ -19,6 +19,7 @@
     "@morpho-org/morpho-ts": "^2.4.0",
     "@morpho-org/simulation-sdk": "^3.1.0",
     "@morpho-org/simulation-sdk-wagmi": "^3.0.2",
+    "@number-flow/react": "^0.5.10",
     "@reown/appkit": "^1.7.9",
     "@reown/appkit-adapter-wagmi": "^1.7.9",
     "@rive-app/react-canvas": "^4.21.4",

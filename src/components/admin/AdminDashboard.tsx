@@ -6,10 +6,12 @@ import { RiftLogo } from "@/components/other/RiftLogo";
 import { GridFlex } from "../other/GridFlex";
 import { VolumeTxnChart } from "@/components/charts/VolumeTxnChart";
 import { SwapHistory } from "@/components/charts/SwapHistory";
+import TopUsers from "@/components/charts/TopUsers";
 import { MarketMakers } from "../other/MarketMakers";
 import { ErrorLogs } from "../other/ErrorLogs";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
+import NumberFlow from "@number-flow/react";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -19,14 +21,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // data from analytics store
   const totalVolume = useAnalyticsStore((s) => s.totalVolume);
   const totalFeesCollected = useAnalyticsStore((s) => s.totalFeesCollected);
-  const totalSwaps = useAnalyticsStore((s) => s.adminSwaps.length);
-  const totalUsers = useAnalyticsStore((s) => s.totalUsers);
-  const adminSwaps = useAnalyticsStore((s) => s.adminSwaps);
-  const inProgressCount = React.useMemo(
-    () =>
-      adminSwaps.filter((sw) => sw.flow.some((st) => st.state === "inProgress"))
-        .length,
-    [adminSwaps]
+
+  // State for swap stats from SwapHistory (via WebSocket)
+  const [totalSwaps, setTotalSwaps] = React.useState(0);
+  const [inProgressCount, setInProgressCount] = React.useState(0);
+  const [totalUsers, setTotalUsers] = React.useState(0);
+
+  const handleStatsUpdate = React.useCallback(
+    (stats: {
+      totalSwaps: number;
+      inProgressSwaps: number;
+      uniqueUsers: number;
+    }) => {
+      setTotalSwaps(stats.totalSwaps);
+      setInProgressCount(stats.inProgressSwaps);
+      setTotalUsers(stats.uniqueUsers);
+    },
+    []
   );
 
   // Fetch and update BTC price
@@ -116,17 +127,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               >
                 Total Swaps
               </Text>
-              <Text
+              <Box
                 mt="-12px"
                 fontWeight="bold"
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="49px"
               >
-                {new Intl.NumberFormat("en-US", {
-                  maximumFractionDigits: 0,
-                }).format(totalSwaps)}
-              </Text>
+                <NumberFlow
+                  value={totalSwaps}
+                  format={{ notation: "compact" }}
+                  style={{
+                    fontFamily: FONT_FAMILIES.SF_PRO,
+                    fontSize: "49px",
+                    fontWeight: "bold",
+                    color: colorsAnalytics.offWhite,
+                  }}
+                />
+              </Box>
             </Flex>
           </GridFlex>
 
@@ -142,17 +160,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               >
                 Total Users
               </Text>
-              <Text
+              <Box
                 mt="-12px"
                 fontWeight="bold"
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="49px"
               >
-                {new Intl.NumberFormat("en-US", {
-                  maximumFractionDigits: 0,
-                }).format(totalUsers)}
-              </Text>
+                <NumberFlow
+                  value={totalUsers}
+                  format={{ notation: "compact" }}
+                  style={{
+                    fontFamily: FONT_FAMILIES.SF_PRO,
+                    fontSize: "49px",
+                    fontWeight: "bold",
+                    color: colorsAnalytics.offWhite,
+                  }}
+                />
+              </Box>
             </Flex>
           </GridFlex>
         </Flex>
@@ -186,7 +211,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             {new Intl.NumberFormat("en-US").format(inProgressCount)} In-Progress
             Swaps
           </Text>
-          <SwapHistory />
+          <SwapHistory onStatsUpdate={handleStatsUpdate} />
+        </Flex>
+
+        {/* TOP USERS */}
+        <Flex mt="-10px" mb="20px" direction="column">
+          <Text
+            ml="5px"
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="bold"
+            mt="18px"
+            fontSize="35px"
+            style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+          >
+            Top Users
+          </Text>
+          <Text
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontSize="14px"
+            mt="4px"
+            ml="5px"
+            mb="28px"
+          >
+            Ranked by volume, swaps, or recent activity
+          </Text>
+          <TopUsers />
         </Flex>
 
         {/* MARKET MAKERS */}

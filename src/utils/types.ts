@@ -160,4 +160,12 @@ export interface AdminSwapItem {
   mmFeeUsd: number;
   /** Ordered list of flow steps for the visual tracker */
   flow: AdminSwapFlowStep[];
+  /** Timestamps for each completed step (for live timer calculation) */
+  stepTimestamps?: {
+    created?: number;
+    userDepositDetected?: number;
+    userConfirmed?: number;
+    mmDepositDetected?: number;
+    mmPrivateKeySent?: number;
+  };
 }
