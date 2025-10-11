@@ -33,6 +33,34 @@ export type SVM = {
   name: "SVM";
 };
 
+export type TokenData = {
+  name: string;
+  ticker: string;
+  address: string | null;
+  balance: string;
+  usdValue: string;
+  icon: string;
+}
+
+export type TokenMetadata = {
+  name: string;
+  ticker: string;
+  icon: string;
+}
+
+export type TokenBalance = {
+  address: string;
+  totalBalance: string;
+  decimals: number;
+  name: string;
+  symbol: string;
+}
+
+export type TokenPrice = {
+  price: number;
+  confidence: number;
+}
+
 export type VirtualMachine = EVM | Bitcoin | SVM;
 
 export type SupportedChain = {

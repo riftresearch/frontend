@@ -4,6 +4,9 @@ import { FONT_FAMILIES } from "../../utils/font";
 import { FaChevronDown } from "react-icons/fa";
 import useWindowSize from "@/hooks/useWindowSize";
 import { ARBITRUM_LOGO, BASE_LOGO } from "./SVGs";
+import { useStore } from "@/utils/store";
+import { FALLBACK_TOKEN_ICON, BTC_ICON, ETH_ICON } from "@/utils/constants";
+import { mainnet, base } from "@reown/appkit/networks";
 
 interface WebAssetTagProps {
   asset: string;
@@ -14,7 +17,6 @@ interface WebAssetTagProps {
   borderWidth?: string | number;
   px?: string | number;
   pointer?: boolean;
-  greyedOut?: boolean;
   cursor?: string;
 }
 
@@ -27,25 +29,35 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
   borderWidth,
   px,
   pointer,
-  greyedOut = false,
   cursor = "default",
 }) => {
   const { isMobile } = useWindowSize();
+  const { evmConnectWalletChainId, selectedInputToken } = useStore();
 
-  const adjustedH = h ?? isMobile ? "30px" : "36px";
+  const adjustedH = (h ?? isMobile) ? "30px" : "36px";
   const adjustedFontSize = fontSize ?? `calc(${adjustedH} / 2 + 0px)`;
-  const arrowSize = fontSize ?? `calc(${adjustedH} / 4)`;
+  const arrowSize = fontSize ?? `calc(${adjustedH} / 2.5)`;
   const adjustedBorderRadius = `calc(${adjustedH} / 4)`;
 
-  const colorKey = asset == "WBTC" ? "btc" : asset.toLowerCase();
-  const imgKey = asset == "WETH" ? "ETH" : asset;
+  const displayTicker = asset === "BTC" ? "BTC" : selectedInputToken?.ticker || "ETH";
 
-  const bgColor = greyedOut
-    ? "#383838"
-    : colors.assetTag[colorKey as keyof typeof colors.assetTag].background;
-  const borderColor = greyedOut
-    ? "#838383"
-    : colors.assetTag[colorKey as keyof typeof colors.assetTag].border;
+  // Use selected token's icon if available and valid, otherwise fallback
+  const iconUrl = asset === "BTC" ? BTC_ICON : selectedInputToken?.icon || ETH_ICON;
+
+  const colorKey = asset === "BTC" ? "btc" : (displayTicker || asset).toLowerCase();
+  const colorDef = colors.assetTag[colorKey as keyof typeof colors.assetTag] || colors.assetTag.eth;
+  const bgColor = colorDef.background;
+  const borderColor = colorDef.border;
+
+  // Determine network logo and colors based on chain ID
+  const isEthereum = evmConnectWalletChainId === mainnet.id;
+  const isBase = evmConnectWalletChainId === base.id;
+
+  const networkBgColor = isEthereum
+    ? colors.assetTag.eth.background
+    : colors.assetTag.cbbtc.background; // Default to Base colors for other chains
+
+  const networkBorderColor = isEthereum ? colors.assetTag.eth.border : colors.assetTag.cbbtc.border; // Default to Base colors for other chains
 
   const pX = px ?? "20px";
 
@@ -69,16 +81,18 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
         onClick={onDropDown}
       >
         <Image
-          src={`/images/assets/icons/${imgKey}.svg`}
-          h={
-            asset == "WBTC"
-              ? adjustedH
-              : asset == "USDC"
-              ? `calc(${adjustedH} - 1px)`
-              : `calc(${adjustedH} - 14px)`
-          }
+          src={iconUrl}
+          h={`calc(${adjustedH} - 2px)`}
+          w={`calc(${adjustedH} - 2px)`}
           userSelect="none"
-          alt={`${asset} icon`}
+          alt={`${displayTicker} icon`}
+          objectFit="cover"
+          borderRadius="400px"
+          onError={(e) => {
+            // Fallback to default icon if loading fails
+            const target = e.target as HTMLImageElement;
+            target.src = FALLBACK_TOKEN_ICON;
+          }}
         />
       </Flex>
       {/* Button Text */}
@@ -96,32 +110,27 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
         cursor={cursor}
         onClick={onDropDown}
       >
-
-        {asset.toLowerCase() === "coinbasebtc" ? (
-          <Text
-            fontSize={adjustedFontSize}
-            color={"white"}
-            fontFamily={FONT_FAMILIES.NOSTROMO}
-            userSelect="none"
-          >
-            <span style={{ fontSize: "12px", marginRight: "1px" }}>cb</span>BTC
-          </Text>
-        ) : (
-          <Text
-            fontSize={adjustedFontSize}
-            color={"white"}
-            fontFamily={FONT_FAMILIES.NOSTROMO}
-            userSelect="none"
-          >
-            {asset}
-          </Text>
+        <Text
+          fontSize={adjustedFontSize}
+          color={"white"}
+          fontFamily={FONT_FAMILIES.NOSTROMO}
+          userSelect="none"
+        >
+          {displayTicker}
+        </Text>
+        {asset !== "BTC" && (
+          <FaChevronDown
+            size={arrowSize}
+            color="white"
+            style={{ marginTop: "2px", marginRight: "-6px" }}
+          />
         )}
       </Flex>
       {asset !== "BTC" && (
         <Flex
           userSelect="none"
-          bg={bgColor}
-          border={`2px solid ${borderColor}`}
+          bg={networkBgColor}
+          border={`2px solid ${networkBorderColor}`}
           borderWidth={borderWidth}
           h={adjustedH}
           w={adjustedH}
@@ -132,7 +141,17 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
           cursor={cursor}
           onClick={onDropDown}
         >
-          <BASE_LOGO width="22" height="22" />
+          {isBase ? (
+            <BASE_LOGO width="22" height="22" />
+          ) : (
+            <Image
+              src="/images/assets/icons/ETH.svg"
+              w="22px"
+              h="22px"
+              alt="Ethereum"
+              objectFit="contain"
+            />
+          )}
         </Flex>
       )}
     </Flex>

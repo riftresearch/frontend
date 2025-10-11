@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { CreateSwapResponse } from "./otcClient";
+import { TokenData } from "./types";
 
 type DepositFlowState =
   | "0-not-started"
@@ -17,6 +18,15 @@ export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
 export const useStore = create<{
   evmConnectWalletChainId: number;
   setEvmConnectWalletChainId: (chainId: number) => void;
+  userTokensByChain: Record<number, TokenData[]>;
+  setUserTokensForChain: (
+    chainId: number,
+    tokens: TokenData[]
+  ) => void;
+  selectedInputToken: TokenData | null;
+  setSelectedInputToken: (token: TokenData | null) => void;
+  searchResults: TokenData[];
+  setSearchResults: (tokens: TokenData[]) => void;
   depositFlowState: DepositFlowState;
   setDepositFlowState: (s: DepositFlowState) => void;
   countdownValue: number;
@@ -29,6 +39,15 @@ export const useStore = create<{
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) =>
     set({ evmConnectWalletChainId: chainId }),
+  userTokensByChain: {},
+  setUserTokensForChain: (chainId: number, tokens) =>
+    set((state) => ({
+      userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
+    })),
+  selectedInputToken: null,
+  setSelectedInputToken: (token: TokenData | null) => set({ selectedInputToken: token }),
+  searchResults: [],
+  setSearchResults: (tokens: TokenData[]) => set({ searchResults: tokens }),
   depositFlowState: "0-not-started",
   setDepositFlowState: (s: DepositFlowState) => set({ depositFlowState: s }),
   countdownValue: 60,

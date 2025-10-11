@@ -2,10 +2,15 @@ import { Config, TokenStyle } from "./types";
 import { createRfqClient, Currency } from "./rfqClient";
 import { createOTCClient } from "./otcClient";
 
-export const IS_FRONTEND_PAUSED =
-  process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === "true";
+export const IS_FRONTEND_PAUSED = process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === "true";
 
 export const LIGHT_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD = 1000;
+
+export const FALLBACK_TOKEN_ICON = "/images/icons/Help.png";
+
+export const ETH_ICON = "https://assets.smold.app/api/chains/1/logo-128.png";
+
+export const BTC_ICON = "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1696501400";
 
 export const BITCOIN_DECIMALS = 8;
 
@@ -30,8 +35,7 @@ export const cbBTCStyle: TokenStyle = {
   border_color_light: "#3B70E8",
   dark_bg_color: "rgba(9, 36, 97, 0.3)",
   light_text_color: "#365B9F",
-  logoURI:
-    "https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp",
+  logoURI: "https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp",
 };
 export const opaqueBackgroundColor = {
   bg: "rgba(15, 15, 15, 0.55)",

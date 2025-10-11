@@ -1,8 +1,3 @@
-const btcColors = {
-  background: "#092461",
-  border: "#1C61FD",
-};
-
 export const colors = {
   RiftOrange: "#FF8F28",
   RiftBlue: "#394AFF",
@@ -14,6 +9,12 @@ export const colors = {
   purpleBorder: "#445BCB",
   purpleBorderDark: "#303F9F",
   purpleButtonBG: "#1B2144",
+
+  swapBorderColor: "#2E59BB",
+  swapBgColor: "rgba(9, 36, 97, 0.3)",
+  swapHoverColor: "rgba(9, 36, 97, 0.95)",
+  coinbaseBlueBackground: "#092461",
+  coinbaseBlueBorder: "#1C61FD",
 
   greenBackground: "#1A4734",
   greenOutline: "#48C94D",
@@ -97,11 +98,12 @@ export const colors = {
       border: "#646C8C",
     },
     coinbasebtc: {
-      ...btcColors,
+      background: "#092461",
+      border: "#1C61FD",
     },
     cbbtc: {
-      // Same as coinbasebtc
-      ...btcColors,
+      background: "#092461",
+      border: "#1C61FD",
     },
   },
   gradient: {

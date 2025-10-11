@@ -7,14 +7,11 @@ import {
   Tooltip as ChakraTooltip,
   Portal,
   Spinner,
+  Button,
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback } from "react";
 import { useRouter } from "next/router";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { colors } from "@/utils/colors";
 import {
   BITCOIN_DECIMALS,
@@ -36,12 +33,7 @@ import {
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
-import {
-  toastInfo,
-  toastWarning,
-  toastSuccess,
-  toastError,
-} from "@/utils/toast";
+import { toastInfo, toastWarning, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { Asset } from "@/utils/types";
 import { TokenStyle } from "@/utils/types";
@@ -57,8 +49,7 @@ const BTC_USD_EXCHANGE_RATE = 115611.06;
 export const SwapWidget = () => {
   const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
   const { isMobile } = useWindowSize();
-  const { isConnected: isWalletConnected, address: userEvmAccountAddress } =
-    useAccount();
+  const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
   const [rawInputAmount, setRawInputAmount] = useState("");
   const [inputTokenAmount, setInputTokenAmount] = useState<bigint>(0n);
@@ -70,9 +61,7 @@ export const SwapWidget = () => {
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }>({ isValid: false });
-  const [lastEditedField, setLastEditedField] = useState<"input" | "output">(
-    "input"
-  );
+  const [lastEditedField, setLastEditedField] = useState<"input" | "output">("input");
   const [isSwappingForBTC, setIsSwappingForBTC] = useState(true);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
@@ -82,15 +71,20 @@ export const SwapWidget = () => {
     amount: number;
     uri: string;
   } | null>(null);
+  const [isHoveringInputSection, setIsHoveringInputSection] = useState(false);
+  const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
+  const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
 
   const [quote, setQuote] = useState<Quote | null>(null);
-  const { swapResponse, setSwapResponse, setTransactionConfirmed } = useStore();
   const {
-    data: hash,
-    writeContract,
-    isPending,
-    error: writeError,
-  } = useWriteContract();
+    swapResponse,
+    setSwapResponse,
+    setTransactionConfirmed,
+    selectedInputToken,
+    userTokensByChain,
+    evmConnectWalletChainId,
+  } = useStore();
+  const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
 
   // Wait for transaction confirmation
   const {
@@ -155,8 +149,8 @@ export const SwapWidget = () => {
   const currentOutputAsset = isSwappingForBTC ? btcAsset : cbBTCAsset;
 
   // For WebAssetTag, we need to pass the right string identifiers
-  const inputAssetIdentifier = isSwappingForBTC ? "CoinbaseBTC" : "BTC";
-  const outputAssetIdentifier = isSwappingForBTC ? "BTC" : "CoinbaseBTC";
+  const inputAssetIdentifier = isSwappingForBTC ? "ETH" : "BTC";
+  const outputAssetIdentifier = isSwappingForBTC ? "BTC" : "ETH";
 
   const openAssetSelector = () => {
     setIsAssetSelectorOpen(true);
@@ -166,16 +160,7 @@ export const SwapWidget = () => {
     setIsAssetSelectorOpen(false);
   };
 
-  const handleAssetSelect = (selectedAsset: string) => {
-    // For now, we'll just show a toast since we only support cbBTC -> BTC swaps
-    toastInfo({
-      title: "Token Selection",
-      description: `${selectedAsset} selection coming soon! Currently only cbBTC is supported.`,
-    });
-  };
-
   const handleSwapReverse = () => {
-
     setIsSwappingForBTC(!isSwappingForBTC);
     // Keep input/output amounts when reversing
     setPayoutAddress("");
@@ -187,9 +172,7 @@ export const SwapWidget = () => {
     }
   };
 
-  const convertInputAmountToFullDecimals = (
-    amount?: string
-  ): bigint | undefined => {
+  const convertInputAmountToFullDecimals = (amount?: string): bigint | undefined => {
     try {
       const inputAmount = amount || rawInputAmount;
       return parseUnits(inputAmount, currentInputAsset.currency.decimals);
@@ -215,17 +198,14 @@ export const SwapWidget = () => {
   useEffect(() => {
     if (payoutAddress) {
       if (!isSwappingForBTC) {
-        // For BTC -> cbBTC swaps, validate Ethereum address for payout
+        // For BTC -> ERC20 swaps, validate Ethereum address for payout
         const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
         setAddressValidation({
           isValid: ethAddressRegex.test(payoutAddress),
         });
       } else {
-        // For cbBTC -> BTC swaps, validate Bitcoin address for payout
-        const validation = validateBitcoinPayoutAddressWithNetwork(
-          payoutAddress,
-          "mainnet"
-        );
+        // For ERC20 -> BTC swaps, validate Bitcoin address for payout
+        const validation = validateBitcoinPayoutAddressWithNetwork(payoutAddress, "mainnet");
         setAddressValidation(validation);
       }
     } else {
@@ -275,8 +255,7 @@ export const SwapWidget = () => {
         } else {
           toastInfo({
             title: "Insufficient liquidity",
-            description:
-              "No market makers have sufficient liquidity to quote this swap",
+            description: "No market makers have sufficient liquidity to quote this swap",
           });
           return;
         }
@@ -405,15 +384,67 @@ export const SwapWidget = () => {
     }
   };
 
+  const handleMaxClick = () => {
+    if (!currentInputBalance) return;
+
+    // Set the balance as the input amount
+    setRawInputAmount(currentInputBalance);
+    setLastEditedField("input");
+    setHasStartedTyping(true);
+
+    const from_amount = convertInputAmountToFullDecimals(currentInputBalance);
+    // if (from_amount && from_amount > 0n) {
+    //   sendRFQRequest(from_amount);
+    // }
+  };
+
+  // useEffect(() => {
+  //   console.log("teeAttestationLoading", teeAttestationLoading);
+  //   console.log("isValidTEE", isValidTEE);
+  //   if (!teeAttestationLoading && !isValidTEE) {
+  //     toastInfo({
+  //       title: "TEE Attestation Failed",
+  //     });
+  //   }
+  // }, [isValidTEE, teeAttestationLoading]);
+
+  // Update current input balance when wallet connection or token selection changes
   useEffect(() => {
-    console.log("teeAttestationLoading", teeAttestationLoading);
-    console.log("isValidTEE", isValidTEE);
-    if (!teeAttestationLoading && !isValidTEE) {
-      toastInfo({
-        title: "TEE Attestation Failed",
-      });
+    if (!isWalletConnected || inputAssetIdentifier === "BTC") {
+      setCurrentInputBalance(null);
+      setCurrentInputTicker(null);
+      return;
     }
-  }, [isValidTEE, teeAttestationLoading]);
+
+    const fallbackList = userTokensByChain?.[evmConnectWalletChainId] || [];
+    const fallbackEth = fallbackList.find((t) => t.ticker?.toUpperCase() === "ETH");
+    const token = selectedInputToken || fallbackEth;
+
+    if (!token) {
+      setCurrentInputBalance(null);
+      setCurrentInputTicker(null);
+      return;
+    }
+
+    const balance = token.balance;
+    const amt = parseFloat(balance);
+
+    if (!balance || !Number.isFinite(amt) || amt <= 0) {
+      setCurrentInputBalance(null);
+      setCurrentInputTicker(null);
+      return;
+    }
+
+    setCurrentInputBalance(balance);
+    setCurrentInputTicker(token.ticker || null);
+  }, [
+    isWalletConnected,
+    userEvmAccountAddress,
+    selectedInputToken,
+    userTokensByChain,
+    evmConnectWalletChainId,
+    inputAssetIdentifier,
+  ]);
 
   const handleOutputChange = (e: ChangeEvent<HTMLInputElement>) => {
     return; // TODO: remove this
@@ -447,8 +478,7 @@ export const SwapWidget = () => {
       if (isMobile) {
         toastInfo({
           title: "Hop on your laptop",
-          description:
-            "This app is too cool for small screens, mobile coming soon!",
+          description: "This app is too cool for small screens, mobile coming soon!",
         });
         return;
       }
@@ -470,9 +500,7 @@ export const SwapWidget = () => {
       // Check payout address
       if (!payoutAddress) {
         toastInfo({
-          title: isSwappingForBTC
-            ? "Enter Bitcoin Address"
-            : "Enter Ethereum Address",
+          title: isSwappingForBTC ? "Enter Bitcoin Address" : "Enter Ethereum Address",
           description: isSwappingForBTC
             ? "Please enter your Bitcoin address to receive BTC"
             : "Please enter your Ethereum address to receive cbBTC",
@@ -488,9 +516,7 @@ export const SwapWidget = () => {
           description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${addressValidation.detectedNetwork}`;
         }
         toastInfo({
-          title: isSwappingForBTC
-            ? "Invalid Bitcoin Address"
-            : "Invalid Ethereum Address",
+          title: isSwappingForBTC ? "Invalid Bitcoin Address" : "Invalid Ethereum Address",
           description,
         });
         return;
@@ -512,9 +538,6 @@ export const SwapWidget = () => {
       // Errors will be handled by the writeError useEffect
     }
   };
-
-  // Always enable the button visually, handle validation in handleSwap
-  const canSwap = true;
 
   // Check if all required fields are filled
   const allFieldsFilled =
@@ -562,10 +585,7 @@ export const SwapWidget = () => {
         <Flex w="100%" flexDir="column" position="relative">
           <Flex
             px="10px"
-            bg={
-              currentInputAsset?.style?.dark_bg_color ||
-              "rgba(37, 82, 131, 0.66)"
-            }
+            bg={currentInputAsset?.style?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
             w="100%"
             h="121px"
             border="2px solid"
@@ -573,16 +593,18 @@ export const SwapWidget = () => {
             borderRadius="16px"
           >
             <Flex direction="column" py="12px" px="8px">
-              <Text
-                color={!rawInputAmount ? colors.offWhite : colors.textGray}
-                fontSize="14px"
-                letterSpacing="-1px"
-                fontWeight="normal"
-                fontFamily="Aux"
-                userSelect="none"
-              >
-                You Send
-              </Text>
+              <Flex align="center" justify="space-between">
+                <Text
+                  color={!rawInputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                  userSelect="none"
+                >
+                  You Send
+                </Text>
+              </Flex>
 
               <Input
                 value={rawInputAmount}
@@ -607,8 +629,7 @@ export const SwapWidget = () => {
                 fontSize="46px"
                 placeholder="0.0"
                 _placeholder={{
-                  color:
-                    currentInputAsset?.style?.light_text_color || "#4A90E2",
+                  color: currentInputAsset?.style?.light_text_color || "#4A90E2",
                 }}
               />
 
@@ -632,12 +653,60 @@ export const SwapWidget = () => {
             </Flex>
 
             <Spacer />
-            <Flex mr="8px">
-              <WebAssetTag
-                cursor="pointer"
-                asset={inputAssetIdentifier}
-                onDropDown={openAssetSelector}
-              />
+            <Flex mr="8px" py="12px" direction="column" align="flex-end" justify="center" h="100%">
+              <Flex direction="row" justify="flex-end" h="21px" align="center">
+                {currentInputBalance && (
+                  <Button
+                    onClick={handleMaxClick}
+                    size="xs"
+                    h="21px"
+                    px="10px"
+                    bg={colors.swapBgColor}
+                    color={colors.offWhite}
+                    fontSize="12px"
+                    fontWeight="bold"
+                    fontFamily="Aux"
+                    letterSpacing="-0.5px"
+                    border="1px solid"
+                    borderColor={colors.swapBorderColor}
+                    borderRadius="6px"
+                    cursor="pointer"
+                    transition="all 0.2s"
+                    _hover={{
+                      bg: colors.swapBorderColor,
+                    }}
+                    _active={{
+                      transform: "scale(0.95)",
+                    }}
+                  >
+                    MAX
+                  </Button>
+                )}
+              </Flex>
+              {/* <Spacer /> */}
+              <Flex align="center" justify="center" direction="column" mt="6px">
+                <WebAssetTag
+                  cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                  asset={inputAssetIdentifier}
+                  onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                />
+              </Flex>
+              <Spacer />
+              <Flex direction="row" justify="flex-end">
+                {currentInputBalance && currentInputTicker && (
+                  <Text
+                    mt="6px"
+                    color={colors.textGray}
+                    fontSize="14px"
+                    letterSpacing="-1px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                    userSelect="none"
+                  >
+                    {currentInputBalance} {currentInputTicker}
+                  </Text>
+                )}
+              </Flex>
             </Flex>
           </Flex>
 
@@ -659,12 +728,7 @@ export const SwapWidget = () => {
             mb="-20px"
             position="relative"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="22px"
-              height="22px"
-              viewBox="0 0 20 20"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" width="22px" height="22px" viewBox="0 0 20 20">
               <path
                 fill="#909090"
                 fillRule="evenodd"
@@ -678,10 +742,7 @@ export const SwapWidget = () => {
           <Flex
             mt="5px"
             px="10px"
-            bg={
-              currentOutputAsset?.style?.dark_bg_color ||
-              "rgba(46, 29, 14, 0.66)"
-            }
+            bg={currentOutputAsset?.style?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
             w="100%"
             h="121px"
             border="2px solid"
@@ -723,8 +784,7 @@ export const SwapWidget = () => {
                 fontSize="46px"
                 placeholder="0.0"
                 _placeholder={{
-                  color:
-                    currentOutputAsset?.style?.light_text_color || "#805530",
+                  color: currentOutputAsset?.style?.light_text_color || "#805530",
                 }}
               />
 
@@ -749,7 +809,11 @@ export const SwapWidget = () => {
 
             <Spacer />
             <Flex mr="8px">
-              <WebAssetTag cursor="default" asset={outputAssetIdentifier} />
+              <WebAssetTag
+                cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                asset={outputAssetIdentifier}
+                onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+              />
             </Flex>
           </Flex>
 
@@ -818,9 +882,7 @@ export const SwapWidget = () => {
             w="100%"
             mb="5px"
             opacity={hasStartedTyping ? 1 : 0}
-            transform={
-              hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"
-            }
+            transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
             transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
             transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
             pointerEvents={hasStartedTyping ? "auto" : "none"}
@@ -829,14 +891,8 @@ export const SwapWidget = () => {
           >
             {/* Payout Recipient Address */}
             <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
-              <Text
-                fontSize="15px"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                color={colors.offWhite}
-              >
-                {isSwappingForBTC
-                  ? "Bitcoin Recipient Address"
-                  : "cbBTC Recipient Address"}
+              <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
+                {isSwappingForBTC ? "Bitcoin Recipient Address" : "cbBTC Recipient Address"}
               </Text>
               <ChakraTooltip.Root>
                 <ChakraTooltip.Trigger asChild>
@@ -867,10 +923,7 @@ export const SwapWidget = () => {
               mt="-4px"
               mb="10px"
               px="10px"
-              bg={
-                currentOutputAsset?.style?.dark_bg_color ||
-                "rgba(46, 29, 14, 0.66)"
-              }
+              bg={currentOutputAsset?.style?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
               border={`2px solid ${currentOutputAsset?.style?.bg_color || "#78491F"}`}
               w="100%"
               h="60px"
@@ -907,12 +960,9 @@ export const SwapWidget = () => {
                     outline: "none",
                   }}
                   fontSize="28px"
-                  placeholder={
-                    isSwappingForBTC ? "bc1q5d7rjq7g6rd2d..." : "0x742d35cc6bf4532..."
-                  }
+                  placeholder={isSwappingForBTC ? "bc1q5d7rjq7g6rd2d..." : "0x742d35cc6bf4532..."}
                   _placeholder={{
-                    color:
-                      currentOutputAsset?.style?.light_text_color || "#856549",
+                    color: currentOutputAsset?.style?.light_text_color || "#856549",
                   }}
                   spellCheck={false}
                 />
@@ -926,29 +976,13 @@ export const SwapWidget = () => {
                       />
                     ) : (
                       // Ethereum address validation indicator - white checkmark only
-                      <Flex
-                        w="24px"
-                        h="24px"
-                        align="center"
-                        justify="center"
-                        alignSelf="center"
-                      >
+                      <Flex w="24px" h="24px" align="center" justify="center" alignSelf="center">
                         {addressValidation.isValid ? (
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="white"
-                          >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                           </svg>
                         ) : (
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="#f44336"
-                          >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="#f44336">
                             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                           </svg>
                         )}
@@ -963,9 +997,9 @@ export const SwapWidget = () => {
 
         {/* Swap Button */}
         <Flex
-          bg={colors.purpleBackground}
+          bg={colors.swapBgColor}
           _hover={{
-            bg: !isButtonLoading ? colors.purpleHover : undefined,
+            bg: !isButtonLoading ? colors.swapHoverColor : undefined,
           }}
           w="100%"
           mt="8px"
@@ -978,19 +1012,14 @@ export const SwapWidget = () => {
           cursor={!isButtonLoading ? "pointer" : "not-allowed"}
           borderRadius="16px"
           justify="center"
-          border="3px solid #445BCB"
+          border="3px solid"
+          borderColor={colors.swapBorderColor}
           opacity={isButtonLoading ? 0.7 : 1}
           pointerEvents={isButtonLoading ? "none" : "auto"}
         >
-          {isButtonLoading && (
-            <Spinner size="sm" color={colors.offWhite} mr="10px" />
-          )}
+          {isButtonLoading && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
           <Text color={colors.offWhite} fontFamily="Nostromo">
-            {isPending
-              ? "Confirm in Wallet..."
-              : isConfirming
-                ? "Confirming..."
-                : "Swap"}
+            {isPending ? "Confirm in Wallet..." : isConfirming ? "Confirming..." : "Swap"}
           </Text>
         </Flex>
 
@@ -1005,9 +1034,7 @@ export const SwapWidget = () => {
             border="2px solid #78491F"
             borderRadius="16px"
             opacity={bitcoinDepositInfo ? 1 : 0}
-            transform={
-              bitcoinDepositInfo ? "translateY(0px)" : "translateY(-20px)"
-            }
+            transform={bitcoinDepositInfo ? "translateY(0px)" : "translateY(-20px)"}
             transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
           >
             <Text
@@ -1051,7 +1078,6 @@ export const SwapWidget = () => {
       <AssetSelectorModal
         isOpen={isAssetSelectorOpen}
         onClose={closeAssetSelector}
-        onSelectAsset={handleAssetSelect}
         currentAsset={inputAssetIdentifier}
       />
     </Flex>

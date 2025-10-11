@@ -6,7 +6,7 @@ import {
   base,
   type AppKitNetwork,
 } from "@reown/appkit/networks";
-import { createStorage, cookieStorage, http } from "wagmi";
+import { createStorage, cookieStorage, http, fallback } from "wagmi";
 import { QueryClient } from "@tanstack/react-query";
 import { GLOBAL_CONFIG } from "./constants";
 
@@ -46,7 +46,7 @@ export const projectId =
 // TODO: Disable anvilNetwork in production
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   //anvilNetwork,
-  //base,
+  // base,
   mainnet,
 ];
 
@@ -58,10 +58,23 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   networks,
   projectId,
-  chains: [mainnet /*base, anvilNetwork*/],
+  chains: [
+    mainnet,
+    // base,
+    // anvilNetwork
+  ],
   transports: {
-    //[base.id]: http(CHAIN_SCOPED_CONFIGS[base.id].rpcUrl),
-    [mainnet.id]: http(GLOBAL_CONFIG.mainnetRpcUrl),
+    [mainnet.id]: fallback([
+      http("https://eth.llamarpc.com"),
+      http("https://rpc.mevblocker.io"),
+      http("https://rpc.flashbots.net"),
+      http("https://eth.drpc.org"),
+    ]),
+    // [base.id]: fallback([
+    //   http("https://mainnet.base.org"),
+    //   http("https://base.llamarpc.com"),
+    //   http("https://base.drpc.org"),
+    // ]),
     //[anvilNetwork.id]: http(CHAIN_SCOPED_CONFIGS[anvilNetwork.id].rpcUrl),
   },
 });
@@ -85,7 +98,11 @@ export const reownModal = createAppKit({
   metadata,
   features: {
     analytics: true,
+    email: false, // Disable email login
+    socials: false, // Disable all social login options
+    emailShowWallets: false, // Show wallets directly without email prompt
   },
+  allWallets: "SHOW", // Display all available wallets
 });
 
 // Override the modal open method to prevent it from opening on admin page

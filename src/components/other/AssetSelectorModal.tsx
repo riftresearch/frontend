@@ -1,91 +1,257 @@
-import {
-  Flex,
-  Text,
-  Box,
-  Image,
-  Portal,
-} from "@chakra-ui/react";
+import { Flex, Text, Box, Image, Portal, Input } from "@chakra-ui/react";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { BASE_LOGO } from "./SVGs";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useAccount, useSwitchChain } from "wagmi";
+import { useStore } from "@/utils/store";
+import { mainnet, base } from "@reown/appkit/networks";
+import { TokenData } from "@/utils/types";
+import { searchTokens } from "@/utils/tokenSearch";
+import { preloadImages } from "@/utils/imagePreload";
+import { FALLBACK_TOKEN_ICON, ETH_ICON } from "@/utils/constants";
+// Import token data constants
+import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.json";
+import ETHEREUM_ADDRESS_METADATA from "@/utils/tokenData/1/address_to_metadata.json";
+import BASE_TICKERS_TO_ADDRESS from "@/utils/tokenData/8453/tickers_to_address.json";
+import ETHEREUM_TICKERS_TO_ADDRESS from "@/utils/tokenData/1/tickers_to_address.json";
 
 interface AssetSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectAsset: (asset: string) => void;
   currentAsset: string;
 }
 
-type Network = 'ethereum' | 'base';
+type Network = "ethereum" | "base";
 
-const POPULAR_TOKENS = [
-  { symbol: "ETH", name: "Ethereum", icon: "ETH" },
-  { symbol: "USDC", name: "USD Coin", icon: "USDC" },
-  { symbol: "USDT", name: "Tether USD", icon: "USDT" },
-  { symbol: "WBTC", name: "Wrapped Bitcoin", icon: "WBTC" },
-  { symbol: "WETH", name: "Wrapped Ethereum", icon: "WETH" },
-  { symbol: "CBBTC", name: "Coinbase Bitcoin", icon: "BTC" },
-];
+const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC"];
 
-interface UserToken {
-  name: string;
-  ticker: string;
-  address: string | null;
-  balance: string;
-  usdValue: string;
-  icon: string;
-}
+// Create network-specific popular tokens
+const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
+  if (ticker === "ETH") {
+    return {
+      name: "Ethereum",
+      ticker: "ETH",
+      address: null,
+      balance: "0",
+      usdValue: "$0.00",
+      icon: ETH_ICON,
+    };
+  }
+  const address = BASE_TICKERS_TO_ADDRESS[ticker as keyof typeof BASE_TICKERS_TO_ADDRESS];
+  const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA];
+  return {
+    name: token.name,
+    ticker: token.ticker,
+    address: address,
+    balance: "0",
+    usdValue: "$0.00",
+    icon: token.icon || FALLBACK_TOKEN_ICON,
+  };
+});
+
+const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
+  if (ticker === "ETH") {
+    return {
+      name: "Ethereum",
+      ticker: "ETH",
+      address: null,
+      balance: "0",
+      usdValue: "$0.00",
+      icon: ETH_ICON,
+    };
+  }
+  const address = ETHEREUM_TICKERS_TO_ADDRESS[ticker as keyof typeof ETHEREUM_TICKERS_TO_ADDRESS];
+  const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA];
+  return {
+    name: token.name,
+    ticker: token.ticker,
+    address: address,
+    balance: "0",
+    usdValue: "$0.00",
+    icon: token.icon || FALLBACK_TOKEN_ICON,
+  };
+});
 
 export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   isOpen,
   onClose,
-  onSelectAsset,
   currentAsset,
 }) => {
-  const [selectedNetwork, setSelectedNetwork] = useState<Network>('ethereum');
-  
-  // Hard-coded user tokens for now - can be replaced with actual wallet data
-  const [userTokens] = useState<UserToken[]>([
-    {
-      name: "Succinct",
-      ticker: "PROVE",
-      address: "0x6BEF...ad29",
-      balance: "2,444",
-      usdValue: "$1,894.16",
-      icon: "PROVE"
-    },
-    {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: null,
-      balance: "0.26148",
-      usdValue: "$1,071.89",
-      icon: "ETH"
-    },
-    {
-      name: "USD Coin",
-      ticker: "USDC",
-      address: "0xA0b8...eB48",
-      balance: "189.815",
-      usdValue: "$189.72",
-      icon: "USDC"
-    },
-    {
-      name: "Coinbase Wrapped BTC",
-      ticker: "cbBTC",
-      address: "0xcbB7...33Bf",
-      balance: "0.00009",
-      usdValue: "$10.65",
-      icon: "BTC"
+  const { evmConnectWalletChainId } = useStore();
+
+  // Initialize selectedNetwork based on current chain ID
+  const getNetworkFromChainId = (chainId: number): Network => {
+    return chainId === base.id ? "base" : "ethereum";
+  };
+
+  const [selectedNetwork, setSelectedNetwork] = useState<Network>(
+    getNetworkFromChainId(evmConnectWalletChainId)
+  );
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const searchResults = useStore((s) => s.searchResults);
+  const setSearchResults = useStore((s) => s.setSearchResults);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [debouncedQuery, setDebouncedQuery] = useState<string>("");
+
+  // Wagmi hooks for chain switching
+  const { isConnected, address } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const { setEvmConnectWalletChainId, setSelectedInputToken } = useStore();
+  const userTokensByChain = useStore((s) => s.userTokensByChain);
+
+  // Sync selectedNetwork with current chain ID when it changes
+  useEffect(() => {
+    setSelectedNetwork(getNetworkFromChainId(evmConnectWalletChainId));
+  }, [evmConnectWalletChainId]);
+
+  // Debounce search input
+  useEffect(() => {
+    const h = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 180);
+    return () => clearTimeout(h);
+  }, [searchQuery]);
+
+  // Preload popular token icons for the selected network when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    const icons = (selectedNetwork === "base" ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS)
+      .map((t) => t.icon)
+      .filter(Boolean);
+    preloadImages(icons as string[]);
+  }, [isOpen, selectedNetwork]);
+
+  // Token fetching/pricing handled globally; modal reads from store
+
+  // Load tokens from global store when modal opens or dependencies change
+  useEffect(() => {
+    if (!isOpen) return;
+    setIsLoading(true);
+    try {
+      const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+      // If there's an active query, use the search index top-10
+      if (debouncedQuery.length > 0) {
+        const results = searchTokens(selectedNetwork, debouncedQuery, 10);
+
+        // Get user's wallet tokens for the current chain
+        const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+        const userTokens = userTokensByChain[chainId] || [];
+
+        // Replace balance and usdValue in search results if token is in user's wallet
+        const mergedResults = results.map((t) => {
+          const walletToken = userTokens.find((token) => token.address === t.address);
+          if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
+            // Only populate the balance if its USD value is > 1
+            return {
+              ...t,
+              balance: walletToken.balance,
+              usdValue: walletToken.usdValue,
+            };
+          }
+          return t;
+        });
+
+        if (mergedResults.length > 0) {
+          // Preload icons for search results
+          preloadImages(mergedResults.map((t) => t.icon).filter(Boolean));
+          setSearchResults(mergedResults);
+        } else {
+          const q = debouncedQuery.trim().toLowerCase();
+          const isAddr = q.startsWith("0x") && /^0x[a-f0-9]{6,40}$/.test(q);
+          const existsInCache = mergedResults.find((r) => r.address === q);
+          if (isAddr && !existsInCache) {
+            const networkParam = selectedNetwork === "ethereum" ? "ethereum" : "base";
+            fetch(`/api/token-metadata?network=${networkParam}&addresses=${q}`)
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data) => {
+                if (!data || !Array.isArray(data.data) || data.data.length === 0) return;
+                const t = data.data[0] as {
+                  name: string;
+                  ticker: string;
+                  icon: string | null;
+                  price: number;
+                  decimals: number;
+                };
+                const built: TokenData = {
+                  name: t.name,
+                  ticker: t.ticker,
+                  address: q,
+                  balance: "0",
+                  usdValue: "$0.00",
+                  icon: t.icon || FALLBACK_TOKEN_ICON,
+                };
+                setSearchResults([built]);
+              })
+              .catch(() => {
+                /* ignore errors */
+              });
+          } else {
+            setSearchResults([]);
+          }
+        }
+
+        return;
+      }
+
+      // No query: show wallet tokens if connected and available; otherwise popular tokens
+      if (isConnected && address) {
+        const tokens = userTokensByChain[chainId] || [];
+        if (tokens.length > 0) {
+          setSearchResults(tokens);
+        } else {
+          const popularTokens = chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
+          preloadImages(popularTokens.map((t) => t.icon).filter(Boolean));
+          setSearchResults(popularTokens);
+        }
+      } else {
+        const popularTokens = chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
+        preloadImages(popularTokens.map((t) => t.icon).filter(Boolean));
+        setSearchResults(popularTokens);
+      }
+    } catch (e) {
+      console.error("Failed to update asset list:", e);
+      setSearchResults(ETHEREUM_POPULAR_TOKENS);
+    } finally {
+      setIsLoading(false);
     }
-  ]);
-  
+  }, [isOpen, isConnected, address, selectedNetwork, userTokensByChain, debouncedQuery]);
+
   if (!isOpen) return null;
 
-  const handleAssetSelect = (asset: string) => {
-    onSelectAsset(asset);
+  const handleAssetSelect = (asset: string, tokenData?: TokenData) => {
+    console.log("handleAssetSelect", asset, tokenData);
+    if (tokenData) {
+      setSelectedInputToken(tokenData);
+    }
     onClose();
+  };
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const query = event.target.value;
+    setSearchQuery(query);
+  };
+
+  const handleNetworkSelect = async (network: Network) => {
+    if (!isConnected) {
+      // If wallet is not connected, just update the selected network
+      setSelectedNetwork(network);
+      return;
+    }
+
+    try {
+      const targetChainId = network === "ethereum" ? mainnet.id : base.id;
+
+      // Switch to the target chain
+      await switchChain({ chainId: targetChainId });
+
+      // Update the store with the new chain ID
+      setEvmConnectWalletChainId(targetChainId);
+
+      // Update the selected network
+      setSelectedNetwork(network);
+    } catch (error) {
+      console.error("Failed to switch chain:", error);
+      // You could add a toast notification here for better UX
+    }
   };
 
   return (
@@ -144,11 +310,11 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               flex="1"
               h="80px"
               borderRadius="12px"
-              border={`2px solid ${selectedNetwork === 'ethereum' ? '#8B5CF6' : '#404040'}`}
-              bg={selectedNetwork === 'ethereum' ? 'rgba(139, 92, 246, 0.2)' : '#2a2a2a'}
+              border={`2px solid ${selectedNetwork === "ethereum" ? "#8B5CF6" : "#404040"}`}
+              bg={selectedNetwork === "ethereum" ? "rgba(139, 92, 246, 0.2)" : "#2a2a2a"}
               cursor="pointer"
-              onClick={() => setSelectedNetwork('ethereum')}
-              _hover={{ bg: selectedNetwork === 'ethereum' ? 'rgba(139, 92, 246, 0.3)' : '#333' }}
+              onClick={() => handleNetworkSelect("ethereum")}
+              _hover={{ bg: selectedNetwork === "ethereum" ? "rgba(139, 92, 246, 0.3)" : "#333" }}
             >
               <Box mb="8px" display="flex" alignItems="center" justifyContent="center">
                 <Image
@@ -175,11 +341,19 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               flex="1"
               h="80px"
               borderRadius="12px"
-              border={`2px solid ${selectedNetwork === 'base' ? '#0052FF' : '#404040'}`}
-              bg={selectedNetwork === 'base' ? 'rgba(0, 82, 255, 0.2)' : '#2a2a2a'}
-              cursor="pointer"
-              onClick={() => setSelectedNetwork('base')}
-              _hover={{ bg: selectedNetwork === 'base' ? 'rgba(0, 82, 255, 0.3)' : '#333' }}
+              // border={`2px solid ${selectedNetwork === 'base' ? '#0052FF' : '#404040'}`}
+              // bg={selectedNetwork === 'base' ? 'rgba(0, 82, 255, 0.2)' : '#2a2a2a'}
+              // cursor="pointer"
+              // onClick={() => handleNetworkSelect('base')}
+              // _hover={{ bg: selectedNetwork === 'base' ? 'rgba(0, 82, 255, 0.3)' : '#333' }}
+              border={`2px solid #404040`}
+              bg="#2a2a2a"
+              cursor="not-allowed"
+              // Remove onClick to disable
+              _hover={{ bg: "#2a2a2a" }}
+              opacity={0.6}
+              pointerEvents="none"
+              position="relative"
             >
               <Box mb="8px">
                 <BASE_LOGO width="24" height="24" />
@@ -190,25 +364,37 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 color={colors.offWhite}
                 fontWeight="bold"
               >
-                Base
+                Base (Soon)
               </Text>
             </Flex>
           </Flex>
 
-          {/* Your Tokens Section */}
-          <Text
+          {/* Search Bar */}
+          <Input
+            placeholder="Search tokens"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            bg="#2a2a2a"
+            border="1px solid #404040"
+            borderRadius="12px"
+            p="12px 16px"
+            mb="20px"
             fontSize="16px"
-            fontFamily={FONT_FAMILIES.NOSTROMO}
+            fontFamily={FONT_FAMILIES.AUX_MONO}
             color={colors.offWhite}
-            fontWeight="bold"
-            mb="12px"
-          >
-            Your tokens
-          </Text>
-          
+            _placeholder={{ color: colors.textGray }}
+            _focus={{
+              borderColor: "#8B5CF6",
+              boxShadow: "0 0 0 1px #8B5CF6",
+            }}
+            _hover={{
+              borderColor: "#666",
+            }}
+          />
+
           <Flex direction="column" gap="8px" mb="20px">
-            {/* User wallet tokens */}
-            {userTokens.length === 0 ? (
+            {/* Loading state */}
+            {isLoading ? (
               <Flex
                 align="center"
                 justify="center"
@@ -217,191 +403,110 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 bg="#2a2a2a"
                 border="1px solid #404040"
               >
-                <Text
-                  fontSize="14px"
-                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                  color={colors.textGray}
-                >
-                  None
+                <Text fontSize="14px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray}>
+                  Loading tokens...
                 </Text>
               </Flex>
             ) : (
-              userTokens.map((token, index) => (
-              <Flex
-                key={index}
-                align="center"
-                p="12px 16px"
-                borderRadius="12px"
-                bg="#2a2a2a"
-                border="1px solid #404040"
-                cursor="pointer"
-                _hover={{ bg: "#333" }}
-                onClick={() => handleAssetSelect(token.ticker)}
-              >
-                {/* Token Icon */}
+              searchResults.map((token, index) => (
                 <Flex
-                  w="40px"
-                  h="40px"
-                  borderRadius="50%"
-                  bg="#4A90E2"
+                  key={`${token.address || token.ticker}-${index}`}
                   align="center"
-                  justify="center"
-                  mr="12px"
+                  p="12px 16px"
+                  borderRadius="12px"
+                  bg="#2a2a2a"
+                  border="1px solid #404040"
+                  cursor="pointer"
+                  _hover={{ bg: "#333" }}
+                  onClick={() => handleAssetSelect(token.ticker, token)}
                 >
-                  <Image
-                    src={`/images/assets/icons/${token.icon}.svg`}
-                    w="24px"
-                    h="24px"
-                    alt={`${token.ticker} icon`}
-                    objectFit="contain"
-                  />
-                </Flex>
-
-                {/* Token Info */}
-                <Flex direction="column" flex="1">
-                  <Text
-                    fontSize="16px"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    color={colors.offWhite}
-                    fontWeight="bold"
+                  {/* Token Icon */}
+                  <Flex
+                    w="40px"
+                    h="40px"
+                    borderRadius="50%"
+                    bg="#404040"
+                    align="center"
+                    justify="center"
+                    mr="12px"
+                    overflow="hidden"
                   >
-                    {token.name}
-                  </Text>
-                  <Flex align="center" gap="8px">
+                    <Image
+                      src={token.icon}
+                      w="100%"
+                      h="100%"
+                      alt={`${token.ticker} icon`}
+                      objectFit="cover"
+                      // onError={(e) => {
+                      //   const target = e.target as HTMLImageElement;
+                      //   target.style.display = 'none';
+                      //   const fallback = target.nextElementSibling as HTMLElement;
+                      //   if (fallback) fallback.style.display = 'block';
+                      // }}
+                    />
                     <Text
-                      fontSize="14px"
+                      fontSize="12px"
                       fontFamily={FONT_FAMILIES.AUX_MONO}
-                      color={colors.textGray}
+                      color={colors.offWhite}
+                      display="none"
                     >
                       {token.ticker}
                     </Text>
-                    {token.address && (
+                  </Flex>
+
+                  {/* Token Info */}
+                  <Flex direction="column" flex="1">
+                    <Text
+                      fontSize="16px"
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      color={colors.offWhite}
+                      fontWeight="bold"
+                    >
+                      {token.name}
+                    </Text>
+                    <Flex align="center" gap="8px">
                       <Text
                         fontSize="14px"
                         fontFamily={FONT_FAMILIES.AUX_MONO}
                         color={colors.textGray}
                       >
-                        {token.address}
+                        {token.ticker}
                       </Text>
-                    )}
+                      {token.address && (
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                        >
+                          {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                        </Text>
+                      )}
+                    </Flex>
                   </Flex>
-                </Flex>
 
-                {/* Balance Info */}
-                <Flex direction="column" align="flex-end">
-                  <Text
-                    fontSize="16px"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    color={colors.offWhite}
-                    fontWeight="bold"
-                  >
-                    {token.usdValue}
-                  </Text>
-                  <Text
-                    fontSize="14px"
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                    color={colors.textGray}
-                  >
-                    {token.balance}
-                  </Text>
+                  {/* Balance Info - show for wallet tokens with balance > 0 */}
+                  {isConnected && token.balance !== "0" && (
+                    <Flex direction="column" align="flex-end">
+                      <Text
+                        fontSize="16px"
+                        fontFamily={FONT_FAMILIES.NOSTROMO}
+                        color={colors.offWhite}
+                        fontWeight="bold"
+                      >
+                        {token.usdValue}
+                      </Text>
+                      <Text
+                        fontSize="14px"
+                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        color={colors.textGray}
+                      >
+                        {token.balance}
+                      </Text>
+                    </Flex>
+                  )}
                 </Flex>
-              </Flex>
               ))
             )}
-          </Flex>
-
-          {/* Search Bar */}
-          <Flex
-            bg="#2a2a2a"
-            borderRadius="12px"
-            p="12px 16px"
-            mb="20px"
-            align="center"
-            border="1px solid #404040"
-          >
-            <Box mr="12px" color={colors.textGray}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-              </svg>
-            </Box>
-            <Text
-              color={colors.textGray}
-              fontSize="16px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-            >
-              Search tokens
-            </Text>
-          </Flex>
-
-          {/* Popular Label */}
-          <Text
-            fontSize="16px"
-            fontFamily={FONT_FAMILIES.NOSTROMO}
-            color={colors.offWhite}
-            fontWeight="bold"
-            mb="12px"
-          >
-            Popular
-          </Text>
-
-          {/* Token Grid - Square Boxes */}
-          <Flex gap="8px" flexWrap="nowrap" justify="space-between">
-            {POPULAR_TOKENS.map((token) => {
-              const isSelected = token.symbol === currentAsset;
-              const colorKey = token.symbol === "WBTC" ? "btc" : token.symbol.toLowerCase();
-              const bgColor = colors.assetTag[colorKey as keyof typeof colors.assetTag]?.background || "#255283";
-              const borderColor = colors.assetTag[colorKey as keyof typeof colors.assetTag]?.border || "#4A90E2";
-
-              return (
-                <Flex
-                  key={token.symbol}
-                  direction="column"
-                  align="center"
-                  p="12px"
-                  w="70px"
-                  h="70px"
-                  borderRadius="12px"
-                  cursor="pointer"
-                  bg={isSelected ? "rgba(68, 91, 203, 0.2)" : "#2a2a2a"}
-                  border={isSelected ? "2px solid #445BCB" : "1px solid #404040"}
-                  _hover={{
-                    bg: isSelected ? "rgba(68, 91, 203, 0.3)" : "rgba(255, 255, 255, 0.05)",
-                    border: isSelected ? "2px solid #445BCB" : "1px solid #666",
-                  }}
-                  onClick={() => handleAssetSelect(token.symbol)}
-                >
-                  {/* Token Icon */}
-                  <Flex
-                    w="28px"
-                    h="28px"
-                    borderRadius="50%"
-                    align="center"
-                    justify="center"
-                    mb="6px"
-                    overflow="hidden"
-                  >
-                    <Image
-                      src={`/images/assets/icons/${token.icon}.svg`}
-                      w="28px"
-                      h="28px"
-                      alt={`${token.symbol} icon`}
-                      objectFit="cover"
-                    />
-                  </Flex>
-
-                  {/* Token Symbol */}
-                  <Text
-                    fontSize="11px"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    color={colors.offWhite}
-                    fontWeight="bold"
-                    textAlign="center"
-                  >
-                    {token.symbol}
-                  </Text>
-                </Flex>
-              );
-            })}
           </Flex>
         </Box>
       </Box>
