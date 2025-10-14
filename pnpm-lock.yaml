@@ -37,14 +37,10 @@ importers:
         version: 3.1.0(@morpho-org/blue-sdk@4.0.0(@morpho-org/morpho-ts@2.4.0))(@morpho-org/morpho-ts@2.4.0)
       '@morpho-org/simulation-sdk-wagmi':
         specifier: ^3.0.2
-<<<<<<< HEAD
         version: 3.0.2(zezlheeot6ovyk6q6d5bbpbwwe)
       '@number-flow/react':
         specifier: ^0.5.10
         version: 0.5.10(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-=======
-        version: 3.0.2(85de6696a979c0a0009e2737456f82f8)
->>>>>>> 398c0a0 (big ahh commit)
       '@reown/appkit':
         specifier: ^1.7.9
         version: 1.7.9(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.62)
@@ -102,15 +98,12 @@ importers:
       react-tsparticles:
         specifier: ^2.12.2
         version: 2.12.2(react@19.1.0)
-<<<<<<< HEAD
       recharts:
         specifier: ^3.2.1
         version: 3.2.1(@types/react@19.1.8)(react-dom@19.1.0(react@19.1.0))(react-is@16.13.1)(react@19.1.0)(redux@5.0.1)
-=======
       siwe:
         specifier: ^3.0.0
         version: 3.0.0(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))
->>>>>>> 398c0a0 (big ahh commit)
       styled-components:
         specifier: ^6.1.18
         version: 6.1.18(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -6408,11 +6401,7 @@ snapshots:
 
   '@morpho-org/morpho-ts@2.4.0': {}
 
-<<<<<<< HEAD
   '@morpho-org/simulation-sdk-wagmi@3.0.2(zezlheeot6ovyk6q6d5bbpbwwe)':
-=======
-  '@morpho-org/simulation-sdk-wagmi@3.0.2(85de6696a979c0a0009e2737456f82f8)':
->>>>>>> 398c0a0 (big ahh commit)
     dependencies:
       '@morpho-org/blue-sdk': 4.0.0(@morpho-org/morpho-ts@2.4.0)
       '@morpho-org/blue-sdk-viem': 3.1.1(@morpho-org/blue-sdk@4.0.0(@morpho-org/morpho-ts@2.4.0))(@morpho-org/morpho-ts@2.4.0)(viem@2.31.0(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.62))

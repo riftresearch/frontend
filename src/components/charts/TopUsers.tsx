@@ -25,8 +25,7 @@ interface TopUsersResponse {
   };
 }
 
-const ANALYTICS_API_URL =
-  process.env.NEXT_PUBLIC_ANALYTICS_API_URL || "http://localhost:3000";
+const ANALYTICS_API_URL = process.env.NEXT_PUBLIC_ANALYTICS_API_URL || "http://localhost:3000";
 
 function getApiKeyFromCookie(): string {
   if (typeof document === "undefined") return "";
@@ -113,10 +112,7 @@ function timeAgo(timestamp: string): string {
   return `${diffDays}d ago`;
 }
 
-const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({
-  user,
-  btcPriceUsd,
-}) => {
+const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({ user, btcPriceUsd }) => {
   const volumeBtc = formatBTC(user.total_volume);
   const volumeUsd = volumeBtc * btcPriceUsd;
   const feesBtc = formatBTC(user.total_rift_fees);
@@ -124,14 +120,11 @@ const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({
 
   return (
     <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
-      <Box w="250px">
+      <Box w="275px">
         <Flex
           as="button"
           onClick={() =>
-            window.open(
-              `https://etherscan.io/address/${user.user_evm_account_address}`,
-              "_blank"
-            )
+            window.open(`https://etherscan.io/address/${user.user_evm_account_address}`, "_blank")
           }
           bg="#1D1D1D"
           px="10px"
@@ -142,57 +135,33 @@ const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({
           justifyContent="center"
           alignItems="center"
         >
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {displayShortAddress(user.user_evm_account_address)}
           </Text>
         </Flex>
       </Box>
-      <Box w="200px">
-        <Text
-          fontSize="14px"
-          color={colorsAnalytics.offWhite}
-          fontFamily={FONT_FAMILIES.SF_PRO}
-        >
+      <Box w="253px">
+        <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatUSD(volumeUsd)}
         </Text>
       </Box>
-      <Box w="200px">
-        <Text
-          fontSize="14px"
-          color={colorsAnalytics.offWhite}
-          fontFamily={FONT_FAMILIES.SF_PRO}
-        >
+      <Box w="253px">
+        <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatUSD(feesUsd)}
         </Text>
       </Box>
-      <Box w="150px">
-        <Text
-          fontSize="14px"
-          color={colorsAnalytics.offWhite}
-          fontFamily={FONT_FAMILIES.SF_PRO}
-        >
+      <Box w="190px">
+        <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {new Intl.NumberFormat("en-US").format(user.total_swaps)}
         </Text>
       </Box>
-      <Box w="150px">
-        <Text
-          fontSize="13px"
-          color={colorsAnalytics.textGray}
-          fontFamily={FONT_FAMILIES.SF_PRO}
-        >
+      <Box w="190px">
+        <Text fontSize="16px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {timeAgo(user.first_swap_at)}
         </Text>
       </Box>
-      <Box w="150px">
-        <Text
-          fontSize="13px"
-          color={colorsAnalytics.textGray}
-          fontFamily={FONT_FAMILIES.SF_PRO}
-        >
+      <Box w="190px">
+        <Text fontSize="16px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {timeAgo(user.last_swap_at)}
         </Text>
       </Box>
@@ -200,17 +169,13 @@ const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({
   );
 };
 
-export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
-  heightBlocks = 10,
-}) => {
+export const TopUsers: React.FC<{ heightBlocks?: number }> = ({ heightBlocks = 10 }) => {
   const [users, setUsers] = React.useState<TopUser[]>([]);
   const [page, setPage] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(true);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
-  const [sortBy, setSortBy] = React.useState<"volume" | "swaps" | "recent">(
-    "volume"
-  );
+  const [sortBy, setSortBy] = React.useState<"volume" | "swaps" | "recent">("volume");
   const pageSize = 20;
 
   // Get BTC price from store for USD conversions
@@ -246,9 +211,7 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
 
       setUsers((prev) => {
         const existing = new Set(prev.map((u) => u.user_evm_account_address));
-        const filtered = newUsers.filter(
-          (u) => !existing.has(u.user_evm_account_address)
-        );
+        const filtered = newUsers.filter((u) => !existing.has(u.user_evm_account_address));
         return [...prev, ...filtered];
       });
 
@@ -280,8 +243,7 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
     (e: React.UIEvent<HTMLDivElement>) => {
       if (isLoadingMore || !hasMore) return;
       const el = e.currentTarget;
-      const distanceFromBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (distanceFromBottom < 100) {
         fetchNextPage();
       }
@@ -291,8 +253,69 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
 
   return (
     <Box position="relative" w="100%">
-      {/* Refresh Button - Outside GridFlex */}
-      <Flex justify="flex-end" mb="12px">
+      {/* Sort Buttons and Refresh Button - Outside GridFlex */}
+      <Flex justify="flex-end" align="center" mb="12px" gap="8px">
+        {/* Sort Buttons */}
+        <Button
+          size="sm"
+          onClick={() => setSortBy("recent")}
+          bg={sortBy === "recent" ? colorsAnalytics.greenBackground : "transparent"}
+          borderWidth="2px"
+          borderRadius="16px"
+          borderColor={
+            sortBy === "recent" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+          }
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+          fontSize="12px"
+          px="12px"
+          _hover={{
+            opacity: 0.8,
+          }}
+        >
+          Recent
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setSortBy("swaps")}
+          bg={sortBy === "swaps" ? colorsAnalytics.greenBackground : "transparent"}
+          borderRadius="16px"
+          borderWidth="2px"
+          borderColor={
+            sortBy === "swaps" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+          }
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+          fontSize="12px"
+          px="12px"
+          _hover={{
+            opacity: 0.8,
+          }}
+        >
+          By Swaps
+        </Button>
+
+        <Button
+          size="sm"
+          onClick={() => setSortBy("volume")}
+          bg={sortBy === "volume" ? colorsAnalytics.greenBackground : "transparent"}
+          borderWidth="2px"
+          borderRadius="16px"
+          borderColor={
+            sortBy === "volume" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+          }
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+          fontSize="12px"
+          px="12px"
+          _hover={{
+            opacity: 0.8,
+          }}
+        >
+          By Volume
+        </Button>
+
+        {/* Refresh Button */}
         <Button
           size="sm"
           onClick={handleRefresh}
@@ -314,7 +337,7 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
 
       <GridFlex width="100%" heightBlocks={heightBlocks} contentPadding={0}>
         <Flex direction="column" w="100%" h="100%">
-          {/* Header Row with Sort Buttons */}
+          {/* Header Row */}
           <Flex
             px="16px"
             pt="16px"
@@ -324,108 +347,25 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
             fontWeight="bold"
             color={colorsAnalytics.textGray}
             flexShrink={0}
-            justify="space-between"
           >
-            <Flex align="center" flex="1">
-              <Box w="250px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>User EVM Account</Text>
-              </Box>
-              <Box w="200px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Volume</Text>
-              </Box>
-              <Box w="200px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Rift Fees</Text>
-              </Box>
-              <Box w="150px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Swaps</Text>
-              </Box>
-              <Box w="150px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>First Swap</Text>
-              </Box>
-              <Box w="150px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Latest Swap</Text>
-              </Box>
-            </Flex>
-
-            {/* Sort Buttons */}
-            <Flex gap="8px" ml="16px">
-              <Button
-                size="sm"
-                onClick={() => setSortBy("recent")}
-                bg={
-                  sortBy === "recent"
-                    ? colorsAnalytics.greenBackground
-                    : "transparent"
-                }
-                borderWidth="2px"
-                borderRadius="16px"
-                borderColor={
-                  sortBy === "recent"
-                    ? colorsAnalytics.greenOutline
-                    : colorsAnalytics.borderGray
-                }
-                color={colorsAnalytics.offWhite}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
-                _hover={{
-                  opacity: 0.8,
-                }}
-              >
-                Recent
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setSortBy("swaps")}
-                bg={
-                  sortBy === "swaps"
-                    ? colorsAnalytics.greenBackground
-                    : "transparent"
-                }
-                borderRadius="16px"
-                borderWidth="2px"
-                borderColor={
-                  sortBy === "swaps"
-                    ? colorsAnalytics.greenOutline
-                    : colorsAnalytics.borderGray
-                }
-                color={colorsAnalytics.offWhite}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
-                _hover={{
-                  opacity: 0.8,
-                }}
-              >
-                By Swaps
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={() => setSortBy("volume")}
-                bg={
-                  sortBy === "volume"
-                    ? colorsAnalytics.greenBackground
-                    : "transparent"
-                }
-                borderWidth="2px"
-                borderRadius="16px"
-                borderColor={
-                  sortBy === "volume"
-                    ? colorsAnalytics.greenOutline
-                    : colorsAnalytics.borderGray
-                }
-                color={colorsAnalytics.offWhite}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
-                _hover={{
-                  opacity: 0.8,
-                }}
-              >
-                By Volume
-              </Button>
-            </Flex>
+            <Box w="275px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>User EVM Account</Text>
+            </Box>
+            <Box w="253px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Volume</Text>
+            </Box>
+            <Box w="253px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Rift Fees</Text>
+            </Box>
+            <Box w="190px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Swaps</Text>
+            </Box>
+            <Box w="190px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>First Swap</Text>
+            </Box>
+            <Box w="190px">
+              <Text fontFamily={FONT_FAMILIES.SF_PRO}>Latest Swap</Text>
+            </Box>
           </Flex>
 
           {/* Rows */}

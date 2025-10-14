@@ -19,8 +19,7 @@ function displayShortAddress(addr: string): string {
 }
 
 function explorerUrl(chain: "ETH" | "BASE", address: string): string {
-  const base =
-    chain === "ETH" ? "https://etherscan.io" : "https://basescan.org";
+  const base = chain === "ETH" ? "https://etherscan.io" : "https://basescan.org";
   return `${base}/address/${address}`;
 }
 
@@ -58,17 +57,8 @@ function formatSecondsToMinSec(seconds: number): string {
 
 const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
   if (!badge) return null;
-  const src =
-    badge === "BTC" ? "/images/BTC_icon.svg" : "/images/cbBTC_icon.svg";
-  return (
-    <Image
-      src={src}
-      alt={badge}
-      width={18}
-      height={18}
-      style={{ opacity: 0.9 }}
-    />
-  );
+  const src = badge === "BTC" ? "/images/BTC_icon.svg" : "/images/cbBTC_icon.svg";
+  return <Image src={src} alt={badge} width={18} height={18} style={{ opacity: 0.9 }} />;
 };
 
 const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
@@ -129,20 +119,14 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       gap="8px"
       cursor={isClickable ? "pointer" : "default"}
       onClick={isClickable ? handleClick : undefined}
-      _hover={
-        isClickable
-          ? { filter: "brightness(1.1)", transform: "scale(1.02)" }
-          : undefined
-      }
+      _hover={isClickable ? { filter: "brightness(1.1)", transform: "scale(1.02)" } : undefined}
       transition="all 150ms ease"
     >
       <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayedLabel}
       </Text>
       {(step.status === "waiting_user_deposit_initiated" ||
-        step.status === "waiting_mm_deposit_initiated") && (
-        <AssetIcon badge={step.badge} />
-      )}
+        step.status === "waiting_mm_deposit_initiated") && <AssetIcon badge={step.badge} />}
     </Flex>
   );
 
@@ -190,10 +174,7 @@ const StepWithTime: React.FC<{
     if (step.state === "inProgress" && previousStepTimestamp) {
       // Step is in progress, show live counting timer
       const elapsed = currentTime - previousStepTimestamp;
-      const seconds = Math.max(
-        0,
-        Math.floor(elapsed / 1000) - LIVE_TIMER_OFFSET
-      );
+      const seconds = Math.max(0, Math.floor(elapsed / 1000) - LIVE_TIMER_OFFSET);
       const minutes = Math.floor(seconds / 60);
       const secs = seconds % 60;
       return `${minutes}:${secs.toString().padStart(2, "0")}`;
@@ -203,13 +184,7 @@ const StepWithTime: React.FC<{
   }, [step.duration, step.state, previousStepTimestamp, currentTime]);
 
   return (
-    <Flex
-      direction="column"
-      align="center"
-      justify="flex-start"
-      minW="auto"
-      letterSpacing={"0px"}
-    >
+    <Flex direction="column" align="center" justify="flex-start" minW="auto" letterSpacing={"0px"}>
       <Flex
         align="center"
         justify="center"
@@ -219,11 +194,7 @@ const StepWithTime: React.FC<{
         visibility={displayDuration ? "visible" : "hidden"}
       >
         <FiClock color={colorsAnalytics.textGray} size={14} />
-        <Text
-          fontSize="13px"
-          color={colorsAnalytics.textGray}
-          fontFamily={FONT_FAMILIES.SF_PRO}
-        >
+        <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {displayDuration || "0:00"}
         </Text>
       </Flex>
@@ -239,9 +210,7 @@ const FinalTime: React.FC<{
   currentTime: number;
 }> = ({ totalSeconds, completed, swapCreatedTimestamp, currentTime }) => {
   const LIVE_TIMER_OFFSET = 13; // Subtract 13 seconds to account for backend processing delay
-  const color = completed
-    ? colorsAnalytics.greenOutline
-    : colorsAnalytics.textGray;
+  const color = completed ? colorsAnalytics.greenOutline : colorsAnalytics.textGray;
 
   // Calculate live elapsed time for in-progress swaps
   const displayTime = React.useMemo(() => {
@@ -263,12 +232,7 @@ const FinalTime: React.FC<{
       ) : (
         <FiClock color={colorsAnalytics.textGray} size={12} />
       )}
-      <Text
-        mt="6px"
-        fontSize="14px"
-        color={color}
-        fontFamily={FONT_FAMILIES.SF_PRO}
-      >
+      <Text mt="6px" fontSize="14px" color={color} fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayTime}
       </Text>
     </Flex>
@@ -279,11 +243,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
   ({ swap, currentTime }) => {
     const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
     const totalSeconds = React.useMemo(
-      () =>
-        swap.flow.reduce(
-          (acc, s) => acc + parseDurationToSeconds(s.duration),
-          0
-        ),
+      () => swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
       [swap.flow]
     );
     const isCompleted = React.useMemo(() => {
@@ -291,9 +251,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
     }, [filteredFlow]);
 
     const impliedUsdPerBtc =
-      swap.swapInitialAmountBtc > 0
-        ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc
-        : 0;
+      swap.swapInitialAmountBtc > 0 ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc : 0;
     const riftFeeUsd = swap.riftFeeBtc * impliedUsdPerBtc;
 
     // Get timestamp for previous step to calculate live duration
@@ -318,31 +276,16 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
     };
 
     return (
-      <Flex
-        w="100%"
-        py="14px"
-        px="16px"
-        align="center"
-        letterSpacing={"-0.8px"}
-      >
+      <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
         <Box w="128px">
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.textGray}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {timeAgoFrom(currentTime, swap.swapCreationTimestamp)}
           </Text>
         </Box>
-        <Box w="115px">
+        <Box w="125px">
           <Flex
             as="button"
-            onClick={() =>
-              window.open(
-                explorerUrl(swap.chain, swap.evmAccountAddress),
-                "_blank"
-              )
-            }
+            onClick={() => window.open(explorerUrl(swap.chain, swap.evmAccountAddress), "_blank")}
             bg="#1D1D1D"
             px="8px"
             py="6px"
@@ -361,62 +304,34 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
             </Text>
           </Flex>
         </Box>
-        <Box w="60px">
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+        <Box w="69px">
+          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {swap.chain}
             {/* {swap.statusTesting} */}
           </Text>
         </Box>
 
-        <Box w="150px">
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+        <Box w="156px">
+          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatUSD(swap.swapInitialAmountUsd)}
           </Text>
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.textGray}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatBTC(swap.swapInitialAmountBtc)}
           </Text>
         </Box>
-        <Box w="130px">
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+        <Box w="136px">
+          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatUSD(riftFeeUsd)}
           </Text>
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.textGray}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatBTC(swap.riftFeeBtc)}
           </Text>
         </Box>
-        <Box w="110px">
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.textGray}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+        <Box w="118px">
+          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             MM - {formatUSD(swap.mmFeeUsd)}
           </Text>
-          <Text
-            fontSize="14px"
-            color={colorsAnalytics.textGray}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-          >
+          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             GAS - {formatUSD(swap.networkFeeUsd)}
           </Text>
         </Box>
@@ -445,9 +360,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
     if (prevProps.swap !== nextProps.swap) return false;
 
     // Check if any step is in progress - if so, update on time change
-    const hasInProgress = nextProps.swap.flow.some(
-      (step) => step.state === "inProgress"
-    );
+    const hasInProgress = nextProps.swap.flow.some((step) => step.state === "inProgress");
 
     // If no in-progress steps, skip time updates (only re-render if swap changes)
     if (!hasInProgress && prevProps.currentTime !== nextProps.currentTime) {
@@ -486,28 +399,16 @@ export const SwapHistory: React.FC<{
   const [hasMore, setHasMore] = React.useState(true);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
-  const [animatingSwapIds, setAnimatingSwapIds] = React.useState<Set<string>>(
-    new Set()
-  );
-  const [updatingSwapIds, setUpdatingSwapIds] = React.useState<Set<string>>(
-    new Set()
-  );
+  const [animatingSwapIds, setAnimatingSwapIds] = React.useState<Set<string>>(new Set());
+  const [updatingSwapIds, setUpdatingSwapIds] = React.useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const [showAverages, setShowAverages] = React.useState(false);
-  const [filter, setFilter] = React.useState<
-    "all" | "completed" | "in-progress"
-  >("all");
+  const [filter, setFilter] = React.useState<"all" | "completed" | "in-progress">("all");
   const pageSize = 20;
 
   // Connect to real-time swap stream
-  const {
-    latestSwap,
-    updatedSwap,
-    totalSwaps,
-    inProgressSwaps,
-    uniqueUsers,
-    isConnected,
-  } = useSwapStream();
+  const { latestSwap, updatedSwap, totalSwaps, inProgressSwaps, uniqueUsers, isConnected } =
+    useSwapStream();
   const latestSwapRef = React.useRef<any>(null);
   const updatedSwapRef = React.useRef<any>(null);
 
@@ -558,10 +459,7 @@ export const SwapHistory: React.FC<{
     }
 
     // Helper to calculate average duration from flow steps
-    function avgDuration(
-      swaps: AdminSwapItem[],
-      stepIndex: number
-    ): string | undefined {
+    function avgDuration(swaps: AdminSwapItem[], stepIndex: number): string | undefined {
       const durations = swaps
         .map((s) => s.flow[stepIndex]?.duration)
         .filter((d): d is string => !!d)
@@ -588,10 +486,7 @@ export const SwapHistory: React.FC<{
 
       // Calculate average total time
       const totalTimes = list.map((s) =>
-        s.flow.reduce(
-          (acc, step) => acc + parseDurationToSeconds(step.duration),
-          0
-        )
+        s.flow.reduce((acc, step) => acc + parseDurationToSeconds(step.duration), 0)
       );
       const avgTotalSeconds = Math.round(avg(totalTimes));
 
@@ -648,24 +543,17 @@ export const SwapHistory: React.FC<{
 
     setIsLoadingMore(true);
     try {
-      console.log(
-        `Fetching page ${page} (${pageSize} swaps, filter: ${filter})...`
-      );
+      console.log(`Fetching page ${page} (${pageSize} swaps, filter: ${filter})...`);
       const data = await getSwaps(page, pageSize, filter);
 
       console.log("📦 Raw swaps response:", JSON.stringify(data, null, 2));
       console.log("📊 Pagination:", data.pagination);
 
-      const mapped = (data?.swaps || []).map((row: any) =>
-        mapDbRowToAdminSwap(row, btcPriceUsd)
-      );
+      const mapped = (data?.swaps || []).map((row: any) => mapDbRowToAdminSwap(row, btcPriceUsd));
 
       console.log(`✅ Received ${mapped.length} swaps from page ${page}`);
       if (data?.swaps?.length > 0) {
-        console.log(
-          "🔍 First swap sample:",
-          JSON.stringify(data.swaps[0], null, 2)
-        );
+        console.log("🔍 First swap sample:", JSON.stringify(data.swaps[0], null, 2));
       }
 
       if (mapped.length < pageSize) {
@@ -675,9 +563,7 @@ export const SwapHistory: React.FC<{
       setAllSwaps((prev) => {
         const existing = new Set(prev.map((s) => s.id));
         const newSwaps = mapped.filter((s) => !existing.has(s.id));
-        console.log(
-          `Added ${newSwaps.length} new swaps (${existing.size} existing)`
-        );
+        console.log(`Added ${newSwaps.length} new swaps (${existing.size} existing)`);
         return [...prev, ...newSwaps];
       });
 
@@ -756,9 +642,7 @@ export const SwapHistory: React.FC<{
     // console.log("Updating existing swap:", mapped.id);
 
     // Update the existing swap in the list
-    setAllSwaps((prev) =>
-      prev.map((swap) => (swap.id === mapped.id ? mapped : swap))
-    );
+    setAllSwaps((prev) => prev.map((swap) => (swap.id === mapped.id ? mapped : swap)));
 
     // Add to updating animation set
     setUpdatingSwapIds((prev) => {
@@ -781,8 +665,7 @@ export const SwapHistory: React.FC<{
     (e: React.UIEvent<HTMLDivElement>) => {
       if (isLoadingMore || !hasMore) return;
       const el = e.currentTarget;
-      const distanceFromBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (distanceFromBottom < 100) {
         fetchNextPage();
       }
@@ -810,19 +693,19 @@ export const SwapHistory: React.FC<{
               <Box w="128px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Created</Text>
               </Box>
-              <Box w="115px">
+              <Box w="125px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Account</Text>
               </Box>
-              <Box w="60px">
+              <Box w="69px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Chain</Text>
               </Box>
-              <Box w="150px">
+              <Box w="156px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Amount</Text>
               </Box>
-              <Box w="130px">
+              <Box w="136px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
               </Box>
-              <Box w="110px">
+              <Box w="118px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Other Fees</Text>
               </Box>
               <Flex flex="1">
@@ -835,17 +718,11 @@ export const SwapHistory: React.FC<{
               <Button
                 size="sm"
                 onClick={() => setFilter("completed")}
-                bg={
-                  filter === "completed"
-                    ? colorsAnalytics.greenBackground
-                    : "transparent"
-                }
+                bg={filter === "completed" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
                 borderRadius="16px"
                 borderColor={
-                  filter === "completed"
-                    ? colorsAnalytics.greenOutline
-                    : colorsAnalytics.borderGray
+                  filter === "completed" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
@@ -860,11 +737,7 @@ export const SwapHistory: React.FC<{
               <Button
                 size="sm"
                 onClick={() => setFilter("in-progress")}
-                bg={
-                  filter === "in-progress"
-                    ? colorsAnalytics.greenBackground
-                    : "transparent"
-                }
+                bg={filter === "in-progress" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
                 borderRadius="16px"
                 borderColor={
@@ -885,17 +758,11 @@ export const SwapHistory: React.FC<{
               <Button
                 size="sm"
                 onClick={() => setFilter("all")}
-                bg={
-                  filter === "all"
-                    ? colorsAnalytics.greenBackground
-                    : "transparent"
-                }
+                bg={filter === "all" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
                 borderRadius="16px"
                 borderColor={
-                  filter === "all"
-                    ? colorsAnalytics.greenOutline
-                    : colorsAnalytics.borderGray
+                  filter === "all" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
@@ -1054,8 +921,7 @@ export const SwapHistory: React.FC<{
                         fontFamily={FONT_FAMILIES.SF_PRO}
                         fontWeight="bold"
                       >
-                        {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"}{" "}
-                        Averages
+                        {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages
                       </Text>
                       <Text
                         fontSize="13px"
@@ -1067,13 +933,13 @@ export const SwapHistory: React.FC<{
                     </Box>
 
                     {/* Account column - skip */}
-                    <Box w="115px" />
+                    <Box w="125px" />
 
                     {/* Chain column - skip */}
-                    <Box w="60px" />
+                    <Box w="69px" />
 
                     {/* Swap Amount - aligned with amount column */}
-                    <Box w="150px">
+                    <Box w="156px">
                       <Text
                         fontSize="14px"
                         color={colorsAnalytics.offWhite}
@@ -1091,7 +957,7 @@ export const SwapHistory: React.FC<{
                     </Box>
 
                     {/* Rift Fee - aligned with fee column */}
-                    <Box w="130px">
+                    <Box w="136px">
                       <Text
                         fontSize="14px"
                         color={colorsAnalytics.offWhite}
@@ -1109,7 +975,7 @@ export const SwapHistory: React.FC<{
                     </Box>
 
                     {/* Other Fees column - skip */}
-                    <Box w="110px" />
+                    <Box w="118px" />
 
                     {/* Swap Flow Tracker - aligned with flow pills */}
                     <Flex flex="1" gap="10px" wrap="wrap" align="center">
@@ -1121,16 +987,8 @@ export const SwapHistory: React.FC<{
                         />
                       ))}
                       {/* Average Total Time */}
-                      <Flex
-                        direction="column"
-                        align="center"
-                        justify="center"
-                        minW="60px"
-                      >
-                        <FiCheck
-                          color={colorsAnalytics.greenOutline}
-                          size={16}
-                        />
+                      <Flex direction="column" align="center" justify="center" minW="60px">
+                        <FiCheck color={colorsAnalytics.greenOutline} size={16} />
                         <Text
                           mt="6px"
                           fontSize="14px"

@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 
-const ANALYTICS_API_URL =
-  process.env.NEXT_PUBLIC_ANALYTICS_API_URL || "http://localhost:3000";
+const ANALYTICS_API_URL = process.env.NEXT_PUBLIC_ANALYTICS_API_URL || "http://localhost:3000";
 
 interface SwapWebSocketResult {
   latestSwap: any | null;
@@ -9,6 +8,10 @@ interface SwapWebSocketResult {
   totalSwaps: number;
   inProgressSwaps: number;
   uniqueUsers: number;
+  totalVolumeSats: string;
+  totalRiftFeesSats: string;
+  totalNetworkFeesSats: string;
+  totalLiquidityFeesSats: string;
   isConnected: boolean;
   error: string | null;
 }
@@ -23,6 +26,10 @@ export function useSwapStream(): SwapWebSocketResult {
   const [totalSwaps, setTotalSwaps] = useState<number>(0);
   const [inProgressSwaps, setInProgressSwaps] = useState<number>(0);
   const [uniqueUsers, setUniqueUsers] = useState<number>(0);
+  const [totalVolumeSats, setTotalVolumeSats] = useState<string>("0");
+  const [totalRiftFeesSats, setTotalRiftFeesSats] = useState<string>("0");
+  const [totalNetworkFeesSats, setTotalNetworkFeesSats] = useState<string>("0");
+  const [totalLiquidityFeesSats, setTotalLiquidityFeesSats] = useState<string>("0");
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -71,10 +78,7 @@ export function useSwapStream(): SwapWebSocketResult {
 
     // Process queued UPDATED swaps one at a time with delay
     async function processUpdateQueue() {
-      if (
-        processingUpdateRef.current ||
-        updateSwapQueueRef.current.length === 0
-      ) {
+      if (processingUpdateRef.current || updateSwapQueueRef.current.length === 0) {
         return;
       }
 
@@ -104,10 +108,8 @@ export function useSwapStream(): SwapWebSocketResult {
       try {
         // Replace http with ws, add auth as query param
         const wsUrl =
-          ANALYTICS_API_URL.replace("http://", "ws://").replace(
-            "https://",
-            "wss://"
-          ) + `/api/swaps/ws?auth=${encodeURIComponent(apiKey)}`;
+          ANALYTICS_API_URL.replace("http://", "ws://").replace("https://", "wss://") +
+          `/api/swaps/ws?auth=${encodeURIComponent(apiKey)}`;
 
         console.log("🔗 Connecting to WebSocket:");
 
@@ -123,46 +125,46 @@ export function useSwapStream(): SwapWebSocketResult {
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            console.log(
-              "📨 RAW WebSocket message:",
-              JSON.stringify(message, null, 2)
-            );
-            console.log(
-              "📊 total_swaps field:",
-              message.total_swaps,
-              typeof message.total_swaps
-            );
+            console.log("📨 RAW WebSocket message:", JSON.stringify(message, null, 2));
+            console.log("📊 total_swaps field:", message.total_swaps, typeof message.total_swaps);
 
             switch (message.type) {
               case "connected":
-                console.log(
-                  "👋 Connected:",
-                  message.message || "Connected to swap stream"
-                );
+                console.log("👋 Connected:", message.message || "Connected to swap stream");
                 if (typeof message.total_swaps === "number") {
-                  console.log(
-                    "✅ Setting initial total swaps:",
-                    message.total_swaps
-                  );
+                  console.log("✅ Setting initial total swaps:", message.total_swaps);
                   setTotalSwaps(message.total_swaps);
                 } else {
                   console.warn("⚠️ No total_swaps in connected message");
                 }
                 if (typeof message.in_progress_swaps === "number") {
-                  console.log(
-                    "✅ Setting initial in-progress swaps:",
-                    message.in_progress_swaps
-                  );
+                  console.log("✅ Setting initial in-progress swaps:", message.in_progress_swaps);
                   setInProgressSwaps(message.in_progress_swaps);
                 } else {
                   console.warn("⚠️ No in_progress_swaps in connected message");
                 }
                 if (typeof message.unique_users === "number") {
-                  console.log(
-                    "✅ Setting initial unique users:",
-                    message.unique_users
-                  );
+                  console.log("✅ Setting initial unique users:", message.unique_users);
                   setUniqueUsers(message.unique_users);
+                }
+                if (message.total_volume_sats) {
+                  console.log("✅ Setting total volume:", message.total_volume_sats);
+                  setTotalVolumeSats(message.total_volume_sats);
+                }
+                if (message.total_rift_fees_sats) {
+                  console.log("✅ Setting total rift fees:", message.total_rift_fees_sats);
+                  setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_network_fees_sats) {
+                  console.log("✅ Setting total network fees:", message.total_network_fees_sats);
+                  setTotalNetworkFeesSats(message.total_network_fees_sats);
+                }
+                if (message.total_liquidity_fees_sats) {
+                  console.log(
+                    "✅ Setting total liquidity fees:",
+                    message.total_liquidity_fees_sats
+                  );
+                  setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
                 }
                 break;
 
@@ -175,19 +177,52 @@ export function useSwapStream(): SwapWebSocketResult {
                 processNewSwapQueue();
 
                 if (typeof message.total_swaps === "number") {
-                  console.log(
-                    "✅ Updating total swaps to:",
-                    message.total_swaps
-                  );
+                  console.log("✅ Updating total swaps to:", message.total_swaps);
                   setTotalSwaps(message.total_swaps);
                 } else {
                   console.warn("⚠️ No total_swaps in swap_created message");
                 }
                 if (typeof message.in_progress_swaps === "number") {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting in-progress swaps:",
+                    message.in_progress_swaps
+                  );
                   setInProgressSwaps(message.in_progress_swaps);
                 }
                 if (typeof message.unique_users === "number") {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting unique users:",
+                    message.unique_users
+                  );
                   setUniqueUsers(message.unique_users);
+                }
+                if (message.total_volume_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting total volume:",
+                    message.total_volume_sats
+                  );
+                  setTotalVolumeSats(message.total_volume_sats);
+                }
+                if (message.total_rift_fees_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting total rift fees:",
+                    message.total_rift_fees_sats
+                  );
+                  setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_network_fees_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting total network fees:",
+                    message.total_network_fees_sats
+                  );
+                  setTotalNetworkFeesSats(message.total_network_fees_sats);
+                }
+                if (message.total_liquidity_fees_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting total liquidity fees:",
+                    message.total_liquidity_fees_sats
+                  );
+                  setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
                 }
                 break;
 
@@ -197,11 +232,52 @@ export function useSwapStream(): SwapWebSocketResult {
                 updateSwapQueueRef.current.push(message.data);
                 processUpdateQueue();
 
+                // Update ALL aggregate statistics - not just some!
+                if (typeof message.total_swaps === "number") {
+                  console.log("[WEBSOCKET_SWAP_UPDATED] Setting total swaps:", message.total_swaps);
+                  setTotalSwaps(message.total_swaps);
+                }
                 if (typeof message.in_progress_swaps === "number") {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting in-progress swaps:",
+                    message.in_progress_swaps
+                  );
                   setInProgressSwaps(message.in_progress_swaps);
                 }
                 if (typeof message.unique_users === "number") {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting unique users:",
+                    message.unique_users
+                  );
                   setUniqueUsers(message.unique_users);
+                }
+                if (message.total_volume_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting total volume:",
+                    message.total_volume_sats
+                  );
+                  setTotalVolumeSats(message.total_volume_sats);
+                }
+                if (message.total_rift_fees_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting total rift fees:",
+                    message.total_rift_fees_sats
+                  );
+                  setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_network_fees_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting total network fees:",
+                    message.total_network_fees_sats
+                  );
+                  setTotalNetworkFeesSats(message.total_network_fees_sats);
+                }
+                if (message.total_liquidity_fees_sats) {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting total liquidity fees:",
+                    message.total_liquidity_fees_sats
+                  );
+                  setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
                 }
                 break;
 
@@ -213,6 +289,30 @@ export function useSwapStream(): SwapWebSocketResult {
                   processNewSwapQueue();
                 } else {
                   console.log("Unknown message type:", message.type);
+                }
+
+                // Update aggregate statistics if present in the message
+                if (typeof message.total_swaps === "number") {
+                  console.log("[WEBSOCKET_DEFAULT] Setting total swaps:", message.total_swaps);
+                  setTotalSwaps(message.total_swaps);
+                }
+                if (typeof message.in_progress_swaps === "number") {
+                  setInProgressSwaps(message.in_progress_swaps);
+                }
+                if (typeof message.unique_users === "number") {
+                  setUniqueUsers(message.unique_users);
+                }
+                if (message.total_volume_sats) {
+                  setTotalVolumeSats(message.total_volume_sats);
+                }
+                if (message.total_rift_fees_sats) {
+                  setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_network_fees_sats) {
+                  setTotalNetworkFeesSats(message.total_network_fees_sats);
+                }
+                if (message.total_liquidity_fees_sats) {
+                  setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
                 }
             }
           } catch (err) {
@@ -273,6 +373,10 @@ export function useSwapStream(): SwapWebSocketResult {
     totalSwaps,
     inProgressSwaps,
     uniqueUsers,
+    totalVolumeSats,
+    totalRiftFeesSats,
+    totalNetworkFeesSats,
+    totalLiquidityFeesSats,
     isConnected,
     error,
   };
