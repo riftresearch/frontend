@@ -4,6 +4,7 @@ import { GridFlex } from "@/components/other/GridFlex";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
+import { FiRefreshCw } from "react-icons/fi";
 
 interface TopUser {
   user_evm_account_address: string;
@@ -48,6 +49,10 @@ async function fetchUsers(
   const offset = page * pageSize;
   const apiKey = getApiKeyFromCookie();
 
+  console.log(
+    `🔗 Fetching users: ${ANALYTICS_API_URL}/api/users?limit=${pageSize}&offset=${offset}&sort=${sort}`
+  );
+
   const response = await fetch(
     `${ANALYTICS_API_URL}/api/users?limit=${pageSize}&offset=${offset}&sort=${sort}`,
     {
@@ -56,6 +61,8 @@ async function fetchUsers(
       },
     }
   );
+
+  console.log("📡 Users API response status:", response.status);
 
   if (!response.ok) {
     const { toastError } = await import("@/utils/toast");
@@ -66,7 +73,10 @@ async function fetchUsers(
     throw new Error(`Failed to fetch users: ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log("📦 Users response data:", JSON.stringify(data, null, 2));
+
+  return data;
 }
 
 function displayShortAddress(addr: string): string {
@@ -206,6 +216,14 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
   // Get BTC price from store for USD conversions
   const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
 
+  // Refresh users (reset and refetch)
+  const handleRefresh = React.useCallback(() => {
+    setUsers([]);
+    setPage(0);
+    setHasMore(true);
+    setIsInitialLoad(true);
+  }, []);
+
   // Fetch next page
   const fetchNextPage = React.useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
@@ -273,6 +291,27 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({
 
   return (
     <Box position="relative" w="100%">
+      {/* Refresh Button - Outside GridFlex */}
+      <Flex justify="flex-end" mb="12px">
+        <Button
+          size="sm"
+          onClick={handleRefresh}
+          bg="transparent"
+          borderWidth="2px"
+          borderRadius="16px"
+          borderColor={colorsAnalytics.borderGray}
+          color={colorsAnalytics.offWhite}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+          fontSize="12px"
+          px="12px"
+          _hover={{
+            opacity: 0.8,
+          }}
+        >
+          <FiRefreshCw />
+        </Button>
+      </Flex>
+
       <GridFlex width="100%" heightBlocks={heightBlocks} contentPadding={0}>
         <Flex direction="column" w="100%" h="100%">
           {/* Header Row with Sort Buttons */}

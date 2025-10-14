@@ -233,7 +233,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             fontSize="14px"
             mt="4px"
             ml="5px"
-            mb="28px"
+            mb="24px"
           >
             Ranked by volume, swaps, or recent activity
           </Text>
