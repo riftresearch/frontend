@@ -1,7 +1,7 @@
 // src/app/api/token-price/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const SUPPORTED_CHAINS = new Set(["ethereum", "base"]);
+const SUPPORTED_CHAINS = new Set(["ethereum", "base", "coingecko"]);
 
 export async function GET(req: NextRequest) {
   try {

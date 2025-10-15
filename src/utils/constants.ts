@@ -1,6 +1,10 @@
-import { Config, TokenStyle } from "./types";
+import { Config, TokenStyle, TokenData } from "./types";
 import { createRfqClient, Currency } from "./rfqClient";
 import { createOTCClient } from "./otcClient";
+import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.json";
+import ETHEREUM_ADDRESS_METADATA from "@/utils/tokenData/1/address_to_metadata.json";
+import BASE_TICKERS_TO_ADDRESS from "@/utils/tokenData/8453/tickers_to_address.json";
+import ETHEREUM_TICKERS_TO_ADDRESS from "@/utils/tokenData/1/tickers_to_address.json";
 
 export const IS_FRONTEND_PAUSED = process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === "true";
 
@@ -13,6 +17,8 @@ export const ETH_ICON = "https://assets.smold.app/api/chains/1/logo-128.png";
 export const BTC_ICON = "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1696501400";
 
 export const BITCOIN_DECIMALS = 8;
+
+export const ZERO_USD_DISPLAY = "$0.00";
 
 export const bitcoinStyle: TokenStyle = {
   name: "Bitcoin",
@@ -83,4 +89,54 @@ export const rfqClient = createRfqClient({
 export const otcClient = createOTCClient({
   baseUrl: GLOBAL_CONFIG.otcServerUrl,
   timeout: 10000,
+});
+
+// Popular tokens list
+const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC"];
+
+// Create network-specific popular tokens
+export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
+  if (ticker === "ETH") {
+    return {
+      name: "Ethereum",
+      ticker: "ETH",
+      address: null,
+      balance: "0",
+      usdValue: "$0.00",
+      icon: ETH_ICON,
+    };
+  }
+  const address = BASE_TICKERS_TO_ADDRESS[ticker as keyof typeof BASE_TICKERS_TO_ADDRESS];
+  const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA];
+  return {
+    name: token.name,
+    ticker: token.ticker,
+    address: address,
+    balance: "0",
+    usdValue: "$0.00",
+    icon: token.icon || FALLBACK_TOKEN_ICON,
+  };
+});
+
+export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
+  if (ticker === "ETH") {
+    return {
+      name: "Ethereum",
+      ticker: "ETH",
+      address: null,
+      balance: "0",
+      usdValue: "$0.00",
+      icon: ETH_ICON,
+    };
+  }
+  const address = ETHEREUM_TICKERS_TO_ADDRESS[ticker as keyof typeof ETHEREUM_TICKERS_TO_ADDRESS];
+  const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA];
+  return {
+    name: token.name,
+    ticker: token.ticker,
+    address: address,
+    balance: "0",
+    usdValue: "$0.00",
+    icon: token.icon || FALLBACK_TOKEN_ICON,
+  };
 });

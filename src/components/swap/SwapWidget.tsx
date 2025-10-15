@@ -9,7 +9,7 @@ import {
   Spinner,
   Button,
 } from "@chakra-ui/react";
-import { useState, useEffect, ChangeEvent, useCallback } from "react";
+import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { colors } from "@/utils/colors";
@@ -19,6 +19,7 @@ import {
   opaqueBackgroundColor,
   otcClient,
   rfqClient,
+  ZERO_USD_DISPLAY,
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { BitcoinQRCode } from "@/components/other/BitcoinQRCode";
@@ -35,8 +36,7 @@ import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
 import { toastInfo, toastWarning, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { Asset } from "@/utils/types";
-import { TokenStyle } from "@/utils/types";
+import { Asset, TokenData, TokenStyle } from "@/utils/types";
 import { Hex } from "bitcoinjs-lib/src/types";
 import { reownModal, wagmiAdapter } from "@/utils/wallet";
 import { Address, erc20Abi, parseUnits } from "viem";
@@ -44,17 +44,12 @@ import { Quote, formatLotAmount, RfqClientError } from "@/utils/rfqClient";
 import { CreateSwapResponse } from "@/utils/otcClient";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useTDXAttestation } from "@/hooks/useTDXAttestation";
-const BTC_USD_EXCHANGE_RATE = 115611.06;
 
 export const SwapWidget = () => {
   const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
-  const [rawInputAmount, setRawInputAmount] = useState("");
-  const [inputTokenAmount, setInputTokenAmount] = useState<bigint>(0n);
-  const [outputAmount, setOutputAmount] = useState("");
-  const [loading, setLoading] = useState(false);
   const [payoutAddress, setPayoutAddress] = useState("");
   const [addressValidation, setAddressValidation] = useState<{
     isValid: boolean;
@@ -62,18 +57,20 @@ export const SwapWidget = () => {
     detectedNetwork?: string;
   }>({ isValid: false });
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">("input");
-  const [isSwappingForBTC, setIsSwappingForBTC] = useState(true);
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
-  const [showRefundSection, setShowRefundSection] = useState(false);
   const [bitcoinDepositInfo, setBitcoinDepositInfo] = useState<{
     address: string;
     amount: number;
     uri: string;
   } | null>(null);
-  const [isHoveringInputSection, setIsHoveringInputSection] = useState(false);
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
+  const formatUsdValue = (value: number) =>
+    value.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+    });
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const {
@@ -83,7 +80,121 @@ export const SwapWidget = () => {
     selectedInputToken,
     userTokensByChain,
     evmConnectWalletChainId,
+    rawInputAmount,
+    setRawInputAmount,
+    outputAmount,
+    setOutputAmount,
+    isSwappingForBTC,
+    setIsSwappingForBTC,
+    setBtcPrice,
+    setEthPrice,
+    btcPrice,
+    ethPrice,
+    erc20Price,
+    setErc20Price,
+    inputUsdValue,
+    setInputUsdValue,
+    outputUsdValue,
+    setOutputUsdValue,
   } = useStore();
+
+  // Update input USD value based on cached prices
+  const updateInputUsdValue = useCallback(
+    (amount: string) => {
+      const parsed = parseFloat(amount);
+
+      if (!amount || !Number.isFinite(parsed) || parsed <= 0) {
+        setInputUsdValue(ZERO_USD_DISPLAY);
+        return;
+      }
+
+      let price: number | null = null;
+
+      if (isSwappingForBTC) {
+        // Input is ERC20 or ETH
+        if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+          price = ethPrice;
+        } else if (selectedInputToken.address) {
+          price = erc20Price;
+        }
+      } else {
+        // Input is BTC
+        price = btcPrice;
+      }
+
+      if (price === null) {
+        setInputUsdValue(ZERO_USD_DISPLAY);
+        return;
+      }
+
+      setInputUsdValue(formatUsdValue(parsed * price));
+    },
+    [isSwappingForBTC, selectedInputToken, ethPrice, erc20Price, btcPrice]
+  );
+
+  // Update output USD value based on cached prices
+  const updateOutputUsdValue = useCallback(
+    (amount: string) => {
+      const parsed = parseFloat(amount);
+
+      if (!amount || !Number.isFinite(parsed) || parsed <= 0) {
+        setOutputUsdValue(ZERO_USD_DISPLAY);
+        return;
+      }
+
+      let price: number | null = null;
+
+      if (isSwappingForBTC) {
+        // Output is BTC
+        price = btcPrice;
+      } else {
+        // Output is ERC20 or ETH
+        if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+          price = ethPrice;
+        } else if (selectedInputToken.address) {
+          price = erc20Price;
+        }
+      }
+
+      if (price === null) {
+        setOutputUsdValue(ZERO_USD_DISPLAY);
+        return;
+      }
+
+      setOutputUsdValue(formatUsdValue(parsed * price));
+    },
+    [isSwappingForBTC, selectedInputToken, ethPrice, erc20Price, btcPrice]
+  );
+
+  const fetchErc20TokenPrice = useCallback(
+    async (tokenData: TokenData | null) => {
+      // Only fetch if token has an address (ERC20 token, not ETH)
+      if (!tokenData?.address) {
+        setErc20Price(null);
+        return;
+      }
+
+      const chainName =
+        evmConnectWalletChainId === 1 || !evmConnectWalletChainId ? "ethereum" : "base";
+      try {
+        const response = await fetch(
+          `/api/token-price?chain=${chainName}&addresses=${tokenData.address}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const key = `${chainName}:${tokenData.address.toLowerCase()}`;
+          const coin = data?.coins?.[key];
+          if (coin && typeof coin.price === "number") {
+            setErc20Price(coin.price);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch ERC20 price:", error);
+      }
+    },
+    [evmConnectWalletChainId, setErc20Price]
+  );
+
   const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
 
   // Wait for transaction confirmation
@@ -132,12 +243,6 @@ export const SwapWidget = () => {
     }
   }, [txError]);
 
-  // const {
-  //   data: availableBitcoinLiquidity,
-  //   isLoading: isLoadingAvailableBitcoinLiquidity,
-  // } = useAvailableBitcoinLiquidity();
-  const [canClickButton, setCanClickButton] = useState(false);
-
   // Button loading state combines pending transaction and confirmation waiting
   const isButtonLoading = isPending || isConfirming;
 
@@ -163,6 +268,11 @@ export const SwapWidget = () => {
   const handleSwapReverse = () => {
     setIsSwappingForBTC(!isSwappingForBTC);
     // Keep input/output amounts when reversing
+    setRawInputAmount(outputAmount);
+    setOutputAmount(rawInputAmount);
+    setInputUsdValue(outputUsdValue);
+    setOutputUsdValue(inputUsdValue);
+
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
     setBitcoinDepositInfo(null); // Clear Bitcoin deposit info when switching directions
@@ -190,9 +300,66 @@ export const SwapWidget = () => {
     // Reset values on mount
     setRawInputAmount("");
     setOutputAmount("");
+    setInputUsdValue(ZERO_USD_DISPLAY);
+    setOutputUsdValue(ZERO_USD_DISPLAY);
     setPayoutAddress("");
     setBitcoinDepositInfo(null);
-  }, []);
+  }, [setRawInputAmount, setOutputAmount, setInputUsdValue, setOutputUsdValue]);
+
+  // Fetch BTC and ETH prices on mount
+  useEffect(() => {
+    const fetchETHandBTCPrice = async () => {
+      try {
+        // Fetch BTC price
+        const btcResponse = await fetch("/api/token-price?chain=coingecko&addresses=bitcoin");
+        if (btcResponse.ok) {
+          const btcData = await btcResponse.json();
+          const btcKey = "coingecko:bitcoin";
+          const btcCoin = btcData?.coins?.[btcKey];
+          if (btcCoin && typeof btcCoin.price === "number") {
+            setBtcPrice(btcCoin.price);
+          }
+        }
+
+        // Fetch ETH price
+        const ethResponse = await fetch(
+          "/api/token-price?chain=ethereum&addresses=0x0000000000000000000000000000000000000000"
+        );
+        if (ethResponse.ok) {
+          const ethData = await ethResponse.json();
+          const ethKey = "ethereum:0x0000000000000000000000000000000000000000";
+          const ethCoin = ethData?.coins?.[ethKey];
+          if (ethCoin && typeof ethCoin.price === "number") {
+            setEthPrice(ethCoin.price);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch BTC/ETH prices:", error);
+      }
+    };
+
+    fetchETHandBTCPrice();
+  }, [setBtcPrice, setEthPrice]);
+
+  // Fetch ERC20 token price when selected token changes
+  useEffect(() => {
+    fetchErc20TokenPrice(selectedInputToken);
+  }, [selectedInputToken, fetchErc20TokenPrice]);
+
+  // Update USD values when prices or amounts change
+  useEffect(() => {
+    updateInputUsdValue(rawInputAmount);
+    updateOutputUsdValue(outputAmount);
+  }, [
+    erc20Price,
+    btcPrice,
+    ethPrice,
+    rawInputAmount,
+    outputAmount,
+    isSwappingForBTC,
+    updateInputUsdValue,
+    updateOutputUsdValue,
+  ]);
 
   // Validate payout address whenever it changes (Bitcoin or Ethereum based on swap direction)
   useEffect(() => {
@@ -213,7 +380,7 @@ export const SwapWidget = () => {
     }
   }, [payoutAddress, btcAsset.currency.chain, isSwappingForBTC]);
 
-  const sendRFQRequest = async (from_amount: bigint) => {
+  const getQuote = async (from_amount: bigint) => {
     try {
       const currentTime = new Date().getTime();
       console.log("currentInputAsset", currentInputAsset);
@@ -363,24 +530,68 @@ export const SwapWidget = () => {
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    let value = e.target.value;
+
+    // If first character is "0" or ".", replace with "0."
+    if (rawInputAmount === "" && (value === "0" || value === ".")) {
+      value = "0.";
+    }
 
     // Allow empty string, numbers, and decimal point
     if (value === "" || /^\d*\.?\d*$/.test(value)) {
       setRawInputAmount(value);
       setLastEditedField("input");
       setHasStartedTyping(true);
+      updateInputUsdValue(value);
 
       const from_amount = convertInputAmountToFullDecimals(value);
       console.log("value", value);
       console.log("from_amount", from_amount);
-      if (from_amount && from_amount > 0n) {
+      if (from_amount && from_amount > 0) {
         // call RFQ - this will update the output amount
-        sendRFQRequest(from_amount);
+        // getQuote(from_amount);
       } else {
         // Clear output if input is empty or 0
         setOutputAmount("");
+        setOutputUsdValue(ZERO_USD_DISPLAY);
       }
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // If value is "0." and user presses Backspace or Delete, clear both characters
+    if (rawInputAmount === "0." && (e.key === "Backspace" || e.key === "Delete")) {
+      e.preventDefault();
+      setRawInputAmount("");
+      setOutputAmount("");
+      setOutputUsdValue(ZERO_USD_DISPLAY);
+      updateInputUsdValue("");
+    }
+  };
+
+  const handleOutputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value;
+
+    // If first character is "0" or ".", replace with "0."
+    if (outputAmount === "" && (value === "0" || value === ".")) {
+      value = "0.";
+    }
+
+    // Allow empty string, numbers, and decimal point
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setOutputAmount(value);
+      setLastEditedField("output");
+      setHasStartedTyping(true);
+      updateOutputUsdValue(value);
+    }
+  };
+
+  const handleOutputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // If value is "0." and user presses Backspace or Delete, clear both characters
+    if (outputAmount === "0." && (e.key === "Backspace" || e.key === "Delete")) {
+      e.preventDefault();
+      setOutputAmount("");
+      updateOutputUsdValue("");
     }
   };
 
@@ -391,10 +602,11 @@ export const SwapWidget = () => {
     setRawInputAmount(currentInputBalance);
     setLastEditedField("input");
     setHasStartedTyping(true);
+    updateInputUsdValue(currentInputBalance);
 
     const from_amount = convertInputAmountToFullDecimals(currentInputBalance);
     // if (from_amount && from_amount > 0n) {
-    //   sendRFQRequest(from_amount);
+    //   getQuote(from_amount);
     // }
   };
 
@@ -445,27 +657,6 @@ export const SwapWidget = () => {
     evmConnectWalletChainId,
     inputAssetIdentifier,
   ]);
-
-  const handleOutputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    return; // TODO: remove this
-    const value = e.target.value;
-
-    // Allow empty string, numbers, and decimal point
-    if (value === "" || /^\d*\.?\d*$/.test(value)) {
-      setOutputAmount(value);
-      setLastEditedField("output");
-      setHasStartedTyping(true);
-
-      /*
-      // Calculate input amount based on output (reverse calculation)
-      if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
-        setRawInputAmount((parseFloat(value) / EXCHANGE_RATE).toFixed(8));
-      } else {
-        setRawInputAmount("");
-      }
-        */
-    }
-  };
 
   const handleSwap = async () => {
     try {
@@ -609,6 +800,7 @@ export const SwapWidget = () => {
               <Input
                 value={rawInputAmount}
                 onChange={handleInputChange}
+                onKeyDown={handleInputKeyDown}
                 fontFamily="Aux"
                 border="none"
                 bg="transparent"
@@ -642,13 +834,7 @@ export const SwapWidget = () => {
                 fontWeight="normal"
                 fontFamily="Aux"
               >
-                {(!isNaN(parseFloat(rawInputAmount)) && rawInputAmount
-                  ? parseFloat(rawInputAmount) * BTC_USD_EXCHANGE_RATE
-                  : 0
-                ).toLocaleString("en-US", {
-                  style: "currency",
-                  currency: "USD",
-                })}
+                {inputUsdValue}
               </Text>
             </Flex>
 
@@ -764,6 +950,7 @@ export const SwapWidget = () => {
               <Input
                 value={outputAmount}
                 onChange={handleOutputChange}
+                onKeyDown={handleOutputKeyDown}
                 fontFamily="Aux"
                 border="none"
                 bg="transparent"
@@ -797,13 +984,7 @@ export const SwapWidget = () => {
                 fontWeight="normal"
                 fontFamily="Aux"
               >
-                {(!isNaN(parseFloat(outputAmount)) && outputAmount
-                  ? parseFloat(outputAmount) * BTC_USD_EXCHANGE_RATE
-                  : 0
-                ).toLocaleString("en-US", {
-                  style: "currency",
-                  currency: "USD",
-                })}
+                {outputUsdValue}
               </Text>
             </Flex>
 
@@ -877,122 +1058,107 @@ export const SwapWidget = () => {
           </Flex>
 
           {/* Recipient Address - Animated (appears second) */}
-          <Flex
-            direction="column"
-            w="100%"
-            mb="5px"
-            opacity={hasStartedTyping ? 1 : 0}
-            transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
-            transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-            transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
-            pointerEvents={hasStartedTyping ? "auto" : "none"}
-            overflow="hidden"
-            maxHeight={hasStartedTyping ? "200px" : "0px"}
-          >
-            {/* Payout Recipient Address */}
-            <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
-              <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
-                {isSwappingForBTC ? "Bitcoin Recipient Address" : "cbBTC Recipient Address"}
-              </Text>
-              <ChakraTooltip.Root>
-                <ChakraTooltip.Trigger asChild>
-                  <Flex pl="5px" mt="-2px" cursor="pointer" userSelect="none">
-                    <Flex mt="0px" mr="2px">
-                      <InfoSVG width="12px" />
-                    </Flex>
-                  </Flex>
-                </ChakraTooltip.Trigger>
-                <Portal>
-                  <ChakraTooltip.Positioner>
-                    <ChakraTooltip.Content
-                      fontFamily="Aux"
-                      letterSpacing="-0.5px"
-                      color={colors.offWhite}
-                      bg="#121212"
-                      fontSize="12px"
-                    >
-                      {isSwappingForBTC
-                        ? "Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported."
-                        : "Enter your Ethereum address to receive cbBTC tokens."}
-                    </ChakraTooltip.Content>
-                  </ChakraTooltip.Positioner>
-                </Portal>
-              </ChakraTooltip.Root>
-            </Flex>
+          {isSwappingForBTC && (
             <Flex
-              mt="-4px"
-              mb="10px"
-              px="10px"
-              bg={currentOutputAsset?.style?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
-              border={`2px solid ${currentOutputAsset?.style?.bg_color || "#78491F"}`}
+              direction="column"
               w="100%"
-              h="60px"
-              borderRadius="16px"
+              mb="5px"
+              opacity={hasStartedTyping ? 1 : 0}
+              transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
+              transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+              transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
+              pointerEvents={hasStartedTyping ? "auto" : "none"}
+              overflow="hidden"
+              maxHeight={hasStartedTyping ? "200px" : "0px"}
             >
-              <Flex direction="row" py="6px" px="8px">
-                <Input
-                  value={payoutAddress}
-                  onChange={(e) => setPayoutAddress(e.target.value)}
-                  fontFamily="Aux"
-                  border="none"
-                  bg="transparent"
-                  outline="none"
-                  mt="3.5px"
-                  mr="15px"
-                  ml="-4px"
-                  p="0px"
-                  w="500px"
-                  letterSpacing="-5px"
-                  color={colors.offWhite}
-                  _active={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  _focus={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  _selected={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  fontSize="28px"
-                  placeholder={isSwappingForBTC ? "bc1q5d7rjq7g6rd2d..." : "0x742d35cc6bf4532..."}
-                  _placeholder={{
-                    color: currentOutputAsset?.style?.light_text_color || "#856549",
-                  }}
-                  spellCheck={false}
-                />
+              {/* Payout Recipient Address */}
+              <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
+                <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
+                  Bitcoin Recipient Address
+                </Text>
+                <ChakraTooltip.Root>
+                  <ChakraTooltip.Trigger asChild>
+                    <Flex pl="5px" mt="-2px" cursor="pointer" userSelect="none">
+                      <Flex mt="0px" mr="2px">
+                        <InfoSVG width="12px" />
+                      </Flex>
+                    </Flex>
+                  </ChakraTooltip.Trigger>
+                  <Portal>
+                    <ChakraTooltip.Positioner>
+                      <ChakraTooltip.Content
+                        fontFamily="Aux"
+                        letterSpacing="-0.5px"
+                        color={colors.offWhite}
+                        bg="#121212"
+                        fontSize="12px"
+                      >
+                        Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported.
+                      </ChakraTooltip.Content>
+                    </ChakraTooltip.Positioner>
+                  </Portal>
+                </ChakraTooltip.Root>
+              </Flex>
+              <Flex
+                mt="-4px"
+                mb="10px"
+                px="10px"
+                bg={currentOutputAsset?.style?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
+                border={`2px solid ${currentOutputAsset?.style?.bg_color || "#78491F"}`}
+                w="100%"
+                h="60px"
+                borderRadius="16px"
+              >
+                <Flex direction="row" py="6px" px="8px">
+                  <Input
+                    value={payoutAddress}
+                    onChange={(e) => setPayoutAddress(e.target.value)}
+                    fontFamily="Aux"
+                    border="none"
+                    bg="transparent"
+                    outline="none"
+                    mt="3.5px"
+                    mr="15px"
+                    ml="-4px"
+                    p="0px"
+                    w="500px"
+                    letterSpacing="-5px"
+                    color={colors.offWhite}
+                    _active={{
+                      border: "none",
+                      boxShadow: "none",
+                      outline: "none",
+                    }}
+                    _focus={{
+                      border: "none",
+                      boxShadow: "none",
+                      outline: "none",
+                    }}
+                    _selected={{
+                      border: "none",
+                      boxShadow: "none",
+                      outline: "none",
+                    }}
+                    fontSize="28px"
+                    placeholder="bc1q5d7rjq7g6rd2d..."
+                    _placeholder={{
+                      color: currentOutputAsset?.style?.light_text_color || "#856549",
+                    }}
+                    spellCheck={false}
+                  />
 
-                {payoutAddress.length > 0 && (
-                  <Flex ml="0px">
-                    {isSwappingForBTC ? (
+                  {payoutAddress.length > 0 && (
+                    <Flex ml="0px">
                       <BitcoinAddressValidation
                         address={payoutAddress}
                         validation={addressValidation}
                       />
-                    ) : (
-                      // Ethereum address validation indicator - white checkmark only
-                      <Flex w="24px" h="24px" align="center" justify="center" alignSelf="center">
-                        {addressValidation.isValid ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                          </svg>
-                        ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="#f44336">
-                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                          </svg>
-                        )}
-                      </Flex>
-                    )}
-                  </Flex>
-                )}
+                    </Flex>
+                  )}
+                </Flex>
               </Flex>
             </Flex>
-          </Flex>
+          )}
         </Flex>
 
         {/* Swap Button */}

@@ -9,12 +9,13 @@ import { mainnet, base } from "@reown/appkit/networks";
 import { TokenData } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
-import { FALLBACK_TOKEN_ICON, ETH_ICON } from "@/utils/constants";
-// Import token data constants
-import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.json";
-import ETHEREUM_ADDRESS_METADATA from "@/utils/tokenData/1/address_to_metadata.json";
-import BASE_TICKERS_TO_ADDRESS from "@/utils/tokenData/8453/tickers_to_address.json";
-import ETHEREUM_TICKERS_TO_ADDRESS from "@/utils/tokenData/1/tickers_to_address.json";
+import {
+  FALLBACK_TOKEN_ICON,
+  ETH_ICON,
+  BASE_POPULAR_TOKENS,
+  ETHEREUM_POPULAR_TOKENS,
+  ZERO_USD_DISPLAY,
+} from "@/utils/constants";
 
 interface AssetSelectorModalProps {
   isOpen: boolean;
@@ -23,55 +24,6 @@ interface AssetSelectorModalProps {
 }
 
 type Network = "ethereum" | "base";
-
-const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC"];
-
-// Create network-specific popular tokens
-const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
-  if (ticker === "ETH") {
-    return {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: null,
-      balance: "0",
-      usdValue: "$0.00",
-      icon: ETH_ICON,
-    };
-  }
-  const address = BASE_TICKERS_TO_ADDRESS[ticker as keyof typeof BASE_TICKERS_TO_ADDRESS];
-  const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA];
-  return {
-    name: token.name,
-    ticker: token.ticker,
-    address: address,
-    balance: "0",
-    usdValue: "$0.00",
-    icon: token.icon || FALLBACK_TOKEN_ICON,
-  };
-});
-
-const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
-  if (ticker === "ETH") {
-    return {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: null,
-      balance: "0",
-      usdValue: "$0.00",
-      icon: ETH_ICON,
-    };
-  }
-  const address = ETHEREUM_TICKERS_TO_ADDRESS[ticker as keyof typeof ETHEREUM_TICKERS_TO_ADDRESS];
-  const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA];
-  return {
-    name: token.name,
-    ticker: token.ticker,
-    address: address,
-    balance: "0",
-    usdValue: "$0.00",
-    icon: token.icon || FALLBACK_TOKEN_ICON,
-  };
-});
 
 export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   isOpen,
@@ -89,16 +41,26 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     getNetworkFromChainId(evmConnectWalletChainId)
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const searchResults = useStore((s) => s.searchResults);
-  const setSearchResults = useStore((s) => s.setSearchResults);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
 
   // Wagmi hooks for chain switching
   const { isConnected, address } = useAccount();
   const { switchChain } = useSwitchChain();
-  const { setEvmConnectWalletChainId, setSelectedInputToken } = useStore();
-  const userTokensByChain = useStore((s) => s.userTokensByChain);
+
+  // Zustand store
+  const {
+    searchResults,
+    setSearchResults,
+    setEvmConnectWalletChainId,
+    setSelectedInputToken,
+    isSwappingForBTC,
+    setRawInputAmount,
+    setOutputAmount,
+    userTokensByChain,
+    setErc20Price,
+    setInputUsdValue,
+  } = useStore();
 
   // Sync selectedNetwork with current chain ID when it changes
   useEffect(() => {
@@ -217,10 +179,18 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleAssetSelect = (asset: string, tokenData?: TokenData) => {
+  const handleAssetSelect = async (asset: string, tokenData?: TokenData) => {
     console.log("handleAssetSelect", asset, tokenData);
     if (tokenData) {
       setSelectedInputToken(tokenData);
+      setErc20Price(null);
+    }
+    if (isSwappingForBTC) {
+      setRawInputAmount("");
+      setOutputAmount("");
+      setInputUsdValue(ZERO_USD_DISPLAY);
+    } else {
+      // recalculate output based on input btc
     }
     onClose();
   };

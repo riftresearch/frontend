@@ -19,12 +19,15 @@ export const useStore = create<{
   evmConnectWalletChainId: number;
   setEvmConnectWalletChainId: (chainId: number) => void;
   userTokensByChain: Record<number, TokenData[]>;
-  setUserTokensForChain: (
-    chainId: number,
-    tokens: TokenData[]
-  ) => void;
+  setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
   selectedInputToken: TokenData | null;
   setSelectedInputToken: (token: TokenData | null) => void;
+  isSwappingForBTC: boolean;
+  setIsSwappingForBTC: (value: boolean) => void;
+  rawInputAmount: string;
+  setRawInputAmount: (value: string) => void;
+  outputAmount: string;
+  setOutputAmount: (value: string) => void;
   searchResults: TokenData[];
   setSearchResults: (tokens: TokenData[]) => void;
   depositFlowState: DepositFlowState;
@@ -35,10 +38,19 @@ export const useStore = create<{
   setSwapResponse: (response: CreateSwapResponse | null) => void;
   transactionConfirmed: boolean;
   setTransactionConfirmed: (confirmed: boolean) => void;
+  btcPrice: number | null;
+  setBtcPrice: (price: number | null) => void;
+  ethPrice: number | null;
+  setEthPrice: (price: number | null) => void;
+  erc20Price: number | null;
+  setErc20Price: (price: number | null) => void;
+  inputUsdValue: string;
+  setInputUsdValue: (value: string) => void;
+  outputUsdValue: string;
+  setOutputUsdValue: (value: string) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
-  setEvmConnectWalletChainId: (chainId: number) =>
-    set({ evmConnectWalletChainId: chainId }),
+  setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
   userTokensByChain: {},
   setUserTokensForChain: (chainId: number, tokens) =>
     set((state) => ({
@@ -46,6 +58,12 @@ export const useStore = create<{
     })),
   selectedInputToken: null,
   setSelectedInputToken: (token: TokenData | null) => set({ selectedInputToken: token }),
+  isSwappingForBTC: true,
+  setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
+  rawInputAmount: "",
+  setRawInputAmount: (value: string) => set({ rawInputAmount: value }),
+  outputAmount: "",
+  setOutputAmount: (value: string) => set({ outputAmount: value }),
   searchResults: [],
   setSearchResults: (tokens: TokenData[]) => set({ searchResults: tokens }),
   depositFlowState: "0-not-started",
@@ -53,9 +71,17 @@ export const useStore = create<{
   countdownValue: 60,
   setCountdownValue: (value: number) => set({ countdownValue: value }),
   swapResponse: null,
-  setSwapResponse: (response: CreateSwapResponse | null) =>
-    set({ swapResponse: response }),
+  setSwapResponse: (response: CreateSwapResponse | null) => set({ swapResponse: response }),
   transactionConfirmed: false,
-  setTransactionConfirmed: (confirmed: boolean) =>
-    set({ transactionConfirmed: confirmed }),
+  setTransactionConfirmed: (confirmed: boolean) => set({ transactionConfirmed: confirmed }),
+  btcPrice: null,
+  setBtcPrice: (price: number | null) => set({ btcPrice: price }),
+  ethPrice: null,
+  setEthPrice: (price: number | null) => set({ ethPrice: price }),
+  erc20Price: null,
+  setErc20Price: (price: number | null) => set({ erc20Price: price }),
+  inputUsdValue: "$0.00",
+  setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
+  outputUsdValue: "$0.00",
+  setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
 }));

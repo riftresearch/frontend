@@ -9,10 +9,11 @@ const audience = process.env.JWT_AUDIENCE!;
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-//   if (!pathname.startsWith("/api/private/")) return NextResponse.next();
+  //   if (!pathname.startsWith("/api/private/")) return NextResponse.next();
 
-  const access = req.cookies.get("access_token")?.value
-             ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const access =
+    req.cookies.get("access_token")?.value ??
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
   if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -25,5 +26,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/token-balance", "/api/token-price", "/api/eth-balance", "/api/token-metadata"],
+  matcher: ["/api/token-balance", "/api/eth-balance", "/api/token-metadata"],
 };
