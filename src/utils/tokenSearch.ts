@@ -70,7 +70,12 @@ type Ranked = {
   isPopular: boolean;
 };
 
-function rankItem(item: TokenIndexItem, qRaw: string, qNorm: string, addrMode: boolean): Ranked | null {
+function rankItem(
+  item: TokenIndexItem,
+  qRaw: string,
+  qNorm: string,
+  addrMode: boolean
+): Ranked | null {
   const addrLc = item.addressLc;
   const qLc = qRaw.toLowerCase();
 
@@ -119,14 +124,10 @@ function rankItem(item: TokenIndexItem, qRaw: string, qNorm: string, addrMode: b
   // If in address mode and we got no meaningful score, drop item
   if (addrMode && score < 70) return null;
 
-  return { item, score, exactTicker, exactName, addrPrefixLen };
+  return { item, score, exactTicker, exactName, addrPrefixLen, isPopular: false };
 }
 
-export function searchTokens(
-  chain: ChainKey,
-  query: string,
-  limit = 10
-): TokenData[] {
+export function searchTokens(chain: ChainKey, query: string, limit = 10): TokenData[] {
   const qRaw = query.trim();
   if (qRaw.length === 0) return [];
   const qNorm = normalize(qRaw);
