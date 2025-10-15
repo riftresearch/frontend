@@ -1,18 +1,14 @@
 import React from "react";
-import { Box, Flex, Text } from "@chakra-ui/react";
-import { useAnalyticsSeries, Timeframe } from "@/hooks/useAnalyticsSeries";
+import { Box, Flex, Text, Spinner } from "@chakra-ui/react";
+import { useTimeBuckets, BucketType } from "@/hooks/useTimeBuckets";
 import { colors } from "@/utils/colors";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { FONT_FAMILIES } from "@/utils/font";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+import { useAnalyticsStore } from "@/utils/analyticsStore";
+import { satsToBtc } from "@/utils/dappHelper";
+import { useBtcPrice } from "@/hooks/useBtcPrice";
+import { useSwapStream } from "@/hooks/useSwapStream";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -22,27 +18,105 @@ function formatUSD(n: number) {
   }).format(n);
 }
 
-export const VolumeTxnChart: React.FC = () => {
-  const [timeframe, setTimeframe] = React.useState<Timeframe>("1d");
-  const { points, totalVolume, totalTxns, maxVolume, maxTxns } =
-    useAnalyticsSeries(timeframe);
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+// Map old timeframe values to new bucket types
+const TIMEFRAME_TO_BUCKET: Record<string, BucketType> = {
+  "30m": "last_30_mins",
+  "1h": "last_hour",
+  "1d": "last_day",
+  "1w": "last_week",
+  "1m": "last_month",
+  "1y": "last_year",
+  all: "all_time",
+};
 
-  // Recharts-friendly data
-  const data = React.useMemo(
-    () =>
-      points.map((p) => ({
+export const VolumeTxnChart: React.FC = () => {
+  const [timeframe, setTimeframe] = React.useState<string>("1d");
+  const bucketType = TIMEFRAME_TO_BUCKET[timeframe] || "last_day";
+
+  const { points, totalVolume, totalTxns, maxVolume, maxTxns, isLoading, isError, refetch } =
+    useTimeBuckets(bucketType);
+
+  const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
+  const [mounted, setMounted] = React.useState(false);
+
+  // Get total swaps count from WebSocket to trigger refetches
+  const { totalSwaps } = useSwapStream();
+  const previousTotalSwaps = React.useRef<number>(0);
+
+  // Fetch and update BTC price
+  useBtcPrice();
+
+  React.useEffect(() => {
+    setMounted(true);
+    // Initialize the ref with current totalSwaps to prevent refetch on mount
+    if (totalSwaps > 0) {
+      previousTotalSwaps.current = totalSwaps;
+    }
+  }, []);
+
+  // Refetch bucket data when total swaps changes (indicating a new swap completed)
+  React.useEffect(() => {
+    if (mounted && totalSwaps > 0 && totalSwaps !== previousTotalSwaps.current) {
+      console.log(
+        `[VolumeTxnChart] Total swaps changed from ${previousTotalSwaps.current} to ${totalSwaps}, refetching bucket data`
+      );
+      refetch();
+      previousTotalSwaps.current = totalSwaps;
+    }
+  }, [totalSwaps, mounted, refetch]);
+
+  // Convert satoshi volumes to USD and normalize transaction counts
+  const data = React.useMemo(() => {
+    if (!points || points.length === 0) return [];
+
+    // Convert max volume from sats to USD for scaling
+    const maxVolumeUsd = parseFloat(satsToBtc(maxVolume)) * btcPriceUsd;
+
+    // Calculate transaction normalization scale (20% of max volume)
+    const txnScale = maxTxns > 0 ? (0.2 * maxVolumeUsd) / maxTxns : 0;
+
+    return points.map((p) => {
+      const volumeBtc = parseFloat(satsToBtc(p.volume));
+      const volumeUsd = volumeBtc * btcPriceUsd;
+
+      return {
         time: p.time,
-        label: buildLabel(p.time, timeframe),
-        volume: Math.max(0, Math.round(p.volumeUsd)),
-        txns: Math.max(0, Math.round((p as any).txns ?? 0)),
-        txnsNorm: Math.max(0, (p as any).txnsNormalized ?? 0),
-      })),
-    [points, timeframe]
-  );
+        label: p.label,
+        volume: Math.max(0, Math.round(volumeUsd)),
+        txns: Math.max(0, Math.round(p.txns)),
+        txnsNorm: Math.max(0, p.txns * txnScale),
+      };
+    });
+  }, [points, btcPriceUsd, maxVolume, maxTxns]);
+
+  // Calculate total volume in USD
+  const totalVolumeUsd = React.useMemo(() => {
+    const btc = parseFloat(satsToBtc(totalVolume));
+    return btc * btcPriceUsd;
+  }, [totalVolume, btcPriceUsd]);
 
   if (!mounted) return null;
+
+  if (isLoading) {
+    return (
+      <Flex h="100%" w="100%" align="center" justify="center">
+        <Spinner size="xl" color={colorsAnalytics.offWhite} />
+      </Flex>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Flex h="100%" w="100%" align="center" justify="center" direction="column">
+        <Text color={colorsAnalytics.textGray} fontSize="16px" mb="8px">
+          Failed to load volume data
+        </Text>
+        <Text color={colorsAnalytics.textGray} fontSize="14px">
+          Please try refreshing the page
+        </Text>
+      </Flex>
+    );
+  }
 
   return (
     <Flex direction="column" h="100%" w="100%">
@@ -82,12 +156,12 @@ export const VolumeTxnChart: React.FC = () => {
             fontFamily={FONT_FAMILIES.SF_PRO}
             style={{ textShadow: "0 0 18px rgba(255,255,255,0.22)" }}
           >
-            {formatUSD(totalVolume)}
+            {formatUSD(totalVolumeUsd)}
           </Text>
         </Box>
         <select
           value={timeframe}
-          onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+          onChange={(e) => setTimeframe(e.target.value)}
           style={{
             background: "transparent",
             color: colors.offWhite,
@@ -97,17 +171,20 @@ export const VolumeTxnChart: React.FC = () => {
             width: 170,
           }}
         >
+          <option style={{ color: "black" }} value="30m">
+            Last 30 Minutes
+          </option>
           <option style={{ color: "black" }} value="1h">
             Last Hour
           </option>
           <option style={{ color: "black" }} value="1d">
             Last Day
           </option>
+          <option style={{ color: "black" }} value="1w">
+            Last Week
+          </option>
           <option style={{ color: "black" }} value="1m">
             Last Month
-          </option>
-          <option style={{ color: "black" }} value="3m">
-            Last 3 Months
           </option>
           <option style={{ color: "black" }} value="1y">
             Last Year
@@ -180,13 +257,13 @@ export const VolumeTxnChart: React.FC = () => {
                 style={{ fontFamily: FONT_FAMILIES.SF_PRO, fontSize: "14px" }}
                 tickLine={false}
                 axisLine={false}
-                domain={[0, Math.max(1, Math.round(maxVolume * 1.05))]}
+                domain={[
+                  0,
+                  Math.max(1, Math.round(Math.max(...data.map((d) => d.volume), 1) * 1.05)),
+                ]}
                 tickFormatter={(value) => formatUSD(value)}
               />
-              <Tooltip
-                content={<CustomTooltip />}
-                cursor={{ fill: "rgba(255,255,255,0.04)" }}
-              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
 
               <Bar
                 yAxisId="volume"
@@ -214,35 +291,12 @@ export const VolumeTxnChart: React.FC = () => {
 
 export default VolumeTxnChart;
 
-function buildLabel(ts: number, tf: Timeframe): string {
-  const d = new Date(ts);
-  const two = (n: number) => n.toString().padStart(2, "0");
-  switch (tf) {
-    case "1h":
-    case "1d":
-      return `${two(d.getHours())}:${two(d.getMinutes())}`;
-    case "1m":
-    case "3m":
-      return `${d.getMonth() + 1}/${d.getDate()}`;
-    case "1y":
-    case "all":
-      return `${d.getMonth() + 1}/${d.getDate()}`;
-    default:
-      return d.toLocaleDateString();
-  }
-}
-
 const CustomTooltip: React.FC<any> = ({ active, payload, label }) => {
   if (!active || !payload || payload.length === 0) return null;
   const vol = payload.find((p: any) => p.dataKey === "volume")?.value ?? 0;
   const txns = payload[0]?.payload?.txns ?? 0;
   return (
-    <Box
-      bg="#101010"
-      border={`1px solid ${colors.borderGray}`}
-      borderRadius="8px"
-      p="8px"
-    >
+    <Box bg="#101010" border={`1px solid ${colors.borderGray}`} borderRadius="8px" p="8px">
       <Text fontSize="12px" color={colors.textGray} mb="4px">
         {label}
       </Text>
@@ -256,18 +310,20 @@ const CustomTooltip: React.FC<any> = ({ active, payload, label }) => {
   );
 };
 
-function labelForTimeframe(tf: Timeframe) {
-  switch (tf) {
+function labelForTimeframe(timeframe: string) {
+  switch (timeframe) {
+    case "30m":
+      return "30-Minute Volume";
     case "1h":
       return "Hourly Volume";
     case "1d":
       return "Daily Volume";
+    case "1w":
+      return "Weekly Volume";
     case "1m":
-      return "30-Day Volume";
-    case "3m":
-      return "90-Day Volume";
+      return "Monthly Volume";
     case "1y":
-      return "1-Year Volume";
+      return "Yearly Volume";
     case "all":
       return "All-Time Volume";
     default:

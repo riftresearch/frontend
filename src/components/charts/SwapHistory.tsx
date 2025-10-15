@@ -404,7 +404,14 @@ export const SwapHistory: React.FC<{
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const [showAverages, setShowAverages] = React.useState(false);
   const [filter, setFilter] = React.useState<"all" | "completed" | "in-progress">("all");
+  const [isAtTop, setIsAtTop] = React.useState(true);
+  const [prunedSwapCount, setPrunedSwapCount] = React.useState(0);
+  const scrollPositionRef = React.useRef(0);
   const pageSize = 20;
+
+  // Maximum swaps to keep in memory when at the top of the scroll position
+  // This prevents infinite memory growth when the page is left open for long periods
+  const MAX_SWAPS_IN_MEMORY = 100;
 
   // Connect to real-time swap stream
   const { latestSwap, updatedSwap, totalSwaps, inProgressSwaps, uniqueUsers, isConnected } =
@@ -609,7 +616,23 @@ export const SwapHistory: React.FC<{
         return prev;
       }
       console.log("Adding new swap to list:", mapped.id);
-      return [mapped, ...prev];
+
+      let newSwaps = [mapped, ...prev];
+
+      // If we're at the top and have too many swaps, prune from the bottom
+      if (isAtTop && newSwaps.length > MAX_SWAPS_IN_MEMORY) {
+        const prunedCount = newSwaps.length - MAX_SWAPS_IN_MEMORY;
+        console.log(`Pruning ${prunedCount} old swaps from memory (staying at top)`);
+        newSwaps = newSwaps.slice(0, MAX_SWAPS_IN_MEMORY);
+
+        // Track total pruned count
+        setPrunedSwapCount((prev) => prev + prunedCount);
+
+        // Adjust pagination to account for pruned items
+        setHasMore(true);
+      }
+
+      return newSwaps;
     });
 
     // Add to animating set
@@ -627,7 +650,7 @@ export const SwapHistory: React.FC<{
         return next;
       });
     }, 1000);
-  }, [latestSwap, btcPriceUsd]);
+  }, [latestSwap, btcPriceUsd, isAtTop]);
 
   // Handle updated swap from WebSocket stream
   React.useEffect(() => {
@@ -663,14 +686,28 @@ export const SwapHistory: React.FC<{
 
   const handleScroll = React.useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
-      if (isLoadingMore || !hasMore) return;
       const el = e.currentTarget;
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom < 100) {
-        fetchNextPage();
+      scrollPositionRef.current = el.scrollTop;
+
+      // Check if we're at the top (within 50px)
+      const wasAtTop = isAtTop;
+      const nowAtTop = el.scrollTop < 50;
+      setIsAtTop(nowAtTop);
+
+      // If we scrolled away from the top, reset pruned count
+      if (wasAtTop && !nowAtTop) {
+        setPrunedSwapCount(0);
+      }
+
+      // Check if we need to load more when scrolling to bottom
+      if (!isLoadingMore && hasMore) {
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom < 100) {
+          fetchNextPage();
+        }
       }
     },
-    [isLoadingMore, hasMore, fetchNextPage]
+    [isLoadingMore, hasMore, fetchNextPage, isAtTop]
   );
 
   return (
@@ -775,6 +812,19 @@ export const SwapHistory: React.FC<{
                 All
               </Button>
             </Flex>
+
+            {/* Pruning Indicator */}
+            {prunedSwapCount > 0 && isAtTop && (
+              <Text
+                fontSize="12px"
+                color={colorsAnalytics.textGray}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                ml="16px"
+                fontStyle="italic"
+              >
+                {prunedSwapCount} older swaps pruned • Scroll down to load more
+              </Text>
+            )}
           </Flex>
 
           {/* Rows */}

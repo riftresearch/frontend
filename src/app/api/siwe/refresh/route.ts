@@ -11,7 +11,14 @@ export async function POST() {
   try {
     const payload = await verifyToken<any>(refresh);
     if (payload.typ !== "refresh") throw new Error("Not a refresh token");
-    const access = await mintAccessToken({ sub: payload.sub, addr: payload.addr, role: payload.role }, 15);
+    const access = await mintAccessToken(
+      {
+        sub: payload.sub,
+        addr: payload.addr,
+        role: payload.role,
+      },
+      15
+    );
     await setAuthCookies(access, refresh); // keep same refresh for simplicity (you can rotate)
     return NextResponse.json({ ok: true });
   } catch {

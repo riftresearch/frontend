@@ -31,23 +31,22 @@ interface TokenMetadata {
 }
 
 const SUPPORTED_NETWORKS = {
-    "ethereum": "eth",
-    "base": "base",
-}
+  ethereum: "eth",
+  base: "base",
+};
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    
+
     // Get network parameter
     const network = (searchParams.get("network") || "").toLowerCase();
     const networkId = SUPPORTED_NETWORKS[network as keyof typeof SUPPORTED_NETWORKS];
 
     // Get addresses parameter - can be comma-separated or multiple params
-    let addresses: string[] = searchParams.getAll("addresses");
+    const addresses: string[] = searchParams.getAll("addresses");
     const addressesParam = addresses.length > 1 ? addresses.join(",") : addresses[0];
     const url = `https://pro-api.coingecko.com/api/v3/onchain/networks/${networkId}/tokens/multi/${addressesParam}`;
-
 
     // Check for API key
     const apiKey = process.env.GECKO_KEY;
@@ -82,13 +81,12 @@ export async function GET(req: NextRequest) {
       data: tokenMetadata,
       count: tokenMetadata.length,
     });
-
   } catch (error: any) {
     console.error("Token metadata API error:", error);
     return NextResponse.json(
-      { 
-        error: "internal_server_error", 
-        message: error?.message ?? "An unexpected error occurred" 
+      {
+        error: "internal_server_error",
+        message: error?.message ?? "An unexpected error occurred",
       },
       { status: 500 }
     );

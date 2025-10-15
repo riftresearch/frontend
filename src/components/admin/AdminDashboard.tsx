@@ -36,6 +36,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [feesDisplayMode, setFeesDisplayMode] = React.useState<"rift" | "network" | "liquidity">(
     "rift"
   );
+  const [timeUntilRefresh, setTimeUntilRefresh] = React.useState(600); // 600 seconds = 10 minutes
 
   const cycleFees = () => {
     setFeesDisplayMode((prev) => {
@@ -58,6 +59,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   // Fetch and update BTC price
   useBtcPrice();
+
+  // Auto-refresh the page every 10 minutes with countdown
+  React.useEffect(() => {
+    // Countdown timer - update every second
+    const countdownInterval = setInterval(() => {
+      setTimeUntilRefresh((prev) => {
+        if (prev <= 1) {
+          console.log("[ADMIN_DASHBOARD] Auto-refreshing page");
+          window.location.reload();
+          return 600; // Reset to 10 minutes
+        }
+        return prev - 1;
+      });
+    }, 1000); // Update every second
+
+    return () => {
+      clearInterval(countdownInterval);
+    };
+  }, []);
 
   // Convert sats to USD
   const totalVolumeUsd = React.useMemo(() => {
@@ -152,9 +172,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {/* HEADER */}
         <Flex justify="space-between" align="center">
           <RiftLogo width="110" height="28" fill={colorsAnalytics.offWhite} />
-          <Text fontSize="sm" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            Admin Dashboard
-          </Text>
+          <Flex align="center" gap="24px">
+            <Text fontSize="sm" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+              Admin Dashboard &nbsp;|&nbsp;{" "}
+              {new Date().toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              })}
+            </Text>
+          </Flex>
         </Flex>
         {/* OVERVIEW */}
         <Flex justify="space-between" align="center" mt="40px" gap="20px">
