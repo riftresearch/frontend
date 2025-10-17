@@ -54,7 +54,7 @@ export const GLOBAL_CONFIG: Config = {
   esploraUrl: "https://blockstream.info/api",
   rfqServerUrl: "https://rfq-server-production.up.railway.app",
   otcServerUrl:
-    "https://1b33795a2f06f8b0fe5a148cc69eb33cb2a3e7c0-4422.dstack-pha-prod7.phala.network",
+    "https://97c189391e051abc6e372aecad1d54bb34c39fde-4422.dstack-pha-prod9.phala.network/",
   underlyingSwappingAssets: [
     {
       currency: {
@@ -104,10 +104,11 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
       balance: "0",
       usdValue: "$0.00",
       icon: ETH_ICON,
+      decimals: 18,
     };
   }
   const address = BASE_TICKERS_TO_ADDRESS[ticker as keyof typeof BASE_TICKERS_TO_ADDRESS];
-  const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA];
+  const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA] as any;
   return {
     name: token.name,
     ticker: token.ticker,
@@ -115,6 +116,7 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
     balance: "0",
     usdValue: "$0.00",
     icon: token.icon || FALLBACK_TOKEN_ICON,
+    decimals: token.decimals || 18,
   };
 });
 
@@ -127,10 +129,11 @@ export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) 
       balance: "0",
       usdValue: "$0.00",
       icon: ETH_ICON,
+      decimals: 18,
     };
   }
   const address = ETHEREUM_TICKERS_TO_ADDRESS[ticker as keyof typeof ETHEREUM_TICKERS_TO_ADDRESS];
-  const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA];
+  const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA] as any;
   return {
     name: token.name,
     ticker: token.ticker,
@@ -138,5 +141,6 @@ export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) 
     balance: "0",
     usdValue: "$0.00",
     icon: token.icon || FALLBACK_TOKEN_ICON,
+    decimals: token.decimals || 18,
   };
 });

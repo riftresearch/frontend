@@ -40,13 +40,15 @@ export type TokenData = {
   balance: string;
   usdValue: string;
   icon: string;
-}
+  decimals: number;
+};
 
 export type TokenMetadata = {
   name: string;
   ticker: string;
   icon: string;
-}
+  decimals: number;
+};
 
 export type TokenBalance = {
   address: string;
@@ -54,12 +56,12 @@ export type TokenBalance = {
   decimals: number;
   name: string;
   symbol: string;
-}
+};
 
 export type TokenPrice = {
   price: number;
   confidence: number;
-}
+};
 
 export type VirtualMachine = EVM | Bitcoin | SVM;
 

@@ -140,6 +140,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   balance: "0",
                   usdValue: "$0.00",
                   icon: t.icon || FALLBACK_TOKEN_ICON,
+                  decimals: t.decimals,
                 };
                 setSearchResults([built]);
               })

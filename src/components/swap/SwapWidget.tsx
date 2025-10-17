@@ -11,7 +11,12 @@ import {
 } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useSignTypedData,
+} from "wagmi";
 import { colors } from "@/utils/colors";
 import {
   BITCOIN_DECIMALS,
@@ -44,6 +49,13 @@ import { Quote, formatLotAmount, RfqClientError } from "@/utils/rfqClient";
 import { CreateSwapResponse } from "@/utils/otcClient";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useTDXAttestation } from "@/hooks/useTDXAttestation";
+import {
+  getERC20ToBTCQuote,
+  getCBBTCtoBTCQuote,
+  pollCowSwapOrderStatus,
+} from "@/utils/swapHelpers";
+import { createCowSwapClient } from "@/utils/cowswapClient";
+import { isAboveMinSwap } from "@/utils/tokenHelpers";
 
 export const SwapWidget = () => {
   const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
@@ -73,6 +85,10 @@ export const SwapWidget = () => {
     });
 
   const [quote, setQuote] = useState<Quote | null>(null);
+  const quoteRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const quoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSigningOrder, setIsSigningOrder] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const {
     swapResponse,
     setSwapResponse,
@@ -96,6 +112,10 @@ export const SwapWidget = () => {
     setInputUsdValue,
     outputUsdValue,
     setOutputUsdValue,
+    cowswapOrder,
+    setCowswapOrder,
+    rfqQuote,
+    setRfqQuote,
   } = useStore();
 
   // Update input USD value based on cached prices
@@ -206,6 +226,14 @@ export const SwapWidget = () => {
     hash,
   });
 
+  // Hook for signing typed data (EIP-712)
+  const {
+    data: signatureData,
+    signTypedData,
+    isPending: isSignaturePending,
+    error: signatureError,
+  } = useSignTypedData();
+
   // Update store when transaction is confirmed
   useEffect(() => {
     if (isConfirmed) {
@@ -246,12 +274,13 @@ export const SwapWidget = () => {
   // Button loading state combines pending transaction and confirmation waiting
   const isButtonLoading = isPending || isConfirming;
 
-  // Define the assets based on swap direction
-  const cbBTCAsset = GLOBAL_CONFIG.underlyingSwappingAssets[1];
-  const btcAsset = GLOBAL_CONFIG.underlyingSwappingAssets[0];
-
-  const currentInputAsset = isSwappingForBTC ? cbBTCAsset : btcAsset;
-  const currentOutputAsset = isSwappingForBTC ? btcAsset : cbBTCAsset;
+  // Define the styles based on swap direction
+  const inputStyle = isSwappingForBTC
+    ? GLOBAL_CONFIG.underlyingSwappingAssets[1].style
+    : GLOBAL_CONFIG.underlyingSwappingAssets[0].style;
+  const outputStyle = isSwappingForBTC
+    ? GLOBAL_CONFIG.underlyingSwappingAssets[0].style
+    : GLOBAL_CONFIG.underlyingSwappingAssets[1].style;
 
   // For WebAssetTag, we need to pass the right string identifiers
   const inputAssetIdentifier = isSwappingForBTC ? "ETH" : "BTC";
@@ -285,7 +314,11 @@ export const SwapWidget = () => {
   const convertInputAmountToFullDecimals = (amount?: string): bigint | undefined => {
     try {
       const inputAmount = amount || rawInputAmount;
-      return parseUnits(inputAmount, currentInputAsset.currency.decimals);
+      if (!selectedInputToken) {
+        console.error("No input token selected");
+        return undefined;
+      }
+      return parseUnits(inputAmount, selectedInputToken.decimals);
     } catch (error) {
       console.error("Error converting input amount to full decimals:", error);
       return undefined;
@@ -304,6 +337,13 @@ export const SwapWidget = () => {
     setOutputUsdValue(ZERO_USD_DISPLAY);
     setPayoutAddress("");
     setBitcoinDepositInfo(null);
+
+    // Cleanup debounce timer on unmount
+    return () => {
+      if (quoteDebounceTimerRef.current) {
+        clearTimeout(quoteDebounceTimerRef.current);
+      }
+    };
   }, [setRawInputAmount, setOutputAmount, setInputUsdValue, setOutputUsdValue]);
 
   // Fetch BTC and ETH prices on mount
@@ -378,93 +418,130 @@ export const SwapWidget = () => {
     } else {
       setAddressValidation({ isValid: false });
     }
-  }, [payoutAddress, btcAsset.currency.chain, isSwappingForBTC]);
+  }, [payoutAddress, isSwappingForBTC]);
 
-  const getQuote = async (from_amount: bigint) => {
-    try {
-      const currentTime = new Date().getTime();
-      console.log("currentInputAsset", currentInputAsset);
-      let quoteResponse: any;
-      try {
-        quoteResponse = await rfqClient.requestQuotes({
-          mode: "ExactInput",
-          amount: from_amount.toString(),
-          from: {
-            chain: currentInputAsset.currency.chain,
-            token: currentInputAsset.currency.token,
-            decimals: currentInputAsset.currency.decimals,
-          },
-          to: {
-            chain: currentOutputAsset.currency.chain,
-            token: currentOutputAsset.currency.token,
-            decimals: currentOutputAsset.currency.decimals,
-          },
-        });
-      } catch (error) {
-        console.error("RFQ request failed:", error);
-        toastInfo({
-          title: "Quote Request Failed",
-        });
+  // Fetch quote for ERC20/ETH -> BTC (combines CowSwap + RFQ)
+  const fetchERC20ToBTCQuote = useCallback(
+    async (inputAmount?: string) => {
+      // Use provided amount or fall back to state
+      const amountToQuote = inputAmount ?? rawInputAmount;
+
+      if (!isSwappingForBTC || !amountToQuote || parseFloat(amountToQuote) <= 0) {
         return;
       }
-      const timeTaken = new Date().getTime() - currentTime;
 
-      const quoteType = (quoteResponse as any)?.quote?.type;
+      if (!userEvmAccountAddress) {
+        return;
+      }
 
-      if (quoteType !== "success") {
-        if (from_amount < 2500n) {
-          // this is probably just too small so no one quoted
-          toastInfo({
-            title: "Amount too little",
-            description: "The amount is too little to be quoted",
-          });
-          return;
-        } else {
-          toastInfo({
-            title: "Insufficient liquidity",
-            description: "No market makers have sufficient liquidity to quote this swap",
-          });
+      // Check if the input value is above minimum swap threshold
+      const inputValue = parseFloat(amountToQuote);
+      let price: number | null = null;
+
+      if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+        price = ethPrice;
+      } else if (selectedInputToken.address) {
+        price = erc20Price;
+      }
+
+      if (price && btcPrice) {
+        const usdValue = inputValue * price;
+
+        if (!isAboveMinSwap(usdValue, btcPrice)) {
+          console.log("Input value below minimum swap threshold");
+          // Clear quotes but don't show error - just wait for larger amount
+          setCowswapOrder(null);
+          setRfqQuote(null);
+          setOutputAmount("");
           return;
         }
       }
 
-      // if we're here, we have a success quote
-      const quote = (quoteResponse as any).quote.data.quote;
-      const feeSchedule = (quoteResponse as any).quote.data.fees;
+      try {
+        // Determine sell token
+        const sellToken = selectedInputToken?.address || "ETH";
 
-      console.log("got quote from RFQ", quoteResponse, "in", timeTaken, "ms");
-      setQuote(quote);
+        // Convert amount to base units
+        const decimals = selectedInputToken?.address ? 18 : 18; // TODO: get actual decimals
+        const sellAmount = parseUnits(amountToQuote, decimals).toString();
 
-      // Populate output field with the quote's output amount
-      const formattedOutputAmount = formatLotAmount(quote.to);
-      setOutputAmount(formattedOutputAmount);
-    } catch (error: unknown) {
-      console.error("RFQ request failed:", error);
+        // Get combined quote
+        const quoteResponse = await getERC20ToBTCQuote(
+          sellToken,
+          sellAmount,
+          userEvmAccountAddress
+        );
 
-      // Normalize error message
-      const description = (() => {
-        if (error instanceof RfqClientError) {
-          return error.response?.error ?? error.message;
+        if (quoteResponse) {
+          setCowswapOrder(quoteResponse.cowswapOrder);
+          setRfqQuote(quoteResponse.rfqQuote);
+          setOutputAmount(quoteResponse.btcOutputAmount);
+          setQuote(quoteResponse.rfqQuote); // Keep for compatibility
+        } else {
+          // Clear state on failure
+          setCowswapOrder(null);
+          setRfqQuote(null);
+          setOutputAmount("");
         }
-        if (typeof error === "object" && error !== null) {
-          const maybeMsg = (error as { message?: unknown }).message;
-          if (typeof maybeMsg === "string" && maybeMsg.length > 0) {
-            return maybeMsg;
-          }
-        }
-        return "Service temporarily unavailable";
-      })();
+      } catch (error) {
+        console.error("Failed to fetch ERC20 to BTC quote:", error);
+        setCowswapOrder(null);
+        setRfqQuote(null);
+        setOutputAmount("");
+      }
+    },
+    [
+      isSwappingForBTC,
+      rawInputAmount,
+      userEvmAccountAddress,
+      selectedInputToken,
+      setCowswapOrder,
+      setRfqQuote,
+      setOutputAmount,
+      ethPrice,
+      erc20Price,
+      btcPrice,
+    ]
+  );
 
-      toastError(error, {
-        title: "Quote Request Failed",
-        description,
-      });
-
-      // Reset quote/output gracefully; do not rethrow
-      setOutputAmount("");
-      setQuote(null);
+  // Auto-refresh quote every 15 seconds when user has entered an amount
+  useEffect(() => {
+    // Clear any existing interval
+    if (quoteRefreshIntervalRef.current) {
+      clearInterval(quoteRefreshIntervalRef.current);
+      quoteRefreshIntervalRef.current = null;
     }
-  };
+
+    // Only set up auto-refresh if conditions are met and we have a quote
+    if (
+      isSwappingForBTC &&
+      rawInputAmount &&
+      parseFloat(rawInputAmount) > 0 &&
+      userEvmAccountAddress &&
+      (cowswapOrder || rfqQuote)
+    ) {
+      // Set up 15-second refresh interval
+      // Don't pass a value to fetchERC20ToBTCQuote - it will use current rawInputAmount from state
+      quoteRefreshIntervalRef.current = setInterval(() => {
+        fetchERC20ToBTCQuote();
+      }, 15000);
+    }
+
+    // Cleanup on unmount or when conditions change
+    return () => {
+      if (quoteRefreshIntervalRef.current) {
+        clearInterval(quoteRefreshIntervalRef.current);
+        quoteRefreshIntervalRef.current = null;
+      }
+    };
+  }, [
+    isSwappingForBTC,
+    rawInputAmount,
+    userEvmAccountAddress,
+    cowswapOrder,
+    rfqQuote,
+    fetchERC20ToBTCQuote,
+  ]);
 
   const sendOTCRequest = async (
     quote: Quote,
@@ -544,16 +621,28 @@ export const SwapWidget = () => {
       setHasStartedTyping(true);
       updateInputUsdValue(value);
 
-      const from_amount = convertInputAmountToFullDecimals(value);
-      console.log("value", value);
-      console.log("from_amount", from_amount);
-      if (from_amount && from_amount > 0) {
-        // call RFQ - this will update the output amount
-        // getQuote(from_amount);
-      } else {
+      // Clear existing quotes when user types
+      setCowswapOrder(null);
+      setRfqQuote(null);
+      setQuote(null);
+
+      if (!value || parseFloat(value) <= 0) {
         // Clear output if input is empty or 0
         setOutputAmount("");
         setOutputUsdValue(ZERO_USD_DISPLAY);
+      }
+
+      // Clear any existing debounce timer
+      if (quoteDebounceTimerRef.current) {
+        clearTimeout(quoteDebounceTimerRef.current);
+      }
+
+      // Set up debounced quote fetch (150ms delay)
+      // Pass the value directly to avoid stale closure issues
+      if (value && parseFloat(value) > 0) {
+        quoteDebounceTimerRef.current = setTimeout(() => {
+          fetchERC20ToBTCQuote(value);
+        }, 150);
       }
     }
   };
@@ -704,7 +793,7 @@ export const SwapWidget = () => {
           ? "Please enter a valid Bitcoin payout address"
           : "Please enter a valid Ethereum address";
         if (isSwappingForBTC && addressValidation.networkMismatch) {
-          description = `Wrong network: expected ${btcAsset.currency.chain} but detected ${addressValidation.detectedNetwork}`;
+          description = `Wrong network: expected ${GLOBAL_CONFIG.underlyingSwappingAssets[0].currency.chain} but detected ${addressValidation.detectedNetwork}`;
         }
         toastInfo({
           title: isSwappingForBTC ? "Invalid Bitcoin Address" : "Invalid Ethereum Address",
@@ -713,12 +802,14 @@ export const SwapWidget = () => {
         return;
       }
 
-      const estimatedOutputAmountInSatoshis = BigInt(
-        Math.round(parseFloat(outputAmount) * 10 ** BITCOIN_DECIMALS)
-      );
+      // For ERC20->BTC swaps, use the new CowSwap flow
+      if (isSwappingForBTC && cowswapOrder && rfqQuote) {
+        await handleERC20ToBTCSwap();
+        return;
+      }
 
+      // For BTC->ERC20 swaps, use the existing flow
       const inputAmountInSatoshis = convertInputAmountToFullDecimals();
-
       console.log("inputAmountInSatoshis", inputAmountInSatoshis);
       if (quote && inputAmountInSatoshis) {
         console.log("sending swap request");
@@ -727,6 +818,111 @@ export const SwapWidget = () => {
     } catch (error) {
       console.error("handleSwap error caught:", error);
       // Errors will be handled by the writeError useEffect
+    }
+  };
+
+  // Handle ERC20->BTC swap using CowSwap + OTC
+  const handleERC20ToBTCSwap = async () => {
+    if (!cowswapOrder || !rfqQuote || !userEvmAccountAddress) {
+      toastError(new Error("Missing quote data"), {
+        title: "Swap Failed",
+        description: "Please refresh the quote and try again",
+      });
+      return;
+    }
+
+    try {
+      // Step 1: Create OTC swap to get deposit address
+      console.log("Creating OTC swap...");
+      const otcSwap = await otcClient.createSwap({
+        quote: rfqQuote,
+        user_destination_address: payoutAddress,
+        user_evm_account_address: userEvmAccountAddress,
+      });
+
+      const depositAddress = otcSwap.deposit_address;
+      console.log("OTC deposit address:", depositAddress);
+
+      // Step 2: Fetch fresh CowSwap quote with deposit address as receiver
+      setIsSigningOrder(true);
+      console.log("Fetching fresh CowSwap quote with deposit address as receiver...");
+
+      const cowswapClient = createCowSwapClient();
+      const sellToken = selectedInputToken?.address || "ETH";
+      const decimals = selectedInputToken?.address ? 18 : 18;
+      const sellAmount = parseUnits(rawInputAmount, decimals).toString();
+
+      const freshCowswapOrder = await cowswapClient.buildOrder(
+        {
+          sellToken,
+          sellAmount,
+          userAddress: userEvmAccountAddress,
+          slippageBps: 10, // 0.1% default
+          validFor: 60, // 60 seconds default
+        },
+        depositAddress // Set receiver to OTC deposit address
+      );
+
+      // Step 3: Sign CowSwap order with EIP-712
+      console.log("Signing CowSwap order...");
+      const typedData = cowswapClient.getOrderTypedData(freshCowswapOrder.order);
+
+      // Sign the order using wagmi's signTypedData
+      await new Promise<void>((resolve, reject) => {
+        signTypedData(
+          {
+            domain: typedData.domain as any,
+            types: typedData.types as any,
+            primaryType: "Order",
+            message: typedData.message as any,
+          },
+          {
+            onSuccess: () => resolve(),
+            onError: (error) => reject(error),
+          }
+        );
+      });
+
+      // Wait for signature
+      if (!signatureData) {
+        throw new Error("Failed to get signature");
+      }
+
+      setIsSigningOrder(false);
+      setIsSubmittingOrder(true);
+
+      // Step 4: Submit signed order to CowSwap
+      console.log("Submitting order to CowSwap...");
+      const orderUid = await cowswapClient.submitOrder(freshCowswapOrder.order, signatureData);
+      console.log("Order submitted with UID:", orderUid);
+
+      // Step 5: Poll for order status
+      console.log("Polling order status...");
+      const status = await pollCowSwapOrderStatus(orderUid);
+
+      setIsSubmittingOrder(false);
+
+      // Step 6: Show result toast
+      if (status === "filled") {
+        toastSuccess({
+          title: "Order Filled Successfully",
+          description: "Your swap is complete!",
+        });
+      } else {
+        toastWarning({
+          title: "Order Not Filled",
+          description: "The order was not filled. Please submit a new order.",
+        });
+      }
+    } catch (error) {
+      console.error("ERC20->BTC swap failed:", error);
+      setIsSigningOrder(false);
+      setIsSubmittingOrder(false);
+
+      toastError(error, {
+        title: "Swap Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   };
 
@@ -776,11 +972,11 @@ export const SwapWidget = () => {
         <Flex w="100%" flexDir="column" position="relative">
           <Flex
             px="10px"
-            bg={currentInputAsset?.style?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
+            bg={inputStyle?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
             w="100%"
             h="121px"
             border="2px solid"
-            borderColor={currentInputAsset?.style?.bg_color || "#255283"}
+            borderColor={inputStyle?.bg_color || "#255283"}
             borderRadius="16px"
           >
             <Flex direction="column" py="12px" px="8px">
@@ -821,7 +1017,7 @@ export const SwapWidget = () => {
                 fontSize="46px"
                 placeholder="0.0"
                 _placeholder={{
-                  color: currentInputAsset?.style?.light_text_color || "#4A90E2",
+                  color: inputStyle?.light_text_color || "#4A90E2",
                 }}
               />
 
@@ -928,11 +1124,11 @@ export const SwapWidget = () => {
           <Flex
             mt="5px"
             px="10px"
-            bg={currentOutputAsset?.style?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
+            bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
             w="100%"
             h="121px"
             border="2px solid"
-            borderColor={currentOutputAsset?.style?.bg_color || "#78491F"}
+            borderColor={outputStyle?.bg_color || "#78491F"}
             borderRadius="16px"
           >
             <Flex direction="column" py="12px" px="8px">
@@ -971,7 +1167,7 @@ export const SwapWidget = () => {
                 fontSize="46px"
                 placeholder="0.0"
                 _placeholder={{
-                  color: currentOutputAsset?.style?.light_text_color || "#805530",
+                  color: outputStyle?.light_text_color || "#805530",
                 }}
               />
 
@@ -1009,8 +1205,8 @@ export const SwapWidget = () => {
               fontFamily="Aux"
             >
               {quote && quote.from.amount && quote.to.amount
-                ? `1 ${currentInputAsset?.style?.symbol} = ${(parseFloat(formatLotAmount(quote.to)) / parseFloat(formatLotAmount(quote.from))).toFixed(6)} ${currentOutputAsset?.style?.symbol}`
-                : `1 ${currentInputAsset?.style?.symbol} = 1 ${currentOutputAsset?.style?.symbol}`}
+                ? `1 ${inputStyle?.symbol} = ${(parseFloat(formatLotAmount(quote.to)) / parseFloat(formatLotAmount(quote.from))).toFixed(6)} ${outputStyle?.symbol}`
+                : `1 ${inputStyle?.symbol} = 1 ${outputStyle?.symbol}`}
             </Text>
             <Spacer />
             <Flex
@@ -1103,8 +1299,8 @@ export const SwapWidget = () => {
                 mt="-4px"
                 mb="10px"
                 px="10px"
-                bg={currentOutputAsset?.style?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
-                border={`2px solid ${currentOutputAsset?.style?.bg_color || "#78491F"}`}
+                bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
+                border={`2px solid ${outputStyle?.bg_color || "#78491F"}`}
                 w="100%"
                 h="60px"
                 borderRadius="16px"
@@ -1142,7 +1338,7 @@ export const SwapWidget = () => {
                     fontSize="28px"
                     placeholder="bc1q5d7rjq7g6rd2d..."
                     _placeholder={{
-                      color: currentOutputAsset?.style?.light_text_color || "#856549",
+                      color: outputStyle?.light_text_color || "#856549",
                     }}
                     spellCheck={false}
                   />
@@ -1165,27 +1361,42 @@ export const SwapWidget = () => {
         <Flex
           bg={colors.swapBgColor}
           _hover={{
-            bg: !isButtonLoading ? colors.swapHoverColor : undefined,
+            bg:
+              !isButtonLoading && !isSigningOrder && !isSubmittingOrder
+                ? colors.swapHoverColor
+                : undefined,
           }}
           w="100%"
           mt="8px"
           transition="0.2s"
           h="58px"
-          onClick={isButtonLoading ? undefined : handleSwap}
+          onClick={isButtonLoading || isSigningOrder || isSubmittingOrder ? undefined : handleSwap}
           fontSize="18px"
           align="center"
           userSelect="none"
-          cursor={!isButtonLoading ? "pointer" : "not-allowed"}
+          cursor={
+            !isButtonLoading && !isSigningOrder && !isSubmittingOrder ? "pointer" : "not-allowed"
+          }
           borderRadius="16px"
           justify="center"
           border="3px solid"
           borderColor={colors.swapBorderColor}
-          opacity={isButtonLoading ? 0.7 : 1}
-          pointerEvents={isButtonLoading ? "none" : "auto"}
+          opacity={isButtonLoading || isSigningOrder || isSubmittingOrder ? 0.7 : 1}
+          pointerEvents={isButtonLoading || isSigningOrder || isSubmittingOrder ? "none" : "auto"}
         >
-          {isButtonLoading && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
+          {(isButtonLoading || isSigningOrder || isSubmittingOrder) && (
+            <Spinner size="sm" color={colors.offWhite} mr="10px" />
+          )}
           <Text color={colors.offWhite} fontFamily="Nostromo">
-            {isPending ? "Confirm in Wallet..." : isConfirming ? "Confirming..." : "Swap"}
+            {isSigningOrder
+              ? "Sign Order..."
+              : isSubmittingOrder
+                ? "Submitting Order..."
+                : isPending
+                  ? "Confirm in Wallet..."
+                  : isConfirming
+                    ? "Confirming..."
+                    : "Swap"}
           </Text>
         </Flex>
 

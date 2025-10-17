@@ -9,7 +9,7 @@ type RawMeta = {
   name: string;
   ticker: string;
   icon: string | null;
-  // other fields are ignored for search
+  decimals?: number;
 };
 
 type TokenIndexItem = {
@@ -18,6 +18,7 @@ type TokenIndexItem = {
   name: string;
   ticker: string;
   icon: string;
+  decimals: number;
   nameNorm: string;
   tickerNorm: string;
   nameWords: string[];
@@ -43,6 +44,7 @@ function buildIndex(metadata: Record<string, RawMeta>): TokenIndexItem[] {
       name: meta.name,
       ticker: meta.ticker,
       icon: meta.icon || FALLBACK_TOKEN_ICON,
+      decimals: meta.decimals || 18, // Default to 18 if not specified
       nameNorm,
       tickerNorm,
       nameWords: nameNorm.split(" ").filter(Boolean),
@@ -172,5 +174,6 @@ export function searchTokens(chain: ChainKey, query: string, limit = 10): TokenD
     balance: "0",
     usdValue: "$0.00",
     icon: item.icon,
+    decimals: item.decimals,
   }));
 }

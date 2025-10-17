@@ -224,6 +224,7 @@ export const ConnectWalletButton: React.FC = () => {
           balance: balanceEth.toFixed(6),
           usdValue: `$${usdValue.toFixed(2)}`,
           icon: ETH_ICON,
+          decimals: 18,
         };
 
         console.log("[UserETH] built ETH asset entry", {
@@ -313,6 +314,7 @@ export const ConnectWalletButton: React.FC = () => {
             balance: Number(balanceStr).toFixed(6),
             usdValue: `$${usd.toFixed(2)}`,
             icon: tokenData.icon || FALLBACK_TOKEN_ICON,
+            decimals: tokenData.decimals || decimals,
           } as TokenData;
           console.log("[UserToken] built asset entry", built);
           return built;

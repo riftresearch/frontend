@@ -23,11 +23,18 @@ export interface Lot {
   amount: string; // U256 as string
 }
 
+export interface FeeSchedule {
+  protocol_fee_sats: number;
+  liquidity_fee_sats: number;
+  network_fee_sats: number;
+}
+
 export interface Quote {
   id: string; // UUID as string
   market_maker_id: string; // UUID as string
   from: Lot;
   to: Lot;
+  fee_schedule: FeeSchedule;
   expires_at: string; // ISO 8601 datetime
   created_at: string; // ISO 8601 datetime
 }
@@ -150,9 +157,7 @@ export class RfqClient {
       if (error instanceof Error && error.name === "AbortError") {
         throw new RfqClientError(`Request timeout after ${this.timeout}ms`);
       }
-      throw new RfqClientError(
-        error instanceof Error ? error.message : "Unknown error occurred"
-      );
+      throw new RfqClientError(error instanceof Error ? error.message : "Unknown error occurred");
     } finally {
       clearTimeout(timeoutId);
     }
@@ -180,9 +185,7 @@ export class RfqClient {
    * Get list of connected market makers
    */
   async getConnectedMarketMakers(): Promise<ConnectedMarketMakersResponse> {
-    return this.fetchWithTimeout<ConnectedMarketMakersResponse>(
-      "/api/v1/market-makers/connected"
-    );
+    return this.fetchWithTimeout<ConnectedMarketMakersResponse>("/api/v1/market-makers/connected");
   }
 
   /**
@@ -205,14 +208,12 @@ export class RfqClient {
 /**
  * Create a configured RFQ client
  */
-export const createRfqClient = (config: RfqClientConfig): RfqClient =>
-  new RfqClient(config);
+export const createRfqClient = (config: RfqClientConfig): RfqClient => new RfqClient(config);
 
 /**
  * Get server status (functional style)
  */
-export const getStatus = (client: RfqClient) => (): Promise<Status> =>
-  client.getStatus();
+export const getStatus = (client: RfqClient) => (): Promise<Status> => client.getStatus();
 
 /**
  * Request quotes (functional style)
@@ -232,8 +233,7 @@ export const getConnectedMarketMakers =
 /**
  * Health check (functional style)
  */
-export const healthCheck = (client: RfqClient) => (): Promise<boolean> =>
-  client.healthCheck();
+export const healthCheck = (client: RfqClient) => (): Promise<boolean> => client.healthCheck();
 
 /**
  * Helper function to create a Lot (currency with amount)
@@ -274,9 +274,7 @@ export const formatLotAmount = (lot: Lot): string => {
     return wholePart.toString();
   }
 
-  const fractionalStr = fractionalPart
-    .toString()
-    .padStart(lot.currency.decimals, "0");
+  const fractionalStr = fractionalPart.toString().padStart(lot.currency.decimals, "0");
   const trimmedFractional = fractionalStr.replace(/0+$/, "");
 
   return `${wholePart}.${trimmedFractional}`;
@@ -285,14 +283,9 @@ export const formatLotAmount = (lot: Lot): string => {
 /**
  * Helper function to parse amount string to base units
  */
-export const parseAmountToBaseUnits = (
-  amount: string,
-  decimals: number
-): string => {
+export const parseAmountToBaseUnits = (amount: string, decimals: number): string => {
   const [wholePart, fractionalPart = ""] = amount.split(".");
-  const paddedFractional = fractionalPart
-    .padEnd(decimals, "0")
-    .slice(0, decimals);
+  const paddedFractional = fractionalPart.padEnd(decimals, "0").slice(0, decimals);
   const baseUnits = wholePart + paddedFractional;
   return BigInt(baseUnits).toString();
 };
