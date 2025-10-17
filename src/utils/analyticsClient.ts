@@ -194,11 +194,11 @@ export function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapIt
 
   // [6] Extract hex amounts from deposit status
   const userDepositAmountHex = row?.user_deposit_status?.amount || "0x0";
-  const mmDepositAmountHex = row?.mm_deposit_status?.amount || "0x0";
+  // const mmDepositAmountHex = row?.mm_deposit_status?.amount || "0x0";
 
   // [7] Convert hex amounts to BTC decimals (8 decimals for cbBTC/BTC)
   const userDepositAmountBtc = parseFloat(satsToBtc(parseInt(userDepositAmountHex)));
-  const mmDepositAmountBtc = parseFloat(satsToBtc(parseInt(mmDepositAmountHex)));
+  // const mmDepositAmountBtc = parseFloat(satsToBtc(parseInt(mmDepositAmountHex)));
 
   // console.log("💰 Amounts & data:", {
   //   userDepositAmountBtc,
