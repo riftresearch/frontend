@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text, Flex, Button } from "@chakra-ui/react";
+import { Box, Text, Flex, Button, Tooltip } from "@chakra-ui/react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { RiftLogo } from "@/components/other/RiftLogo";
@@ -14,7 +14,9 @@ import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import { satsToBtc } from "@/utils/dappHelper";
 import NumberFlow from "@number-flow/react";
-import { FiChevronRight } from "react-icons/fi";
+import { FiRefreshCw } from "react-icons/fi";
+import { FaDollarSign, FaBitcoin } from "react-icons/fa";
+import { toastSuccess } from "@/utils/toast";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -37,6 +39,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     "rift"
   );
   const [timeUntilRefresh, setTimeUntilRefresh] = React.useState(600); // 600 seconds = 10 minutes
+
+  // Currency toggle states
+  const [feesCurrency, setFeesCurrency] = React.useState<"usd" | "btc">("usd");
+  const [volumeCurrency, setVolumeCurrency] = React.useState<"usd" | "btc">("usd");
 
   const cycleFees = () => {
     setFeesDisplayMode((prev) => {
@@ -187,41 +193,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         <Flex justify="space-between" align="center" mt="40px" gap="20px">
           {/* TOTAL VOLUME */}
           <GridFlex widthBlocks={10} heightBlocks={3}>
-            <Flex direction="column" pl="25px" pt="18px">
-              <Text
-                color={colorsAnalytics.textGray}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="19px"
-                fontWeight="bold"
-                mb="8px"
-              >
-                Total Volume
-              </Text>
-              <Box mt="-11px">
-                <NumberFlow
-                  value={totalVolumeUsd}
-                  format={{
-                    style: "currency",
-                    currency: "USD",
-                    maximumFractionDigits: 2,
-                  }}
-                  style={{
-                    fontFamily: FONT_FAMILIES.SF_PRO,
-                    fontSize: "49px",
-                    fontWeight: "bold",
-                    color: colorsAnalytics.offWhite,
-                  }}
-                />
-              </Box>
-            </Flex>
-          </GridFlex>
-
-          {/* TOTAL FEES COLLECTED */}
-          <GridFlex widthBlocks={9} heightBlocks={3}>
             <Box position="relative" w="100%" h="100%">
               <Button
                 size="sm"
-                onClick={cycleFees}
+                onClick={() => setVolumeCurrency(volumeCurrency === "usd" ? "btc" : "usd")}
                 bg="transparent"
                 borderWidth="2px"
                 borderRadius="12px"
@@ -238,8 +213,138 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 right="20px"
                 zIndex={1}
               >
-                <FiChevronRight />
+                {volumeCurrency === "usd" ? <FaDollarSign /> : <FaBitcoin />}
               </Button>
+              <Flex direction="column" pl="25px" pt="18px">
+                <Text
+                  color={colorsAnalytics.textGray}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontSize="19px"
+                  fontWeight="bold"
+                  mb="8px"
+                >
+                  Total Volume
+                </Text>
+                <Box mt="-11px">
+                  {volumeCurrency === "usd" ? (
+                    <Box
+                      display="inline-block"
+                      cursor="pointer"
+                      onClick={() => {
+                        navigator.clipboard.writeText(totalVolumeUsd.toFixed(2));
+                        toastSuccess({
+                          title: "Copied to clipboard",
+                          description: `$${totalVolumeUsd.toFixed(2)}`,
+                        });
+                      }}
+                    >
+                      <NumberFlow
+                        value={totalVolumeUsd}
+                        format={{
+                          style: "currency",
+                          currency: "USD",
+                          maximumFractionDigits: 2,
+                        }}
+                        style={{
+                          fontFamily: FONT_FAMILIES.SF_PRO,
+                          fontSize: "49px",
+                          fontWeight: "bold",
+                          color: colorsAnalytics.offWhite,
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <Tooltip.Root openDelay={200} closeDelay={0}>
+                      <Tooltip.Trigger asChild>
+                        <Box
+                          display="inline-block"
+                          cursor="pointer"
+                          onClick={() => {
+                            const satsValue = parseInt(totalVolumeSats) || 0;
+                            navigator.clipboard.writeText(satsValue.toString());
+                            toastSuccess({
+                              title: "Copied to clipboard",
+                              description: `${satsValue.toLocaleString()} sats`,
+                            });
+                          }}
+                        >
+                          <NumberFlow
+                            value={parseInt(totalVolumeSats) || 0}
+                            format={{
+                              notation: "compact",
+                              maximumFractionDigits: 2,
+                            }}
+                            suffix=" sats"
+                            style={{
+                              fontFamily: FONT_FAMILIES.SF_PRO,
+                              fontSize: "49px",
+                              fontWeight: "bold",
+                              color: colorsAnalytics.offWhite,
+                            }}
+                          />
+                        </Box>
+                      </Tooltip.Trigger>
+                      <Tooltip.Positioner>
+                        <Tooltip.Content
+                          bg={colorsAnalytics.offBlackLighter}
+                          color={colorsAnalytics.offWhite}
+                          borderRadius="8px"
+                          px="12px"
+                          py="6px"
+                          fontSize="14px"
+                        >
+                          <Tooltip.Arrow />
+                          <Text fontFamily={FONT_FAMILIES.SF_PRO}>
+                            {(parseInt(totalVolumeSats) || 0).toLocaleString()} sats
+                          </Text>
+                        </Tooltip.Content>
+                      </Tooltip.Positioner>
+                    </Tooltip.Root>
+                  )}
+                </Box>
+              </Flex>
+            </Box>
+          </GridFlex>
+
+          {/* TOTAL FEES COLLECTED */}
+          <GridFlex widthBlocks={9} heightBlocks={3}>
+            <Box position="relative" w="100%" h="100%">
+              <Flex position="absolute" top="18px" right="20px" zIndex={1} gap="8px">
+                <Button
+                  size="sm"
+                  onClick={cycleFees}
+                  bg="transparent"
+                  borderWidth="2px"
+                  borderRadius="12px"
+                  borderColor={colorsAnalytics.borderGray}
+                  color={colorsAnalytics.offWhite}
+                  _hover={{
+                    opacity: 0.8,
+                  }}
+                  minW="32px"
+                  h="32px"
+                  p={0}
+                >
+                  <FiRefreshCw />
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setFeesCurrency(feesCurrency === "usd" ? "btc" : "usd")}
+                  bg="transparent"
+                  borderWidth="2px"
+                  borderRadius="12px"
+                  borderColor={colorsAnalytics.borderGray}
+                  color={colorsAnalytics.offWhite}
+                  _hover={{
+                    opacity: 0.8,
+                  }}
+                  minW="32px"
+                  h="32px"
+                  p={0}
+                >
+                  {feesCurrency === "usd" ? <FaDollarSign /> : <FaBitcoin />}
+                </Button>
+              </Flex>
               <Flex direction="column" pl="25px" pt="18px">
                 <Text
                   color={colorsAnalytics.textGray}
@@ -253,26 +358,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   {feesDisplayMode === "liquidity" && "Total Market Maker Fees"}
                 </Text>
                 <Box mt="-12px">
-                  <NumberFlow
-                    value={
-                      feesDisplayMode === "rift"
-                        ? totalRiftFeesUsd
-                        : feesDisplayMode === "network"
-                          ? totalNetworkFeesUsd
-                          : totalLiquidityFeesUsd
-                    }
-                    format={{
-                      style: "currency",
-                      currency: "USD",
-                      maximumFractionDigits: 2,
-                    }}
-                    style={{
-                      fontFamily: FONT_FAMILIES.SF_PRO,
-                      fontSize: "49px",
-                      fontWeight: "bold",
-                      color: colorsAnalytics.offWhite,
-                    }}
-                  />
+                  {feesCurrency === "usd" ? (
+                    <Box
+                      display="inline-block"
+                      cursor="pointer"
+                      onClick={() => {
+                        const usdValue =
+                          feesDisplayMode === "rift"
+                            ? totalRiftFeesUsd
+                            : feesDisplayMode === "network"
+                              ? totalNetworkFeesUsd
+                              : totalLiquidityFeesUsd;
+                        navigator.clipboard.writeText(usdValue.toFixed(2));
+                        toastSuccess({
+                          title: "Copied to clipboard",
+                          description: `$${usdValue.toFixed(2)}`,
+                        });
+                      }}
+                    >
+                      <NumberFlow
+                        value={
+                          feesDisplayMode === "rift"
+                            ? totalRiftFeesUsd
+                            : feesDisplayMode === "network"
+                              ? totalNetworkFeesUsd
+                              : totalLiquidityFeesUsd
+                        }
+                        format={{
+                          style: "currency",
+                          currency: "USD",
+                          maximumFractionDigits: 2,
+                        }}
+                        style={{
+                          fontFamily: FONT_FAMILIES.SF_PRO,
+                          fontSize: "49px",
+                          fontWeight: "bold",
+                          color: colorsAnalytics.offWhite,
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <Tooltip.Root openDelay={200} closeDelay={0}>
+                      <Tooltip.Trigger asChild>
+                        <Box
+                          display="inline-block"
+                          cursor="pointer"
+                          onClick={() => {
+                            const satsValue =
+                              feesDisplayMode === "rift"
+                                ? parseInt(totalRiftFeesSats) || 0
+                                : feesDisplayMode === "network"
+                                  ? parseInt(totalNetworkFeesSats) || 0
+                                  : parseInt(totalLiquidityFeesSats) || 0;
+                            navigator.clipboard.writeText(satsValue.toString());
+                            toastSuccess({
+                              title: "Copied to clipboard",
+                              description: `${satsValue.toLocaleString()} sats`,
+                            });
+                          }}
+                        >
+                          <NumberFlow
+                            value={
+                              feesDisplayMode === "rift"
+                                ? parseInt(totalRiftFeesSats) || 0
+                                : feesDisplayMode === "network"
+                                  ? parseInt(totalNetworkFeesSats) || 0
+                                  : parseInt(totalLiquidityFeesSats) || 0
+                            }
+                            format={{
+                              notation: "compact",
+                              maximumFractionDigits: 2,
+                            }}
+                            suffix=" sats"
+                            style={{
+                              fontFamily: FONT_FAMILIES.SF_PRO,
+                              fontSize: "49px",
+                              fontWeight: "bold",
+                              color: colorsAnalytics.offWhite,
+                            }}
+                          />
+                        </Box>
+                      </Tooltip.Trigger>
+                      <Tooltip.Positioner>
+                        <Tooltip.Content
+                          bg={colorsAnalytics.offBlackLighter}
+                          color={colorsAnalytics.offWhite}
+                          borderRadius="8px"
+                          px="12px"
+                          py="6px"
+                          fontSize="14px"
+                        >
+                          <Tooltip.Arrow />
+                          <Text fontFamily={FONT_FAMILIES.SF_PRO}>
+                            {(feesDisplayMode === "rift"
+                              ? parseInt(totalRiftFeesSats) || 0
+                              : feesDisplayMode === "network"
+                                ? parseInt(totalNetworkFeesSats) || 0
+                                : parseInt(totalLiquidityFeesSats) || 0
+                            ).toLocaleString()}{" "}
+                            sats
+                          </Text>
+                        </Tooltip.Content>
+                      </Tooltip.Positioner>
+                    </Tooltip.Root>
+                  )}
                 </Box>
               </Flex>
             </Box>
@@ -296,6 +485,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="49px"
+                cursor="pointer"
+                onClick={() => {
+                  navigator.clipboard.writeText(totalSwaps.toString());
+                  toastSuccess({
+                    title: "Copied to clipboard",
+                    description: `${totalSwaps.toLocaleString()} swaps`,
+                  });
+                }}
               >
                 <NumberFlow
                   value={totalSwaps}
@@ -329,6 +526,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="49px"
+                cursor="pointer"
+                onClick={() => {
+                  navigator.clipboard.writeText(uniqueUsers.toString());
+                  toastSuccess({
+                    title: "Copied to clipboard",
+                    description: `${uniqueUsers.toLocaleString()} users`,
+                  });
+                }}
               >
                 <NumberFlow
                   value={uniqueUsers}

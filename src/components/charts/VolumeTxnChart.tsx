@@ -9,12 +9,13 @@ import { satsToBtc } from "@/utils/dappHelper";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { toastSuccess } from "@/utils/toast";
 
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(n);
 }
 
@@ -75,19 +76,25 @@ export const VolumeTxnChart: React.FC = () => {
     // Calculate transaction normalization scale (20% of max volume)
     const txnScale = maxTxns > 0 ? (0.2 * maxVolumeUsd) / maxTxns : 0;
 
-    return points.map((p) => {
+    const result = points.map((p, idx) => {
       const volumeBtc = parseFloat(satsToBtc(p.volume));
       const volumeUsd = volumeBtc * btcPriceUsd;
 
-      return {
+      const dataPoint = {
         time: p.time,
         label: p.label,
+        displayLabel: p.label, // For display purposes
         volume: Math.max(0, Math.round(volumeUsd)),
+        volumeSats: p.volume,
         txns: Math.max(0, Math.round(p.txns)),
         txnsNorm: Math.max(0, p.txns * txnScale),
       };
+
+      return dataPoint;
     });
-  }, [points, btcPriceUsd, maxVolume, maxTxns]);
+
+    return result;
+  }, [points, btcPriceUsd, maxVolume, maxTxns, bucketType]);
 
   // Calculate total volume in USD
   const totalVolumeUsd = React.useMemo(() => {
@@ -148,16 +155,43 @@ export const VolumeTxnChart: React.FC = () => {
               {`${totalTxns.toLocaleString()} Swaps`}
             </Text>
           </Flex>
-          <Text
-            mt="-6px"
-            color={colorsAnalytics.offWhite}
-            fontSize="49px"
-            fontWeight="bold"
-            fontFamily={FONT_FAMILIES.SF_PRO}
-            style={{ textShadow: "0 0 18px rgba(255,255,255,0.22)" }}
-          >
-            {formatUSD(totalVolumeUsd)}
-          </Text>
+          <Flex direction="column">
+            <Text
+              mt="-6px"
+              color={colorsAnalytics.offWhite}
+              fontSize="49px"
+              fontWeight="bold"
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              style={{ textShadow: "0 0 18px rgba(255,255,255,0.22)" }}
+              cursor="pointer"
+              onClick={() => {
+                navigator.clipboard.writeText(totalVolumeUsd.toFixed(2));
+                toastSuccess({
+                  title: "Copied to clipboard",
+                  description: formatUSD(totalVolumeUsd),
+                });
+              }}
+            >
+              {formatUSD(totalVolumeUsd)}
+            </Text>
+            <Text
+              mt="-8px"
+              color={colorsAnalytics.textGray}
+              fontSize="16px"
+              fontWeight="normal"
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              cursor="pointer"
+              onClick={() => {
+                navigator.clipboard.writeText(totalVolume.toString());
+                toastSuccess({
+                  title: "Copied to clipboard",
+                  description: `${totalVolume.toLocaleString()} sats`,
+                });
+              }}
+            >
+              {totalVolume.toLocaleString()} sats
+            </Text>
+          </Flex>
         </Box>
         <select
           value={timeframe}
@@ -204,6 +238,18 @@ export const VolumeTxnChart: React.FC = () => {
         // @ts-ignore
         sx={{
           fontFamily: FONT_FAMILIES.SF_PRO,
+          userSelect: "none",
+          WebkitTapHighlightColor: "transparent",
+          "&:focus, &:active": {
+            outline: "none",
+          },
+          "& *": {
+            userSelect: "none",
+            WebkitTapHighlightColor: "transparent",
+            "&:focus, &:active": {
+              outline: "none",
+            },
+          },
         }}
       >
         {/* Lighting overlay: above GridFlex, below chart; non-interactive */}
@@ -212,7 +258,7 @@ export const VolumeTxnChart: React.FC = () => {
           top={-32}
           left={0}
           right={0}
-          bottom={20}
+          bottom={0}
           zIndex={1}
           pointerEvents="none"
           style={{
@@ -220,7 +266,28 @@ export const VolumeTxnChart: React.FC = () => {
               "linear-gradient(-45deg, rgba(0, 0, 0, 0) 35%, rgb(255, 128, 0, 0.13) 47%, rgb(255, 128, 0, 0.13) 52%, rgb(0, 0, 0, 0) 60%)",
           }}
         />
-        <Box position="relative" zIndex={2} w="100%" h="100%">
+        <Box
+          position="relative"
+          zIndex={2}
+          w="100%"
+          h="100%"
+          css={{
+            "& svg": {
+              outline: "none !important",
+              border: "none !important",
+              "&:focus, &:active": {
+                outline: "none !important",
+                border: "none !important",
+              },
+            },
+            "& *": {
+              outline: "none !important",
+              "&:focus, &:active": {
+                outline: "none !important",
+              },
+            },
+          }}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
@@ -243,7 +310,12 @@ export const VolumeTxnChart: React.FC = () => {
 
               <CartesianGrid stroke="transparent" />
               <XAxis
-                dataKey="label"
+                dataKey="time"
+                tickFormatter={(timestamp) => {
+                  // Find the data point with this timestamp to get its label
+                  const point = data.find((d) => d.time === timestamp);
+                  return point?.displayLabel || "";
+                }}
                 style={{ fontFamily: FONT_FAMILIES.SF_PRO, fontSize: "14px" }}
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 tickLine={false}
@@ -263,23 +335,26 @@ export const VolumeTxnChart: React.FC = () => {
                 ]}
                 tickFormatter={(value) => formatUSD(value)}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                isAnimationActive={false}
+                animationDuration={0}
+              />
 
               <Bar
                 yAxisId="volume"
                 dataKey="volume"
                 fill="url(#volGrad)"
-                radius={[8, 8, 8, 8]}
-                isAnimationActive
-                animationDuration={500}
+                radius={[15, 15, 8, 8]}
+                isAnimationActive={false}
               />
               <Bar
                 yAxisId="volume"
                 dataKey="txnsNorm"
                 fill="url(#txnGrad)"
-                radius={[8, 8, 8, 8]}
-                isAnimationActive
-                animationDuration={500}
+                radius={[15, 15, 8, 8]}
+                isAnimationActive={false}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -291,17 +366,24 @@ export const VolumeTxnChart: React.FC = () => {
 
 export default VolumeTxnChart;
 
-const CustomTooltip: React.FC<any> = ({ active, payload, label }) => {
+const CustomTooltip: React.FC<any> = ({ active, payload }) => {
   if (!active || !payload || payload.length === 0) return null;
+
   const vol = payload.find((p: any) => p.dataKey === "volume")?.value ?? 0;
+  const volumeSats = payload[0]?.payload?.volumeSats ?? 0;
   const txns = payload[0]?.payload?.txns ?? 0;
+  const displayLabel = payload[0]?.payload?.displayLabel ?? "";
+
   return (
     <Box bg="#101010" border={`1px solid ${colors.borderGray}`} borderRadius="8px" p="8px">
       <Text fontSize="12px" color={colors.textGray} mb="4px">
-        {label}
+        {displayLabel}
       </Text>
       <Text fontSize="12px" color={colors.offWhite}>
         Volume: {formatUSD(vol)}
+      </Text>
+      <Text fontSize="12px" color={colors.textGray}>
+        {volumeSats.toLocaleString()} sats
       </Text>
       <Text fontSize="12px" color={colors.offWhite}>
         Txns: {txns.toLocaleString()}

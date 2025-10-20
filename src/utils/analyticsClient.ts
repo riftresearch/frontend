@@ -39,7 +39,7 @@ function getApiKeyFromCookie(): string {
 export async function getSwaps(
   page: number = 0,
   pageSize: number = 10,
-  filter?: "all" | "completed" | "in-progress"
+  filter?: "all" | "completed" | "in-progress" | "created"
 ): Promise<AnalyticsSwapsResponse> {
   try {
     const offset = page * pageSize;
@@ -47,7 +47,8 @@ export async function getSwaps(
 
     // Add filter parameter if specified
     if (filter && filter !== "all") {
-      url += `&status=${filter === "completed" ? "settled" : "in_progress"}`;
+      const status = filter === "in-progress" ? "in_progress" : filter;
+      url += `&status=${status}`;
     }
 
     const apiKey = getApiKeyFromCookie();

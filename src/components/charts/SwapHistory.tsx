@@ -403,7 +403,9 @@ export const SwapHistory: React.FC<{
   const [updatingSwapIds, setUpdatingSwapIds] = React.useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const [showAverages, setShowAverages] = React.useState(false);
-  const [filter, setFilter] = React.useState<"all" | "completed" | "in-progress">("all");
+  const [filter, setFilter] = React.useState<"all" | "completed" | "in-progress" | "created">(
+    "all"
+  );
   const [isAtTop, setIsAtTop] = React.useState(true);
   const [prunedSwapCount, setPrunedSwapCount] = React.useState(0);
   const scrollPositionRef = React.useRef(0);
@@ -754,22 +756,26 @@ export const SwapHistory: React.FC<{
             <Flex gap="8px" ml="16px">
               <Button
                 size="sm"
-                onClick={() => setFilter("completed")}
-                bg={filter === "completed" ? colorsAnalytics.greenBackground : "transparent"}
+                onClick={() => setFilter("created")}
+                bg={filter === "created" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
                 borderRadius="16px"
                 borderColor={
-                  filter === "completed" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+                  filter === "created" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="12px"
                 px="12px"
-                _hover={{
-                  opacity: 0.8,
-                }}
+                _hover={
+                  filter === "created"
+                    ? {}
+                    : {
+                        opacity: 0.8,
+                      }
+                }
               >
-                Completed
+                Created
               </Button>
               <Button
                 size="sm"
@@ -786,11 +792,38 @@ export const SwapHistory: React.FC<{
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="12px"
                 px="12px"
-                _hover={{
-                  opacity: 0.8,
-                }}
+                _hover={
+                  filter === "in-progress"
+                    ? {}
+                    : {
+                        opacity: 0.8,
+                      }
+                }
               >
                 In-Progress
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setFilter("completed")}
+                bg={filter === "completed" ? colorsAnalytics.greenBackground : "transparent"}
+                borderWidth="2px"
+                borderRadius="16px"
+                borderColor={
+                  filter === "completed" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+                }
+                color={colorsAnalytics.offWhite}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                fontSize="12px"
+                px="12px"
+                _hover={
+                  filter === "completed"
+                    ? {}
+                    : {
+                        opacity: 0.8,
+                      }
+                }
+              >
+                Completed
               </Button>
               <Button
                 size="sm"
@@ -805,9 +838,13 @@ export const SwapHistory: React.FC<{
                 fontFamily={FONT_FAMILIES.SF_PRO}
                 fontSize="12px"
                 px="12px"
-                _hover={{
-                  opacity: 0.8,
-                }}
+                _hover={
+                  filter === "all"
+                    ? {}
+                    : {
+                        opacity: 0.8,
+                      }
+                }
               >
                 All
               </Button>
@@ -908,7 +945,9 @@ export const SwapHistory: React.FC<{
                           ? "completed"
                           : filter === "in-progress"
                             ? "in-progress"
-                            : ""}{" "}
+                            : filter === "created"
+                              ? "created"
+                              : ""}{" "}
                         swaps found
                       </Text>
                     </Flex>
