@@ -74,9 +74,7 @@ export class OTCServerError extends Error {
     public statusText: string,
     public body?: string
   ) {
-    super(
-      `OTC Server Error: ${status} ${statusText}${body ? `: ${body}` : ""}`
-    );
+    super(`OTC Server Error: ${status} ${statusText}${body ? `: ${body}` : ""}`);
     this.name = "OTCServerError";
   }
 }
@@ -103,10 +101,7 @@ export class OTCServerClient {
   /**
    * Performs a fetch request with timeout and error handling
    */
-  private async fetchWithTimeout<T>(
-    endpoint: string,
-    options?: RequestInit
-  ): Promise<T> {
+  private async fetchWithTimeout<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -124,11 +119,7 @@ export class OTCServerClient {
       if (!response.ok) {
         const errorText = await response.text();
         console.log("OTC Server Error:", errorText); // TODO: auto refresh the MM quote if this happens
-        throw new OTCServerError(
-          response.status,
-          response.statusText,
-          errorText
-        );
+        throw new OTCServerError(response.status, response.statusText, errorText);
       }
 
       const contentType = response.headers.get("content-type");
@@ -156,6 +147,22 @@ export class OTCServerClient {
    */
   async getStatus(): Promise<string> {
     return this.fetchWithTimeout<string>("/status");
+  }
+
+  async getBestHash(chain: string): Promise<string> {
+    const response = await this.fetchWithTimeout<{ block_hash: string }>(
+      `/api/v1/chains/${chain}/best-hash`
+    );
+
+    if (!response || typeof response !== "object") {
+      throw new Error(`Invalid response structure for chain ${chain}`);
+    }
+
+    if (!response.block_hash) {
+      throw new Error(`Missing block_hash field for chain ${chain}`);
+    }
+
+    return response.block_hash;
   }
 
   /**
@@ -189,9 +196,7 @@ export class OTCServerClient {
    * Get list of currently connected market makers
    */
   async getConnectedMarketMakers(): Promise<ConnectedMarketMakersResponse> {
-    return this.fetchWithTimeout<ConnectedMarketMakersResponse>(
-      "/api/v1/market-makers/connected"
-    );
+    return this.fetchWithTimeout<ConnectedMarketMakersResponse>("/api/v1/market-makers/connected");
   }
 
   /**
@@ -238,15 +243,13 @@ export class OTCServerClient {
 /**
  * Create a configured OTC server client
  */
-export const createOTCClient = (
-  config: OTCServerClientConfig
-): OTCServerClient => new OTCServerClient(config);
+export const createOTCClient = (config: OTCServerClientConfig): OTCServerClient =>
+  new OTCServerClient(config);
 
 /**
  * Get server status (functional style)
  */
-export const getStatus = (client: OTCServerClient) => (): Promise<string> =>
-  client.getStatus();
+export const getStatus = (client: OTCServerClient) => (): Promise<string> => client.getStatus();
 
 /**
  * Create swap (functional style)

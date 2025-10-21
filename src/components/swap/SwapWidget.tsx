@@ -56,9 +56,11 @@ import {
 } from "@/utils/swapHelpers";
 import { createCowSwapClient } from "@/utils/cowswapClient";
 import { isAboveMinSwap } from "@/utils/tokenHelpers";
+import { useTEEChainSyncVerification } from "@/hooks/useTEEChainSyncVerification";
 
 export const SwapWidget = () => {
   const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
+  const { isChainSafe, isLoading: chainSyncVerificationLoading } = useTEEChainSyncVerification();
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
