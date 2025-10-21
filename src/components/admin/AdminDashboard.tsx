@@ -86,6 +86,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const totalNetworkFeesUsdNum = parseFloat(totalNetworkFeesUsd) || 0;
   const totalLiquidityFeesUsdNum = parseFloat(totalLiquidityFeesUsd) || 0;
 
+  // Check if data has loaded (any non-zero value indicates loaded state)
+  const hasDataLoaded = totalSwaps > 0 || totalVolumeUsdNum > 0 || totalRiftFeesUsdNum > 0;
+
   // Debug: Log ALL values whenever they change
   React.useEffect(() => {
     console.log("═══════════════════════════════════════════════");
@@ -145,7 +148,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       <Flex width="1400px" py="30px" mt="15px" direction="column">
         {/* HEADER */}
         <Flex justify="space-between" align="center">
-          <RiftLogo width="110" height="28" fill={colorsAnalytics.offWhite} />
+          <Box cursor="pointer" onClick={() => window.location.reload()}>
+            <RiftLogo width="110" height="28" fill={colorsAnalytics.offWhite} />
+          </Box>
           <Flex align="center" gap="24px">
             <Text fontSize="sm" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
               Admin Dashboard &nbsp;|&nbsp;{" "}
@@ -194,55 +199,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   Total Volume
                 </Text>
                 <Box mt="-11px">
-                  {volumeCurrency === "usd" ? (
-                    <Box
-                      display="inline-block"
-                      cursor="pointer"
-                      onClick={() => {
-                        navigator.clipboard.writeText(totalVolumeUsdNum.toFixed(2));
-                        toastSuccess({
-                          title: "Copied to clipboard",
-                          description: `$${totalVolumeUsdNum.toFixed(2)}`,
-                        });
-                      }}
-                    >
-                      <NumberFlow
-                        value={totalVolumeUsdNum}
-                        format={{
-                          style: "currency",
-                          currency: "USD",
-                          maximumFractionDigits: 2,
-                        }}
-                        style={{
-                          fontFamily: FONT_FAMILIES.SF_PRO,
-                          fontSize: "49px",
-                          fontWeight: "bold",
-                          color: colorsAnalytics.offWhite,
-                        }}
-                      />
-                    </Box>
-                  ) : (
-                    <Tooltip.Root openDelay={200} closeDelay={0}>
-                      <Tooltip.Trigger asChild>
-                        <Box
-                          display="inline-block"
-                          cursor="pointer"
-                          onClick={() => {
+                  <Tooltip.Root openDelay={200} closeDelay={0}>
+                    <Tooltip.Trigger asChild>
+                      <Box
+                        display="inline-block"
+                        cursor="pointer"
+                        onClick={() => {
+                          const isUsd = volumeCurrency === "usd";
+                          if (isUsd) {
+                            navigator.clipboard.writeText(totalVolumeUsdNum.toFixed(2));
+                            toastSuccess({
+                              title: "Copied to clipboard",
+                              description: `$${totalVolumeUsdNum.toFixed(2)}`,
+                            });
+                          } else {
                             const satsValue = parseInt(totalVolumeSats) || 0;
                             navigator.clipboard.writeText(satsValue.toString());
                             toastSuccess({
                               title: "Copied to clipboard",
                               description: `${satsValue.toLocaleString()} sats`,
                             });
-                          }}
-                        >
+                          }
+                        }}
+                      >
+                        {hasDataLoaded ? (
                           <NumberFlow
-                            value={parseInt(totalVolumeSats) || 0}
-                            format={{
-                              notation: "compact",
-                              maximumFractionDigits: 2,
-                            }}
-                            suffix=" sats"
+                            value={
+                              volumeCurrency === "usd"
+                                ? totalVolumeUsdNum
+                                : parseInt(totalVolumeSats) || 0
+                            }
+                            format={
+                              volumeCurrency === "usd"
+                                ? {
+                                    style: "currency",
+                                    currency: "USD",
+                                    maximumFractionDigits: 2,
+                                  }
+                                : {
+                                    notation: "compact",
+                                    maximumFractionDigits: 2,
+                                  }
+                            }
+                            suffix={volumeCurrency === "usd" ? undefined : " sats"}
                             style={{
                               fontFamily: FONT_FAMILIES.SF_PRO,
                               fontSize: "49px",
@@ -250,25 +249,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                               color: colorsAnalytics.offWhite,
                             }}
                           />
-                        </Box>
-                      </Tooltip.Trigger>
-                      <Tooltip.Positioner>
-                        <Tooltip.Content
-                          bg={colorsAnalytics.offBlackLighter}
-                          color={colorsAnalytics.offWhite}
-                          borderRadius="8px"
-                          px="12px"
-                          py="6px"
-                          fontSize="14px"
-                        >
-                          <Tooltip.Arrow />
-                          <Text fontFamily={FONT_FAMILIES.SF_PRO}>
-                            {(parseInt(totalVolumeSats) || 0).toLocaleString()} sats
+                        ) : (
+                          <Text
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                            fontSize="49px"
+                            fontWeight="bold"
+                            color="#3a3a3a"
+                          >
+                            --
                           </Text>
-                        </Tooltip.Content>
-                      </Tooltip.Positioner>
-                    </Tooltip.Root>
-                  )}
+                        )}
+                      </Box>
+                    </Tooltip.Trigger>
+                    <Tooltip.Positioner>
+                      <Tooltip.Content
+                        bg={colorsAnalytics.offBlackLighter}
+                        color={colorsAnalytics.offWhite}
+                        borderRadius="8px"
+                        px="12px"
+                        py="6px"
+                        fontSize="14px"
+                      >
+                        <Tooltip.Arrow />
+                        <Text fontFamily={FONT_FAMILIES.SF_PRO}>
+                          {volumeCurrency === "usd"
+                            ? `$${totalVolumeUsdNum.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            : `${(parseInt(totalVolumeSats) || 0).toLocaleString()} sats`}
+                        </Text>
+                      </Tooltip.Content>
+                    </Tooltip.Positioner>
+                  </Tooltip.Root>
                 </Box>
               </Flex>
             </Box>
@@ -326,52 +339,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   {feesDisplayMode === "liquidity" && "Total Market Maker Fees"}
                 </Text>
                 <Box mt="-12px">
-                  {feesCurrency === "usd" ? (
-                    <Box
-                      display="inline-block"
-                      cursor="pointer"
-                      onClick={() => {
-                        const usdValue =
-                          feesDisplayMode === "rift"
-                            ? totalRiftFeesUsdNum
-                            : feesDisplayMode === "network"
-                              ? totalNetworkFeesUsdNum
-                              : totalLiquidityFeesUsdNum;
-                        navigator.clipboard.writeText(usdValue.toFixed(2));
-                        toastSuccess({
-                          title: "Copied to clipboard",
-                          description: `$${usdValue.toFixed(2)}`,
-                        });
-                      }}
-                    >
-                      <NumberFlow
-                        value={
-                          feesDisplayMode === "rift"
-                            ? totalRiftFeesUsdNum
-                            : feesDisplayMode === "network"
-                              ? totalNetworkFeesUsdNum
-                              : totalLiquidityFeesUsdNum
-                        }
-                        format={{
-                          style: "currency",
-                          currency: "USD",
-                          maximumFractionDigits: 2,
-                        }}
-                        style={{
-                          fontFamily: FONT_FAMILIES.SF_PRO,
-                          fontSize: "49px",
-                          fontWeight: "bold",
-                          color: colorsAnalytics.offWhite,
-                        }}
-                      />
-                    </Box>
-                  ) : (
-                    <Tooltip.Root openDelay={200} closeDelay={0}>
-                      <Tooltip.Trigger asChild>
-                        <Box
-                          display="inline-block"
-                          cursor="pointer"
-                          onClick={() => {
+                  <Tooltip.Root openDelay={200} closeDelay={0}>
+                    <Tooltip.Trigger asChild>
+                      <Box
+                        display="inline-block"
+                        cursor="pointer"
+                        onClick={() => {
+                          const isUsd = feesCurrency === "usd";
+                          if (isUsd) {
+                            const usdValue =
+                              feesDisplayMode === "rift"
+                                ? totalRiftFeesUsdNum
+                                : feesDisplayMode === "network"
+                                  ? totalNetworkFeesUsdNum
+                                  : totalLiquidityFeesUsdNum;
+                            navigator.clipboard.writeText(usdValue.toFixed(2));
+                            toastSuccess({
+                              title: "Copied to clipboard",
+                              description: `$${usdValue.toFixed(2)}`,
+                            });
+                          } else {
                             const satsValue =
                               feesDisplayMode === "rift"
                                 ? parseInt(totalRiftFeesSats) || 0
@@ -383,21 +370,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                               title: "Copied to clipboard",
                               description: `${satsValue.toLocaleString()} sats`,
                             });
-                          }}
-                        >
+                          }
+                        }}
+                      >
+                        {hasDataLoaded ? (
                           <NumberFlow
                             value={
-                              feesDisplayMode === "rift"
-                                ? parseInt(totalRiftFeesSats) || 0
-                                : feesDisplayMode === "network"
-                                  ? parseInt(totalNetworkFeesSats) || 0
-                                  : parseInt(totalLiquidityFeesSats) || 0
+                              feesCurrency === "usd"
+                                ? feesDisplayMode === "rift"
+                                  ? totalRiftFeesUsdNum
+                                  : feesDisplayMode === "network"
+                                    ? totalNetworkFeesUsdNum
+                                    : totalLiquidityFeesUsdNum
+                                : feesDisplayMode === "rift"
+                                  ? parseInt(totalRiftFeesSats) || 0
+                                  : feesDisplayMode === "network"
+                                    ? parseInt(totalNetworkFeesSats) || 0
+                                    : parseInt(totalLiquidityFeesSats) || 0
                             }
-                            format={{
-                              notation: "compact",
-                              maximumFractionDigits: 2,
-                            }}
-                            suffix=" sats"
+                            format={
+                              feesCurrency === "usd"
+                                ? {
+                                    style: "currency",
+                                    currency: "USD",
+                                    maximumFractionDigits: 2,
+                                  }
+                                : {
+                                    notation: "compact",
+                                    maximumFractionDigits: 2,
+                                  }
+                            }
+                            suffix={feesCurrency === "usd" ? undefined : " sats"}
                             style={{
                               fontFamily: FONT_FAMILIES.SF_PRO,
                               fontSize: "49px",
@@ -405,31 +408,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                               color: colorsAnalytics.offWhite,
                             }}
                           />
-                        </Box>
-                      </Tooltip.Trigger>
-                      <Tooltip.Positioner>
-                        <Tooltip.Content
-                          bg={colorsAnalytics.offBlackLighter}
-                          color={colorsAnalytics.offWhite}
-                          borderRadius="8px"
-                          px="12px"
-                          py="6px"
-                          fontSize="14px"
-                        >
-                          <Tooltip.Arrow />
-                          <Text fontFamily={FONT_FAMILIES.SF_PRO}>
-                            {(feesDisplayMode === "rift"
-                              ? parseInt(totalRiftFeesSats) || 0
-                              : feesDisplayMode === "network"
-                                ? parseInt(totalNetworkFeesSats) || 0
-                                : parseInt(totalLiquidityFeesSats) || 0
-                            ).toLocaleString()}{" "}
-                            sats
+                        ) : (
+                          <Text
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                            fontSize="49px"
+                            fontWeight="bold"
+                            color="#3a3a3a"
+                          >
+                            --
                           </Text>
-                        </Tooltip.Content>
-                      </Tooltip.Positioner>
-                    </Tooltip.Root>
-                  )}
+                        )}
+                      </Box>
+                    </Tooltip.Trigger>
+                    <Tooltip.Positioner>
+                      <Tooltip.Content
+                        bg={colorsAnalytics.offBlackLighter}
+                        color={colorsAnalytics.offWhite}
+                        borderRadius="8px"
+                        px="12px"
+                        py="6px"
+                        fontSize="14px"
+                      >
+                        <Tooltip.Arrow />
+                        <Text fontFamily={FONT_FAMILIES.SF_PRO}>
+                          {feesCurrency === "usd"
+                            ? (() => {
+                                const usdValue =
+                                  feesDisplayMode === "rift"
+                                    ? totalRiftFeesUsdNum
+                                    : feesDisplayMode === "network"
+                                      ? totalNetworkFeesUsdNum
+                                      : totalLiquidityFeesUsdNum;
+                                return `$${usdValue.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}`;
+                              })()
+                            : (() => {
+                                const satsValue =
+                                  feesDisplayMode === "rift"
+                                    ? parseInt(totalRiftFeesSats) || 0
+                                    : feesDisplayMode === "network"
+                                      ? parseInt(totalNetworkFeesSats) || 0
+                                      : parseInt(totalLiquidityFeesSats) || 0;
+                                return `${satsValue.toLocaleString()} sats`;
+                              })()}
+                        </Text>
+                      </Tooltip.Content>
+                    </Tooltip.Positioner>
+                  </Tooltip.Root>
                 </Box>
               </Flex>
             </Box>
@@ -462,16 +489,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   });
                 }}
               >
-                <NumberFlow
-                  value={totalSwaps}
-                  format={{ notation: "compact" }}
-                  style={{
-                    fontFamily: FONT_FAMILIES.SF_PRO,
-                    fontSize: "49px",
-                    fontWeight: "bold",
-                    color: colorsAnalytics.offWhite,
-                  }}
-                />
+                {hasDataLoaded ? (
+                  <NumberFlow
+                    value={totalSwaps}
+                    format={{ notation: "compact" }}
+                    style={{
+                      fontFamily: FONT_FAMILIES.SF_PRO,
+                      fontSize: "49px",
+                      fontWeight: "bold",
+                      color: colorsAnalytics.offWhite,
+                    }}
+                  />
+                ) : (
+                  <Text
+                    fontFamily={FONT_FAMILIES.SF_PRO}
+                    fontSize="49px"
+                    fontWeight="bold"
+                    color="#3a3a3a"
+                  >
+                    --
+                  </Text>
+                )}
               </Box>
             </Flex>
           </GridFlex>
@@ -503,16 +541,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   });
                 }}
               >
-                <NumberFlow
-                  value={uniqueUsers}
-                  format={{ notation: "compact" }}
-                  style={{
-                    fontFamily: FONT_FAMILIES.SF_PRO,
-                    fontSize: "49px",
-                    fontWeight: "bold",
-                    color: colorsAnalytics.offWhite,
-                  }}
-                />
+                {hasDataLoaded ? (
+                  <NumberFlow
+                    value={uniqueUsers}
+                    format={{ notation: "compact" }}
+                    style={{
+                      fontFamily: FONT_FAMILIES.SF_PRO,
+                      fontSize: "49px",
+                      fontWeight: "bold",
+                      color: colorsAnalytics.offWhite,
+                    }}
+                  />
+                ) : (
+                  <Text
+                    fontFamily={FONT_FAMILIES.SF_PRO}
+                    fontSize="49px"
+                    fontWeight="bold"
+                    color="#3a3a3a"
+                  >
+                    --
+                  </Text>
+                )}
               </Box>
             </Flex>
           </GridFlex>
@@ -570,7 +619,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             ml="5px"
             mb="-30px"
           >
-            Ranked by volume, swaps, or recent activity
+            {new Intl.NumberFormat("en-US").format(uniqueUsers)} Unique Users | Ranked by volume,
+            swaps, or recent activity
           </Text>
           <TopUsers />
         </Flex>

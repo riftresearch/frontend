@@ -102,9 +102,7 @@ async function fetchTimeBuckets(bucketType: BucketType): Promise<TimeBucketsResp
   console.log(`[useTimeBuckets] Received ${data.chunks?.length || 0} chunks for ${bucketType}`);
   console.log("[useTimeBuckets] Full response:", data);
   console.log("[useTimeBuckets] totalVolume:", data.totalVolume);
-  console.log("[useTimeBuckets] total_volume_usd:", data.total_volume_usd);
   console.log("[useTimeBuckets] totalVolumeUSD:", data.totalVolumeUSD);
-  console.log("[useTimeBuckets] totalVolumeUsd:", data.totalVolumeUsd);
   return data;
 }
 

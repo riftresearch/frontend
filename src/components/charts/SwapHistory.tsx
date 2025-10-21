@@ -420,6 +420,7 @@ export const SwapHistory: React.FC<{
     useSwapStream();
   const latestSwapRef = React.useRef<any>(null);
   const updatedSwapRef = React.useRef<any>(null);
+  const processedSwapIds = React.useRef<Set<string>>(new Set());
 
   // Update current time for live timers and "time ago" display
   React.useEffect(() => {
@@ -611,13 +612,20 @@ export const SwapHistory: React.FC<{
 
     const mapped = mapDbRowToAdminSwap(latestSwap);
 
+    // Check if we've already processed this swap ID
+    if (processedSwapIds.current.has(mapped.id)) {
+      return;
+    }
+
+    // Mark this swap as processed
+    processedSwapIds.current.add(mapped.id);
+    console.log("Adding new swap to list:", mapped.id);
+
     // Add to the list if not already present
     setAllSwaps((prev) => {
       if (prev.some((s) => s.id === mapped.id)) {
-        console.log("Duplicate swap detected, skipping:", mapped.id);
         return prev;
       }
-      console.log("Adding new swap to list:", mapped.id);
 
       let newSwaps = [mapped, ...prev];
 
@@ -850,7 +858,7 @@ export const SwapHistory: React.FC<{
               </Button>
             </Flex>
 
-            {/* Pruning Indicator */}
+            {/* Pruning Indicator
             {prunedSwapCount > 0 && isAtTop && (
               <Text
                 fontSize="12px"
@@ -861,7 +869,7 @@ export const SwapHistory: React.FC<{
               >
                 {prunedSwapCount} older swaps pruned • Scroll down to load more
               </Text>
-            )}
+            )} */}
           </Flex>
 
           {/* Rows */}
