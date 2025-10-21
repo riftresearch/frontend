@@ -28,6 +28,7 @@ interface TimeBucketChunk {
   start: number; // Unix timestamp
   end: number; // Unix timestamp
   volume: number; // Volume in satoshis
+  volume_usd: number; // Volume in USD
   swap_count: number;
 }
 
@@ -35,6 +36,7 @@ interface TimeBucketsResponse {
   bucketType: BucketType;
   chunks: TimeBucketChunk[];
   totalVolume: number; // Total volume in satoshis
+  totalVolumeUSD: number; // Total volume in USD (from backend)
   totalSwaps: number;
   chunkSize: number;
   windowSize: number | null;
@@ -98,7 +100,11 @@ async function fetchTimeBuckets(bucketType: BucketType): Promise<TimeBucketsResp
 
   const data = await response.json();
   console.log(`[useTimeBuckets] Received ${data.chunks?.length || 0} chunks for ${bucketType}`);
-
+  console.log("[useTimeBuckets] Full response:", data);
+  console.log("[useTimeBuckets] totalVolume:", data.totalVolume);
+  console.log("[useTimeBuckets] total_volume_usd:", data.total_volume_usd);
+  console.log("[useTimeBuckets] totalVolumeUSD:", data.totalVolumeUSD);
+  console.log("[useTimeBuckets] totalVolumeUsd:", data.totalVolumeUsd);
   return data;
 }
 
@@ -119,21 +125,24 @@ export function useTimeBuckets(bucketType: BucketType) {
     query.data?.chunks.map((chunk) => ({
       time: chunk.start * 1000, // Convert to milliseconds
       label: formatChunkLabel(chunk.start * 1000, bucketType),
-      volume: chunk.volume, // Keep in satoshis for now
-      volumeUsd: 0, // Will be calculated in the component with BTC price
+      volume: chunk.volume, // Keep in satoshis
+      volumeUsd: chunk.volume_usd, // Use backend-calculated USD
       txns: chunk.swap_count,
       txnsNormalized: 0, // Will be calculated in the component
     })) || [];
 
   // Calculate max values for scaling
   const maxVolume = Math.max(1, ...chartData.map((d) => d.volume));
+  const maxVolumeUsd = Math.max(1, ...chartData.map((d) => d.volumeUsd));
   const maxTxns = Math.max(1, ...chartData.map((d) => d.txns));
 
   return {
     points: chartData,
     totalVolume: query.data?.totalVolume || 0,
+    totalVolumeUsd: query.data?.totalVolumeUSD || 0,
     totalTxns: query.data?.totalSwaps || 0,
     maxVolume,
+    maxVolumeUsd,
     maxTxns,
     isLoading: query.isLoading,
     isError: query.isError,

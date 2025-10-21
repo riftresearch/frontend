@@ -252,7 +252,8 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
 
     const impliedUsdPerBtc =
       swap.swapInitialAmountBtc > 0 ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc : 0;
-    const riftFeeUsd = swap.riftFeeBtc * impliedUsdPerBtc;
+    const riftFeeBtc = swap.riftFeeSats / 100000000; // Convert sats to BTC
+    const riftFeeUsd = riftFeeBtc * impliedUsdPerBtc;
 
     // Get timestamp for previous step to calculate live duration
     const getPreviousStepTimestamp = (index: number): number | undefined => {
@@ -324,7 +325,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
             {formatUSD(riftFeeUsd)}
           </Text>
           <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {formatBTC(swap.riftFeeBtc)}
+            {swap.riftFeeSats.toLocaleString()} sats
           </Text>
         </Box>
         <Box w="118px">
@@ -393,7 +394,6 @@ export const SwapHistory: React.FC<{
   }) => void;
 }> = ({ heightBlocks = 13, onStatsUpdate }) => {
   const storeSwaps = useAnalyticsStore((s) => s.adminSwaps);
-  const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
   const [allSwaps, setAllSwaps] = React.useState<AdminSwapItem[]>([]);
   const [page, setPage] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(true);
@@ -489,7 +489,7 @@ export const SwapHistory: React.FC<{
       const list = byDir[dir];
       const avgUsd = avg(list.map((s) => s.swapInitialAmountUsd));
       const avgBtc = avg(list.map((s) => s.swapInitialAmountBtc));
-      const avgRiftFeeBtc = avg(list.map((s) => s.riftFeeBtc));
+      const avgRiftFeeSats = Math.round(avg(list.map((s) => s.riftFeeSats)));
       const avgUserConfs = Math.round(avg(list.map((s) => s.userConfs || 0)));
       const avgMmConfs = Math.round(avg(list.map((s) => s.mmConfs || 0)));
 
@@ -538,7 +538,7 @@ export const SwapHistory: React.FC<{
         count: list.length,
         avgUsd,
         avgBtc,
-        avgRiftFeeBtc,
+        avgRiftFeeSats,
         avgTotalSeconds,
         flow: filteredFlow,
       };
@@ -558,7 +558,7 @@ export const SwapHistory: React.FC<{
       console.log("📦 Raw swaps response:", JSON.stringify(data, null, 2));
       console.log("📊 Pagination:", data.pagination);
 
-      const mapped = (data?.swaps || []).map((row: any) => mapDbRowToAdminSwap(row, btcPriceUsd));
+      const mapped = (data?.swaps || []).map((row: any) => mapDbRowToAdminSwap(row));
 
       console.log(`✅ Received ${mapped.length} swaps from page ${page}`);
       if (data?.swaps?.length > 0) {
@@ -583,7 +583,7 @@ export const SwapHistory: React.FC<{
       setIsLoadingMore(false);
       setIsInitialLoad(false);
     }
-  }, [page, pageSize, isLoadingMore, hasMore, btcPriceUsd, filter]);
+  }, [page, pageSize, isLoadingMore, hasMore, filter]);
 
   // Initial load and refetch when filter changes
   React.useEffect(() => {
@@ -609,7 +609,7 @@ export const SwapHistory: React.FC<{
     if (latestSwap === latestSwapRef.current) return;
     latestSwapRef.current = latestSwap;
 
-    const mapped = mapDbRowToAdminSwap(latestSwap, btcPriceUsd);
+    const mapped = mapDbRowToAdminSwap(latestSwap);
 
     // Add to the list if not already present
     setAllSwaps((prev) => {
@@ -652,7 +652,7 @@ export const SwapHistory: React.FC<{
         return next;
       });
     }, 1000);
-  }, [latestSwap, btcPriceUsd, isAtTop]);
+  }, [latestSwap, isAtTop]);
 
   // Handle updated swap from WebSocket stream
   React.useEffect(() => {
@@ -662,7 +662,7 @@ export const SwapHistory: React.FC<{
     if (updatedSwap === updatedSwapRef.current) return;
     updatedSwapRef.current = updatedSwap;
 
-    const mapped = mapDbRowToAdminSwap(updatedSwap, btcPriceUsd);
+    const mapped = mapDbRowToAdminSwap(updatedSwap);
 
     // console.log("Updating existing swap:", mapped.id);
 
@@ -684,7 +684,7 @@ export const SwapHistory: React.FC<{
         return next;
       });
     }, 600);
-  }, [updatedSwap, btcPriceUsd]);
+  }, [updatedSwap]);
 
   const handleScroll = React.useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -991,7 +991,8 @@ export const SwapHistory: React.FC<{
             <Flex direction="column" pt="10px" w="100%">
               {averages.map((a) => {
                 const impliedUsdPerBtc = a.avgBtc > 0 ? a.avgUsd / a.avgBtc : 0;
-                const riftFeeUsd = a.avgRiftFeeBtc * impliedUsdPerBtc;
+                const riftFeeBtc = a.avgRiftFeeSats / 100000000; // Convert sats to BTC
+                const riftFeeUsd = riftFeeBtc * impliedUsdPerBtc;
 
                 return (
                   <Flex
@@ -1059,7 +1060,7 @@ export const SwapHistory: React.FC<{
                         color={colorsAnalytics.textGray}
                         fontFamily={FONT_FAMILIES.SF_PRO}
                       >
-                        {formatBTC(a.avgRiftFeeBtc)}
+                        {a.avgRiftFeeSats.toLocaleString()} sats
                       </Text>
                     </Box>
 

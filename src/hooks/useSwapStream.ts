@@ -9,9 +9,13 @@ interface SwapWebSocketResult {
   inProgressSwaps: number;
   uniqueUsers: number;
   totalVolumeSats: string;
+  totalVolumeUsd: string;
   totalRiftFeesSats: string;
+  totalRiftFeesUsd: string;
   totalNetworkFeesSats: string;
+  totalNetworkFeesUsd: string;
   totalLiquidityFeesSats: string;
+  totalLiquidityFeesUsd: string;
   isConnected: boolean;
   error: string | null;
 }
@@ -27,9 +31,13 @@ export function useSwapStream(): SwapWebSocketResult {
   const [inProgressSwaps, setInProgressSwaps] = useState<number>(0);
   const [uniqueUsers, setUniqueUsers] = useState<number>(0);
   const [totalVolumeSats, setTotalVolumeSats] = useState<string>("0");
+  const [totalVolumeUsd, setTotalVolumeUsd] = useState<string>("0");
   const [totalRiftFeesSats, setTotalRiftFeesSats] = useState<string>("0");
+  const [totalRiftFeesUsd, setTotalRiftFeesUsd] = useState<string>("0");
   const [totalNetworkFeesSats, setTotalNetworkFeesSats] = useState<string>("0");
+  const [totalNetworkFeesUsd, setTotalNetworkFeesUsd] = useState<string>("0");
   const [totalLiquidityFeesSats, setTotalLiquidityFeesSats] = useState<string>("0");
+  const [totalLiquidityFeesUsd, setTotalLiquidityFeesUsd] = useState<string>("0");
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -151,13 +159,25 @@ export function useSwapStream(): SwapWebSocketResult {
                   console.log("✅ Setting total volume:", message.total_volume_sats);
                   setTotalVolumeSats(message.total_volume_sats);
                 }
+                if (message.total_volume_usd) {
+                  console.log("✅ Setting total volume USD:", message.total_volume_usd);
+                  setTotalVolumeUsd(message.total_volume_usd);
+                }
                 if (message.total_rift_fees_sats) {
                   console.log("✅ Setting total rift fees:", message.total_rift_fees_sats);
                   setTotalRiftFeesSats(message.total_rift_fees_sats);
                 }
+                if (message.total_rift_fees_usd) {
+                  console.log("✅ Setting total rift fees USD:", message.total_rift_fees_usd);
+                  setTotalRiftFeesUsd(message.total_rift_fees_usd);
+                }
                 if (message.total_network_fees_sats) {
                   console.log("✅ Setting total network fees:", message.total_network_fees_sats);
                   setTotalNetworkFeesSats(message.total_network_fees_sats);
+                }
+                if (message.total_network_fees_usd) {
+                  console.log("✅ Setting total network fees USD:", message.total_network_fees_usd);
+                  setTotalNetworkFeesUsd(message.total_network_fees_usd);
                 }
                 if (message.total_liquidity_fees_sats) {
                   console.log(
@@ -165,6 +185,13 @@ export function useSwapStream(): SwapWebSocketResult {
                     message.total_liquidity_fees_sats
                   );
                   setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
+                }
+                if (message.total_liquidity_fees_usd) {
+                  console.log(
+                    "✅ Setting total liquidity fees USD:",
+                    message.total_liquidity_fees_usd
+                  );
+                  setTotalLiquidityFeesUsd(message.total_liquidity_fees_usd);
                 }
                 break;
 
@@ -203,12 +230,18 @@ export function useSwapStream(): SwapWebSocketResult {
                   );
                   setTotalVolumeSats(message.total_volume_sats);
                 }
+                if (message.total_volume_usd) {
+                  setTotalVolumeUsd(message.total_volume_usd);
+                }
                 if (message.total_rift_fees_sats) {
                   console.log(
                     "[WEBSOCKET_SWAP_CREATED] Setting total rift fees:",
                     message.total_rift_fees_sats
                   );
                   setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_rift_fees_usd) {
+                  setTotalRiftFeesUsd(message.total_rift_fees_usd);
                 }
                 if (message.total_network_fees_sats) {
                   console.log(
@@ -217,12 +250,18 @@ export function useSwapStream(): SwapWebSocketResult {
                   );
                   setTotalNetworkFeesSats(message.total_network_fees_sats);
                 }
+                if (message.total_network_fees_usd) {
+                  setTotalNetworkFeesUsd(message.total_network_fees_usd);
+                }
                 if (message.total_liquidity_fees_sats) {
                   console.log(
                     "[WEBSOCKET_SWAP_CREATED] Setting total liquidity fees:",
                     message.total_liquidity_fees_sats
                   );
                   setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
+                }
+                if (message.total_liquidity_fees_usd) {
+                  setTotalLiquidityFeesUsd(message.total_liquidity_fees_usd);
                 }
                 break;
 
@@ -258,12 +297,18 @@ export function useSwapStream(): SwapWebSocketResult {
                   );
                   setTotalVolumeSats(message.total_volume_sats);
                 }
+                if (message.total_volume_usd) {
+                  setTotalVolumeUsd(message.total_volume_usd);
+                }
                 if (message.total_rift_fees_sats) {
                   console.log(
                     "[WEBSOCKET_SWAP_UPDATED] Setting total rift fees:",
                     message.total_rift_fees_sats
                   );
                   setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_rift_fees_usd) {
+                  setTotalRiftFeesUsd(message.total_rift_fees_usd);
                 }
                 if (message.total_network_fees_sats) {
                   console.log(
@@ -272,12 +317,18 @@ export function useSwapStream(): SwapWebSocketResult {
                   );
                   setTotalNetworkFeesSats(message.total_network_fees_sats);
                 }
+                if (message.total_network_fees_usd) {
+                  setTotalNetworkFeesUsd(message.total_network_fees_usd);
+                }
                 if (message.total_liquidity_fees_sats) {
                   console.log(
                     "[WEBSOCKET_SWAP_UPDATED] Setting total liquidity fees:",
                     message.total_liquidity_fees_sats
                   );
                   setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
+                }
+                if (message.total_liquidity_fees_usd) {
+                  setTotalLiquidityFeesUsd(message.total_liquidity_fees_usd);
                 }
                 break;
 
@@ -305,14 +356,26 @@ export function useSwapStream(): SwapWebSocketResult {
                 if (message.total_volume_sats) {
                   setTotalVolumeSats(message.total_volume_sats);
                 }
+                if (message.total_volume_usd) {
+                  setTotalVolumeUsd(message.total_volume_usd);
+                }
                 if (message.total_rift_fees_sats) {
                   setTotalRiftFeesSats(message.total_rift_fees_sats);
+                }
+                if (message.total_rift_fees_usd) {
+                  setTotalRiftFeesUsd(message.total_rift_fees_usd);
                 }
                 if (message.total_network_fees_sats) {
                   setTotalNetworkFeesSats(message.total_network_fees_sats);
                 }
+                if (message.total_network_fees_usd) {
+                  setTotalNetworkFeesUsd(message.total_network_fees_usd);
+                }
                 if (message.total_liquidity_fees_sats) {
                   setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
+                }
+                if (message.total_liquidity_fees_usd) {
+                  setTotalLiquidityFeesUsd(message.total_liquidity_fees_usd);
                 }
             }
           } catch (err) {
@@ -374,9 +437,13 @@ export function useSwapStream(): SwapWebSocketResult {
     inProgressSwaps,
     uniqueUsers,
     totalVolumeSats,
+    totalVolumeUsd,
     totalRiftFeesSats,
+    totalRiftFeesUsd,
     totalNetworkFeesSats,
+    totalNetworkFeesUsd,
     totalLiquidityFeesSats,
+    totalLiquidityFeesUsd,
     isConnected,
     error,
   };

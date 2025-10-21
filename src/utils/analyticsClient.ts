@@ -116,17 +116,19 @@ export function formatDuration(startMs: number, endMs: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapItem {
+export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   console.log("🔍 Mapping swap row:", {
     id: row.id,
     status: row.status,
     quote: row.quote,
     user_deposit_address: row.user_deposit_address,
     user_evm_account_address: row.user_evm_account_address,
+    bitcoin_usd_at_swap_time: row.bitcoin_usd_at_swap_time,
   });
 
-  // [0] Parse created_at timestamp
+  // [0] Parse created_at timestamp and BTC price at swap time
   const createdAtMs = new Date(row.created_at).getTime();
+  const btcPriceUsd = row.bitcoin_usd_at_swap_time || 0;
 
   // [1] Determine swap direction from quote.from_chain (defaults to EVM_TO_BTC)
   let direction: SwapDirection = "EVM_TO_BTC";
@@ -217,7 +219,7 @@ export function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapIt
   const networkFeeSats = row.quote?.fee_schedule?.network_fee_sats || 0;
 
   // [10] Convert fees to BTC and USD
-  const riftFeeBtc = parseFloat(satsToBtc(protocolFeeSats));
+  const riftFeeSats = protocolFeeSats;
   const mmFeeBtc = parseFloat(satsToBtc(liquidityFeeSats));
   const mmFeeUsd = btcPriceUsd !== undefined ? mmFeeBtc * btcPriceUsd : 0;
   const networkFeeBtc = parseFloat(satsToBtc(networkFeeSats));
@@ -307,7 +309,7 @@ export function mapDbRowToAdminSwap(row: any, btcPriceUsd?: number): AdminSwapIt
     direction,
     swapInitialAmountBtc: swapAmountBtc,
     swapInitialAmountUsd: swapAmountUsd,
-    riftFeeBtc,
+    riftFeeSats,
     userConfs,
     mmConfs,
     networkFeeUsd,

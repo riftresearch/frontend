@@ -4,9 +4,6 @@ import { useTimeBuckets, BucketType } from "@/hooks/useTimeBuckets";
 import { colors } from "@/utils/colors";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { FONT_FAMILIES } from "@/utils/font";
-import { useAnalyticsStore } from "@/utils/analyticsStore";
-import { satsToBtc } from "@/utils/dappHelper";
-import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { toastSuccess } from "@/utils/toast";
@@ -34,18 +31,26 @@ export const VolumeTxnChart: React.FC = () => {
   const [timeframe, setTimeframe] = React.useState<string>("1d");
   const bucketType = TIMEFRAME_TO_BUCKET[timeframe] || "last_day";
 
-  const { points, totalVolume, totalTxns, maxVolume, maxTxns, isLoading, isError, refetch } =
-    useTimeBuckets(bucketType);
+  const {
+    points,
+    totalVolume,
+    totalVolumeUsd,
+    totalTxns,
+    maxVolume,
+    maxVolumeUsd,
+    maxTxns,
+    isLoading,
+    isError,
+    refetch,
+  } = useTimeBuckets(bucketType);
 
-  const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
   const [mounted, setMounted] = React.useState(false);
+
+  // Debug: Log the values
 
   // Get total swaps count from WebSocket to trigger refetches
   const { totalSwaps } = useSwapStream();
   const previousTotalSwaps = React.useRef<number>(0);
-
-  // Fetch and update BTC price
-  useBtcPrice();
 
   React.useEffect(() => {
     setMounted(true);
@@ -66,25 +71,19 @@ export const VolumeTxnChart: React.FC = () => {
     }
   }, [totalSwaps, mounted, refetch]);
 
-  // Convert satoshi volumes to USD and normalize transaction counts
+  // Normalize transaction counts based on max volume USD
   const data = React.useMemo(() => {
     if (!points || points.length === 0) return [];
 
-    // Convert max volume from sats to USD for scaling
-    const maxVolumeUsd = parseFloat(satsToBtc(maxVolume)) * btcPriceUsd;
-
-    // Calculate transaction normalization scale (20% of max volume)
+    // Calculate transaction normalization scale (20% of max volume USD)
     const txnScale = maxTxns > 0 ? (0.2 * maxVolumeUsd) / maxTxns : 0;
 
-    const result = points.map((p, idx) => {
-      const volumeBtc = parseFloat(satsToBtc(p.volume));
-      const volumeUsd = volumeBtc * btcPriceUsd;
-
+    const result = points.map((p) => {
       const dataPoint = {
         time: p.time,
         label: p.label,
         displayLabel: p.label, // For display purposes
-        volume: Math.max(0, Math.round(volumeUsd)),
+        volume: Math.max(0, p.volumeUsd),
         volumeSats: p.volume,
         txns: Math.max(0, Math.round(p.txns)),
         txnsNorm: Math.max(0, p.txns * txnScale),
@@ -94,13 +93,7 @@ export const VolumeTxnChart: React.FC = () => {
     });
 
     return result;
-  }, [points, btcPriceUsd, maxVolume, maxTxns, bucketType]);
-
-  // Calculate total volume in USD
-  const totalVolumeUsd = React.useMemo(() => {
-    const btc = parseFloat(satsToBtc(totalVolume));
-    return btc * btcPriceUsd;
-  }, [totalVolume, btcPriceUsd]);
+  }, [points, maxVolumeUsd, maxTxns]);
 
   if (!mounted) return null;
 

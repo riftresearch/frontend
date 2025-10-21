@@ -1,16 +1,10 @@
 import { create } from "zustand";
-import {
-  AdminSwapItem,
-  SwapDirection,
-  MarketMaker,
-  ErrorLogItem,
-} from "./types";
+import { AdminSwapItem, SwapDirection, MarketMaker, ErrorLogItem } from "./types";
 
 function randomHex(len: number) {
   const chars = "abcdef0123456789";
   let out = "";
-  for (let i = 0; i < len; i++)
-    out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 }
 
@@ -140,8 +134,7 @@ function generateDummyErrorLogs(): ErrorLogItem[] {
     {
       timestamp: now - 20 * 60 * 1000,
       title: "QUOTE_ERROR",
-      message:
-        "LOG: The frontend quote has failed, please check the RFQ server.",
+      message: "LOG: The frontend quote has failed, please check the RFQ server.",
     },
   ];
 }
@@ -153,8 +146,6 @@ export const useAnalyticsStore = create<{
   setTotalFeesCollected: (value: number) => void;
   totalUsers: number;
   setTotalUsers: (value: number) => void;
-  btcPriceUsd: number;
-  setBtcPriceUsd: (price: number) => void;
   adminSwaps: AdminSwapItem[];
   setAdminSwaps: (items: AdminSwapItem[]) => void;
   addAdminSwap: (item: AdminSwapItem) => void;
@@ -169,8 +160,6 @@ export const useAnalyticsStore = create<{
   setTotalFeesCollected: (value: number) => set({ totalFeesCollected: value }),
   totalUsers: 2382,
   setTotalUsers: (value: number) => set({ totalUsers: value }),
-  btcPriceUsd: 64000, // Default price, will be updated on load
-  setBtcPriceUsd: (price: number) => set({ btcPriceUsd: price }),
   // Start with no swaps; they will be populated by the DB hook
   adminSwaps: [],
   setAdminSwaps: (items: AdminSwapItem[]) => set({ adminSwaps: items }),

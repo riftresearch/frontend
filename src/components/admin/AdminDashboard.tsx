@@ -9,10 +9,7 @@ import { SwapHistory } from "@/components/charts/SwapHistory";
 import TopUsers from "@/components/charts/TopUsers";
 import { MarketMakers } from "../other/MarketMakers";
 import { ErrorLogs } from "../other/ErrorLogs";
-import { useBtcPrice } from "@/hooks/useBtcPrice";
-import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { useSwapStream } from "@/hooks/useSwapStream";
-import { satsToBtc } from "@/utils/dappHelper";
 import NumberFlow from "@number-flow/react";
 import { FiRefreshCw } from "react-icons/fi";
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
@@ -29,9 +26,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     inProgressSwaps,
     uniqueUsers,
     totalVolumeSats,
+    totalVolumeUsd,
     totalRiftFeesSats,
+    totalRiftFeesUsd,
     totalNetworkFeesSats,
+    totalNetworkFeesUsd,
     totalLiquidityFeesSats,
+    totalLiquidityFeesUsd,
   } = useSwapStream();
 
   // Cycle state for fees display: 'rift' -> 'network' -> 'liquidity' -> 'rift'
@@ -60,12 +61,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     []
   );
 
-  // Get BTC price for USD conversion
-  const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
-
-  // Fetch and update BTC price
-  useBtcPrice();
-
   // Auto-refresh the page every 10 minutes with countdown
   React.useEffect(() => {
     // Countdown timer - update every second
@@ -85,30 +80,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     };
   }, []);
 
-  // Convert sats to USD
-  const totalVolumeUsd = React.useMemo(() => {
-    const btc = parseFloat(satsToBtc(parseInt(totalVolumeSats) || 0));
-    const usd = btc * btcPriceUsd;
-    return usd;
-  }, [totalVolumeSats, btcPriceUsd]);
-
-  const totalRiftFeesUsd = React.useMemo(() => {
-    const btc = parseFloat(satsToBtc(parseInt(totalRiftFeesSats) || 0));
-    const usd = btc * btcPriceUsd;
-    return usd;
-  }, [totalRiftFeesSats, btcPriceUsd]);
-
-  const totalNetworkFeesUsd = React.useMemo(() => {
-    const btc = parseFloat(satsToBtc(parseInt(totalNetworkFeesSats) || 0));
-    const usd = btc * btcPriceUsd;
-    return usd;
-  }, [totalNetworkFeesSats, btcPriceUsd]);
-
-  const totalLiquidityFeesUsd = React.useMemo(() => {
-    const btc = parseFloat(satsToBtc(parseInt(totalLiquidityFeesSats) || 0));
-    const usd = btc * btcPriceUsd;
-    return usd;
-  }, [totalLiquidityFeesSats, btcPriceUsd]);
+  // Convert websocket string values to numbers for display
+  const totalVolumeUsdNum = parseFloat(totalVolumeUsd) || 0;
+  const totalRiftFeesUsdNum = parseFloat(totalRiftFeesUsd) || 0;
+  const totalNetworkFeesUsdNum = parseFloat(totalNetworkFeesUsd) || 0;
+  const totalLiquidityFeesUsdNum = parseFloat(totalLiquidityFeesUsd) || 0;
 
   // Debug: Log ALL values whenever they change
   React.useEffect(() => {
@@ -118,12 +94,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     console.log("  inProgressSwaps:", inProgressSwaps, "(type:", typeof inProgressSwaps, ")");
     console.log("  uniqueUsers:", uniqueUsers, "(type:", typeof uniqueUsers, ")");
     console.log("  totalVolumeSats:", totalVolumeSats, "(type:", typeof totalVolumeSats, ")");
+    console.log("  totalVolumeUsd:", totalVolumeUsd, "(type:", typeof totalVolumeUsd, ")");
     console.log("  totalRiftFeesSats:", totalRiftFeesSats, "(type:", typeof totalRiftFeesSats, ")");
+    console.log("  totalRiftFeesUsd:", totalRiftFeesUsd, "(type:", typeof totalRiftFeesUsd, ")");
     console.log(
       "  totalNetworkFeesSats:",
       totalNetworkFeesSats,
       "(type:",
       typeof totalNetworkFeesSats,
+      ")"
+    );
+    console.log(
+      "  totalNetworkFeesUsd:",
+      totalNetworkFeesUsd,
+      "(type:",
+      typeof totalNetworkFeesUsd,
       ")"
     );
     console.log(
@@ -133,43 +118,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       typeof totalLiquidityFeesSats,
       ")"
     );
-    console.log("");
-    console.log("[ADMIN_DASHBOARD_RENDER] Converted USD Values (what will render):");
-    console.log(
-      "  totalVolumeUsd:",
-      totalVolumeUsd,
-      "(formatted: $" + totalVolumeUsd.toFixed(2) + ")"
-    );
-    console.log(
-      "  totalRiftFeesUsd:",
-      totalRiftFeesUsd,
-      "(formatted: $" + totalRiftFeesUsd.toFixed(2) + ")"
-    );
-    console.log(
-      "  totalNetworkFeesUsd:",
-      totalNetworkFeesUsd,
-      "(formatted: $" + totalNetworkFeesUsd.toFixed(2) + ")"
-    );
     console.log(
       "  totalLiquidityFeesUsd:",
       totalLiquidityFeesUsd,
-      "(formatted: $" + totalLiquidityFeesUsd.toFixed(2) + ")"
+      "(type:",
+      typeof totalLiquidityFeesUsd,
+      ")"
     );
-    console.log("  btcPriceUsd:", btcPriceUsd);
     console.log("═══════════════════════════════════════════════");
   }, [
     totalSwaps,
     inProgressSwaps,
     uniqueUsers,
     totalVolumeSats,
-    totalRiftFeesSats,
-    totalNetworkFeesSats,
-    totalLiquidityFeesSats,
     totalVolumeUsd,
+    totalRiftFeesSats,
     totalRiftFeesUsd,
+    totalNetworkFeesSats,
     totalNetworkFeesUsd,
+    totalLiquidityFeesSats,
     totalLiquidityFeesUsd,
-    btcPriceUsd,
   ]);
 
   return (
@@ -231,15 +199,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                       display="inline-block"
                       cursor="pointer"
                       onClick={() => {
-                        navigator.clipboard.writeText(totalVolumeUsd.toFixed(2));
+                        navigator.clipboard.writeText(totalVolumeUsdNum.toFixed(2));
                         toastSuccess({
                           title: "Copied to clipboard",
-                          description: `$${totalVolumeUsd.toFixed(2)}`,
+                          description: `$${totalVolumeUsdNum.toFixed(2)}`,
                         });
                       }}
                     >
                       <NumberFlow
-                        value={totalVolumeUsd}
+                        value={totalVolumeUsdNum}
                         format={{
                           style: "currency",
                           currency: "USD",
@@ -365,10 +333,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                       onClick={() => {
                         const usdValue =
                           feesDisplayMode === "rift"
-                            ? totalRiftFeesUsd
+                            ? totalRiftFeesUsdNum
                             : feesDisplayMode === "network"
-                              ? totalNetworkFeesUsd
-                              : totalLiquidityFeesUsd;
+                              ? totalNetworkFeesUsdNum
+                              : totalLiquidityFeesUsdNum;
                         navigator.clipboard.writeText(usdValue.toFixed(2));
                         toastSuccess({
                           title: "Copied to clipboard",
@@ -379,10 +347,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                       <NumberFlow
                         value={
                           feesDisplayMode === "rift"
-                            ? totalRiftFeesUsd
+                            ? totalRiftFeesUsdNum
                             : feesDisplayMode === "network"
-                              ? totalNetworkFeesUsd
-                              : totalLiquidityFeesUsd
+                              ? totalNetworkFeesUsdNum
+                              : totalLiquidityFeesUsdNum
                         }
                         format={{
                           style: "currency",

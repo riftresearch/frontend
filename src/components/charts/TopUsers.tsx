@@ -3,13 +3,14 @@ import { Box, Flex, Text, Spinner, Button } from "@chakra-ui/react";
 import { GridFlex } from "@/components/other/GridFlex";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
-import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { FiRefreshCw } from "react-icons/fi";
 
 interface TopUser {
   user_evm_account_address: string;
   total_volume: string; // In satoshis (cbBTC 8 decimals)
+  total_volume_usd: number; // Volume in USD (from backend)
   total_rift_fees: string; // In satoshis
+  total_rift_fees_usd: number; // Fees in USD (from backend)
   total_swaps: number;
   first_swap_at: string;
   last_swap_at: string;
@@ -93,9 +94,12 @@ function formatUSD(n: number) {
   }).format(n);
 }
 
-function formatBTC(satoshis: string): number {
-  // Convert from satoshis (8 decimals) to BTC
-  return parseInt(satoshis, 10) / 1e8;
+function formatBTC(n: number) {
+  // Show up to 8 decimals, trimming trailing zeros
+  return `${Number(n)
+    .toFixed(8)
+    .replace(/\.0+$/, "")
+    .replace(/(\.[0-9]*?)0+$/, "$1")} BTC`;
 }
 
 function timeAgo(timestamp: string): string {
@@ -112,11 +116,12 @@ function timeAgo(timestamp: string): string {
   return `${diffDays}d ago`;
 }
 
-const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({ user, btcPriceUsd }) => {
-  const volumeBtc = formatBTC(user.total_volume);
-  const volumeUsd = volumeBtc * btcPriceUsd;
-  const feesBtc = formatBTC(user.total_rift_fees);
-  const feesUsd = feesBtc * btcPriceUsd;
+const UserRow: React.FC<{ user: TopUser }> = ({ user }) => {
+  const volumeSats = parseInt(user.total_volume, 10);
+  const volumeBtc = volumeSats / 100000000; // Convert sats to BTC
+  const volumeUsd = user.total_volume_usd;
+  const feesSats = parseInt(user.total_rift_fees, 10);
+  const feesUsd = user.total_rift_fees_usd;
 
   return (
     <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
@@ -144,10 +149,16 @@ const UserRow: React.FC<{ user: TopUser; btcPriceUsd: number }> = ({ user, btcPr
         <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatUSD(volumeUsd)}
         </Text>
+        <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+          {formatBTC(volumeBtc)}
+        </Text>
       </Box>
       <Box w="253px">
         <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatUSD(feesUsd)}
+        </Text>
+        <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+          {feesSats.toLocaleString()} sats
         </Text>
       </Box>
       <Box w="190px">
@@ -177,59 +188,81 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({ heightBlocks = 1
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
   const [sortBy, setSortBy] = React.useState<"volume" | "swaps" | "recent">("volume");
   const pageSize = 20;
-
-  // Get BTC price from store for USD conversions
-  const btcPriceUsd = useAnalyticsStore((s) => s.btcPriceUsd);
+  const fetchingRef = React.useRef(false);
 
   // Refresh users (reset and refetch)
   const handleRefresh = React.useCallback(() => {
+    console.log("Refresh button clicked - Resetting state");
     setUsers([]);
     setPage(0);
     setHasMore(true);
     setIsInitialLoad(true);
+    fetchingRef.current = false;
   }, []);
 
   // Fetch next page
   const fetchNextPage = React.useCallback(async () => {
-    if (isLoadingMore || !hasMore) return;
+    if (isLoadingMore || !hasMore || fetchingRef.current) {
+      console.log(
+        `Skipping fetch - isLoadingMore: ${isLoadingMore}, hasMore: ${hasMore}, fetchingRef: ${fetchingRef.current}`
+      );
+      return;
+    }
 
+    // Derive target page from number of users already loaded to avoid double increment under Strict Mode
+    const targetPage = Math.floor(users.length / pageSize);
+    console.log(
+      `📥 Starting fetch for page ${targetPage} (derived from users.length=${users.length})`
+    );
+    fetchingRef.current = true;
     setIsLoadingMore(true);
     try {
-      console.log(`Fetching users page ${page} (sort: ${sortBy})...`);
-      const data = await fetchUsers(sortBy, page, pageSize);
+      console.log(`Fetching users page ${targetPage} (sort: ${sortBy})...`);
+      const data = await fetchUsers(sortBy, targetPage, pageSize);
       console.log("Raw users data:", JSON.stringify(data, null, 2));
       const newUsers = data?.users || [];
 
-      console.log(`Received ${newUsers.length} users from page ${page}`);
+      console.log(`Received ${newUsers.length} users from page ${targetPage}`);
+      console.log("Pagination info:", data?.pagination);
+      console.log("  - total:", data?.pagination?.total);
+      console.log("  - limit:", data?.pagination?.limit);
+      console.log("  - offset:", data?.pagination?.offset);
+      console.log("  - hasMore:", data?.pagination?.hasMore);
+
       if (newUsers.length > 0) {
         console.log("First user sample:", JSON.stringify(newUsers[0], null, 2));
       }
 
-      if (newUsers.length < pageSize) {
-        setHasMore(false);
-      }
+      // Use backend's hasMore flag instead of comparing array length
+      setHasMore(data?.pagination?.hasMore ?? false);
 
       setUsers((prev) => {
         const existing = new Set(prev.map((u) => u.user_evm_account_address));
         const filtered = newUsers.filter((u) => !existing.has(u.user_evm_account_address));
-        return [...prev, ...filtered];
+        const updated = [...prev, ...filtered];
+        console.log(`Total users now: ${updated.length} (added ${filtered.length} new)`);
+        return updated;
       });
 
-      setPage((p) => p + 1);
+      // Keep page in sync with the derived target page
+      setPage(targetPage + 1);
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
+      fetchingRef.current = false;
       setIsLoadingMore(false);
       setIsInitialLoad(false);
     }
-  }, [page, pageSize, isLoadingMore, hasMore, sortBy]);
+  }, [users.length, pageSize, isLoadingMore, hasMore, sortBy]);
 
   // Initial load and refetch when sort changes
   React.useEffect(() => {
+    console.log("Sort changed to:", sortBy, "- Resetting state");
     setUsers([]);
     setPage(0);
     setHasMore(true);
     setIsInitialLoad(true);
+    fetchingRef.current = false;
   }, [sortBy]);
 
   React.useEffect(() => {
@@ -400,11 +433,7 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({ heightBlocks = 1
               ) : (
                 <>
                   {users.map((user) => (
-                    <UserRow
-                      key={user.user_evm_account_address}
-                      user={user}
-                      btcPriceUsd={btcPriceUsd}
-                    />
+                    <UserRow key={user.user_evm_account_address} user={user} />
                   ))}
                   {isLoadingMore && (
                     <Flex justify="center" py="12px" flexShrink={0}>

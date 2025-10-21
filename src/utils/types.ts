@@ -178,8 +178,8 @@ export interface AdminSwapItem {
   swapInitialAmountBtc: number;
   /** Initial amount in USD */
   swapInitialAmountUsd: number;
-  /** Rift fee in BTC */
-  riftFeeBtc: number;
+  /** Rift fee in sats */
+  riftFeeSats: number;
   /** Observed user confirmations (for averages) */
   userConfs?: number;
   /** Observed mm confirmations (for averages) */
