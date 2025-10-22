@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { CreateSwapResponse } from "./otcClient";
 import { TokenData } from "./types";
 import { Quote } from "./rfqClient";
-import { CowSwapOrder } from "./cowswapClient";
+import { UniswapQuoteResponse } from "./uniswapRouter";
 
 type DepositFlowState =
   | "0-not-started"
@@ -50,10 +50,12 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => void;
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
-  cowswapOrder: CowSwapOrder | null;
-  setCowswapOrder: (order: CowSwapOrder | null) => void;
+  uniswapQuote: UniswapQuoteResponse | null;
+  setUniswapQuote: (quote: UniswapQuoteResponse | null) => void;
   rfqQuote: Quote | null;
   setRfqQuote: (quote: Quote | null) => void;
+  slippageBips: number;
+  setSlippageBips: (value: number) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -90,8 +92,10 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
   outputUsdValue: "$0.00",
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
-  cowswapOrder: null,
-  setCowswapOrder: (order: CowSwapOrder | null) => set({ cowswapOrder: order }),
+  uniswapQuote: null,
+  setUniswapQuote: (quote: UniswapQuoteResponse | null) => set({ uniswapQuote: quote }),
   rfqQuote: null,
   setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
+  slippageBips: 10,
+  setSlippageBips: (value: number) => set({ slippageBips: value }),
 }));

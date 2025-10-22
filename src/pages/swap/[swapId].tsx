@@ -37,8 +37,7 @@ export default function SwapPage() {
     setTransactionConfirmed,
   } = useStore();
 
-  const [previousState, setPreviousState] =
-    React.useState<string>("0-not-started");
+  const [previousState, setPreviousState] = React.useState<string>("0-not-started");
   useSyncChainIdToStore();
 
   // Use the swapId from URL params, fallback to store if available
@@ -54,9 +53,7 @@ export default function SwapPage() {
   // Update deposit flow state based on swap status
   React.useEffect(() => {
     if (swapStatusInfo?.status) {
-      const newDepositFlowState = mapStatusToDepositFlowState(
-        swapStatusInfo.status
-      );
+      const newDepositFlowState = mapStatusToDepositFlowState(swapStatusInfo.status);
       if (newDepositFlowState !== depositFlowState) {
         setDepositFlowState(newDepositFlowState as any);
       }
@@ -65,10 +62,7 @@ export default function SwapPage() {
 
   // Reset countdown only when starting deposit flow (0 -> 1)
   React.useEffect(() => {
-    if (
-      depositFlowState === "1-WaitingUserDepositInitiated" &&
-      previousState === "0-not-started"
-    ) {
+    if (depositFlowState === "1-WaitingUserDepositInitiated" && previousState === "0-not-started") {
       setCountdownValue(60);
     }
     setPreviousState(depositFlowState);
@@ -84,8 +78,31 @@ export default function SwapPage() {
   // Debug logging
   React.useEffect(() => {
     if (swapStatusInfo) {
-      console.log("Current time", new Date().toISOString());
-      console.log("New Swap status", swapStatusInfo);
+      console.log("New Swap status", {
+        ...swapStatusInfo,
+        mm_deposit: swapStatusInfo.mm_deposit
+          ? {
+              ...swapStatusInfo.mm_deposit,
+              deposit_amount: swapStatusInfo.mm_deposit.deposit_amount
+                ? parseInt(swapStatusInfo.mm_deposit.deposit_amount, 16)
+                : null,
+              expected_amount: swapStatusInfo.mm_deposit.expected_amount
+                ? parseInt(swapStatusInfo.mm_deposit.expected_amount, 16)
+                : null,
+            }
+          : null,
+        user_deposit: swapStatusInfo.user_deposit
+          ? {
+              ...swapStatusInfo.user_deposit,
+              deposit_amount: swapStatusInfo.user_deposit.deposit_amount
+                ? parseInt(swapStatusInfo.user_deposit.deposit_amount, 16)
+                : null,
+              expected_amount: swapStatusInfo.user_deposit.expected_amount
+                ? parseInt(swapStatusInfo.user_deposit.expected_amount, 16)
+                : null,
+            }
+          : null,
+      });
     }
   }, [swapStatusInfo]);
 
@@ -114,13 +131,7 @@ export default function SwapPage() {
         backgroundPosition="center"
       >
         <Navbar />
-        <Flex
-          justify="center"
-          align="center"
-          direction="column"
-          minH="calc(100vh - 80px)"
-          p="4"
-        >
+        <Flex justify="center" align="center" direction="column" minH="calc(100vh - 80px)" p="4">
           <TransactionWidget swapId={currentSwapId} />
         </Flex>
       </Flex>

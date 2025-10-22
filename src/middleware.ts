@@ -26,5 +26,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/token-balance", "/api/eth-balance", "/api/token-metadata"],
+  matcher: ["/api/token-balance", "/api/eth-balance", "/api/token-metadata", "/api/eth-gas"],
 };

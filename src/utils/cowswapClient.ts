@@ -11,12 +11,14 @@ import {
   SellTokenSource,
   BuyTokenDestination,
   SigningScheme,
+  PriceQuality,
 } from "@cowprotocol/cow-sdk";
 import type {
   OrderCreation,
   OrderQuoteResponse,
   OrderQuoteSideKindSell,
 } from "@cowprotocol/cow-sdk";
+import { applySlippage } from "./swapHelpers";
 
 // Constants
 const CBBTC_ADDRESS = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
@@ -38,6 +40,8 @@ export interface CowSwapQuoteRequest {
   validFor?: number;
   /** User's wallet address */
   userAddress: string;
+  /** Price quality preference (defaults to FAST) */
+  priceQuality?: PriceQuality;
 }
 
 /**
@@ -107,6 +111,7 @@ export class CowSwapClient {
 
       const validFor = request.validFor ?? DEFAULT_VALID_FOR_SECONDS;
       const slippageBps = request.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
+      const priceQuality = request.priceQuality ?? PriceQuality.FAST;
 
       // Request quote from CowSwap
       const quoteRequest = {
@@ -117,6 +122,7 @@ export class CowSwapClient {
         sellAmountBeforeFee: request.sellAmount,
         kind: "sell" as OrderQuoteSideKindSell,
         validFor,
+        priceQuality,
       };
 
       const quote = await this.orderBookApi.getQuote(quoteRequest);
@@ -143,11 +149,15 @@ export class CowSwapClient {
    */
   async buildOrder(request: CowSwapQuoteRequest, receiver?: string): Promise<CowSwapOrder> {
     try {
+      console.log("Building CowSwap order with request:", request);
       const quoteResponse = await this.getQuote(request);
       const { quote } = quoteResponse;
 
       const sellToken =
         request.sellToken.toUpperCase() === "ETH" ? NATIVE_ETH_ADDRESS : request.sellToken;
+
+      // Apply slippage to buy amount
+      const adjustedBuyAmount = applySlippage(quote.quote.buyAmount, request.slippageBps);
 
       // Build the order from the quote
       const order: OrderCreation = {
@@ -162,6 +172,8 @@ export class CowSwapClient {
         sellTokenBalance: SellTokenSource.ERC20,
         buyTokenBalance: BuyTokenDestination.ERC20,
         signingScheme: SigningScheme.EIP712,
+        buyAmount: adjustedBuyAmount,
+        feeAmount: "0",
       };
 
       return {
@@ -200,10 +212,10 @@ export class CowSwapClient {
   /**
    * Get EIP-712 typed data for signing an order
    */
-  getOrderTypedData(order: OrderCreation) {
+  async getOrderTypedData(order: OrderCreation) {
     try {
       // Use CowSwap SDK's signing utilities to get the typed data
-      const domain = OrderSigningUtils.getDomain(this.chainId);
+      const domain = await OrderSigningUtils.getDomain(this.chainId);
       const types = OrderSigningUtils.getEIP712Types();
 
       return {

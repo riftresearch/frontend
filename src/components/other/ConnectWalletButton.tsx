@@ -227,13 +227,13 @@ export const ConnectWalletButton: React.FC = () => {
           decimals: 18,
         };
 
-        console.log("[UserETH] built ETH asset entry", {
-          chainId: cid,
-          address: walletAddress,
-          balanceEth,
-          price: ethPrice,
-          usdValue,
-        });
+        // console.log("[UserETH] built ETH asset entry", {
+        //   chainId: cid,
+        //   address: walletAddress,
+        //   balanceEth,
+        //   price: ethPrice,
+        //   usdValue,
+        // });
 
         return ethTokenData;
       } catch (e) {
@@ -253,13 +253,13 @@ export const ConnectWalletButton: React.FC = () => {
         fetchUserEth(address, chainId),
       ]);
 
-      console.log("[Wallet] fetched token balances", {
-        chainId,
-        address,
-        count: walletTokens.length,
-        tokens: walletTokens,
-        ethToken: ethToken ? "ETH included" : "ETH excluded (low value)",
-      });
+      // console.log("[Wallet] fetched token balances", {
+      //   chainId,
+      //   address,
+      //   count: walletTokens.length,
+      //   tokens: walletTokens,
+      //   ethToken: ethToken ? "ETH included" : "ETH excluded (low value)",
+      // });
 
       // If no tokens and no ETH, set empty array
       if (walletTokens.length === 0 && !ethToken) {
@@ -270,7 +270,7 @@ export const ConnectWalletButton: React.FC = () => {
       const filteredWalletTokens = walletTokens.filter((t) => t.name && t.symbol && t.address);
       const addresses = filteredWalletTokens.map((t) => t.address.toLowerCase());
       const prices = await fetchTokenPrices(addresses, chainName);
-      console.log("[Prices] fetched token prices", prices);
+      // console.log("[Prices] fetched token prices", prices);
 
       const results: TokenData[] = await Promise.all(
         filteredWalletTokens.map(async (t) => {
@@ -316,7 +316,7 @@ export const ConnectWalletButton: React.FC = () => {
             icon: tokenData.icon || FALLBACK_TOKEN_ICON,
             decimals: tokenData.decimals || decimals,
           } as TokenData;
-          console.log("[UserToken] built asset entry", built);
+          // console.log("[UserToken] built asset entry", built);
           return built;
         })
       ).then((results) => results.filter((item): item is TokenData => item !== null));
@@ -335,11 +335,11 @@ export const ConnectWalletButton: React.FC = () => {
 
       // Preload token icons to reduce white flash on first render
       preloadImages(sorted.map((t) => t.icon));
-      console.log("[UserTokens] final array for chain", {
-        chainId,
-        count: sorted.length,
-        results: sorted,
-      });
+      // console.log("[UserTokens] final array for chain", {
+      //   chainId,
+      //   count: sorted.length,
+      //   results: sorted,
+      // });
       setUserTokensForChain(chainId, sorted);
       // Also populate global search results so the modal shows wallet tokens instantly
       setSearchResults(sorted);

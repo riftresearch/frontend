@@ -24,7 +24,15 @@ const nextConfig: NextConfig = {
   },
 
   // Server external packages
-  serverExternalPackages: ["pino-pretty", "lokijs", "encoding"],
+  serverExternalPackages: [
+    "pino-pretty",
+    "lokijs",
+    "encoding",
+    "@uniswap/smart-order-router",
+    "@uniswap/v3-sdk",
+    "@uniswap/v4-sdk",
+    "@uniswap/sdk-core",
+  ],
 };
 
 export default nextConfig;

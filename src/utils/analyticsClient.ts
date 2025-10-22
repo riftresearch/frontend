@@ -1,6 +1,5 @@
-import { satsToBtc } from "./dappHelper";
+import { satsToBtc } from "./swapHelpers";
 import { AdminSwapFlowStep, AdminSwapItem, SwapDirection } from "./types";
-import { BigNumberish, formatUnits } from "ethers";
 
 export type AnalyticsPagination = {
   total: number;
