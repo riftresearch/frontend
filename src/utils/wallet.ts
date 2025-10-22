@@ -1,11 +1,6 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { createAppKit } from "@reown/appkit";
-import {
-  mainnet,
-  arbitrum,
-  base,
-  type AppKitNetwork,
-} from "@reown/appkit/networks";
+import { mainnet, arbitrum, base, type AppKitNetwork } from "@reown/appkit/networks";
 import { createStorage, cookieStorage, http, fallback } from "wagmi";
 import { QueryClient } from "@tanstack/react-query";
 import { GLOBAL_CONFIG } from "./constants";
@@ -39,8 +34,7 @@ export const anvilNetwork: AppKitNetwork = {
 
 // Change this to your actual project ID from Reown Cloud
 export const projectId =
-  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
-  "03057a73ca14c5d45baef6dfe54a15ee";
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "03057a73ca14c5d45baef6dfe54a15ee";
 
 // Define the networks your app will support - add anvilNetwork as the first network
 // TODO: Disable anvilNetwork in production
@@ -98,9 +92,9 @@ export const reownModal = createAppKit({
   metadata,
   features: {
     analytics: true,
-    email: false, // Disable email login
-    socials: false, // Disable all social login options
-    emailShowWallets: false, // Show wallets directly without email prompt
+    email: true, // Enable email login
+    socials: ["google", "apple", "x"], // Enable social logins
+    emailShowWallets: true, // Show wallets directly without email prompt
   },
   allWallets: "SHOW", // Display all available wallets
 });

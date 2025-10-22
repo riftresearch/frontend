@@ -21,11 +21,12 @@ export default function Home() {
 
   // Check if we're on localhost
   React.useEffect(() => {
-    setIsLocalhost(
-      typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1")
-    );
+    // setIsLocalhost(
+    //   typeof window !== "undefined" &&
+    //     (window.location.hostname === "localhost" ||
+    //       window.location.hostname === "127.0.0.1")
+    // );
+    setIsLocalhost(true); // for testing app connect on non localhost
   }, []);
 
   // Redirect to swap page when swap response is available AND transaction is confirmed
@@ -50,10 +51,7 @@ export default function Home() {
           backgroundSize="cover"
           backgroundPosition="center"
         >
-          <RiftLogo
-            width={isTablet ? "70" : "390"}
-            height={isTablet ? "30" : "70"}
-          />
+          <RiftLogo width={isTablet ? "70" : "390"} height={isTablet ? "30" : "70"} />
           <Text
             mt="40px"
             fontSize={isTablet ? "24px" : "22px"}
@@ -83,18 +81,9 @@ export default function Home() {
         backgroundPosition="center"
       >
         <Navbar />
-        <Flex
-          justify="center"
-          align="center"
-          direction="column"
-          minH="calc(100vh - 80px)"
-          p="4"
-        >
+        <Flex justify="center" align="center" direction="column" minH="calc(100vh - 80px)" p="4">
           <Flex mt="15px"></Flex>
-          <RiftLogo
-            width={isTablet ? "70" : "390"}
-            height={isTablet ? "30" : "70"}
-          />
+          <RiftLogo width={isTablet ? "70" : "390"} height={isTablet ? "30" : "70"} />
 
           <Flex
             flexDir={"column"}
