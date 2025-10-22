@@ -33,8 +33,7 @@ export const anvilNetwork: AppKitNetwork = {
 };
 
 // Change this to your actual project ID from Reown Cloud
-export const projectId =
-  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "03057a73ca14c5d45baef6dfe54a15ee";
+export const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID;
 
 // Define the networks your app will support - add anvilNetwork as the first network
 // TODO: Disable anvilNetwork in production
@@ -51,7 +50,7 @@ export const wagmiAdapter = new WagmiAdapter({
   }),
   ssr: true,
   networks,
-  projectId,
+  projectId: projectId || "",
   chains: [
     mainnet,
     // base,
@@ -87,7 +86,7 @@ const metadata = {
 // Create the modal
 export const reownModal = createAppKit({
   adapters: [wagmiAdapter],
-  projectId,
+  projectId: projectId || "",
   networks,
   metadata,
   features: {
