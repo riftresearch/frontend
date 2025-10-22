@@ -23,6 +23,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // Get WebSocket data with new fields - use these directly for real-time updates
   const {
     totalSwaps,
+    createdSwaps,
     inProgressSwaps,
     uniqueUsers,
     totalVolumeSats,
@@ -593,7 +594,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             mb="28px"
           >
             {new Intl.NumberFormat("en-US").format(totalSwaps)} Total Swaps |{" "}
-            {new Intl.NumberFormat("en-US").format(inProgressSwaps)} In-Progress Swaps
+            {new Intl.NumberFormat("en-US").format(inProgressSwaps)} In-Progress |{" "}
+            {new Intl.NumberFormat("en-US").format(createdSwaps)} Awaiting Deposit
           </Text>
           <SwapHistory onStatsUpdate={handleStatsUpdate} />
         </Flex>

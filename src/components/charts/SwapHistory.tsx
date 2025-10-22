@@ -869,7 +869,7 @@ export const SwapHistory: React.FC<{
             px="16px"
             pt="16px"
             pb="8px"
-            fontSize="15px"
+            fontSize="14px"
             align="center"
             fontWeight="bold"
             color={colorsAnalytics.textGray}
@@ -881,7 +881,7 @@ export const SwapHistory: React.FC<{
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap ID</Text>
               </Box>
               <Box w="114px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Created</Text>
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Time</Text>
               </Box>
               <Box w="125px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
@@ -899,7 +899,7 @@ export const SwapHistory: React.FC<{
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Other Fees</Text>
               </Box>
               <Flex flex="1">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Flow Tracker</Text>
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Flow</Text>
               </Flex>
             </Flex>
 
@@ -949,7 +949,7 @@ export const SwapHistory: React.FC<{
                       }
                 }
               >
-                Created
+                Awaiting Deposit
               </Button>
               <Button
                 size="sm"
