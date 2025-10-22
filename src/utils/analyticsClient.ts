@@ -210,7 +210,12 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   // });
 
   // [8] Calculate swap amounts in BTC and USD
-  const swapAmountBtc = userDepositAmountBtc || 0;
+  // If no user deposit yet, fall back to quote from_amount (which is the intended swap amount)
+  let swapAmountBtc = userDepositAmountBtc || 0;
+  if (swapAmountBtc === 0 && row.quote?.from_amount && row.quote?.from_decimals) {
+    // from_amount is in the smallest unit (e.g., sats), convert to BTC
+    swapAmountBtc = parseFloat(satsToBtc(parseInt(row.quote.from_amount)));
+  }
   const swapAmountUsd = btcPriceUsd !== undefined ? swapAmountBtc * btcPriceUsd : 0;
 
   // [9] Extract fees from quote.fee_schedule (in sats)
