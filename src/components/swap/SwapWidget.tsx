@@ -70,7 +70,7 @@ export const SwapWidget = () => {
   // ============================================================================
 
   const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
-  const { isChainSafe, isLoading: chainSyncVerificationLoading } = useTEEChainSyncVerification();
+  // const { isChainSafe, isLoading: chainSyncVerificationLoading } = useTEEChainSyncVerification();
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
