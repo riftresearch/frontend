@@ -39,7 +39,7 @@ function getApiKeyFromCookie(): string {
 export async function getSwaps(
   page: number = 0,
   pageSize: number = 10,
-  filter?: "all" | "completed" | "in-progress" | "created"
+  filter?: "all" | "completed" | "in-progress" | "created" | "failed"
 ): Promise<AnalyticsSwapsResponse> {
   try {
     const offset = page * pageSize;
@@ -117,7 +117,7 @@ export function formatDuration(startMs: number, endMs: number): string {
 }
 
 export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
-  console.log("🔍 Mapping swap row:", {
+  console.log("🔍 FIND Mapping swap row:", {
     id: row.id,
     status: row.status,
     quote: row.quote,
@@ -133,15 +133,15 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   // [1] Determine swap direction from quote.from_chain (defaults to EVM_TO_BTC)
   let direction: SwapDirection = "EVM_TO_BTC";
   if (row.quote?.from_chain) {
-    direction = row.quote.from_chain === "bitcoin" ? "BTC_TO_EVM" : "EVM_TO_BTC";
-    // console.log(
-    //   "📍 Direction from quote.from_chain:",
-    //   row.quote.from_chain,
-    //   "→",
-    //   direction
-    // );
+    direction =
+      row.quote.from_chain === "bitcoin"
+        ? "BTC_TO_EVM"
+        : row.quote.from_chain === "ethereum"
+          ? "EVM_TO_BTC"
+          : "UNKNOWN";
   } else {
-    console.log("⚠️ No quote.from_chain, defaulting to EVM_TO_BTC");
+    console.log("⚠️ No quote.from_chain, not defaulting");
+    direction = "UNKNOWN";
   }
 
   // [2] Define status order and find current step index
@@ -322,5 +322,6 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
       mmDepositDetected: mmDepositDetectedAt || undefined,
       mmPrivateKeySent: mmPrivateKeySentAt || undefined,
     },
+    rawData: row,
   };
 }

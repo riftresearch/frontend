@@ -1,15 +1,16 @@
 import React from "react";
 import Image from "next/image";
-import { Box, Flex, Text, Spinner, Tooltip, Button } from "@chakra-ui/react";
+import { Box, Flex, Text, Spinner, Tooltip, Button, Dialog, Portal } from "@chakra-ui/react";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { AdminSwapItem, AdminSwapFlowStep, SwapDirection } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
-import { FiClock, FiCheck, FiChevronDown, FiChevronUp } from "react-icons/fi";
+import { FiClock, FiCheck, FiChevronDown, FiChevronUp, FiX } from "react-icons/fi";
 import { getSwaps, mapDbRowToAdminSwap } from "@/utils/analyticsClient";
-import { toastError } from "@/utils/toast";
+import { toastError, toastSuccess } from "@/utils/toast";
 import { useSwapStream } from "@/hooks/useSwapStream";
+import { useSwapAverages } from "@/hooks/useSwapAverages";
 
 function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
@@ -69,7 +70,8 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
     (step.status === "waiting_user_deposit_initiated" ||
       step.status === "waiting_mm_deposit_initiated");
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!step.txHash || !step.txChain) {
       toastError(null, {
         title: "Transaction Not Available",
@@ -122,7 +124,7 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       _hover={isClickable ? { filter: "brightness(1.1)", transform: "scale(1.02)" } : undefined}
       transition="all 150ms ease"
     >
-      <Text fontSize="13px" fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Text fontSize="11px" fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayedLabel}
       </Text>
       {(step.status === "waiting_user_deposit_initiated" ||
@@ -193,8 +195,8 @@ const StepWithTime: React.FC<{
         h={`${timeRowHeight}px`}
         visibility={displayDuration ? "visible" : "hidden"}
       >
-        <FiClock color={colorsAnalytics.textGray} size={14} />
-        <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+        <FiClock color={colorsAnalytics.textGray} size={12} />
+        <Text fontSize="11px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {displayDuration || "0:00"}
         </Text>
       </Flex>
@@ -239,8 +241,13 @@ const FinalTime: React.FC<{
   );
 };
 
-const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
-  ({ swap, currentTime }) => {
+const Row: React.FC<{
+  swap: AdminSwapItem;
+  currentTime: number;
+  onClick?: () => void;
+}> = React.memo(
+  ({ swap, currentTime, onClick }) => {
+    const [isDragging, setIsDragging] = React.useState(false);
     const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
     const totalSeconds = React.useMemo(
       () => swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
@@ -249,6 +256,15 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
     const isCompleted = React.useMemo(() => {
       return filteredFlow.every((s) => s.state === "completed");
     }, [filteredFlow]);
+
+    const handleRowClick = () => {
+      // Don't open modal if user was dragging to select text
+      if (isDragging) {
+        setIsDragging(false);
+        return;
+      }
+      onClick?.();
+    };
 
     const impliedUsdPerBtc =
       swap.swapInitialAmountBtc > 0 ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc : 0;
@@ -277,8 +293,53 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
     };
 
     return (
-      <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
-        <Box w="128px">
+      <Flex
+        w="100%"
+        py="14px"
+        px="16px"
+        align="center"
+        letterSpacing={"-0.8px"}
+        cursor="pointer"
+        _hover={{ bg: "rgba(255, 255, 255, 0.03)" }}
+        transition="background 150ms ease"
+        onClick={handleRowClick}
+        onMouseDown={() => setIsDragging(false)}
+        onMouseMove={(e) => {
+          if (e.buttons === 1) {
+            setIsDragging(true);
+          }
+        }}
+      >
+        <Box w="119px">
+          <Flex
+            as="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(swap.id);
+              toastSuccess({
+                title: "Copied to clipboard",
+                description: `Swap ID: ${swap.id.slice(0, 8)}...`,
+              });
+            }}
+            bg="#1D1D1D"
+            px="8px"
+            py="6px"
+            borderRadius="10px"
+            _hover={{ filter: "brightness(1.1)" }}
+            cursor="pointer"
+            justifyContent="center"
+            alignItems="center"
+          >
+            <Text
+              fontSize="14px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              {swap.id.slice(0, 8)}...
+            </Text>
+          </Flex>
+        </Box>
+        <Box w="114px">
           <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {timeAgoFrom(currentTime, swap.swapCreationTimestamp)}
           </Text>
@@ -286,7 +347,10 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
         <Box w="125px">
           <Flex
             as="button"
-            onClick={() => window.open(explorerUrl(swap.chain, swap.evmAccountAddress), "_blank")}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(explorerUrl(swap.chain, swap.evmAccountAddress), "_blank");
+            }}
             bg="#1D1D1D"
             px="8px"
             py="6px"
@@ -305,10 +369,9 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
             </Text>
           </Flex>
         </Box>
-        <Box w="69px">
+        <Box w="91px">
           <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {swap.chain}
-            {/* {swap.statusTesting} */}
+            {swap.direction === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"}
           </Text>
         </Box>
 
@@ -320,7 +383,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
             {formatBTC(swap.swapInitialAmountBtc)}
           </Text>
         </Box>
-        <Box w="136px">
+        <Box w="95px">
           <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatUSD(riftFeeUsd)}
           </Text>
@@ -328,7 +391,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
             {swap.riftFeeSats.toLocaleString()} sats
           </Text>
         </Box>
-        <Box w="118px">
+        <Box w="103px">
           <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             MM - {formatUSD(swap.mmFeeUsd)}
           </Text>
@@ -336,7 +399,7 @@ const Row: React.FC<{ swap: AdminSwapItem; currentTime: number }> = React.memo(
             GAS - {formatUSD(swap.networkFeeUsd)}
           </Text>
         </Box>
-        <Flex flex="1" gap="10px" wrap="wrap" align="center">
+        <Flex flex="1" gap="6px" wrap="wrap" align="center" mr="-16px">
           {filteredFlow.map((step, idx) => (
             <StepWithTime
               key={`${step.status}-${idx}`}
@@ -385,6 +448,62 @@ function timeAgoFrom(nowMs: number, tsMs: number): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
+function getSwapCategory(status: string): "created" | "completed" | "failed" | "in-progress" {
+  if (status === "waiting_user_deposit_initiated") return "created";
+  if (status === "settled") return "completed";
+  if (status === "refunding_user" || status === "refunding_mm" || status === "failed")
+    return "failed";
+  return "in-progress";
+}
+
+// Helper to build flow steps for averages display
+function buildAverageFlowSteps(
+  direction: "BTC_TO_EVM" | "ETH_TO_BTC",
+  avgData: {
+    time_created_to_user_sent_ms: number;
+    time_user_sent_to_confs_ms: number;
+    time_user_confs_to_mm_sent_ms: number;
+    time_mm_sent_to_mm_confs_ms: number;
+  }
+): AdminSwapFlowStep[] {
+  const userAsset = direction === "BTC_TO_EVM" ? "BTC" : "cbBTC";
+  const mmAsset = direction === "BTC_TO_EVM" ? "cbBTC" : "BTC";
+
+  return [
+    {
+      status: "pending",
+      label: "Created",
+      state: "completed",
+    },
+    {
+      status: "waiting_user_deposit_initiated",
+      label: "User Sent",
+      state: "completed",
+      badge: userAsset,
+      duration: formatSecondsToMinSec(Math.round(avgData.time_created_to_user_sent_ms / 1000)),
+    },
+    {
+      status: "waiting_user_deposit_confirmed",
+      label: "Confs",
+      state: "completed",
+      duration: formatSecondsToMinSec(Math.round(avgData.time_user_sent_to_confs_ms / 1000)),
+    },
+    {
+      status: "waiting_mm_deposit_initiated",
+      label: "MM Sent",
+      state: "completed",
+      badge: mmAsset,
+      duration: formatSecondsToMinSec(Math.round(avgData.time_user_confs_to_mm_sent_ms / 1000)),
+    },
+    {
+      status: "waiting_mm_deposit_confirmed",
+      label: "Confs",
+      state: "completed",
+      duration: formatSecondsToMinSec(Math.round(avgData.time_mm_sent_to_mm_confs_ms / 1000)),
+    },
+  ];
+}
+
 export const SwapHistory: React.FC<{
   heightBlocks?: number;
   onStatsUpdate?: (stats: {
@@ -403,11 +522,16 @@ export const SwapHistory: React.FC<{
   const [updatingSwapIds, setUpdatingSwapIds] = React.useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const [showAverages, setShowAverages] = React.useState(false);
-  const [filter, setFilter] = React.useState<"all" | "completed" | "in-progress" | "created">(
-    "all"
-  );
+  const [filter, setFilter] = React.useState<
+    "all" | "completed" | "in-progress" | "created" | "failed"
+  >("all");
+
+  // Fetch averages from backend when showAverages is true
+  const { data: averagesData, isLoading: isLoadingAverages } = useSwapAverages(showAverages);
   const [isAtTop, setIsAtTop] = React.useState(true);
   const [prunedSwapCount, setPrunedSwapCount] = React.useState(0);
+  const [selectedSwap, setSelectedSwap] = React.useState<AdminSwapItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
   const scrollPositionRef = React.useRef(0);
   const pageSize = 20;
 
@@ -445,10 +569,21 @@ export const SwapHistory: React.FC<{
       .filter((swap) => swap.swapCreationTimestamp > latestFetchedTime)
       .forEach((swap) => mergedMap.set(swap.id, swap));
 
-    return Array.from(mergedMap.values()).sort(
+    const allMerged = Array.from(mergedMap.values()).sort(
       (a, b) => b.swapCreationTimestamp - a.swapCreationTimestamp
     );
-  }, [allSwaps, storeSwaps]);
+
+    // Apply filter based on swap category
+    if (filter === "all") return allMerged;
+
+    return allMerged.filter((swap) => {
+      // Get the most recent status from the flow (last in-progress or completed step)
+      const currentStep =
+        swap.flow.find((step) => step.state === "inProgress") || swap.flow[swap.flow.length - 1];
+      const category = getSwapCategory(currentStep?.status || "");
+      return category === filter;
+    });
+  }, [allSwaps, storeSwaps, filter]);
 
   // Notify parent component of stats changes
   React.useEffect(() => {
@@ -461,8 +596,13 @@ export const SwapHistory: React.FC<{
     const byDir: Record<SwapDirection, AdminSwapItem[]> = {
       BTC_TO_EVM: [],
       EVM_TO_BTC: [],
+      UNKNOWN: [],
     };
-    for (const s of swaps) byDir[s.direction].push(s);
+    for (const s of swaps) {
+      if (s.direction !== "UNKNOWN") {
+        byDir[s.direction].push(s);
+      }
+    }
     function avg(nums: number[]) {
       if (!nums.length) return 0;
       return nums.reduce((a, b) => a + b, 0) / nums.length;
@@ -737,22 +877,25 @@ export const SwapHistory: React.FC<{
             justify="space-between"
           >
             <Flex align="center" flex="1">
-              <Box w="128px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Created</Text>
+              <Box w="119px">
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap ID</Text>
+              </Box>
+              <Box w="114px">
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Created</Text>
               </Box>
               <Box w="125px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Account</Text>
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
               </Box>
-              <Box w="69px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Chain</Text>
+              <Box w="91px">
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Direction</Text>
               </Box>
               <Box w="156px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Amount</Text>
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Amount</Text>
               </Box>
-              <Box w="136px">
+              <Box w="95px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
               </Box>
-              <Box w="118px">
+              <Box w="103px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Other Fees</Text>
               </Box>
               <Flex flex="1">
@@ -762,6 +905,29 @@ export const SwapHistory: React.FC<{
 
             {/* Filter Buttons */}
             <Flex gap="8px" ml="16px">
+              <Button
+                size="sm"
+                onClick={() => setFilter("failed")}
+                bg={filter === "failed" ? colorsAnalytics.greenBackground : "transparent"}
+                borderWidth="2px"
+                borderRadius="16px"
+                borderColor={
+                  filter === "failed" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+                }
+                color={colorsAnalytics.offWhite}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                fontSize="12px"
+                px="12px"
+                _hover={
+                  filter === "failed"
+                    ? {}
+                    : {
+                        opacity: 0.8,
+                      }
+                }
+              >
+                Failed
+              </Button>
               <Button
                 size="sm"
                 onClick={() => setFilter("created")}
@@ -921,7 +1087,14 @@ export const SwapHistory: React.FC<{
                               : undefined
                         }
                       >
-                        <Row swap={s} currentTime={currentTime} />
+                        <Row
+                          swap={s}
+                          currentTime={currentTime}
+                          onClick={() => {
+                            setSelectedSwap(s);
+                            setIsModalOpen(true);
+                          }}
+                        />
                       </Flex>
                     );
                   })}
@@ -955,7 +1128,9 @@ export const SwapHistory: React.FC<{
                             ? "in-progress"
                             : filter === "created"
                               ? "created"
-                              : ""}{" "}
+                              : filter === "failed"
+                                ? "failed"
+                                : ""}{" "}
                         swaps found
                       </Text>
                     </Flex>
@@ -995,111 +1170,349 @@ export const SwapHistory: React.FC<{
       {/* Averages block below the container */}
       {showAverages && (
         <Flex pt="12px" w="100%">
-          <GridFlex width="100%" heightBlocks={4.57} contentPadding={0}>
+          <GridFlex width="100%" heightBlocks={7} contentPadding={0}>
             <Flex direction="column" pt="10px" w="100%">
-              {averages.map((a) => {
-                const impliedUsdPerBtc = a.avgBtc > 0 ? a.avgUsd / a.avgBtc : 0;
-                const riftFeeBtc = a.avgRiftFeeSats / 100000000; // Convert sats to BTC
-                const riftFeeUsd = riftFeeBtc * impliedUsdPerBtc;
-
-                return (
-                  <Flex
-                    key={a.dir}
-                    w="100%"
-                    py="14px"
-                    px="16px"
-                    align="center"
-                    letterSpacing={"-0.8px"}
-                  >
-                    {/* Direction Label - aligned with "Swap Created" column */}
-                    <Box w="128px" ml="16px" mr="-16px">
-                      <Text
-                        fontSize="14px"
-                        color={colorsAnalytics.offWhite}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        fontWeight="bold"
-                      >
-                        {a.dir === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"} Averages
-                      </Text>
-                      <Text
-                        fontSize="13px"
-                        color={colorsAnalytics.textGray}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {new Intl.NumberFormat("en-US").format(a.count)} Swaps
-                      </Text>
-                    </Box>
-
-                    {/* Account column - skip */}
-                    <Box w="125px" />
-
-                    {/* Chain column - skip */}
-                    <Box w="69px" />
-
-                    {/* Swap Amount - aligned with amount column */}
-                    <Box w="156px">
-                      <Text
-                        fontSize="14px"
-                        color={colorsAnalytics.offWhite}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {formatUSD(a.avgUsd)}
-                      </Text>
-                      <Text
-                        fontSize="14px"
-                        color={colorsAnalytics.textGray}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {formatBTC(a.avgBtc)}
-                      </Text>
-                    </Box>
-
-                    {/* Rift Fee - aligned with fee column */}
-                    <Box w="136px">
-                      <Text
-                        fontSize="14px"
-                        color={colorsAnalytics.offWhite}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {formatUSD(riftFeeUsd)}
-                      </Text>
-                      <Text
-                        fontSize="14px"
-                        color={colorsAnalytics.textGray}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {a.avgRiftFeeSats.toLocaleString()} sats
-                      </Text>
-                    </Box>
-
-                    {/* Other Fees column - skip */}
-                    <Box w="118px" />
-
-                    {/* Swap Flow Tracker - aligned with flow pills */}
-                    <Flex flex="1" gap="10px" wrap="wrap" align="center">
-                      {a.flow.map((step, idx) => (
-                        <StepWithTime
-                          key={`${step.status}-${idx}`}
-                          step={step}
-                          currentTime={currentTime}
-                        />
-                      ))}
-                      {/* Average Total Time */}
-                      <Flex direction="column" align="center" justify="center" minW="60px">
-                        <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+              {isLoadingAverages ? (
+                <Flex justify="center" align="center" py="40px">
+                  <Spinner size="md" color={colorsAnalytics.offWhite} />
+                </Flex>
+              ) : averagesData ? (
+                <>
+                  {/* BTC to ETH Averages */}
+                  {averagesData.btc_to_eth.count > 0 && (
+                    <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
+                      {/* Direction Label - aligned with ID column */}
+                      <Box w="119px" ml="16px" mr="-16px">
                         <Text
-                          mt="6px"
                           fontSize="14px"
-                          color={colorsAnalytics.greenOutline}
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          fontWeight="bold"
+                        >
+                          BTC→ETH Averages
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.textGray}
                           fontFamily={FONT_FAMILIES.SF_PRO}
                         >
-                          {formatSecondsToMinSec(a.avgTotalSeconds)}
+                          {new Intl.NumberFormat("en-US").format(averagesData.btc_to_eth.count)}{" "}
+                          Swaps
                         </Text>
+                      </Box>
+
+                      {/* Created column - skip */}
+                      <Box w="115px" />
+
+                      {/* Account column - skip */}
+                      <Box w="125px" />
+
+                      {/* Direction column - skip */}
+                      <Box w="83px" />
+
+                      {/* Swap Amount */}
+                      <Box w="156px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          ${averagesData.btc_to_eth.averages.amount_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {averagesData.btc_to_eth.averages.amount_btc} BTC
+                        </Text>
+                      </Box>
+
+                      {/* Rift Fee */}
+                      <Box w="95px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          ${averagesData.btc_to_eth.averages.protocol_fee_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {averagesData.btc_to_eth.averages.protocol_fee_sats.toLocaleString()} sats
+                        </Text>
+                      </Box>
+
+                      {/* Other Fees */}
+                      <Box w="103px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          MM - ${averagesData.btc_to_eth.averages.liquidity_fee_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          GAS - ${averagesData.btc_to_eth.averages.network_fee_usd}
+                        </Text>
+                      </Box>
+
+                      {/* Swap Flow Tracker */}
+                      <Flex flex="1" gap="6px" wrap="wrap" align="center" mr="-16px">
+                        {buildAverageFlowSteps("BTC_TO_EVM", averagesData.btc_to_eth.averages).map(
+                          (step, idx) => (
+                            <StepWithTime
+                              key={`${step.status}-${idx}`}
+                              step={step}
+                              currentTime={currentTime}
+                            />
+                          )
+                        )}
+                        {/* Average Total Time */}
+                        <Flex direction="column" align="center" justify="center" minW="60px">
+                          <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+                          <Text
+                            mt="6px"
+                            fontSize="14px"
+                            color={colorsAnalytics.greenOutline}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {formatSecondsToMinSec(
+                              averagesData.btc_to_eth.averages.time_full_seconds
+                            )}
+                          </Text>
+                        </Flex>
                       </Flex>
                     </Flex>
-                  </Flex>
-                );
-              })}
+                  )}
+
+                  {/* ETH to BTC Averages */}
+                  {averagesData.eth_to_btc.count > 0 && (
+                    <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
+                      {/* Direction Label */}
+                      <Box w="119px" ml="16px" mr="-16px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          fontWeight="bold"
+                        >
+                          ETH→BTC Averages
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {new Intl.NumberFormat("en-US").format(averagesData.eth_to_btc.count)}{" "}
+                          Swaps
+                        </Text>
+                      </Box>
+
+                      <Box w="115px" />
+                      <Box w="125px" />
+                      <Box w="83px" />
+
+                      {/* Swap Amount */}
+                      <Box w="156px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          ${averagesData.eth_to_btc.averages.amount_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {averagesData.eth_to_btc.averages.amount_btc} BTC
+                        </Text>
+                      </Box>
+
+                      {/* Rift Fee */}
+                      <Box w="95px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          ${averagesData.eth_to_btc.averages.protocol_fee_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {averagesData.eth_to_btc.averages.protocol_fee_sats.toLocaleString()} sats
+                        </Text>
+                      </Box>
+
+                      {/* Other Fees */}
+                      <Box w="103px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          MM - ${averagesData.eth_to_btc.averages.liquidity_fee_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          GAS - ${averagesData.eth_to_btc.averages.network_fee_usd}
+                        </Text>
+                      </Box>
+
+                      {/* Swap Flow Tracker */}
+                      <Flex flex="1" gap="6px" wrap="wrap" align="center" mr="-16px">
+                        {buildAverageFlowSteps("ETH_TO_BTC", averagesData.eth_to_btc.averages).map(
+                          (step, idx) => (
+                            <StepWithTime
+                              key={`${step.status}-${idx}`}
+                              step={step}
+                              currentTime={currentTime}
+                            />
+                          )
+                        )}
+                        {/* Average Total Time */}
+                        <Flex direction="column" align="center" justify="center" minW="60px">
+                          <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+                          <Text
+                            mt="6px"
+                            fontSize="14px"
+                            color={colorsAnalytics.greenOutline}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {formatSecondsToMinSec(
+                              averagesData.eth_to_btc.averages.time_full_seconds
+                            )}
+                          </Text>
+                        </Flex>
+                      </Flex>
+                    </Flex>
+                  )}
+
+                  {/* Combined Average */}
+                  {averagesData.combined && (
+                    <Flex
+                      w="100%"
+                      py="14px"
+                      px="16px"
+                      align="center"
+                      letterSpacing={"-0.8px"}
+                      mt="12px"
+                      pt="24px"
+                      borderTop={`2px solid ${colorsAnalytics.borderGray}`}
+                    >
+                      {/* Combined Label */}
+                      <Box w="119px" ml="16px" mr="-16px">
+                        <Text
+                          fontSize="15px"
+                          color={colorsAnalytics.greenOutline}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          fontWeight="bold"
+                        >
+                          Combined Average
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {new Intl.NumberFormat("en-US").format(averagesData.combined.count)} Total
+                          Swaps
+                        </Text>
+                      </Box>
+
+                      <Box w="115px" />
+                      <Box w="125px" />
+                      <Box w="83px" />
+
+                      {/* Combined Swap Amount */}
+                      <Box w="156px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          ${averagesData.combined.averages.amount_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {averagesData.combined.averages.amount_btc} BTC
+                        </Text>
+                      </Box>
+
+                      {/* Rift Fee */}
+                      <Box w="95px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          ${averagesData.combined.averages.protocol_fee_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {averagesData.combined.averages.protocol_fee_sats.toLocaleString()} sats
+                        </Text>
+                      </Box>
+
+                      {/* Other Fees */}
+                      <Box w="103px">
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          MM - ${averagesData.combined.averages.liquidity_fee_usd}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          GAS - ${averagesData.combined.averages.network_fee_usd}
+                        </Text>
+                      </Box>
+
+                      {/* Combined Average Total Time - just show final time, no individual steps */}
+                      <Flex flex="1" justify="flex-start" align="center" pl="10px" mr="-16px">
+                        <Flex direction="column" align="center" justify="center" minW="60px">
+                          <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+                          <Text
+                            mt="6px"
+                            fontSize="14px"
+                            color={colorsAnalytics.greenOutline}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {formatSecondsToMinSec(
+                              averagesData.combined.averages.time_full_seconds
+                            )}
+                          </Text>
+                        </Flex>
+                      </Flex>
+                    </Flex>
+                  )}
+                </>
+              ) : null}
             </Flex>
           </GridFlex>
         </Flex>
@@ -1145,6 +1558,442 @@ export const SwapHistory: React.FC<{
           }
         }
       `}</style>
+
+      {/* Swap Details Modal */}
+      {selectedSwap && (
+        <Dialog.Root open={isModalOpen} onOpenChange={(e) => setIsModalOpen(e.open)}>
+          <Portal>
+            <Dialog.Backdrop
+              bg="rgba(0, 0, 0, 0.8)"
+              backdropFilter="blur(4px)"
+              position="fixed"
+              inset="0"
+              zIndex={1000}
+            />
+            <Dialog.Positioner
+              position="fixed"
+              inset="0"
+              zIndex={1001}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Dialog.Content
+                bg={colorsAnalytics.offBlack}
+                border={`2px solid ${colorsAnalytics.borderGray}`}
+                borderRadius="16px"
+                p="32px"
+                maxW="900px"
+                maxH="90vh"
+                overflowY="auto"
+                css={{
+                  "&::-webkit-scrollbar": {
+                    width: "8px",
+                  },
+                  "&::-webkit-scrollbar-track": {
+                    background: "transparent",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "#333",
+                    borderRadius: "4px",
+                  },
+                }}
+              >
+                <Flex justify="space-between" align="center" mb="24px">
+                  <Dialog.Title>
+                    <Text
+                      fontSize="24px"
+                      fontWeight="bold"
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      Swap Details
+                    </Text>
+                  </Dialog.Title>
+                  <Dialog.CloseTrigger asChild>
+                    <Button
+                      size="sm"
+                      bg="transparent"
+                      border={`2px solid ${colorsAnalytics.borderGray}`}
+                      borderRadius="8px"
+                      color={colorsAnalytics.offWhite}
+                      _hover={{ filter: "brightness(1.2)" }}
+                      p="8px"
+                    >
+                      <FiX size={20} />
+                    </Button>
+                  </Dialog.CloseTrigger>
+                </Flex>
+
+                <Flex direction="column" gap="20px">
+                  {/* Swap ID */}
+                  <Flex direction="column" gap="8px">
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.textGray}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      fontWeight="bold"
+                    >
+                      Swap ID
+                    </Text>
+                    <Flex
+                      as="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedSwap.id);
+                        toastSuccess({
+                          title: "Copied to clipboard",
+                          description: `Swap ID copied`,
+                        });
+                      }}
+                      bg="#1D1D1D"
+                      px="12px"
+                      py="8px"
+                      borderRadius="8px"
+                      _hover={{ filter: "brightness(1.1)" }}
+                      cursor="pointer"
+                      align="center"
+                      justify="space-between"
+                    >
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {selectedSwap.id}
+                      </Text>
+                    </Flex>
+                  </Flex>
+
+                  {/* Direction & Chain */}
+                  <Flex gap="20px">
+                    <Flex direction="column" gap="8px" flex="1">
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.textGray}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        fontWeight="bold"
+                      >
+                        Direction
+                      </Text>
+                      <Text
+                        fontSize="16px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {selectedSwap.direction === "BTC_TO_EVM" ? "BTC → ETH" : "ETH → BTC"}
+                      </Text>
+                    </Flex>
+                    <Flex direction="column" gap="8px" flex="1">
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.textGray}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        fontWeight="bold"
+                      >
+                        Chain
+                      </Text>
+                      <Text
+                        fontSize="16px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {selectedSwap.chain}
+                      </Text>
+                    </Flex>
+                  </Flex>
+
+                  {/* User Account */}
+                  <Flex direction="column" gap="8px">
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.textGray}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      fontWeight="bold"
+                    >
+                      User Account
+                    </Text>
+                    <Flex
+                      as="button"
+                      onClick={() =>
+                        window.open(
+                          explorerUrl(selectedSwap.chain, selectedSwap.evmAccountAddress),
+                          "_blank"
+                        )
+                      }
+                      bg="#1D1D1D"
+                      px="12px"
+                      py="8px"
+                      borderRadius="8px"
+                      _hover={{ filter: "brightness(1.1)" }}
+                      cursor="pointer"
+                      justify="space-between"
+                      align="center"
+                    >
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {selectedSwap.evmAccountAddress}
+                      </Text>
+                    </Flex>
+                  </Flex>
+
+                  {/* Swap Amount */}
+                  <Flex direction="column" gap="8px">
+                    <Text
+                      fontSize="14px"
+                      color={colorsAnalytics.textGray}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      fontWeight="bold"
+                    >
+                      Swap Amount
+                    </Text>
+                    <Flex direction="column">
+                      <Text
+                        fontSize="18px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        fontWeight="bold"
+                      >
+                        {formatUSD(selectedSwap.swapInitialAmountUsd)}
+                      </Text>
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.textGray}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {formatBTC(selectedSwap.swapInitialAmountBtc)}
+                      </Text>
+                    </Flex>
+                  </Flex>
+
+                  {/* Fees Section */}
+                  <Flex direction="column" gap="16px">
+                    <Text
+                      fontSize="16px"
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      fontWeight="bold"
+                    >
+                      Fees Breakdown
+                    </Text>
+
+                    <Flex direction="column" gap="12px" pl="12px">
+                      {/* Rift Fee */}
+                      <Flex direction="column" gap="4px">
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          Rift Fee
+                        </Text>
+                        <Flex gap="12px" align="center">
+                          <Text
+                            fontSize="15px"
+                            color={colorsAnalytics.offWhite}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {selectedSwap.riftFeeSats.toLocaleString()} sats
+                          </Text>
+                          <Text
+                            fontSize="13px"
+                            color={colorsAnalytics.textGray}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            (
+                            {formatUSD(
+                              (selectedSwap.riftFeeSats / 100000000) *
+                                (selectedSwap.swapInitialAmountUsd /
+                                  selectedSwap.swapInitialAmountBtc)
+                            )}
+                            )
+                          </Text>
+                        </Flex>
+                      </Flex>
+
+                      {/* Network Fee */}
+                      <Flex direction="column" gap="4px">
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          Network/Gas Fee
+                        </Text>
+                        <Text
+                          fontSize="15px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {formatUSD(selectedSwap.networkFeeUsd)}
+                        </Text>
+                      </Flex>
+
+                      {/* Market Maker Fee */}
+                      <Flex direction="column" gap="4px">
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.textGray}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          Market Maker Fee
+                        </Text>
+                        <Text
+                          fontSize="15px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {formatUSD(selectedSwap.mmFeeUsd)}
+                        </Text>
+                      </Flex>
+                    </Flex>
+                  </Flex>
+
+                  {/* Timestamps */}
+                  {selectedSwap.stepTimestamps && (
+                    <Flex direction="column" gap="8px">
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.textGray}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        fontWeight="bold"
+                      >
+                        Created
+                      </Text>
+                      <Text
+                        fontSize="14px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {new Date(selectedSwap.swapCreationTimestamp).toLocaleString()}
+                      </Text>
+                    </Flex>
+                  )}
+
+                  {/* Flow Status */}
+                  <Flex direction="column" gap="12px">
+                    <Text
+                      fontSize="16px"
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                      fontWeight="bold"
+                    >
+                      Swap Flow Status
+                    </Text>
+                    <Flex direction="column" gap="8px">
+                      {selectedSwap.flow
+                        .filter((s) => s.status !== "settled")
+                        .map((step, idx) => (
+                          <Flex key={idx} align="center" gap="12px">
+                            <Box>
+                              {step.state === "completed" ? (
+                                <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+                              ) : step.state === "inProgress" ? (
+                                <FiClock color={colorsAnalytics.textGray} size={16} />
+                              ) : (
+                                <Box
+                                  w="16px"
+                                  h="16px"
+                                  borderRadius="50%"
+                                  border={`2px solid ${colorsAnalytics.borderGray}`}
+                                />
+                              )}
+                            </Box>
+                            <Text
+                              fontSize="14px"
+                              color={
+                                step.state === "completed"
+                                  ? colorsAnalytics.offWhite
+                                  : colorsAnalytics.textGray
+                              }
+                              fontFamily={FONT_FAMILIES.SF_PRO}
+                            >
+                              {step.label}
+                              {step.duration && ` (${step.duration})`}
+                            </Text>
+                          </Flex>
+                        ))}
+                    </Flex>
+                  </Flex>
+
+                  {/* Raw Data Section */}
+                  {selectedSwap.rawData && (
+                    <Flex
+                      direction="column"
+                      gap="12px"
+                      mt="20px"
+                      pt="20px"
+                      borderTop={`1px solid ${colorsAnalytics.borderGray}`}
+                    >
+                      <Text
+                        fontSize="16px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        fontWeight="bold"
+                      >
+                        Complete Swap & Quote Data
+                      </Text>
+                      <Box
+                        bg="#0a0a0a"
+                        borderRadius="8px"
+                        p="16px"
+                        border={`1px solid ${colorsAnalytics.borderGray}`}
+                        fontFamily="monospace"
+                        fontSize="12px"
+                        overflowX="auto"
+                        css={{
+                          "&::-webkit-scrollbar": {
+                            height: "6px",
+                          },
+                          "&::-webkit-scrollbar-track": {
+                            background: "transparent",
+                          },
+                          "&::-webkit-scrollbar-thumb": {
+                            background: "#333",
+                            borderRadius: "3px",
+                          },
+                        }}
+                      >
+                        <pre
+                          style={{
+                            margin: 0,
+                            color: colorsAnalytics.offWhite,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-all",
+                          }}
+                        >
+                          {JSON.stringify(selectedSwap.rawData, null, 2)}
+                        </pre>
+                      </Box>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            JSON.stringify(selectedSwap.rawData, null, 2)
+                          );
+                          toastSuccess({
+                            title: "Copied to clipboard",
+                            description: "Complete swap data copied",
+                          });
+                        }}
+                        bg={colorsAnalytics.greenBackground}
+                        border={`2px solid ${colorsAnalytics.greenOutline}`}
+                        color={colorsAnalytics.offWhite}
+                        _hover={{ filter: "brightness(1.2)" }}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        Copy Raw Data to Clipboard
+                      </Button>
+                    </Flex>
+                  )}
+                </Flex>
+              </Dialog.Content>
+            </Dialog.Positioner>
+          </Portal>
+        </Dialog.Root>
+      )}
     </Box>
   );
 };

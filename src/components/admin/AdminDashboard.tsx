@@ -626,7 +626,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         </Flex>
 
         {/* RIFT LOGO */}
-        <Flex justify="center" mt="60px" mb="80px">
+        <Flex justify="center" mt="60px" mb="60px">
           <RiftLogo width="80" height="20" fill={colorsAnalytics.textGray} />
         </Flex>
 

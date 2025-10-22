@@ -160,7 +160,7 @@ export interface AdminSwapFlowStep {
   txChain?: "ETH" | "BTC";
 }
 
-export type SwapDirection = "BTC_TO_EVM" | "EVM_TO_BTC";
+export type SwapDirection = "BTC_TO_EVM" | "EVM_TO_BTC" | "UNKNOWN";
 
 export interface AdminSwapItem {
   statusTesting?: any;
@@ -198,4 +198,6 @@ export interface AdminSwapItem {
     mmDepositDetected?: number;
     mmPrivateKeySent?: number;
   };
+  /** Raw swap data from backend */
+  rawData?: any;
 }
