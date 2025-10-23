@@ -87,66 +87,6 @@ export const ConnectWalletButton: React.FC = () => {
     }
   };
 
-  // Helper: fetch with 401 refresh + SIWE fallback, then retry
-  const fetchWithAuthRetry = async (input: string, init?: RequestInit): Promise<Response> => {
-    const doFetch = () => fetch(input, init);
-    let res: Response;
-    try {
-      res = await doFetch();
-    } catch (e) {
-      // Network error; propagate
-      throw e;
-    }
-
-    if (res.status !== 401) return res;
-
-    // Try to refresh
-    try {
-      const refreshRes = await fetch("/api/siwe/refresh", { method: "POST" });
-      if (refreshRes.ok) {
-        const retry = await doFetch();
-        if (retry.status !== 401) return retry;
-      }
-    } catch {
-      // ignore and continue to SIWE
-    }
-
-    // Final fallback: SIWE, then retry
-    try {
-      await signInWithEthereum();
-      return await doFetch();
-    } catch (e) {
-      // Return original 401 response if SIWE failed or retry still 401
-      return res;
-    }
-  };
-
-  // Check authentication status and auto-trigger SIWE when wallet connects
-  useEffect(() => {
-    const checkAuthStatusAndSignIn = async () => {
-      if (!address) {
-        setIsAuthenticated(false);
-        return;
-      }
-      try {
-        const verifyRes = await fetchWithAuthRetry("/api/siwe/verify", {
-          method: "GET",
-        });
-        if (verifyRes.ok) {
-          const data = await verifyRes.json();
-          setIsAuthenticated(Boolean(data?.authenticated));
-          return;
-        }
-        // If not OK after retries, consider unauthenticated
-        setIsAuthenticated(false);
-      } catch {
-        setIsAuthenticated(false);
-      }
-    };
-
-    checkAuthStatusAndSignIn();
-  }, [address]);
-
   // Fetch user tokens and populate global store when connected or chain changes
   useEffect(() => {
     const fetchWalletTokens = async (
@@ -154,10 +94,9 @@ export const ConnectWalletButton: React.FC = () => {
       cid: number
     ): Promise<TokenBalance[]> => {
       try {
-        const response = await fetchWithAuthRetry(
-          `/api/token-balance?wallet=${walletAddress}&chainId=${cid}`,
-          { method: "GET" }
-        );
+        const response = await fetch(`/api/token-balance?wallet=${walletAddress}&chainId=${cid}`, {
+          method: "GET",
+        });
         const data = await response.json();
         if (data.result?.result) {
           return data.result.result as TokenBalance[];
@@ -175,10 +114,9 @@ export const ConnectWalletButton: React.FC = () => {
     ): Promise<Record<string, TokenPrice & { decimals?: number }>> => {
       try {
         const addrParam = addresses.join(",");
-        const response = await fetchWithAuthRetry(
-          `/api/token-price?chain=${chain}&addresses=${addrParam}`,
-          { method: "GET" }
-        );
+        const response = await fetch(`/api/token-price?chain=${chain}&addresses=${addrParam}`, {
+          method: "GET",
+        });
         const data = await response.json();
         if (data.coins) {
           const prices: Record<string, TokenPrice & { decimals?: number }> = {};
@@ -197,10 +135,9 @@ export const ConnectWalletButton: React.FC = () => {
 
     const fetchUserEth = async (walletAddress: string, cid: number): Promise<TokenData | null> => {
       try {
-        const response = await fetchWithAuthRetry(
-          `/api/eth-balance?wallet=${walletAddress}&chainId=${cid}`,
-          { method: "GET" }
-        );
+        const response = await fetch(`/api/eth-balance?wallet=${walletAddress}&chainId=${cid}`, {
+          method: "GET",
+        });
         const data = await response.json();
 
         if (data.error) {
@@ -297,7 +234,7 @@ export const ConnectWalletButton: React.FC = () => {
 
           if (!tokenData) {
             // fetch metadata from our API (which returns { data: TokenMetadata[], count: number })
-            const response = await fetchWithAuthRetry(
+            const response = await fetch(
               `/api/token-metadata?network=${chainName}&addresses=${address}`,
               { method: "GET" }
             );
@@ -397,7 +334,7 @@ export const ConnectWalletButton: React.FC = () => {
           bg={colors.swapBgColor}
           boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
         >
-          Sign in with Wallet
+          Connect Wallet
         </Button>
       ) : isSigningIn ? (
         <Button

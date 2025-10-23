@@ -1,7 +1,8 @@
 import {
   otcClient,
   GLOBAL_CONFIG,
-  LIGHT_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
+  ETH_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
+  BTC_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
 } from "@/utils/constants";
 import { useQuery } from "@tanstack/react-query";
 import { createPublicClient, http, type Block } from "viem";
@@ -74,7 +75,7 @@ async function fetchLatestBitcoinHeight(): Promise<number> {
 }
 
 /**
- * Hook to verify that the TEE's light clients are synced with the actual chains
+ * Hook to verify that the TEE's chain clients are synced with the actual chains
  * Fetches block headers from both Ethereum (via viem) and Bitcoin (via Esplora)
  * and compares them against the TEE's reported best hashes
  */
@@ -147,8 +148,8 @@ export function useTEEChainSyncVerification() {
           bitcoinHeader.id.toLowerCase() === bestTEEBitcoinHash.toLowerCase();
 
         // Check if the TEE is within acceptable sync threshold
-        const isEthereumSynced = ethHeightDiff <= BigInt(LIGHT_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD);
-        const isBitcoinSynced = btcHeightDiff <= LIGHT_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD;
+        const isEthereumSynced = ethHeightDiff <= BigInt(ETH_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD);
+        const isBitcoinSynced = btcHeightDiff <= BTC_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD;
 
         const isValid =
           ethereumHashMatches && bitcoinHashMatches && isEthereumSynced && isBitcoinSynced;
@@ -191,7 +192,7 @@ export function useTEEChainSyncVerification() {
   });
 
   return {
-    isChainSafe: query.data?.isValid ?? false,
+    isTEESynced: query.data?.isValid ?? false,
     ethereumHeader: query.data?.ethereumHeader,
     bitcoinHeader: query.data?.bitcoinHeader,
     ethereumBlockHeight: query.data?.ethereumBlockHeight,

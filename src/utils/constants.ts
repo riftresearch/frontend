@@ -8,7 +8,8 @@ import ETHEREUM_TICKERS_TO_ADDRESS from "@/utils/tokenData/1/tickers_to_address.
 
 export const IS_FRONTEND_PAUSED = process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === "true";
 
-export const LIGHT_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD = 1000;
+export const ETH_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD = 100;
+export const BTC_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD = 6;
 
 export const FALLBACK_TOKEN_ICON = "/images/icons/Help.png";
 
