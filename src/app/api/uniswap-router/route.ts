@@ -42,8 +42,188 @@ const POOL_CONFIGS = [
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// V4 Quoter ABI (minimal for quoteExactInputSingle and quoteExactInput)
+// V4 Quoter ABI (full)
 const V4_QUOTER_ABI = [
+  {
+    inputs: [{ internalType: "contract IPoolManager", name: "_poolManager", type: "address" }],
+    stateMutability: "nonpayable",
+    type: "constructor",
+  },
+  {
+    inputs: [{ internalType: "PoolId", name: "poolId", type: "bytes32" }],
+    name: "NotEnoughLiquidity",
+    type: "error",
+  },
+  { inputs: [], name: "NotPoolManager", type: "error" },
+  { inputs: [], name: "NotSelf", type: "error" },
+  {
+    inputs: [{ internalType: "uint256", name: "amount", type: "uint256" }],
+    name: "QuoteSwap",
+    type: "error",
+  },
+  { inputs: [], name: "UnexpectedCallSuccess", type: "error" },
+  {
+    inputs: [{ internalType: "bytes", name: "revertData", type: "bytes" }],
+    name: "UnexpectedRevertBytes",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { internalType: "Currency", name: "exactCurrency", type: "address" },
+          {
+            components: [
+              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
+              { internalType: "uint24", name: "fee", type: "uint24" },
+              { internalType: "int24", name: "tickSpacing", type: "int24" },
+              { internalType: "contract IHooks", name: "hooks", type: "address" },
+              { internalType: "bytes", name: "hookData", type: "bytes" },
+            ],
+            internalType: "struct PathKey[]",
+            name: "path",
+            type: "tuple[]",
+          },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
+        ],
+        internalType: "struct IV4Quoter.QuoteExactParams",
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "_quoteExactInput",
+    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          {
+            components: [
+              { internalType: "Currency", name: "currency0", type: "address" },
+              { internalType: "Currency", name: "currency1", type: "address" },
+              { internalType: "uint24", name: "fee", type: "uint24" },
+              { internalType: "int24", name: "tickSpacing", type: "int24" },
+              { internalType: "contract IHooks", name: "hooks", type: "address" },
+            ],
+            internalType: "struct PoolKey",
+            name: "poolKey",
+            type: "tuple",
+          },
+          { internalType: "bool", name: "zeroForOne", type: "bool" },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
+          { internalType: "bytes", name: "hookData", type: "bytes" },
+        ],
+        internalType: "struct IV4Quoter.QuoteExactSingleParams",
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "_quoteExactInputSingle",
+    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { internalType: "Currency", name: "exactCurrency", type: "address" },
+          {
+            components: [
+              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
+              { internalType: "uint24", name: "fee", type: "uint24" },
+              { internalType: "int24", name: "tickSpacing", type: "int24" },
+              { internalType: "contract IHooks", name: "hooks", type: "address" },
+              { internalType: "bytes", name: "hookData", type: "bytes" },
+            ],
+            internalType: "struct PathKey[]",
+            name: "path",
+            type: "tuple[]",
+          },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
+        ],
+        internalType: "struct IV4Quoter.QuoteExactParams",
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "_quoteExactOutput",
+    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          {
+            components: [
+              { internalType: "Currency", name: "currency0", type: "address" },
+              { internalType: "Currency", name: "currency1", type: "address" },
+              { internalType: "uint24", name: "fee", type: "uint24" },
+              { internalType: "int24", name: "tickSpacing", type: "int24" },
+              { internalType: "contract IHooks", name: "hooks", type: "address" },
+            ],
+            internalType: "struct PoolKey",
+            name: "poolKey",
+            type: "tuple",
+          },
+          { internalType: "bool", name: "zeroForOne", type: "bool" },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
+          { internalType: "bytes", name: "hookData", type: "bytes" },
+        ],
+        internalType: "struct IV4Quoter.QuoteExactSingleParams",
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "_quoteExactOutputSingle",
+    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "poolManager",
+    outputs: [{ internalType: "contract IPoolManager", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { internalType: "Currency", name: "exactCurrency", type: "address" },
+          {
+            components: [
+              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
+              { internalType: "uint24", name: "fee", type: "uint24" },
+              { internalType: "int24", name: "tickSpacing", type: "int24" },
+              { internalType: "contract IHooks", name: "hooks", type: "address" },
+              { internalType: "bytes", name: "hookData", type: "bytes" },
+            ],
+            internalType: "struct PathKey[]",
+            name: "path",
+            type: "tuple[]",
+          },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
+        ],
+        internalType: "struct IV4Quoter.QuoteExactParams",
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "quoteExactInput",
+    outputs: [
+      { internalType: "uint256", name: "amountOut", type: "uint256" },
+      { internalType: "uint256", name: "gasEstimate", type: "uint256" },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
   {
     inputs: [
       {
@@ -81,18 +261,10 @@ const V4_QUOTER_ABI = [
     inputs: [
       {
         components: [
-          {
-            internalType: "Currency",
-            name: "exactCurrency",
-            type: "address",
-          },
+          { internalType: "Currency", name: "exactCurrency", type: "address" },
           {
             components: [
-              {
-                internalType: "Currency",
-                name: "intermediateCurrency",
-                type: "address",
-              },
+              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
               { internalType: "uint24", name: "fee", type: "uint24" },
               { internalType: "int24", name: "tickSpacing", type: "int24" },
               { internalType: "contract IHooks", name: "hooks", type: "address" },
@@ -102,22 +274,58 @@ const V4_QUOTER_ABI = [
             name: "path",
             type: "tuple[]",
           },
-          {
-            internalType: "uint128",
-            name: "exactAmount",
-            type: "uint128",
-          },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
         ],
         internalType: "struct IV4Quoter.QuoteExactParams",
         name: "params",
         type: "tuple",
       },
     ],
-    name: "quoteExactInput",
+    name: "quoteExactOutput",
     outputs: [
-      { internalType: "uint256", name: "amountOut", type: "uint256" },
+      { internalType: "uint256", name: "amountIn", type: "uint256" },
       { internalType: "uint256", name: "gasEstimate", type: "uint256" },
     ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          {
+            components: [
+              { internalType: "Currency", name: "currency0", type: "address" },
+              { internalType: "Currency", name: "currency1", type: "address" },
+              { internalType: "uint24", name: "fee", type: "uint24" },
+              { internalType: "int24", name: "tickSpacing", type: "int24" },
+              { internalType: "contract IHooks", name: "hooks", type: "address" },
+            ],
+            internalType: "struct PoolKey",
+            name: "poolKey",
+            type: "tuple",
+          },
+          { internalType: "bool", name: "zeroForOne", type: "bool" },
+          { internalType: "uint128", name: "exactAmount", type: "uint128" },
+          { internalType: "bytes", name: "hookData", type: "bytes" },
+        ],
+        internalType: "struct IV4Quoter.QuoteExactSingleParams",
+        name: "params",
+        type: "tuple",
+      },
+    ],
+    name: "quoteExactOutputSingle",
+    outputs: [
+      { internalType: "uint256", name: "amountIn", type: "uint256" },
+      { internalType: "uint256", name: "gasEstimate", type: "uint256" },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "bytes", name: "data", type: "bytes" }],
+    name: "unlockCallback",
+    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
     stateMutability: "nonpayable",
     type: "function",
   },
@@ -212,6 +420,7 @@ interface V2V3QuoteParams {
   userAddress: string;
   slippageBps: number;
   validFor: number;
+  tradeType?: "input" | "output";
 }
 
 interface QuoteResult {
@@ -221,7 +430,15 @@ interface QuoteResult {
 }
 
 async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> {
-  const { sellToken, sellAmount, decimals, userAddress, slippageBps, validFor } = params;
+  const {
+    sellToken,
+    sellAmount,
+    decimals,
+    userAddress,
+    slippageBps,
+    validFor,
+    tradeType = "input",
+  } = params;
 
   try {
     // Determine token address
@@ -237,14 +454,28 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
       type: SwapType.SWAP_ROUTER_02,
     };
 
+    // Determine trade type
+    const isExactOutput = tradeType === "output";
+    const routeTradeType = isExactOutput ? TradeType.EXACT_OUTPUT : TradeType.EXACT_INPUT;
+
     // Get route from AlphaRouter
-    console.log("[V2/V3] Fetching AlphaRouter quote for", sellToken, "->", "cbBTC");
-    const route = await alphaRouter.route(
-      CurrencyAmount.fromRawAmount(tokenIn, sellAmount),
-      tokenOut,
-      TradeType.EXACT_INPUT,
-      options
+    console.log(
+      `[V2/V3] Fetching AlphaRouter quote for ${sellToken} -> cbBTC (${isExactOutput ? "exact output" : "exact input"})`
     );
+
+    const route = isExactOutput
+      ? await alphaRouter.route(
+          CurrencyAmount.fromRawAmount(tokenOut, sellAmount),
+          tokenIn,
+          routeTradeType,
+          options
+        )
+      : await alphaRouter.route(
+          CurrencyAmount.fromRawAmount(tokenIn, sellAmount),
+          tokenOut,
+          routeTradeType,
+          options
+        );
 
     if (!route || !route.methodParameters) {
       console.log("[V2/V3] No route found");
@@ -254,7 +485,7 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
     // Calculate expiration
     const expiresAt = new Date(Date.now() + validFor * 1000);
 
-    // Extract buy amount (cbBTC output)
+    // Extract amount - for exact output, buyAmount is the required input amount
     const buyAmount = route.quote.numerator.toString();
 
     // Build route path string with pool types
@@ -279,7 +510,11 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
     };
 
     console.log("[V2/V3] Route:", routePath);
-    console.log("[V2/V3] Quote:", buyAmount, "cbBTC (", result.route.quote, ")");
+    if (isExactOutput) {
+      console.log("[V2/V3] Quote:", buyAmount, "input required (", result.route.quote, ")");
+    } else {
+      console.log("[V2/V3] Quote:", buyAmount, "cbBTC output (", result.route.quote, ")");
+    }
     return result;
   } catch (error) {
     console.error("[V2/V3] Quote error:", error);
@@ -438,6 +673,162 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
     };
   } catch (error) {
     console.error("[V4] Quote error:", error);
+    return null;
+  }
+}
+
+// ============================================================================
+// V4 Quote Logic (Exact Output)
+// ============================================================================
+
+async function getV4QuoteExactOutput(params: V2V3QuoteParams): Promise<V4QuoteResult | null> {
+  const { sellToken, sellAmount, validFor } = params;
+
+  try {
+    const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
+
+    // If input is already WBTC, try direct WBTC -> cbBTC swap
+    if (tokenInAddress.toLowerCase() === WBTC_ADDRESS.toLowerCase()) {
+      console.log("[V4] Input is WBTC, trying direct WBTC -> cbBTC (exact output) at 0.01%");
+      try {
+        const sortedPair = sortTokens(WBTC_ADDRESS, CBBTC_ADDRESS);
+        const poolKey = {
+          currency0: sortedPair.firstToken,
+          currency1: sortedPair.secondToken,
+          fee: 100, // 0.01%
+          tickSpacing: 1,
+          hooks: ZERO_ADDRESS,
+        };
+
+        const result = await v4QuoterContract.callStatic.quoteExactOutputSingle({
+          poolKey: poolKey,
+          zeroForOne: sortedPair.isFirstToken,
+          exactAmount: sellAmount, // This is the exact output amount (cbBTC)
+          hookData: "0x",
+        });
+
+        const inputAmountNeeded = result.amountIn.toString();
+        const expiresAt = new Date(Date.now() + validFor * 1000);
+
+        console.log(
+          "[V4] ✓ Direct WBTC -> cbBTC (exact output) quote:",
+          inputAmountNeeded,
+          "WBTC needed"
+        );
+
+        return {
+          buyAmount: inputAmountNeeded, // For exact output, this is the required input
+          expiresAt: expiresAt.toISOString(),
+          route: {
+            type: "single-hop",
+            path: "WBTC -> cbBTC",
+            poolFee: 100,
+            tickSpacing: 1,
+            gasEstimate: result.gasEstimate?.toString() || "0",
+          },
+          v4Metadata: {
+            poolKey,
+            isFirstToken: sortedPair.isFirstToken,
+            amountIn: "0", // Will be set by swap builder
+            amountOutMinimum: sellAmount, // This is the exact amount we want
+          },
+        };
+      } catch (error) {
+        console.log(
+          "[V4] ✗ Direct WBTC -> cbBTC (exact output) failed:",
+          error instanceof Error ? error.message : "Unknown error"
+        );
+        return null;
+      }
+    }
+
+    // Multi-hop: tokenIn -> WBTC -> cbBTC (exact output)
+    // For exact output, we work backwards: specify cbBTC output, get input needed
+    let bestQuote: {
+      inputAmount: string;
+      metadata: V4QuoteMetadata;
+      route: any;
+      firstHopFee: number;
+    } | null = null;
+    let bestAmount = BigInt(2) ** BigInt(256) - BigInt(1); // Start with max value, looking for minimum input
+
+    for (const config of POOL_CONFIGS) {
+      try {
+        // Build the two-hop path for exact output
+        // Note: For exact output, path is reversed
+        const path: PathKey[] = [
+          {
+            intermediateCurrency: WBTC_ADDRESS, // First hop output (going backwards)
+            fee: 100, // 0.01% - the only WBTC/cbBTC pool on V4
+            tickSpacing: 1,
+            hooks: ZERO_ADDRESS,
+            hookData: "0x",
+          },
+          {
+            intermediateCurrency: tokenInAddress, // Second hop output (going backwards) = our input
+            fee: config.fee,
+            tickSpacing: config.tickSpacing,
+            hooks: ZERO_ADDRESS,
+            hookData: "0x",
+          },
+        ];
+
+        const result = await v4QuoterContract.callStatic.quoteExactOutput({
+          exactCurrency: CBBTC_ADDRESS, // The token we want exact amount of
+          path: path,
+          exactAmount: sellAmount, // The exact output amount we want
+        });
+
+        const inputAmount = result.amountIn.toString();
+
+        // For exact output, we want the minimum input amount
+        if (BigInt(inputAmount) < bestAmount) {
+          bestAmount = BigInt(inputAmount);
+          bestQuote = {
+            inputAmount,
+            metadata: {
+              currencyIn: tokenInAddress,
+              path,
+              amountIn: "0", // Will be set by swap builder
+              amountOutMinimum: sellAmount, // This is the exact amount we want
+            },
+            route: {
+              type: "multi-hop",
+              path: `${sellToken} -> WBTC -> cbBTC`,
+              poolFees: [config.fee, 100],
+              tickSpacings: [config.tickSpacing, 1],
+              gasEstimate: result.gasEstimate?.toString() || "0",
+            },
+            firstHopFee: config.fee,
+          };
+        }
+      } catch (error) {
+        // Silently try next config
+      }
+    }
+
+    if (!bestQuote) {
+      console.log("[V4] No valid routes found (exact output)");
+      return null;
+    }
+
+    const expiresAt = new Date(Date.now() + validFor * 1000);
+
+    // Log the best route in the requested format
+    const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
+    console.log(
+      `[V4] Trying (exact output): ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`
+    );
+    console.log("[V4] Best quote (exact output):", bestQuote.inputAmount, "input needed");
+
+    return {
+      buyAmount: bestQuote.inputAmount, // For exact output, this is the required input
+      expiresAt: expiresAt.toISOString(),
+      route: bestQuote.route,
+      v4Metadata: bestQuote.metadata,
+    };
+  } catch (error) {
+    console.error("[V4] Quote error (exact output):", error);
     return null;
   }
 }
@@ -635,6 +1026,7 @@ export async function GET(request: NextRequest) {
     const slippageBps = parseInt(searchParams.get("slippageBps") || String(DEFAULT_SLIPPAGE_BPS));
     const validFor = parseInt(searchParams.get("validFor") || String(DEFAULT_VALID_FOR_SECONDS));
     const router = searchParams.get("router"); // "v3", "v4", or null (both)
+    const tradeType = (searchParams.get("tradeType") as "input" | "output") || "input";
 
     // Validate inputs
     if (!sellToken || !sellAmount || !decimalsParam || !userAddress) {
@@ -653,22 +1045,35 @@ export async function GET(request: NextRequest) {
       userAddress,
       slippageBps,
       validFor,
+      tradeType,
     };
 
-    // Fetch quotes based on router parameter
+    // Fetch quotes based on router parameter and trade type
     console.log("\n========================================");
     if (router === "v3") {
-      console.log("Fetching quotes from V2/V3 only...");
+      console.log(
+        `Fetching quotes from V2/V3 only (${tradeType === "output" ? "exact output" : "exact input"})...`
+      );
     } else if (router === "v4") {
-      console.log("Fetching quotes from V4 only...");
+      console.log(
+        `Fetching quotes from V4 only (${tradeType === "output" ? "exact output" : "exact input"})...`
+      );
     } else {
-      console.log("Fetching quotes from V2/V3 and V4...");
+      console.log(
+        `Fetching quotes from V2/V3 and V4 (${tradeType === "output" ? "exact output" : "exact input"})...`
+      );
     }
     console.log("========================================");
 
+    const isExactOutput = tradeType === "output";
+
     const [v2v3Result, v4Result] = await Promise.all([
       router === "v4" ? Promise.resolve(null) : getV2V3Quote(quoteParams),
-      router === "v3" ? Promise.resolve(null) : getV4Quote(quoteParams),
+      router === "v3"
+        ? Promise.resolve(null)
+        : isExactOutput
+          ? getV4QuoteExactOutput(quoteParams)
+          : getV4Quote(quoteParams),
     ]);
 
     // Compare and select winner
@@ -697,21 +1102,42 @@ export async function GET(request: NextRequest) {
       const v2v3Amount = BigInt(v2v3Result.buyAmount);
       const v4Amount = BigInt(v4Result.buyAmount);
 
-      if (v4Amount > v2v3Amount) {
-        winner = "v4";
-        winningQuote = v4Result;
-        v4Metadata = v4Result.v4Metadata;
-        const improvement = Number(((v4Amount - v2v3Amount) * BigInt(10000)) / v2v3Amount) / 100;
-        console.log(`\n✓ V4 wins! (+${improvement.toFixed(2)}% better)`);
-        console.log(`  V4: ${v4Amount.toString()} cbBTC`);
-        console.log(`  V2/V3: ${v2v3Amount.toString()} cbBTC`);
+      if (isExactOutput) {
+        // For exact output, lower input amount is better
+        if (v4Amount < v2v3Amount) {
+          winner = "v4";
+          winningQuote = v4Result;
+          v4Metadata = v4Result.v4Metadata;
+          const improvement = Number(((v2v3Amount - v4Amount) * BigInt(10000)) / v2v3Amount) / 100;
+          console.log(`\n✓ V4 wins! (-${improvement.toFixed(2)}% less input required)`);
+          console.log(`  V4: ${v4Amount.toString()} input required`);
+          console.log(`  V2/V3: ${v2v3Amount.toString()} input required`);
+        } else {
+          winner = "v2v3";
+          winningQuote = v2v3Result;
+          const improvement = Number(((v4Amount - v2v3Amount) * BigInt(10000)) / v4Amount) / 100;
+          console.log(`\n✓ V2/V3 wins! (-${improvement.toFixed(2)}% less input required)`);
+          console.log(`  V2/V3: ${v2v3Amount.toString()} input required`);
+          console.log(`  V4: ${v4Amount.toString()} input required`);
+        }
       } else {
-        winner = "v2v3";
-        winningQuote = v2v3Result;
-        const improvement = Number(((v2v3Amount - v4Amount) * BigInt(10000)) / v4Amount) / 100;
-        console.log(`\n✓ V2/V3 wins! (+${improvement.toFixed(2)}% better)`);
-        console.log(`  V2/V3: ${v2v3Amount.toString()} cbBTC`);
-        console.log(`  V4: ${v4Amount.toString()} cbBTC`);
+        // For exact input, higher output amount is better
+        if (v4Amount > v2v3Amount) {
+          winner = "v4";
+          winningQuote = v4Result;
+          v4Metadata = v4Result.v4Metadata;
+          const improvement = Number(((v4Amount - v2v3Amount) * BigInt(10000)) / v2v3Amount) / 100;
+          console.log(`\n✓ V4 wins! (+${improvement.toFixed(2)}% better)`);
+          console.log(`  V4: ${v4Amount.toString()} cbBTC`);
+          console.log(`  V2/V3: ${v2v3Amount.toString()} cbBTC`);
+        } else {
+          winner = "v2v3";
+          winningQuote = v2v3Result;
+          const improvement = Number(((v2v3Amount - v4Amount) * BigInt(10000)) / v4Amount) / 100;
+          console.log(`\n✓ V2/V3 wins! (+${improvement.toFixed(2)}% better)`);
+          console.log(`  V2/V3: ${v2v3Amount.toString()} cbBTC`);
+          console.log(`  V4: ${v4Amount.toString()} cbBTC`);
+        }
       }
     }
 

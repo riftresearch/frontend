@@ -393,6 +393,179 @@ export function convertInputAmountToFullDecimals(
 }
 
 /**
+ * Response from ERC20 to BTC quote (exact output) combining RFQ and Uniswap
+ */
+export interface ERC20ToBTCQuoteExactOutputResponse {
+  /** Uniswap quote with pricing information (if needed) */
+  uniswapQuote?: UniswapQuoteResponse;
+  /** Required ERC20/ETH input amount (formatted string) */
+  erc20InputAmount: string;
+  /** RFQ quote for cbBTC -> BTC (needed for OTC swap creation) */
+  rfqQuote: Quote;
+  /** Earliest expiration timestamp */
+  expiresAt: Date;
+}
+
+/**
+ * Apply slippage for exact output (increases input amount)
+ *
+ * @param amount - The input amount to apply slippage to (as BigInt or string)
+ * @param slippageBps - Slippage tolerance in basis points (100 bps = 1%)
+ * @returns The adjusted amount as a string
+ */
+export function applySlippageExactOutput(amount: bigint | string, slippageBps?: number): string {
+  const amountBigInt = typeof amount === "string" ? BigInt(amount) : amount;
+  const slippage = slippageBps ?? DEFAULT_SLIPPAGE_BPS;
+  const slippageMultiplier = 1 + slippage / 10000;
+
+  return ((amountBigInt * BigInt(Math.floor(slippageMultiplier * 10000))) / 10000n).toString();
+}
+
+/**
+ * Get combined quote for ERC20/ETH -> BTC using exact output
+ * User specifies desired BTC output, we calculate required input
+ */
+export async function getERC20ToBTCQuoteExactOutput(
+  btcOutputAmount: string,
+  selectedInputToken: TokenData | null,
+  userAddress: string,
+  slippageBps?: number,
+  validFor?: number
+): Promise<ERC20ToBTCQuoteExactOutputResponse | null> {
+  try {
+    if (!selectedInputToken) {
+      throw new Error("No input token selected");
+    }
+
+    // Convert BTC amount to base units (satoshis)
+    const btcAmountInSats = parseUnits(btcOutputAmount, BITCOIN_DECIMALS).toString();
+
+    // Step 1: Get RFQ quote for cbBTC -> BTC using exact output mode
+    console.log("Getting RFQ quote (exact output) for", btcAmountInSats, "sats BTC");
+
+    const rfqQuote = await rfqClient.requestQuotes({
+      mode: "ExactOutput",
+      amount: btcAmountInSats,
+      from: {
+        chain: "ethereum",
+        decimals: 8,
+        token: {
+          type: "Address",
+          data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+        },
+      },
+      to: {
+        chain: "bitcoin",
+        decimals: 8,
+        token: {
+          type: "Native",
+        },
+      },
+    });
+
+    const rfqQuoteData = (rfqQuote as any)?.quote?.data;
+    if (!rfqQuoteData) {
+      throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
+    }
+
+    // The "from" amount is how much cbBTC we need
+    const cbBTCAmountNeeded = rfqQuoteData.from.amount;
+    console.log("RFQ quote: need", cbBTCAmountNeeded, "cbBTC (in base units)");
+
+    // Check if input token is cbBTC
+    const isCbBTC = selectedInputToken.ticker === "cbBTC";
+
+    if (isCbBTC) {
+      // For cbBTC, we already have the answer - just format it
+      const cbBTCFormatted = formatUnits(BigInt(cbBTCAmountNeeded), 8);
+      const expiresAt = new Date(rfqQuoteData.expires_at);
+
+      console.log("Input is cbBTC, returning direct quote:", cbBTCFormatted);
+
+      return {
+        erc20InputAmount: cbBTCFormatted,
+        rfqQuote: rfqQuoteData,
+        expiresAt,
+      };
+    }
+
+    // Step 2: Get Uniswap quote for ERC20/ETH -> cbBTC using exact output
+    const uniswapRouter = createUniswapRouter();
+    const buyToken = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"; // cbBTC
+    const sellToken = selectedInputToken?.address || "ETH";
+
+    console.log(
+      "Getting Uniswap quote (exact output) for",
+      sellToken,
+      "->",
+      cbBTCAmountNeeded,
+      "cbBTC"
+    );
+
+    const uniswapQuote = await uniswapRouter.getQuote({
+      sellToken,
+      sellAmount: cbBTCAmountNeeded, // This is actually buyAmount for exact output
+      decimals: selectedInputToken.decimals,
+      userAddress,
+      slippageBps,
+      validFor,
+      router: "v3",
+      tradeType: "output",
+    });
+
+    // For exact output, the API returns the required input amount in buyAmount field
+    const erc20AmountNeeded = uniswapQuote.buyAmount;
+    console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units)");
+
+    // Apply slippage by increasing the input amount
+    const adjustedInputAmount = applySlippageExactOutput(erc20AmountNeeded, slippageBps);
+    console.log("Adjusted input amount after slippage:", adjustedInputAmount);
+
+    // Format the input amount for display
+    const erc20InputFormatted = formatUnits(
+      BigInt(adjustedInputAmount),
+      selectedInputToken.decimals
+    );
+
+    // Determine earliest expiration
+    const uniswapExpiration = uniswapQuote.expiresAt;
+    const rfqExpiration = new Date(rfqQuoteData.expires_at);
+    const expiresAt = uniswapExpiration < rfqExpiration ? uniswapExpiration : rfqExpiration;
+
+    console.log("Combined exact output quote complete:", {
+      btcOutputAmount,
+      erc20InputAmount: erc20InputFormatted,
+      expiresAt,
+    });
+
+    return {
+      uniswapQuote,
+      erc20InputAmount: erc20InputFormatted,
+      rfqQuote: rfqQuoteData,
+      expiresAt,
+    };
+  } catch (error: unknown) {
+    console.error("Failed to get ERC20 to BTC quote (exact output):", error);
+
+    // Handle specific error types
+    if (error instanceof RfqClientError) {
+      toastError(error, {
+        title: "RFQ Quote Failed",
+        description: error.message,
+      });
+    } else {
+      const description = error instanceof Error ? error.message : "Unknown error occurred";
+      toastError(error, {
+        title: "Quote Failed",
+        description,
+      });
+    }
+
+    return null;
+  }
+}
+
+/**
  * Calculate USD value for an amount based on swap direction and token prices
  * @param amount - The amount to calculate USD value for
  * @param isSwappingForBTC - Whether we're swapping for BTC (true) or from BTC (false)

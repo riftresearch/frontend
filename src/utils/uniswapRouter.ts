@@ -21,6 +21,8 @@ export interface UniswapQuoteRequest {
   userAddress: string;
   /** Router to use: "v3" for V2/V3 only, "v4" for V4 only, or undefined for both */
   router?: "v3" | "v4";
+  /** Trade type: "input" for exact input (default), "output" for exact output */
+  tradeType?: "input" | "output";
 }
 
 /**
@@ -117,6 +119,9 @@ export class UniswapRouterClient {
       }
       if (request.router !== undefined) {
         params.append("router", request.router);
+      }
+      if (request.tradeType !== undefined) {
+        params.append("tradeType", request.tradeType);
       }
 
       const response = await fetch(`${this.apiBaseUrl}?${params.toString()}`);

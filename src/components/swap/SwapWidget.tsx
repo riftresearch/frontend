@@ -54,6 +54,7 @@ import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useTDXAttestation } from "@/hooks/useTDXAttestation";
 import {
   getERC20ToBTCQuote,
+  getERC20ToBTCQuoteExactOutput,
   getCBBTCtoBTCQuote,
   isAboveMinSwap,
   applySlippage,
@@ -61,6 +62,7 @@ import {
   convertInputAmountToFullDecimals,
   calculateUsdValue,
   fetchGasParams,
+  getMinSwapValueUsd,
 } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
 
@@ -85,6 +87,7 @@ export const SwapWidget = () => {
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">("input");
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
+  const getQuoteForInputRef = useRef(true);
   const [bitcoinDepositInfo, setBitcoinDepositInfo] = useState<{
     address: string;
     amount: number;
@@ -105,6 +108,8 @@ export const SwapWidget = () => {
   // Refs
   const quoteRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const quoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const outputQuoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const quoteRequestIdRef = useRef(0);
 
   // Global store
   const {
@@ -325,7 +330,7 @@ export const SwapWidget = () => {
 
   // Fetch quote for ERC20/ETH -> BTC (combines CowSwap + RFQ)
   const fetchERC20ToBTCQuote = useCallback(
-    async (inputAmount?: string) => {
+    async (inputAmount?: string, requestId?: number) => {
       // Use provided amount or fall back to state
       const amountToQuote = inputAmount ?? rawInputAmount;
 
@@ -372,6 +377,12 @@ export const SwapWidget = () => {
           // For cbBTC, use direct RFQ quote
           const rfqQuoteResponse = await getCBBTCtoBTCQuote(sellAmount);
 
+          // Check if this is still the latest request
+          if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+            console.log("Ignoring stale quote response (cbBTC)", requestId);
+            return;
+          }
+
           if (rfqQuoteResponse) {
             setUniswapQuote(null); // No Uniswap needed for cbBTC
             setRfqQuote(rfqQuoteResponse);
@@ -395,6 +406,12 @@ export const SwapWidget = () => {
               : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
             slippageBips
           );
+
+          // Check if this is still the latest request
+          if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+            console.log("Ignoring stale quote response (ERC20)", requestId);
+            return;
+          }
 
           if (quoteResponse) {
             setUniswapQuote(quoteResponse.uniswapQuote);
@@ -425,6 +442,83 @@ export const SwapWidget = () => {
       setOutputAmount,
       ethPrice,
       erc20Price,
+      btcPrice,
+      slippageBips,
+    ]
+  );
+
+  // Fetch quote for ERC20/ETH -> BTC (exact output mode)
+  const fetchERC20ToBTCQuoteExactOutput = useCallback(
+    async (outputAmountOverride?: string, requestId?: number) => {
+      // Use provided amount or fall back to state
+      const btcAmountToQuote = outputAmountOverride ?? outputAmount;
+
+      if (!isSwappingForBTC || !btcAmountToQuote || parseFloat(btcAmountToQuote) <= 0) {
+        return;
+      }
+
+      if (!selectedInputToken) {
+        return;
+      }
+
+      // Check if the output BTC value is above minimum swap threshold
+      const outputValue = parseFloat(btcAmountToQuote);
+
+      if (btcPrice) {
+        const usdValue = outputValue * btcPrice;
+
+        if (!isAboveMinSwap(usdValue, btcPrice)) {
+          console.log("Output value below minimum swap threshold");
+          // Clear quotes but don't show error - just wait for larger amount
+          setUniswapQuote(null);
+          setRfqQuote(null);
+          setRawInputAmount("");
+          return;
+        }
+      }
+
+      try {
+        const quoteResponse = await getERC20ToBTCQuoteExactOutput(
+          btcAmountToQuote,
+          selectedInputToken,
+          userEvmAccountAddress
+            ? userEvmAccountAddress
+            : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+          slippageBips
+        );
+
+        // Check if this is still the latest request
+        if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+          console.log("Ignoring stale exact output quote response", requestId);
+          return;
+        }
+
+        if (quoteResponse) {
+          setUniswapQuote(quoteResponse.uniswapQuote || null);
+          setRfqQuote(quoteResponse.rfqQuote);
+          setRawInputAmount(quoteResponse.erc20InputAmount);
+          setQuote(quoteResponse.rfqQuote); // Keep for compatibility
+        } else {
+          // Clear state on failure
+          setUniswapQuote(null);
+          setRfqQuote(null);
+          setRawInputAmount("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch exact output quote:", error);
+        setUniswapQuote(null);
+        setRfqQuote(null);
+        setRawInputAmount("");
+      }
+    },
+    [
+      isSwappingForBTC,
+      outputAmount,
+      userEvmAccountAddress,
+      selectedInputToken,
+      setUniswapQuote,
+      setRfqQuote,
+      setRawInputAmount,
       btcPrice,
       slippageBips,
     ]
@@ -913,17 +1007,24 @@ export const SwapWidget = () => {
         clearTimeout(quoteDebounceTimerRef.current);
       }
 
-      // Set up debounced quote fetch (150ms delay)
+      // Set up debounced quote fetch (125ms delay)
       // Pass the value directly to avoid stale closure issues
-      if (value && parseFloat(value) > 0) {
+      if (value && parseFloat(value) > 0 && isSwappingForBTC && getQuoteForInputRef.current) {
+        // Increment request ID and capture it
+        quoteRequestIdRef.current += 1;
+        const currentRequestId = quoteRequestIdRef.current;
+
         quoteDebounceTimerRef.current = setTimeout(() => {
-          fetchERC20ToBTCQuote(value);
-        }, 150);
+          fetchERC20ToBTCQuote(value, currentRequestId);
+        }, 125);
       }
     }
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Set flag to indicate we should quote for input field
+    getQuoteForInputRef.current = true;
+
     // If value is "0." and user presses Backspace or Delete, clear both characters
     if (rawInputAmount === "0." && (e.key === "Backspace" || e.key === "Delete")) {
       e.preventDefault();
@@ -959,10 +1060,46 @@ export const SwapWidget = () => {
         false // isInputField
       );
       setOutputUsdValue(usdValue);
+
+      // Clear existing quotes when user types
+      setUniswapQuote(null);
+      setRfqQuote(null);
+      setQuote(null);
+
+      if (!value || parseFloat(value) <= 0) {
+        // Clear input if output is empty or 0
+        setRawInputAmount("");
+        setInputUsdValue(ZERO_USD_DISPLAY);
+      }
+
+      // Clear any existing debounce timer
+      if (outputQuoteDebounceTimerRef.current) {
+        clearTimeout(outputQuoteDebounceTimerRef.current);
+      }
+
+      // Set up debounced quote fetch (125ms delay)
+      if (value && parseFloat(value) > 0 && !getQuoteForInputRef.current) {
+        if (isSwappingForBTC) {
+          // Increment request ID and capture it
+          quoteRequestIdRef.current += 1;
+          const currentRequestId = quoteRequestIdRef.current;
+
+          // Fetch exact output quote for ERC20/ETH -> BTC
+          outputQuoteDebounceTimerRef.current = setTimeout(() => {
+            fetchERC20ToBTCQuoteExactOutput(value, currentRequestId);
+          }, 125);
+        } else {
+          // TODO: Implement BTC -> ERC20/ETH exact output quoting logic
+          console.log("Exact output quoting for BTC -> ERC20/ETH not yet implemented");
+        }
+      }
     }
   };
 
   const handleOutputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Set flag to indicate we should quote for output field
+    getQuoteForInputRef.current = false;
+
     // If value is "0." and user presses Backspace or Delete, clear both characters
     if (outputAmount === "0." && (e.key === "Backspace" || e.key === "Delete")) {
       e.preventDefault();
@@ -973,6 +1110,9 @@ export const SwapWidget = () => {
 
   const handleMaxClick = () => {
     if (!currentInputBalance) return;
+
+    // Set flag to indicate we should quote for input field
+    getQuoteForInputRef.current = true;
 
     // Set the balance as the input amount
     setRawInputAmount(currentInputBalance);
@@ -990,6 +1130,26 @@ export const SwapWidget = () => {
       true // isInputField
     );
     setInputUsdValue(usdValue);
+
+    // Clear existing quotes when max is clicked
+    setUniswapQuote(null);
+    setRfqQuote(null);
+    setQuote(null);
+
+    // Clear any existing debounce timer
+    if (quoteDebounceTimerRef.current) {
+      clearTimeout(quoteDebounceTimerRef.current);
+    }
+
+    // Fetch quote immediately (no debounce for MAX button)
+    if (parseFloat(currentInputBalance) > 0 && isSwappingForBTC && getQuoteForInputRef.current) {
+      // Increment request ID and capture it
+      quoteRequestIdRef.current += 1;
+      const currentRequestId = quoteRequestIdRef.current;
+
+      // Fetch immediately
+      fetchERC20ToBTCQuote(currentInputBalance, currentRequestId);
+    }
   };
 
   // Handle keyboard events (Enter to submit)
@@ -1016,10 +1176,13 @@ export const SwapWidget = () => {
     setPayoutAddress("");
     setBitcoinDepositInfo(null);
 
-    // Cleanup debounce timer on unmount
+    // Cleanup debounce timers on unmount
     return () => {
       if (quoteDebounceTimerRef.current) {
         clearTimeout(quoteDebounceTimerRef.current);
+      }
+      if (outputQuoteDebounceTimerRef.current) {
+        clearTimeout(outputQuoteDebounceTimerRef.current);
       }
     };
   }, [setRawInputAmount, setOutputAmount, setInputUsdValue, setOutputUsdValue]);
@@ -1135,9 +1298,19 @@ export const SwapWidget = () => {
       (uniswapQuote || rfqQuote)
     ) {
       // Set up 15-second refresh interval
-      // Don't pass a value to fetchERC20ToBTCQuote - it will use current rawInputAmount from state
+      // Respect which field the user is editing
       quoteRefreshIntervalRef.current = setInterval(() => {
-        fetchERC20ToBTCQuote();
+        // Increment request ID and capture it
+        quoteRequestIdRef.current += 1;
+        const currentRequestId = quoteRequestIdRef.current;
+
+        if (getQuoteForInputRef.current) {
+          // User is editing input field - fetch exact input quote
+          fetchERC20ToBTCQuote(undefined, currentRequestId);
+        } else {
+          // User is editing output field - fetch exact output quote
+          fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
+        }
       }, 15000);
     }
 
@@ -1155,6 +1328,7 @@ export const SwapWidget = () => {
     uniswapQuote,
     rfqQuote,
     fetchERC20ToBTCQuote,
+    fetchERC20ToBTCQuoteExactOutput,
   ]);
 
   // Update current input balance when wallet connection or token selection changes
