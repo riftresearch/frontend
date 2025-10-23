@@ -39,9 +39,8 @@ export const GridFlex = forwardRef<HTMLDivElement, GridFlexProps>(
   ) => {
     const GRID_FLEX_COLORS = {
       background: "#090909",
-      gridLine: "#202020",
-      borderGradient:
-        "linear-gradient(to bottom, #242424 0%, #4E4E4E 56%, #252525 100%)",
+      gridLine: "#191919",
+      borderGradient: "linear-gradient(to bottom, #242424 0%, #4E4E4E 56%, #252525 100%)",
     } as const;
     const borderRadiusPx = 30; // px
     const borderWidthPx = 2; // px
@@ -81,25 +80,19 @@ export const GridFlex = forwardRef<HTMLDivElement, GridFlexProps>(
     const gridBackgroundPosition = `${blockSize / 2}px 0, 0 ${blockSize / 2}px`;
 
     // Normalize shorthand alignment props (left/right/top/bottom → flex-start/end)
-    const normalizeAlign = (
-      value?: string
-    ): "flex-start" | "center" | "flex-end" | undefined => {
+    const normalizeAlign = (value?: string): "flex-start" | "center" | "flex-end" | undefined => {
       if (!value) return undefined;
       const v = value.toLowerCase();
-      if (v === "left" || v === "top" || v === "start" || v === "flex-start")
-        return "flex-start";
-      if (v === "right" || v === "bottom" || v === "end" || v === "flex-end")
-        return "flex-end";
+      if (v === "left" || v === "top" || v === "start" || v === "flex-start") return "flex-start";
+      if (v === "right" || v === "bottom" || v === "end" || v === "flex-end") return "flex-end";
       if (v === "center") return "center";
       return undefined;
     };
 
     const anyProps = flexProps as any;
-    const contentAlignItems =
-      normalizeAlign(anyProps.alignItems || anyProps.align) || "flex-start";
+    const contentAlignItems = normalizeAlign(anyProps.alignItems || anyProps.align) || "flex-start";
     const contentJustify =
-      normalizeAlign(anyProps.justifyContent || anyProps.justify) ||
-      "flex-start";
+      normalizeAlign(anyProps.justifyContent || anyProps.justify) || "flex-start";
 
     return (
       <Flex

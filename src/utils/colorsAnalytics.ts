@@ -10,7 +10,7 @@ export const colorsAnalytics = {
   purpleBorderDark: "#303F9F",
   purpleButtonBG: "#1B2144",
 
-  greenBackground: "#1A4734",
+  greenBackground: "#0f3025",
   greenOutline: "#48C94D",
   green: "#125641",
 

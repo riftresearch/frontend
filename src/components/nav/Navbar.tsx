@@ -32,9 +32,7 @@ export const Navbar = ({}) => {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const transactionConfirmed = useStore((state) => state.transactionConfirmed);
 
-  const [displayWarning, setDisplayWarning] = useState<boolean | undefined>(
-    undefined
-  );
+  const [displayWarning, setDisplayWarning] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     setDisplayWarning(!isDismissWarning("dismissAlphaWarning"));
@@ -49,8 +47,7 @@ export const Navbar = ({}) => {
     // If navigating to "/" from a swap page, reset swap state
     if (route === "/" && router.pathname.includes("/swap")) {
       // Clear swap state when navigating back to main page
-      const { setSwapResponse, setDepositFlowState, setTransactionConfirmed } =
-        useStore.getState();
+      const { setSwapResponse, setDepositFlowState, setTransactionConfirmed } = useStore.getState();
       setSwapResponse(null);
       setDepositFlowState("0-not-started");
       setTransactionConfirmed(false);
@@ -83,8 +80,7 @@ export const Navbar = ({}) => {
         >
           {text}
         </Text>
-        {(router.pathname === route ||
-          (route === "/" && router.pathname.includes("/swap"))) && (
+        {(router.pathname === route || (route === "/" && router.pathname.includes("/swap"))) && (
           <Flex
             position={"absolute"}
             top="31px"
@@ -152,7 +148,7 @@ export const Navbar = ({}) => {
         w="100%"
         h="130%"
       ></Flex>
-      {displayWarning == true && (
+      {/* {displayWarning == true && (
         <>
           <Flex
             bgGradient="linear(90deg, rgba(223, 111, 19, 1), rgba(39, 46, 221, 1))"
@@ -165,8 +161,8 @@ export const Navbar = ({}) => {
             position="relative"
           >
             <GlowingShimmerText>
-              The Rift early alpha is awaiting audits - swaps are limited to 100
-              USDT - use at your own risk
+              The Rift early alpha is awaiting audits - swaps are limited to 100 USDT - use at your
+              own risk
             </GlowingShimmerText>
             <Flex
               // h='100%'
@@ -205,28 +201,20 @@ export const Navbar = ({}) => {
             mb="-10px"
           />
         </>
-      )}
+      )} */}
 
       <Flex direction="row" w="100%" px={"30px"} pt="25px" zIndex={400}>
         <Flex gap="12px">
           {navItem("Swap", "/")}
-          {/* {navItem("Activity", "/activity")} */}
+          {navItem("History", "/history")}
           {/* {navItem('OTC', '/otc')} */}
         </Flex>
         <Flex ml="25px" gap="30px" align="center">
-          <a
-            href="https://x.com/riftdex"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href="https://x.com/riftdex" target="_blank" rel="noopener noreferrer">
             <Image src="/images/social/x.svg" w="17px" aspectRatio={1} />
           </a>
           <Flex mt="1px">
-            <a
-              href="https://t.me/riftdex"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://t.me/riftdex" target="_blank" rel="noopener noreferrer">
               <Image
                 src="/images/social/telegram.svg"
                 objectFit="contain"

@@ -43,17 +43,41 @@ function formatBTC(n: number) {
 function parseDurationToSeconds(duration?: string): number {
   if (!duration) return 0;
   const parts = duration.split(":");
-  if (parts.length !== 2) return 0;
-  const m = Number(parts[0]);
-  const s = Number(parts[1]);
-  if (Number.isNaN(m) || Number.isNaN(s)) return 0;
-  return m * 60 + s;
+
+  // Handle both hh:mm:ss and mm:ss formats
+  if (parts.length === 3) {
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
+    const s = Number(parts[2]);
+    if (Number.isNaN(h) || Number.isNaN(m) || Number.isNaN(s)) return 0;
+    return h * 3600 + m * 60 + s;
+  } else if (parts.length === 2) {
+    const m = Number(parts[0]);
+    const s = Number(parts[1]);
+    if (Number.isNaN(m) || Number.isNaN(s)) return 0;
+    return m * 60 + s;
+  }
+
+  return 0;
 }
 
 function formatSecondsToMinSec(seconds: number): string {
-  const m = Math.floor(seconds / 60);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = Math.max(0, Math.floor(seconds % 60));
-  return `${m}:${s.toString().padStart(2, "0")}`;
+
+  // Only seconds (less than 1 minute)
+  if (h === 0 && m === 0) {
+    return `${s}`;
+  }
+
+  // Minutes and seconds (less than 1 hour)
+  if (h === 0) {
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  // Hours, minutes, and seconds
+  return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
 const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
@@ -80,10 +104,16 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       return;
     }
 
+    // Add 0x prefix to Ethereum transaction hashes if missing
+    let txHash = step.txHash;
+    if (step.txChain !== "BTC" && !txHash.startsWith("0x")) {
+      txHash = `0x${txHash}`;
+    }
+
     const url =
       step.txChain === "ETH"
-        ? `https://etherscan.io/tx/${step.txHash}`
-        : `https://mempool.space/tx/${step.txHash}`;
+        ? `https://etherscan.io/tx/${txHash}`
+        : `https://mempool.space/tx/${txHash}`;
 
     window.open(url, "_blank");
   };
@@ -109,6 +139,9 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
   };
   const s = styleByState();
 
+  // Check if this is a confirmation pill
+  const isConfsPill = displayedLabel.includes("Conf");
+
   const pillContent = (
     <Flex
       align="center"
@@ -123,6 +156,8 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
       onClick={isClickable ? handleClick : undefined}
       _hover={isClickable ? { filter: "brightness(1.1)", transform: "scale(1.02)" } : undefined}
       transition="all 150ms ease"
+      minW={isConfsPill ? "80px" : undefined}
+      justifyContent={isConfsPill ? "center" : undefined}
     >
       <Text fontSize="11px" fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayedLabel}
@@ -185,6 +220,9 @@ const StepWithTime: React.FC<{
     return undefined;
   }, [step.duration, step.state, previousStepTimestamp, currentTime]);
 
+  const isCompleted = step.state === "completed";
+  const showIcon = displayDuration || isCompleted;
+
   return (
     <Flex direction="column" align="center" justify="flex-start" minW="auto" letterSpacing={"0px"}>
       <Flex
@@ -193,11 +231,15 @@ const StepWithTime: React.FC<{
         gap="6px"
         mb="6px"
         h={`${timeRowHeight}px`}
-        visibility={displayDuration ? "visible" : "hidden"}
+        visibility={showIcon ? "visible" : "hidden"}
       >
-        <FiClock color={colorsAnalytics.textGray} size={12} />
+        {isCompleted ? (
+          <FiCheck color={colorsAnalytics.textGray} size={12} />
+        ) : (
+          <FiClock color={colorsAnalytics.textGray} size={12} />
+        )}
         <Text fontSize="11px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-          {displayDuration || "0:00"}
+          {displayDuration || ""}
         </Text>
       </Flex>
       <Pill step={step} />
@@ -228,13 +270,13 @@ const FinalTime: React.FC<{
   }, [completed, totalSeconds, swapCreatedTimestamp, currentTime]);
 
   return (
-    <Flex direction="column" align="center" justify="center" minW="60px">
+    <Flex direction="column" align="center" justify="center" minW="45px">
       {completed ? (
-        <FiCheck color={colorsAnalytics.greenOutline} size={16} />
+        <FiCheck color={colorsAnalytics.greenOutline} size={11} />
       ) : (
-        <FiClock color={colorsAnalytics.textGray} size={12} />
+        <FiClock color={colorsAnalytics.textGray} size={10} />
       )}
-      <Text mt="6px" fontSize="14px" color={color} fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Text mt="6px" fontSize="11px" color={color} fontFamily={FONT_FAMILIES.SF_PRO}>
         {displayTime}
       </Text>
     </Flex>
@@ -310,7 +352,12 @@ const Row: React.FC<{
           }
         }}
       >
-        <Box w="119px">
+        <Box w="50px">
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+            {swap.rawData?.swap_number || swap.rawData?.swapNumber || "—"}
+          </Text>
+        </Box>
+        <Box w="107px">
           <Flex
             as="button"
             onClick={(e) => {
@@ -318,7 +365,7 @@ const Row: React.FC<{
               navigator.clipboard.writeText(swap.id);
               toastSuccess({
                 title: "Copied to clipboard",
-                description: `Swap ID: ${swap.id.slice(0, 8)}...`,
+                description: `Swap ID: ${swap.id.slice(0, 6)}...`,
               });
             }}
             bg="#1D1D1D"
@@ -331,20 +378,20 @@ const Row: React.FC<{
             alignItems="center"
           >
             <Text
-              fontSize="14px"
+              fontSize="13px"
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
-              {swap.id.slice(0, 8)}...
+              {swap.id.slice(0, 6)}...
             </Text>
           </Flex>
         </Box>
-        <Box w="114px">
-          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+        <Box w="109px">
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {timeAgoFrom(currentTime, swap.swapCreationTimestamp)}
           </Text>
         </Box>
-        <Box w="125px">
+        <Box w="115px">
           <Flex
             as="button"
             onClick={(e) => {
@@ -361,7 +408,7 @@ const Row: React.FC<{
             alignItems="center"
           >
             <Text
-              fontSize="14px"
+              fontSize="13px"
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
@@ -370,32 +417,32 @@ const Row: React.FC<{
           </Flex>
         </Box>
         <Box w="91px">
-          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {swap.direction === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"}
           </Text>
         </Box>
 
-        <Box w="156px">
-          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+        <Box w="150px">
+          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatUSD(swap.swapInitialAmountUsd)}
           </Text>
-          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatBTC(swap.swapInitialAmountBtc)}
           </Text>
         </Box>
         <Box w="95px">
-          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatUSD(riftFeeUsd)}
           </Text>
-          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {swap.riftFeeSats.toLocaleString()} sats
           </Text>
         </Box>
         <Box w="103px">
-          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             MM - {formatUSD(swap.mmFeeUsd)}
           </Text>
-          <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             GAS - {formatUSD(swap.networkFeeUsd)}
           </Text>
         </Box>
@@ -877,19 +924,22 @@ export const SwapHistory: React.FC<{
             justify="space-between"
           >
             <Flex align="center" flex="1">
-              <Box w="119px">
+              <Box w="50px">
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>#</Text>
+              </Box>
+              <Box w="107px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap ID</Text>
               </Box>
-              <Box w="114px">
+              <Box w="109px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Time</Text>
               </Box>
-              <Box w="125px">
+              <Box w="115px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
               </Box>
               <Box w="91px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Direction</Text>
               </Box>
-              <Box w="156px">
+              <Box w="150px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Amount</Text>
               </Box>
               <Box w="95px">
@@ -899,7 +949,7 @@ export const SwapHistory: React.FC<{
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Other Fees</Text>
               </Box>
               <Flex flex="1">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap Flow</Text>
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Flow</Text>
               </Flex>
             </Flex>
 

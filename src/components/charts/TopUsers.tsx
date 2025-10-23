@@ -83,7 +83,7 @@ function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
   const prefix = addr.startsWith("0x") ? "0x" : "";
   const hex = addr.replace(/^0x/, "");
-  return `${prefix}${hex.slice(0, 6)}...${hex.slice(-4)}`;
+  return `${prefix}${hex.slice(0, 9)}...${hex.slice(-6)}`;
 }
 
 function formatUSD(n: number) {

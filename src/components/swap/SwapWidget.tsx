@@ -63,6 +63,10 @@ import {
   fetchGasParams,
 } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
+import {
+  EVMAccountWarningModal,
+  hasAcknowledgedEVMWarning,
+} from "@/components/other/EVMAccountWarningModal";
 
 export const SwapWidget = () => {
   // ============================================================================
@@ -93,6 +97,9 @@ export const SwapWidget = () => {
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
+
+  // EVM warning modal state
+  const [showEVMWarning, setShowEVMWarning] = useState(false);
 
   // Token approval state
   const [pendingSwapTransaction, setPendingSwapTransaction] = useState<{
@@ -499,10 +506,21 @@ export const SwapWidget = () => {
     }
   };
 
+  // Handle EVM warning confirmation
+  const handleEVMWarningConfirm = async (): Promise<void> => {
+    setShowEVMWarning(false);
+    await reownModal.open();
+  };
+
   // Main swap handler - routes to appropriate swap function
   const handleSwap = async () => {
     try {
       if (!isWalletConnected) {
+        // Check if user has already acknowledged the EVM warning
+        if (!hasAcknowledgedEVMWarning()) {
+          setShowEVMWarning(true);
+          return;
+        }
         // Open wallet connection modal instead of showing toast
         await reownModal.open();
         return;
@@ -1242,328 +1260,299 @@ export const SwapWidget = () => {
   }, [handleKeyDown]);
 
   return (
-    <Flex
-      direction="column"
-      align="center"
-      py={isMobile ? "20px" : "27px"}
-      w={isMobile ? "100%" : "630px"}
-      borderRadius="30px"
-      {...opaqueBackgroundColor}
-      borderBottom={borderColor}
-      borderLeft={borderColor}
-      borderTop={borderColor}
-      borderRight={borderColor}
-    >
-      <Flex w="91.5%" direction="column">
-        {/* Input Asset Section */}
-        <Flex w="100%" flexDir="column" position="relative">
-          <Flex
-            px="10px"
-            bg={inputStyle?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
-            w="100%"
-            h="121px"
-            border="2px solid"
-            borderColor={inputStyle?.bg_color || "#255283"}
-            borderRadius="16px"
-          >
-            <Flex direction="column" py="12px" px="8px">
-              <Flex align="center" justify="space-between">
-                <Text
-                  color={!rawInputAmount ? colors.offWhite : colors.textGray}
-                  fontSize="14px"
-                  letterSpacing="-1px"
-                  fontWeight="normal"
-                  fontFamily="Aux"
-                  userSelect="none"
-                >
-                  You Send
-                </Text>
-              </Flex>
+    <>
+      <EVMAccountWarningModal isOpen={showEVMWarning} onConfirm={handleEVMWarningConfirm} />
 
-              <Input
-                value={rawInputAmount}
-                onChange={handleInputChange}
-                onKeyDown={handleInputKeyDown}
-                fontFamily="Aux"
-                border="none"
-                bg="transparent"
-                outline="none"
-                mt="6px"
-                mr="-150px"
-                ml="-5px"
-                p="0px"
-                letterSpacing="-6px"
-                color={colors.offWhite}
-                _active={{ border: "none", boxShadow: "none", outline: "none" }}
-                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
-                _selected={{
-                  border: "none",
-                  boxShadow: "none",
-                  outline: "none",
-                }}
-                fontSize="46px"
-                placeholder="0.0"
-                _placeholder={{
-                  color: inputStyle?.light_text_color || "#4A90E2",
-                }}
-              />
-
-              <Text
-                color={!rawInputAmount ? colors.offWhite : colors.textGray}
-                fontSize="14px"
-                mt="6px"
-                ml="1px"
-                letterSpacing="-1px"
-                fontWeight="normal"
-                fontFamily="Aux"
-              >
-                {inputUsdValue}
-              </Text>
-            </Flex>
-
-            <Spacer />
-            <Flex mr="8px" py="12px" direction="column" align="flex-end" justify="center" h="100%">
-              <Flex direction="row" justify="flex-end" h="21px" align="center">
-                {currentInputBalance && (
-                  <Button
-                    onClick={handleMaxClick}
-                    size="xs"
-                    h="21px"
-                    px="10px"
-                    bg={colors.swapBgColor}
-                    color={colors.offWhite}
-                    fontSize="12px"
-                    fontWeight="bold"
-                    fontFamily="Aux"
-                    letterSpacing="-0.5px"
-                    border="1px solid"
-                    borderColor={colors.swapBorderColor}
-                    borderRadius="6px"
-                    cursor="pointer"
-                    transition="all 0.2s"
-                    _hover={{
-                      bg: colors.swapBorderColor,
-                    }}
-                    _active={{
-                      transform: "scale(0.95)",
-                    }}
-                  >
-                    MAX
-                  </Button>
-                )}
-              </Flex>
-              {/* <Spacer /> */}
-              <Flex align="center" justify="center" direction="column" mt="6px">
-                <WebAssetTag
-                  cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
-                  asset={inputAssetIdentifier}
-                  onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
-                />
-              </Flex>
-              <Spacer />
-              <Flex direction="row" justify="flex-end">
-                {currentInputBalance && currentInputTicker && (
+      <Flex
+        direction="column"
+        align="center"
+        py={isMobile ? "20px" : "27px"}
+        w={isMobile ? "100%" : "630px"}
+        borderRadius="30px"
+        {...opaqueBackgroundColor}
+        borderBottom={borderColor}
+        borderLeft={borderColor}
+        borderTop={borderColor}
+        borderRight={borderColor}
+      >
+        <Flex w="91.5%" direction="column">
+          {/* Input Asset Section */}
+          <Flex w="100%" flexDir="column" position="relative">
+            <Flex
+              px="10px"
+              bg={inputStyle?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
+              w="100%"
+              h="121px"
+              border="2px solid"
+              borderColor={inputStyle?.bg_color || "#255283"}
+              borderRadius="16px"
+            >
+              <Flex direction="column" py="12px" px="8px">
+                <Flex align="center" justify="space-between">
                   <Text
-                    mt="6px"
-                    color={colors.textGray}
+                    color={!rawInputAmount ? colors.offWhite : colors.textGray}
                     fontSize="14px"
                     letterSpacing="-1px"
                     fontWeight="normal"
                     fontFamily="Aux"
                     userSelect="none"
                   >
-                    {currentInputBalance} {currentInputTicker}
+                    You Send
                   </Text>
-                )}
+                </Flex>
+
+                <Input
+                  value={rawInputAmount}
+                  onChange={handleInputChange}
+                  onKeyDown={handleInputKeyDown}
+                  fontFamily="Aux"
+                  border="none"
+                  bg="transparent"
+                  outline="none"
+                  mt="6px"
+                  mr="-150px"
+                  ml="-5px"
+                  p="0px"
+                  letterSpacing="-6px"
+                  color={colors.offWhite}
+                  _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _selected={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                  fontSize="46px"
+                  placeholder="0.0"
+                  _placeholder={{
+                    color: inputStyle?.light_text_color || "#4A90E2",
+                  }}
+                />
+
+                <Text
+                  color={!rawInputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  mt="6px"
+                  ml="1px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                >
+                  {inputUsdValue}
+                </Text>
               </Flex>
-            </Flex>
-          </Flex>
 
-          {/* Swap Arrow */}
-          <Flex
-            zIndex="overlay"
-            w="36px"
-            h="36px"
-            borderRadius="20%"
-            alignSelf="center"
-            align="center"
-            justify="center"
-            cursor="pointer"
-            _hover={{ bg: "#333" }}
-            onClick={handleSwapReverse}
-            bg="#161616"
-            border="2px solid #323232"
-            mt="-16px"
-            mb="-20px"
-            position="relative"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="22px" height="22px" viewBox="0 0 20 20">
-              <path
-                fill="#909090"
-                fillRule="evenodd"
-                d="M2.24 6.8a.75.75 0 0 0 1.06-.04l1.95-2.1v8.59a.75.75 0 0 0 1.5 0V4.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L2.2 5.74a.75.75 0 0 0 .04 1.06m8 6.4a.75.75 0 0 0-.04 1.06l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75a.75.75 0 0 0-1.5 0v8.59l-1.95-2.1a.75.75 0 0 0-1.06-.04"
-                clipRule="evenodd"
-              />
-            </svg>
-          </Flex>
-
-          {/* Output Asset Section */}
-          <Flex
-            mt="5px"
-            px="10px"
-            bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
-            w="100%"
-            h="121px"
-            border="2px solid"
-            borderColor={outputStyle?.bg_color || "#78491F"}
-            borderRadius="16px"
-          >
-            <Flex direction="column" py="12px" px="8px">
-              <Text
-                color={!outputAmount ? colors.offWhite : colors.textGray}
-                fontSize="14px"
-                letterSpacing="-1px"
-                fontWeight="normal"
-                fontFamily="Aux"
-                userSelect="none"
+              <Spacer />
+              <Flex
+                mr="8px"
+                py="12px"
+                direction="column"
+                align="flex-end"
+                justify="center"
+                h="100%"
               >
-                You Receive
-              </Text>
-
-              <Input
-                value={outputAmount}
-                onChange={handleOutputChange}
-                onKeyDown={handleOutputKeyDown}
-                fontFamily="Aux"
-                border="none"
-                bg="transparent"
-                outline="none"
-                mt="6px"
-                mr="-150px"
-                ml="-5px"
-                p="0px"
-                letterSpacing="-6px"
-                color={colors.offWhite}
-                _active={{ border: "none", boxShadow: "none", outline: "none" }}
-                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
-                _selected={{
-                  border: "none",
-                  boxShadow: "none",
-                  outline: "none",
-                }}
-                fontSize="46px"
-                placeholder="0.0"
-                _placeholder={{
-                  color: outputStyle?.light_text_color || "#805530",
-                }}
-              />
-
-              <Text
-                color={!outputAmount ? colors.offWhite : colors.textGray}
-                fontSize="14px"
-                mt="6px"
-                ml="1px"
-                letterSpacing="-1px"
-                fontWeight="normal"
-                fontFamily="Aux"
-              >
-                {outputUsdValue}
-              </Text>
-            </Flex>
-
-            <Spacer />
-            <Flex mr="8px">
-              <WebAssetTag
-                cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
-                asset={outputAssetIdentifier}
-                onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
-              />
-            </Flex>
-          </Flex>
-
-          {/* Exchange Rate */}
-          <Flex mt="12px">
-            <Text
-              color={colors.textGray}
-              fontSize="14px"
-              ml="3px"
-              letterSpacing="-1.5px"
-              fontWeight="normal"
-              fontFamily="Aux"
-            >
-              {quote && quote.from.amount && quote.to.amount
-                ? `1 ${inputStyle?.symbol} = ${(parseFloat(formatLotAmount(quote.to)) / parseFloat(formatLotAmount(quote.from))).toFixed(6)} ${outputStyle?.symbol}`
-                : `1 ${inputStyle?.symbol} = 1 ${outputStyle?.symbol}`}
-            </Text>
-            <Spacer />
-            <Flex
-              color={colors.textGray}
-              fontSize="13px"
-              mr="3px"
-              letterSpacing="-1.5px"
-              fontWeight="normal"
-              fontFamily="Aux"
-            >
-              <ChakraTooltip.Root>
-                <ChakraTooltip.Trigger asChild>
-                  <Flex pr="3px" mt="-2px" cursor="pointer" userSelect="none">
-                    <Text
-                      color={colors.textGray}
-                      fontSize="14px"
-                      mr="8px"
-                      mt="1px"
-                      letterSpacing="-1.5px"
-                      fontWeight="normal"
-                      fontFamily="Aux"
-                    >
-                      Includes Fees
-                    </Text>
-                    <Flex mt="0px" mr="2px">
-                      <InfoSVG width="14px" />
-                    </Flex>
-                  </Flex>
-                </ChakraTooltip.Trigger>
-                <Portal>
-                  <ChakraTooltip.Positioner>
-                    <ChakraTooltip.Content
+                <Flex direction="row" justify="flex-end" h="21px" align="center">
+                  {currentInputBalance && (
+                    <Button
+                      onClick={handleMaxClick}
+                      size="xs"
+                      h="21px"
+                      px="10px"
+                      bg={colors.swapBgColor}
+                      color={colors.offWhite}
+                      fontSize="12px"
+                      fontWeight="bold"
                       fontFamily="Aux"
                       letterSpacing="-0.5px"
-                      color={colors.offWhite}
-                      bg="#121212"
-                      fontSize="12px"
+                      border="1px solid"
+                      borderColor={colors.swapBorderColor}
+                      borderRadius="6px"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        bg: colors.swapBorderColor,
+                      }}
+                      _active={{
+                        transform: "scale(0.95)",
+                      }}
                     >
-                      Exchange rate includes protocol fees. No additional fees.
-                    </ChakraTooltip.Content>
-                  </ChakraTooltip.Positioner>
-                </Portal>
-              </ChakraTooltip.Root>
+                      MAX
+                    </Button>
+                  )}
+                </Flex>
+                {/* <Spacer /> */}
+                <Flex align="center" justify="center" direction="column" mt="6px">
+                  <WebAssetTag
+                    cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                    asset={inputAssetIdentifier}
+                    onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                  />
+                </Flex>
+                <Spacer />
+                <Flex direction="row" justify="flex-end">
+                  {currentInputBalance && currentInputTicker && (
+                    <Text
+                      mt="6px"
+                      color={colors.textGray}
+                      fontSize="14px"
+                      letterSpacing="-1px"
+                      fontWeight="normal"
+                      fontFamily="Aux"
+                      userSelect="none"
+                    >
+                      {currentInputBalance} {currentInputTicker}
+                    </Text>
+                  )}
+                </Flex>
+              </Flex>
             </Flex>
-          </Flex>
 
-          {/* Recipient Address - Animated (appears second) */}
-          {isSwappingForBTC && (
+            {/* Swap Arrow */}
             <Flex
-              direction="column"
-              w="100%"
-              mb="5px"
-              opacity={hasStartedTyping ? 1 : 0}
-              transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
-              transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-              transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
-              pointerEvents={hasStartedTyping ? "auto" : "none"}
-              overflow="hidden"
-              maxHeight={hasStartedTyping ? "200px" : "0px"}
+              zIndex="overlay"
+              w="36px"
+              h="36px"
+              borderRadius="20%"
+              alignSelf="center"
+              align="center"
+              justify="center"
+              cursor="pointer"
+              _hover={{ bg: "#333" }}
+              onClick={handleSwapReverse}
+              bg="#161616"
+              border="2px solid #323232"
+              mt="-16px"
+              mb="-20px"
+              position="relative"
             >
-              {/* Payout Recipient Address */}
-              <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
-                <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
-                  Bitcoin Recipient Address
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22px"
+                height="22px"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill="#909090"
+                  fillRule="evenodd"
+                  d="M2.24 6.8a.75.75 0 0 0 1.06-.04l1.95-2.1v8.59a.75.75 0 0 0 1.5 0V4.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L2.2 5.74a.75.75 0 0 0 .04 1.06m8 6.4a.75.75 0 0 0-.04 1.06l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75a.75.75 0 0 0-1.5 0v8.59l-1.95-2.1a.75.75 0 0 0-1.06-.04"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </Flex>
+
+            {/* Output Asset Section */}
+            <Flex
+              mt="5px"
+              px="10px"
+              bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
+              w="100%"
+              h="121px"
+              border="2px solid"
+              borderColor={outputStyle?.bg_color || "#78491F"}
+              borderRadius="16px"
+            >
+              <Flex direction="column" py="12px" px="8px">
+                <Text
+                  color={!outputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                  userSelect="none"
+                >
+                  You Receive
                 </Text>
+
+                <Input
+                  value={outputAmount}
+                  onChange={handleOutputChange}
+                  onKeyDown={handleOutputKeyDown}
+                  fontFamily="Aux"
+                  border="none"
+                  bg="transparent"
+                  outline="none"
+                  mt="6px"
+                  mr="-150px"
+                  ml="-5px"
+                  p="0px"
+                  letterSpacing="-6px"
+                  color={colors.offWhite}
+                  _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _selected={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                  fontSize="46px"
+                  placeholder="0.0"
+                  _placeholder={{
+                    color: outputStyle?.light_text_color || "#805530",
+                  }}
+                />
+
+                <Text
+                  color={!outputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  mt="6px"
+                  ml="1px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                >
+                  {outputUsdValue}
+                </Text>
+              </Flex>
+
+              <Spacer />
+              <Flex mr="8px">
+                <WebAssetTag
+                  cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                  asset={outputAssetIdentifier}
+                  onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                />
+              </Flex>
+            </Flex>
+
+            {/* Exchange Rate */}
+            <Flex mt="12px">
+              <Text
+                color={colors.textGray}
+                fontSize="14px"
+                ml="3px"
+                letterSpacing="-1.5px"
+                fontWeight="normal"
+                fontFamily="Aux"
+              >
+                {quote && quote.from.amount && quote.to.amount
+                  ? `1 ${inputStyle?.symbol} = ${(parseFloat(formatLotAmount(quote.to)) / parseFloat(formatLotAmount(quote.from))).toFixed(6)} ${outputStyle?.symbol}`
+                  : `1 ${inputStyle?.symbol} = 1 ${outputStyle?.symbol}`}
+              </Text>
+              <Spacer />
+              <Flex
+                color={colors.textGray}
+                fontSize="13px"
+                mr="3px"
+                letterSpacing="-1.5px"
+                fontWeight="normal"
+                fontFamily="Aux"
+              >
                 <ChakraTooltip.Root>
                   <ChakraTooltip.Trigger asChild>
-                    <Flex pl="5px" mt="-2px" cursor="pointer" userSelect="none">
+                    <Flex pr="3px" mt="-2px" cursor="pointer" userSelect="none">
+                      <Text
+                        color={colors.textGray}
+                        fontSize="14px"
+                        mr="8px"
+                        mt="1px"
+                        letterSpacing="-1.5px"
+                        fontWeight="normal"
+                        fontFamily="Aux"
+                      >
+                        Includes Fees
+                      </Text>
                       <Flex mt="0px" mr="2px">
-                        <InfoSVG width="12px" />
+                        <InfoSVG width="14px" />
                       </Flex>
                     </Flex>
                   </ChakraTooltip.Trigger>
@@ -1576,87 +1565,185 @@ export const SwapWidget = () => {
                         bg="#121212"
                         fontSize="12px"
                       >
-                        Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported.
+                        Exchange rate includes protocol fees. No additional fees.
                       </ChakraTooltip.Content>
                     </ChakraTooltip.Positioner>
                   </Portal>
                 </ChakraTooltip.Root>
               </Flex>
-              <Flex
-                mt="-4px"
-                mb="10px"
-                px="10px"
-                bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
-                border={`2px solid ${outputStyle?.bg_color || "#78491F"}`}
-                w="100%"
-                h="60px"
-                borderRadius="16px"
-              >
-                <Flex direction="row" py="6px" px="8px">
-                  <Input
-                    value={payoutAddress}
-                    onChange={(e) => setPayoutAddress(e.target.value)}
-                    fontFamily="Aux"
-                    border="none"
-                    bg="transparent"
-                    outline="none"
-                    mt="3.5px"
-                    mr="15px"
-                    ml="-4px"
-                    p="0px"
-                    w="500px"
-                    letterSpacing="-5px"
-                    color={colors.offWhite}
-                    _active={{
-                      border: "none",
-                      boxShadow: "none",
-                      outline: "none",
-                    }}
-                    _focus={{
-                      border: "none",
-                      boxShadow: "none",
-                      outline: "none",
-                    }}
-                    _selected={{
-                      border: "none",
-                      boxShadow: "none",
-                      outline: "none",
-                    }}
-                    fontSize="28px"
-                    placeholder="bc1q5d7rjq7g6rd2d..."
-                    _placeholder={{
-                      color: outputStyle?.light_text_color || "#856549",
-                    }}
-                    spellCheck={false}
-                  />
+            </Flex>
 
-                  {payoutAddress.length > 0 && (
-                    <Flex ml="0px">
-                      <BitcoinAddressValidation
-                        address={payoutAddress}
-                        validation={addressValidation}
-                      />
-                    </Flex>
-                  )}
+            {/* Recipient Address - Animated (appears second) */}
+            {isSwappingForBTC && (
+              <Flex
+                direction="column"
+                w="100%"
+                mb="5px"
+                opacity={hasStartedTyping ? 1 : 0}
+                transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
+                transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+                transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
+                pointerEvents={hasStartedTyping ? "auto" : "none"}
+                overflow="hidden"
+                maxHeight={hasStartedTyping ? "200px" : "0px"}
+              >
+                {/* Payout Recipient Address */}
+                <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
+                  <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
+                    Bitcoin Recipient Address
+                  </Text>
+                  <ChakraTooltip.Root>
+                    <ChakraTooltip.Trigger asChild>
+                      <Flex pl="5px" mt="-2px" cursor="pointer" userSelect="none">
+                        <Flex mt="0px" mr="2px">
+                          <InfoSVG width="12px" />
+                        </Flex>
+                      </Flex>
+                    </ChakraTooltip.Trigger>
+                    <Portal>
+                      <ChakraTooltip.Positioner>
+                        <ChakraTooltip.Content
+                          fontFamily="Aux"
+                          letterSpacing="-0.5px"
+                          color={colors.offWhite}
+                          bg="#121212"
+                          fontSize="12px"
+                        >
+                          Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported.
+                        </ChakraTooltip.Content>
+                      </ChakraTooltip.Positioner>
+                    </Portal>
+                  </ChakraTooltip.Root>
+                </Flex>
+                <Flex
+                  mt="-4px"
+                  mb="10px"
+                  px="10px"
+                  bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
+                  border={`2px solid ${outputStyle?.bg_color || "#78491F"}`}
+                  w="100%"
+                  h="60px"
+                  borderRadius="16px"
+                >
+                  <Flex direction="row" py="6px" px="8px">
+                    <Input
+                      value={payoutAddress}
+                      onChange={(e) => setPayoutAddress(e.target.value)}
+                      fontFamily="Aux"
+                      border="none"
+                      bg="transparent"
+                      outline="none"
+                      mt="3.5px"
+                      mr="15px"
+                      ml="-4px"
+                      p="0px"
+                      w="500px"
+                      letterSpacing="-5px"
+                      color={colors.offWhite}
+                      _active={{
+                        border: "none",
+                        boxShadow: "none",
+                        outline: "none",
+                      }}
+                      _focus={{
+                        border: "none",
+                        boxShadow: "none",
+                        outline: "none",
+                      }}
+                      _selected={{
+                        border: "none",
+                        boxShadow: "none",
+                        outline: "none",
+                      }}
+                      fontSize="28px"
+                      placeholder="bc1q5d7rjq7g6rd2d..."
+                      _placeholder={{
+                        color: outputStyle?.light_text_color || "#856549",
+                      }}
+                      spellCheck={false}
+                    />
+
+                    {payoutAddress.length > 0 && (
+                      <Flex ml="0px">
+                        <BitcoinAddressValidation
+                          address={payoutAddress}
+                          validation={addressValidation}
+                        />
+                      </Flex>
+                    )}
+                  </Flex>
                 </Flex>
               </Flex>
-            </Flex>
-          )}
-        </Flex>
+            )}
+          </Flex>
 
-        {/* Approval and Swap Buttons */}
-        {pendingSwapTransaction && needsApproval && !isNativeETH ? (
-          // Show Approve button when approval is needed
-          <Flex gap="8px" w="100%" mt="8px">
+          {/* Approval and Swap Buttons */}
+          {pendingSwapTransaction && needsApproval && !isNativeETH ? (
+            // Show Approve button when approval is needed
+            <Flex gap="8px" w="100%" mt="8px">
+              <Flex
+                bg={colors.swapBgColor}
+                _hover={{
+                  bg: !isButtonLoading ? colors.swapHoverColor : undefined,
+                }}
+                w="100%"
+                transition="0.2s"
+                h="58px"
+                onClick={isButtonLoading ? undefined : handleApprove}
+                fontSize="18px"
+                align="center"
+                userSelect="none"
+                cursor={!isButtonLoading ? "pointer" : "not-allowed"}
+                borderRadius="16px"
+                justify="center"
+                border="3px solid"
+                borderColor={colors.swapBorderColor}
+                opacity={isButtonLoading ? 0.7 : 1}
+                pointerEvents={isButtonLoading ? "none" : "auto"}
+              >
+                {(isApprovePending || isApproveConfirming) && (
+                  <Spinner size="sm" color={colors.offWhite} mr="10px" />
+                )}
+                <Text color={colors.offWhite} fontFamily="Nostromo">
+                  {isApprovePending
+                    ? "Confirm in Wallet..."
+                    : isApproveConfirming
+                      ? "Confirming..."
+                      : `Approve ${selectedInputToken?.ticker || "Token"}`}
+                </Text>
+              </Flex>
+              <Flex
+                bg={colors.swapBgColor}
+                w="100%"
+                transition="0.2s"
+                h="58px"
+                fontSize="18px"
+                align="center"
+                userSelect="none"
+                cursor="not-allowed"
+                borderRadius="16px"
+                justify="center"
+                border="3px solid"
+                borderColor={colors.swapBorderColor}
+                opacity={0.5}
+              >
+                <Text color={colors.offWhite} fontFamily="Nostromo">
+                  Swap
+                </Text>
+              </Flex>
+            </Flex>
+          ) : pendingSwapTransaction && !needsApproval && !isNativeETH ? (
+            // Show Swap button when approved
             <Flex
               bg={colors.swapBgColor}
               _hover={{
                 bg: !isButtonLoading ? colors.swapHoverColor : undefined,
               }}
               w="100%"
+              mt="8px"
               transition="0.2s"
               h="58px"
-              onClick={isButtonLoading ? undefined : handleApprove}
+              onClick={isButtonLoading ? undefined : handleExecuteSwap}
               fontSize="18px"
               align="center"
               userSelect="none"
@@ -1668,158 +1755,105 @@ export const SwapWidget = () => {
               opacity={isButtonLoading ? 0.7 : 1}
               pointerEvents={isButtonLoading ? "none" : "auto"}
             >
-              {(isApprovePending || isApproveConfirming) && (
+              {(isSendTxPending || isConfirming) && (
                 <Spinner size="sm" color={colors.offWhite} mr="10px" />
               )}
               <Text color={colors.offWhite} fontFamily="Nostromo">
-                {isApprovePending
-                  ? "Confirm in Wallet..."
-                  : isApproveConfirming
-                    ? "Confirming..."
-                    : `Approve ${selectedInputToken?.ticker || "Token"}`}
+                {isSendTxPending ? "Confirm in Wallet..." : isConfirming ? "Confirming..." : "Swap"}
               </Text>
             </Flex>
+          ) : (
+            // Show default Swap button for initial swap or native ETH
             <Flex
               bg={colors.swapBgColor}
+              _hover={{
+                bg: !isButtonLoading ? colors.swapHoverColor : undefined,
+              }}
               w="100%"
+              mt="8px"
               transition="0.2s"
               h="58px"
+              onClick={isButtonLoading ? undefined : handleSwap}
               fontSize="18px"
               align="center"
               userSelect="none"
-              cursor="not-allowed"
+              cursor={!isButtonLoading ? "pointer" : "not-allowed"}
               borderRadius="16px"
               justify="center"
               border="3px solid"
               borderColor={colors.swapBorderColor}
-              opacity={0.5}
+              opacity={isButtonLoading ? 0.7 : 1}
+              pointerEvents={isButtonLoading ? "none" : "auto"}
             >
+              {isButtonLoading && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
               <Text color={colors.offWhite} fontFamily="Nostromo">
-                Swap
+                {isPending || isSendTxPending
+                  ? "Confirm in Wallet..."
+                  : isConfirming
+                    ? "Confirming..."
+                    : "Swap"}
               </Text>
             </Flex>
-          </Flex>
-        ) : pendingSwapTransaction && !needsApproval && !isNativeETH ? (
-          // Show Swap button when approved
-          <Flex
-            bg={colors.swapBgColor}
-            _hover={{
-              bg: !isButtonLoading ? colors.swapHoverColor : undefined,
-            }}
-            w="100%"
-            mt="8px"
-            transition="0.2s"
-            h="58px"
-            onClick={isButtonLoading ? undefined : handleExecuteSwap}
-            fontSize="18px"
-            align="center"
-            userSelect="none"
-            cursor={!isButtonLoading ? "pointer" : "not-allowed"}
-            borderRadius="16px"
-            justify="center"
-            border="3px solid"
-            borderColor={colors.swapBorderColor}
-            opacity={isButtonLoading ? 0.7 : 1}
-            pointerEvents={isButtonLoading ? "none" : "auto"}
-          >
-            {(isSendTxPending || isConfirming) && (
-              <Spinner size="sm" color={colors.offWhite} mr="10px" />
-            )}
-            <Text color={colors.offWhite} fontFamily="Nostromo">
-              {isSendTxPending ? "Confirm in Wallet..." : isConfirming ? "Confirming..." : "Swap"}
-            </Text>
-          </Flex>
-        ) : (
-          // Show default Swap button for initial swap or native ETH
-          <Flex
-            bg={colors.swapBgColor}
-            _hover={{
-              bg: !isButtonLoading ? colors.swapHoverColor : undefined,
-            }}
-            w="100%"
-            mt="8px"
-            transition="0.2s"
-            h="58px"
-            onClick={isButtonLoading ? undefined : handleSwap}
-            fontSize="18px"
-            align="center"
-            userSelect="none"
-            cursor={!isButtonLoading ? "pointer" : "not-allowed"}
-            borderRadius="16px"
-            justify="center"
-            border="3px solid"
-            borderColor={colors.swapBorderColor}
-            opacity={isButtonLoading ? 0.7 : 1}
-            pointerEvents={isButtonLoading ? "none" : "auto"}
-          >
-            {isButtonLoading && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
-            <Text color={colors.offWhite} fontFamily="Nostromo">
-              {isPending || isSendTxPending
-                ? "Confirm in Wallet..."
-                : isConfirming
-                  ? "Confirming..."
-                  : "Swap"}
-            </Text>
-          </Flex>
-        )}
+          )}
 
-        {/* Bitcoin QR Code Display - Animated (appears after swap initiation) */}
-        {bitcoinDepositInfo && (
-          <Flex
-            direction="column"
-            w="100%"
-            mt="20px"
-            p="20px"
-            bg="rgba(46, 29, 14, 0.66)"
-            border="2px solid #78491F"
-            borderRadius="16px"
-            opacity={bitcoinDepositInfo ? 1 : 0}
-            transform={bitcoinDepositInfo ? "translateY(0px)" : "translateY(-20px)"}
-            transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-          >
-            <Text
-              fontSize="18px"
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              color={colors.offWhite}
-              mb="15px"
-              textAlign="center"
-            >
-              Send Bitcoin to Complete Swap
-            </Text>
-            <Text
-              fontSize="14px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.textGray}
-              mb="20px"
-              textAlign="center"
-            >
-              Scan the QR code or copy the address and amount below
-            </Text>
-            <BitcoinQRCode
-              bitcoinUri={bitcoinDepositInfo.uri}
-              address={bitcoinDepositInfo.address}
-              amount={bitcoinDepositInfo.amount}
-            />
-            <Text
-              fontWeight="normal"
-              fontSize="13px"
+          {/* Bitcoin QR Code Display - Animated (appears after swap initiation) */}
+          {bitcoinDepositInfo && (
+            <Flex
+              direction="column"
+              w="100%"
               mt="20px"
-              color={colors.textGray}
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              textAlign="center"
+              p="20px"
+              bg="rgba(46, 29, 14, 0.66)"
+              border="2px solid #78491F"
+              borderRadius="16px"
+              opacity={bitcoinDepositInfo ? 1 : 0}
+              transform={bitcoinDepositInfo ? "translateY(0px)" : "translateY(-20px)"}
+              transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
             >
-              WARNING: Send the exact amount shown above to complete the swap.
-            </Text>
-          </Flex>
-        )}
-      </Flex>
+              <Text
+                fontSize="18px"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                color={colors.offWhite}
+                mb="15px"
+                textAlign="center"
+              >
+                Send Bitcoin to Complete Swap
+              </Text>
+              <Text
+                fontSize="14px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={colors.textGray}
+                mb="20px"
+                textAlign="center"
+              >
+                Scan the QR code or copy the address and amount below
+              </Text>
+              <BitcoinQRCode
+                bitcoinUri={bitcoinDepositInfo.uri}
+                address={bitcoinDepositInfo.address}
+                amount={bitcoinDepositInfo.amount}
+              />
+              <Text
+                fontWeight="normal"
+                fontSize="13px"
+                mt="20px"
+                color={colors.textGray}
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                textAlign="center"
+              >
+                WARNING: Send the exact amount shown above to complete the swap.
+              </Text>
+            </Flex>
+          )}
+        </Flex>
 
-      {/* Asset Selector Modal */}
-      <AssetSelectorModal
-        isOpen={isAssetSelectorOpen}
-        onClose={closeAssetSelector}
-        currentAsset={inputAssetIdentifier}
-      />
-    </Flex>
+        {/* Asset Selector Modal */}
+        <AssetSelectorModal
+          isOpen={isAssetSelectorOpen}
+          onClose={closeAssetSelector}
+          currentAsset={inputAssetIdentifier}
+        />
+      </Flex>
+    </>
   );
 };

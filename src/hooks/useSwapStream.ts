@@ -6,6 +6,7 @@ interface SwapWebSocketResult {
   latestSwap: any | null;
   updatedSwap: any | null;
   totalSwaps: number;
+  completedSwaps: number;
   createdSwaps: number;
   inProgressSwaps: number;
   uniqueUsers: number;
@@ -29,6 +30,7 @@ export function useSwapStream(): SwapWebSocketResult {
   const [latestSwap, setLatestSwap] = useState<any | null>(null);
   const [updatedSwap, setUpdatedSwap] = useState<any | null>(null);
   const [totalSwaps, setTotalSwaps] = useState<number>(0);
+  const [completedSwaps, setCompletedSwaps] = useState<number>(0);
   const [createdSwaps, setCreatedSwaps] = useState<number>(0);
   const [inProgressSwaps, setInProgressSwaps] = useState<number>(0);
   const [uniqueUsers, setUniqueUsers] = useState<number>(0);
@@ -108,18 +110,11 @@ export function useSwapStream(): SwapWebSocketResult {
     function connect() {
       if (!shouldConnectRef.current) return;
 
-      const apiKey = getApiKeyFromCookie();
-      if (!apiKey) {
-        console.warn("No API key found for swap WebSocket");
-        setError("No API key found");
-        return;
-      }
-
       try {
         // Replace http with ws, add auth as query param
         const wsUrl =
           ANALYTICS_API_URL.replace("http://", "ws://").replace("https://", "wss://") +
-          `/api/swaps/ws?auth=${encodeURIComponent(apiKey)}`;
+          `/api/swaps/ws`;
 
         console.log("🔗 Connecting to WebSocket:");
 
@@ -146,6 +141,10 @@ export function useSwapStream(): SwapWebSocketResult {
                   setTotalSwaps(message.total_swaps);
                 } else {
                   console.warn("⚠️ No total_swaps in connected message");
+                }
+                if (typeof message.completed_swaps === "number") {
+                  console.log("✅ Setting initial completed swaps:", message.completed_swaps);
+                  setCompletedSwaps(message.completed_swaps);
                 }
                 if (typeof message.created_swaps === "number") {
                   console.log("✅ Setting initial created swaps:", message.created_swaps);
@@ -216,6 +215,13 @@ export function useSwapStream(): SwapWebSocketResult {
                   setTotalSwaps(message.total_swaps);
                 } else {
                   console.warn("⚠️ No total_swaps in swap_created message");
+                }
+                if (typeof message.completed_swaps === "number") {
+                  console.log(
+                    "[WEBSOCKET_SWAP_CREATED] Setting completed swaps:",
+                    message.completed_swaps
+                  );
+                  setCompletedSwaps(message.completed_swaps);
                 }
                 if (typeof message.created_swaps === "number") {
                   console.log(
@@ -290,6 +296,13 @@ export function useSwapStream(): SwapWebSocketResult {
                 if (typeof message.total_swaps === "number") {
                   console.log("[WEBSOCKET_SWAP_UPDATED] Setting total swaps:", message.total_swaps);
                   setTotalSwaps(message.total_swaps);
+                }
+                if (typeof message.completed_swaps === "number") {
+                  console.log(
+                    "[WEBSOCKET_SWAP_UPDATED] Setting completed swaps:",
+                    message.completed_swaps
+                  );
+                  setCompletedSwaps(message.completed_swaps);
                 }
                 if (typeof message.created_swaps === "number") {
                   console.log(
@@ -368,6 +381,13 @@ export function useSwapStream(): SwapWebSocketResult {
                 if (typeof message.total_swaps === "number") {
                   console.log("[WEBSOCKET_DEFAULT] Setting total swaps:", message.total_swaps);
                   setTotalSwaps(message.total_swaps);
+                }
+                if (typeof message.completed_swaps === "number") {
+                  console.log(
+                    "[WEBSOCKET_DEFAULT] Setting completed swaps:",
+                    message.completed_swaps
+                  );
+                  setCompletedSwaps(message.completed_swaps);
                 }
                 if (typeof message.created_swaps === "number") {
                   setCreatedSwaps(message.created_swaps);
@@ -459,6 +479,7 @@ export function useSwapStream(): SwapWebSocketResult {
     latestSwap,
     updatedSwap,
     totalSwaps,
+    completedSwaps,
     createdSwaps,
     inProgressSwaps,
     uniqueUsers,
