@@ -9,8 +9,10 @@
 export interface UniswapQuoteRequest {
   /** Token to sell (address or "ETH" for native) */
   sellToken: string;
-  /** Amount to sell in base units (wei for ETH, token decimals for ERC20) */
-  sellAmount: string;
+  /** Amount to sell in base units (for exact input) - provide either this OR buyAmount */
+  sellAmount?: string;
+  /** Amount to buy in base units (for exact output) - provide either this OR sellAmount */
+  buyAmount?: string;
   /** Token decimals */
   decimals: number;
   /** Slippage tolerance in basis points (100 bps = 1%) */
@@ -21,8 +23,6 @@ export interface UniswapQuoteRequest {
   userAddress: string;
   /** Router to use: "v3" for V2/V3 only, "v4" for V4 only, or undefined for both */
   router?: "v3" | "v4";
-  /** Trade type: "input" for exact input (default), "output" for exact output */
-  tradeType?: "input" | "output";
 }
 
 /**
@@ -31,8 +31,10 @@ export interface UniswapQuoteRequest {
 export interface UniswapQuoteResponse {
   /** Router type that provided the best quote */
   routerType: "v4" | "v2v3";
-  /** Amount of cbBTC to receive (in base units) */
-  buyAmount: string;
+  /** Amount to sell (in base units) - returned for exact output quotes */
+  sellAmount?: string;
+  /** Amount of cbBTC to receive (in base units) - returned for exact input quotes */
+  buyAmount?: string;
   /** When the quote expires */
   expiresAt: Date;
   /** Additional route information */
@@ -56,22 +58,28 @@ export interface UniswapQuoteResponse {
  * Uniswap swap transaction ready for execution
  */
 export interface UniswapSwapTransaction {
-  /** Transaction calldata */
+  /** Transaction calldata (for V2/V3) or encoded V4 actions (for V4) */
   calldata: string;
   /** Transaction value (for ETH swaps) */
   value: string;
-  /** Target address (SwapRouter02) */
+  /** Target address (SwapRouter02 for V2/V3, UniversalRouter for V4) */
   to: string;
   /** Buy amount of cbBTC */
   buyAmount: string;
   /** Expiration timestamp */
   expiresAt: Date;
+  /** Router type that generated this transaction */
+  routerType?: "v4" | "v2v3";
   /** Additional route information */
   route?: {
-    quote: string;
-    quoteGasAdjusted: string;
-    estimatedGasUsed: string;
-    gasPriceWei: string;
+    quote?: string;
+    quoteGasAdjusted?: string;
+    estimatedGasUsed?: string;
+    gasPriceWei?: string;
+    type?: string;
+    deadline?: string;
+    inputToken?: string;
+    outputToken?: string;
   };
 }
 
@@ -104,12 +112,33 @@ export class UniswapRouterClient {
    */
   async getQuote(request: UniswapQuoteRequest): Promise<UniswapQuoteResponse> {
     try {
+      // Validate exactly one of sellAmount or buyAmount is provided
+      if (!request.sellAmount && !request.buyAmount) {
+        throw new UniswapRouterError(
+          "Must provide either sellAmount (for exact input) or buyAmount (for exact output)",
+          "INVALID_PARAMS"
+        );
+      }
+      if (request.sellAmount && request.buyAmount) {
+        throw new UniswapRouterError(
+          "Cannot provide both sellAmount and buyAmount - use only one",
+          "INVALID_PARAMS"
+        );
+      }
+
       const params = new URLSearchParams({
         sellToken: request.sellToken,
-        sellAmount: request.sellAmount,
         decimals: request.decimals.toString(),
         userAddress: request.userAddress,
       });
+
+      // Add either sellAmount or buyAmount
+      if (request.sellAmount) {
+        params.append("sellAmount", request.sellAmount);
+      }
+      if (request.buyAmount) {
+        params.append("buyAmount", request.buyAmount);
+      }
 
       if (request.slippageBps !== undefined) {
         params.append("slippageBps", request.slippageBps.toString());
@@ -119,9 +148,6 @@ export class UniswapRouterClient {
       }
       if (request.router !== undefined) {
         params.append("router", request.router);
-      }
-      if (request.tradeType !== undefined) {
-        params.append("tradeType", request.tradeType);
       }
 
       const response = await fetch(`${this.apiBaseUrl}?${params.toString()}`);
@@ -139,6 +165,7 @@ export class UniswapRouterClient {
 
       return {
         routerType: data.routerType,
+        sellAmount: data.sellAmount,
         buyAmount: data.buyAmount,
         expiresAt: new Date(data.expiresAt),
         route: data.route,
@@ -198,6 +225,7 @@ export class UniswapRouterClient {
         to: data.to,
         buyAmount: data.buyAmount,
         expiresAt: new Date(data.expiresAt),
+        routerType,
         route: data.route,
       };
     } catch (error) {

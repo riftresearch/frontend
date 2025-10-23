@@ -90,15 +90,15 @@ export async function GET(req: NextRequest) {
 
     // Convert hex strings to BigInt for calculation
     const baseFee = BigInt(baseFeePerGas);
-    const priorityFee = BigInt(maxPriorityFeePerGas * 1.5);
+    const priorityFee = BigInt(maxPriorityFeePerGas);
 
-    // Calculate maxFeePerGas = baseFee + (maxPriorityFeePerGas * 1.5)
-    const maxFeePerGas = baseFee + priorityFee;
+    // Calculate maxFeePerGas = (baseFee * 1.25) + priorityFee
+    const maxFeePerGas = (baseFee * BigInt(125)) / BigInt(100) + priorityFee;
 
     // Return as hex strings
     return NextResponse.json({
       maxFeePerGas: `0x${maxFeePerGas.toString(16)}`,
-      maxPriorityFeePerGas: maxPriorityFeePerGas,
+      maxPriorityFeePerGas: `0x${priorityFee.toString(16)}`,
     });
   } catch (e: any) {
     return NextResponse.json(

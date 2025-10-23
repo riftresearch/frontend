@@ -7,10 +7,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AlphaRouter, SwapOptionsSwapRouter02, SwapType } from "@uniswap/smart-order-router";
 import { CurrencyAmount, Percent, Token, TradeType, ChainId } from "@uniswap/sdk-core";
-import { Contract, providers, utils } from "ethers";
+import { Contract, providers } from "ethers";
 import { Actions, PathKey, V4Planner } from "@uniswap/v4-sdk";
-import { CommandType, RoutePlanner } from "@uniswap/universal-router-sdk";
 import { createHash } from "crypto";
+import {
+  V4_QUOTER_ABI,
+  V4_QUOTER,
+  V4_POOL_MANAGER,
+  V4_UNIVERSAL_ROUTER,
+  V4_PERMIT2,
+} from "./v4ABIs";
 
 // ============================================================================
 // Constants
@@ -26,12 +32,6 @@ const DEFAULT_SLIPPAGE_BPS = 10;
 const DEFAULT_VALID_FOR_SECONDS = 120;
 const RPC_URL = process.env.QUICKNODE_ETHEREUM_URL || "https://eth0.riftnodes.com";
 
-// V4 Contract Addresses (Mainnet)
-const V4_POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
-const V4_QUOTER = "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203";
-const V4_UNIVERSAL_ROUTER = "0x66a9893cc07d91d95644aedd05d03f95e1dba8af";
-const V4_PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-
 // Pool configurations (fee tier -> tick spacing)
 const POOL_CONFIGS = [
   { fee: 100, tickSpacing: 1 }, // 0.01%
@@ -41,295 +41,6 @@ const POOL_CONFIGS = [
 ];
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-// V4 Quoter ABI (full)
-const V4_QUOTER_ABI = [
-  {
-    inputs: [{ internalType: "contract IPoolManager", name: "_poolManager", type: "address" }],
-    stateMutability: "nonpayable",
-    type: "constructor",
-  },
-  {
-    inputs: [{ internalType: "PoolId", name: "poolId", type: "bytes32" }],
-    name: "NotEnoughLiquidity",
-    type: "error",
-  },
-  { inputs: [], name: "NotPoolManager", type: "error" },
-  { inputs: [], name: "NotSelf", type: "error" },
-  {
-    inputs: [{ internalType: "uint256", name: "amount", type: "uint256" }],
-    name: "QuoteSwap",
-    type: "error",
-  },
-  { inputs: [], name: "UnexpectedCallSuccess", type: "error" },
-  {
-    inputs: [{ internalType: "bytes", name: "revertData", type: "bytes" }],
-    name: "UnexpectedRevertBytes",
-    type: "error",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          { internalType: "Currency", name: "exactCurrency", type: "address" },
-          {
-            components: [
-              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-              { internalType: "bytes", name: "hookData", type: "bytes" },
-            ],
-            internalType: "struct PathKey[]",
-            name: "path",
-            type: "tuple[]",
-          },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "_quoteExactInput",
-    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          {
-            components: [
-              { internalType: "Currency", name: "currency0", type: "address" },
-              { internalType: "Currency", name: "currency1", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-            ],
-            internalType: "struct PoolKey",
-            name: "poolKey",
-            type: "tuple",
-          },
-          { internalType: "bool", name: "zeroForOne", type: "bool" },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-          { internalType: "bytes", name: "hookData", type: "bytes" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactSingleParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "_quoteExactInputSingle",
-    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          { internalType: "Currency", name: "exactCurrency", type: "address" },
-          {
-            components: [
-              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-              { internalType: "bytes", name: "hookData", type: "bytes" },
-            ],
-            internalType: "struct PathKey[]",
-            name: "path",
-            type: "tuple[]",
-          },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "_quoteExactOutput",
-    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          {
-            components: [
-              { internalType: "Currency", name: "currency0", type: "address" },
-              { internalType: "Currency", name: "currency1", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-            ],
-            internalType: "struct PoolKey",
-            name: "poolKey",
-            type: "tuple",
-          },
-          { internalType: "bool", name: "zeroForOne", type: "bool" },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-          { internalType: "bytes", name: "hookData", type: "bytes" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactSingleParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "_quoteExactOutputSingle",
-    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "poolManager",
-    outputs: [{ internalType: "contract IPoolManager", name: "", type: "address" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          { internalType: "Currency", name: "exactCurrency", type: "address" },
-          {
-            components: [
-              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-              { internalType: "bytes", name: "hookData", type: "bytes" },
-            ],
-            internalType: "struct PathKey[]",
-            name: "path",
-            type: "tuple[]",
-          },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "quoteExactInput",
-    outputs: [
-      { internalType: "uint256", name: "amountOut", type: "uint256" },
-      { internalType: "uint256", name: "gasEstimate", type: "uint256" },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          {
-            components: [
-              { internalType: "Currency", name: "currency0", type: "address" },
-              { internalType: "Currency", name: "currency1", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-            ],
-            internalType: "struct PoolKey",
-            name: "poolKey",
-            type: "tuple",
-          },
-          { internalType: "bool", name: "zeroForOne", type: "bool" },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-          { internalType: "bytes", name: "hookData", type: "bytes" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactSingleParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "quoteExactInputSingle",
-    outputs: [
-      { internalType: "uint256", name: "amountOut", type: "uint256" },
-      { internalType: "uint256", name: "gasEstimate", type: "uint256" },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          { internalType: "Currency", name: "exactCurrency", type: "address" },
-          {
-            components: [
-              { internalType: "Currency", name: "intermediateCurrency", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-              { internalType: "bytes", name: "hookData", type: "bytes" },
-            ],
-            internalType: "struct PathKey[]",
-            name: "path",
-            type: "tuple[]",
-          },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "quoteExactOutput",
-    outputs: [
-      { internalType: "uint256", name: "amountIn", type: "uint256" },
-      { internalType: "uint256", name: "gasEstimate", type: "uint256" },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          {
-            components: [
-              { internalType: "Currency", name: "currency0", type: "address" },
-              { internalType: "Currency", name: "currency1", type: "address" },
-              { internalType: "uint24", name: "fee", type: "uint24" },
-              { internalType: "int24", name: "tickSpacing", type: "int24" },
-              { internalType: "contract IHooks", name: "hooks", type: "address" },
-            ],
-            internalType: "struct PoolKey",
-            name: "poolKey",
-            type: "tuple",
-          },
-          { internalType: "bool", name: "zeroForOne", type: "bool" },
-          { internalType: "uint128", name: "exactAmount", type: "uint128" },
-          { internalType: "bytes", name: "hookData", type: "bytes" },
-        ],
-        internalType: "struct IV4Quoter.QuoteExactSingleParams",
-        name: "params",
-        type: "tuple",
-      },
-    ],
-    name: "quoteExactOutputSingle",
-    outputs: [
-      { internalType: "uint256", name: "amountIn", type: "uint256" },
-      { internalType: "uint256", name: "gasEstimate", type: "uint256" },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "bytes", name: "data", type: "bytes" }],
-    name: "unlockCallback",
-    outputs: [{ internalType: "bytes", name: "", type: "bytes" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-];
 
 // Initialize provider and router (reused across requests)
 const provider = new providers.StaticJsonRpcProvider(
@@ -350,7 +61,8 @@ const v4QuoterContract = new Contract(V4_QUOTER, V4_QUOTER_ABI, provider);
 
 interface CachedQuote {
   routerType: "v4" | "v2v3";
-  buyAmount: string;
+  sellAmount?: string;
+  buyAmount?: string;
   expiresAt: Date;
   route: any;
   v4Metadata?: V4QuoteMetadata;
@@ -415,32 +127,37 @@ function sortTokens(
 
 interface V2V3QuoteParams {
   sellToken: string;
-  sellAmount: string;
+  sellAmount?: string;
+  buyAmount?: string;
   decimals: number;
   userAddress: string;
   slippageBps: number;
   validFor: number;
-  tradeType?: "input" | "output";
 }
 
 interface QuoteResult {
-  buyAmount: string;
+  sellAmount?: string;
+  buyAmount?: string;
   expiresAt: string;
   route: any;
 }
 
 async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> {
-  const {
-    sellToken,
-    sellAmount,
-    decimals,
-    userAddress,
-    slippageBps,
-    validFor,
-    tradeType = "input",
-  } = params;
+  const { sellToken, sellAmount, buyAmount, decimals, userAddress, slippageBps, validFor } = params;
 
   try {
+    // Validate exactly one of sellAmount or buyAmount is provided
+    if (!sellAmount && !buyAmount) {
+      throw new Error("Must provide either sellAmount or buyAmount");
+    }
+    if (sellAmount && buyAmount) {
+      throw new Error("Cannot provide both sellAmount and buyAmount");
+    }
+
+    // Determine trade type and amount
+    const isExactOutput = !!buyAmount;
+    const amount = (buyAmount || sellAmount) as string;
+
     // Determine token address
     const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
     const tokenIn = new Token(ChainId.MAINNET, tokenInAddress, decimals);
@@ -455,7 +172,6 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
     };
 
     // Determine trade type
-    const isExactOutput = tradeType === "output";
     const routeTradeType = isExactOutput ? TradeType.EXACT_OUTPUT : TradeType.EXACT_INPUT;
 
     // Get route from AlphaRouter
@@ -465,13 +181,13 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
 
     const route = isExactOutput
       ? await alphaRouter.route(
-          CurrencyAmount.fromRawAmount(tokenOut, sellAmount),
+          CurrencyAmount.fromRawAmount(tokenOut, amount),
           tokenIn,
           routeTradeType,
           options
         )
       : await alphaRouter.route(
-          CurrencyAmount.fromRawAmount(tokenIn, sellAmount),
+          CurrencyAmount.fromRawAmount(tokenIn, amount),
           tokenOut,
           routeTradeType,
           options
@@ -485,8 +201,8 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
     // Calculate expiration
     const expiresAt = new Date(Date.now() + validFor * 1000);
 
-    // Extract amount - for exact output, buyAmount is the required input amount
-    const buyAmount = route.quote.numerator.toString();
+    // Extract the quoted amount
+    const quotedAmount = route.quote.numerator.toString();
 
     // Build route path string with pool types
     const routePath = route.route
@@ -497,23 +213,37 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
       })
       .join(" | ");
 
-    const result = {
-      buyAmount,
-      expiresAt: expiresAt.toISOString(),
-      route: {
-        quote: route.quote.toExact(),
-        quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
-        estimatedGasUsed: route.estimatedGasUsed.toString(),
-        gasPriceWei: route.gasPriceWei.toString(),
-        routePath,
-      },
-    };
+    // For exact output: return sellAmount (required input)
+    // For exact input: return buyAmount (expected output)
+    const result: QuoteResult = isExactOutput
+      ? {
+          sellAmount: quotedAmount,
+          expiresAt: expiresAt.toISOString(),
+          route: {
+            quote: route.quote.toExact(),
+            quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
+            estimatedGasUsed: route.estimatedGasUsed.toString(),
+            gasPriceWei: route.gasPriceWei.toString(),
+            routePath,
+          },
+        }
+      : {
+          buyAmount: quotedAmount,
+          expiresAt: expiresAt.toISOString(),
+          route: {
+            quote: route.quote.toExact(),
+            quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
+            estimatedGasUsed: route.estimatedGasUsed.toString(),
+            gasPriceWei: route.gasPriceWei.toString(),
+            routePath,
+          },
+        };
 
     console.log("[V2/V3] Route:", routePath);
     if (isExactOutput) {
-      console.log("[V2/V3] Quote:", buyAmount, "input required (", result.route.quote, ")");
+      console.log("[V2/V3] Quote:", quotedAmount, "input required (", result.route.quote, ")");
     } else {
-      console.log("[V2/V3] Quote:", buyAmount, "cbBTC output (", result.route.quote, ")");
+      console.log("[V2/V3] Quote:", quotedAmount, "cbBTC output (", result.route.quote, ")");
     }
     return result;
   } catch (error) {
@@ -531,59 +261,125 @@ interface V4QuoteResult extends QuoteResult {
 }
 
 async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null> {
-  const { sellToken, sellAmount, validFor } = params;
+  const { sellToken, sellAmount, buyAmount, validFor } = params;
 
   try {
+    // Validate exactly one of sellAmount or buyAmount is provided
+    if (!sellAmount && !buyAmount) {
+      throw new Error("Must provide either sellAmount or buyAmount");
+    }
+    if (sellAmount && buyAmount) {
+      throw new Error("Cannot provide both sellAmount and buyAmount");
+    }
+
+    // Determine trade type and amount
+    const isExactOutput = !!buyAmount;
+    const amount = (buyAmount || sellAmount) as string;
+
     const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
 
     // If input is already WBTC, try direct WBTC -> cbBTC swap
     if (tokenInAddress.toLowerCase() === WBTC_ADDRESS.toLowerCase()) {
-      console.log("[V4] Input is WBTC, trying direct WBTC -> cbBTC at 0.01%");
-      try {
-        const sortedPair = sortTokens(WBTC_ADDRESS, CBBTC_ADDRESS);
-        const poolKey = {
-          currency0: sortedPair.firstToken,
-          currency1: sortedPair.secondToken,
-          fee: 100, // 0.01%
-          tickSpacing: 1,
-          hooks: ZERO_ADDRESS,
-        };
-
-        const result = await v4QuoterContract.callStatic.quoteExactInputSingle({
-          poolKey: poolKey,
-          zeroForOne: sortedPair.isFirstToken,
-          exactAmount: sellAmount,
-          hookData: "0x",
-        });
-
-        const buyAmount = result.amountOut.toString();
-        const expiresAt = new Date(Date.now() + validFor * 1000);
-
-        console.log("[V4] ✓ Direct WBTC -> cbBTC quote:", buyAmount, "cbBTC");
-
-        return {
-          buyAmount,
-          expiresAt: expiresAt.toISOString(),
-          route: {
-            type: "single-hop",
-            path: "WBTC -> cbBTC",
-            poolFee: 100,
+      if (isExactOutput) {
+        console.log("[V4] Input is WBTC, trying direct WBTC -> cbBTC (exact output) at 0.01%");
+        try {
+          const sortedPair = sortTokens(WBTC_ADDRESS, CBBTC_ADDRESS);
+          const poolKey = {
+            currency0: sortedPair.firstToken,
+            currency1: sortedPair.secondToken,
+            fee: 100, // 0.01%
             tickSpacing: 1,
-            gasEstimate: result.gasEstimate?.toString() || "0",
-          },
-          v4Metadata: {
-            poolKey,
-            isFirstToken: sortedPair.isFirstToken,
-            amountIn: sellAmount,
-            amountOutMinimum: "0",
-          },
-        };
-      } catch (error) {
-        console.log(
-          "[V4] ✗ Direct WBTC -> cbBTC failed:",
-          error instanceof Error ? error.message : "Unknown error"
-        );
-        return null;
+            hooks: ZERO_ADDRESS,
+          };
+
+          const result = await v4QuoterContract.callStatic.quoteExactOutputSingle({
+            poolKey: poolKey,
+            zeroForOne: sortedPair.isFirstToken,
+            exactAmount: amount, // This is the exact output amount (cbBTC)
+            hookData: "0x",
+          });
+
+          const inputAmountNeeded = result.amountIn.toString();
+          const expiresAt = new Date(Date.now() + validFor * 1000);
+
+          console.log(
+            "[V4] ✓ Direct WBTC -> cbBTC (exact output) quote:",
+            inputAmountNeeded,
+            "WBTC needed"
+          );
+
+          return {
+            sellAmount: inputAmountNeeded, // For exact output, return the required input
+            expiresAt: expiresAt.toISOString(),
+            route: {
+              type: "single-hop",
+              path: "WBTC -> cbBTC",
+              poolFee: 100,
+              tickSpacing: 1,
+              gasEstimate: result.gasEstimate?.toString() || "0",
+            },
+            v4Metadata: {
+              poolKey,
+              isFirstToken: sortedPair.isFirstToken,
+              amountIn: "0", // Will be set by swap builder
+              amountOutMinimum: amount, // This is the exact amount we want
+            },
+          };
+        } catch (error) {
+          console.log(
+            "[V4] ✗ Direct WBTC -> cbBTC (exact output) failed:",
+            error instanceof Error ? error.message : "Unknown error"
+          );
+          return null;
+        }
+      } else {
+        console.log("[V4] Input is WBTC, trying direct WBTC -> cbBTC at 0.01%");
+        try {
+          const sortedPair = sortTokens(WBTC_ADDRESS, CBBTC_ADDRESS);
+          const poolKey = {
+            currency0: sortedPair.firstToken,
+            currency1: sortedPair.secondToken,
+            fee: 100, // 0.01%
+            tickSpacing: 1,
+            hooks: ZERO_ADDRESS,
+          };
+
+          const result = await v4QuoterContract.callStatic.quoteExactInputSingle({
+            poolKey: poolKey,
+            zeroForOne: sortedPair.isFirstToken,
+            exactAmount: amount,
+            hookData: "0x",
+          });
+
+          const outputAmount = result.amountOut.toString();
+          const expiresAt = new Date(Date.now() + validFor * 1000);
+
+          console.log("[V4] ✓ Direct WBTC -> cbBTC quote:", outputAmount, "cbBTC");
+
+          return {
+            buyAmount: outputAmount,
+            expiresAt: expiresAt.toISOString(),
+            route: {
+              type: "single-hop",
+              path: "WBTC -> cbBTC",
+              poolFee: 100,
+              tickSpacing: 1,
+              gasEstimate: result.gasEstimate?.toString() || "0",
+            },
+            v4Metadata: {
+              poolKey,
+              isFirstToken: sortedPair.isFirstToken,
+              amountIn: amount,
+              amountOutMinimum: "0",
+            },
+          };
+        } catch (error) {
+          console.log(
+            "[V4] ✗ Direct WBTC -> cbBTC failed:",
+            error instanceof Error ? error.message : "Unknown error"
+          );
+          return null;
+        }
       }
     }
 
@@ -591,244 +387,177 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
     // Try different fee tiers for first hop (tokenIn -> WBTC)
     // Always use 0.01% for second hop (WBTC -> cbBTC, the only pool that exists)
 
-    let bestQuote: {
-      buyAmount: string;
-      metadata: V4QuoteMetadata;
-      route: any;
-      firstHopFee: number;
-    } | null = null;
-    let bestAmount = BigInt(0);
+    if (isExactOutput) {
+      // Exact output: minimize input amount
+      let bestQuote: {
+        inputAmount: string;
+        metadata: V4QuoteMetadata;
+        route: any;
+        firstHopFee: number;
+      } | null = null;
+      let bestAmount = BigInt(2) ** BigInt(256) - BigInt(1); // Start with max value
 
-    for (const config of POOL_CONFIGS) {
-      try {
-        // Build the two-hop path
-        // Key insight: intermediateCurrency is the OUTPUT of each hop
-        const path: PathKey[] = [
-          {
-            intermediateCurrency: WBTC_ADDRESS, // Output of first hop
-            fee: config.fee,
-            tickSpacing: config.tickSpacing,
-            hooks: ZERO_ADDRESS,
-            hookData: "0x",
-          },
-          {
-            intermediateCurrency: CBBTC_ADDRESS, // Output of second hop
-            fee: 100, // 0.01% - the only WBTC/cbBTC pool on V4
-            tickSpacing: 1,
-            hooks: ZERO_ADDRESS,
-            hookData: "0x",
-          },
-        ];
-
-        const result = await v4QuoterContract.callStatic.quoteExactInput({
-          exactCurrency: tokenInAddress,
-          path: path,
-          exactAmount: sellAmount,
-        });
-
-        const buyAmount = result.amountOut.toString();
-
-        if (BigInt(buyAmount) > bestAmount) {
-          bestAmount = BigInt(buyAmount);
-          bestQuote = {
-            buyAmount,
-            metadata: {
-              currencyIn: tokenInAddress,
-              path,
-              amountIn: sellAmount,
-              amountOutMinimum: "0",
+      for (const config of POOL_CONFIGS) {
+        try {
+          // Build the two-hop path for exact output
+          // For exact output: we start at cbBTC (exactCurrency) and work backwards through WBTC to tokenIn
+          // The path only contains intermediate currencies (WBTC), not the final input (tokenIn)
+          const path: PathKey[] = [
+            {
+              intermediateCurrency: tokenInAddress, // The input token
+              fee: config.fee,
+              tickSpacing: config.tickSpacing,
+              hooks: ZERO_ADDRESS,
+              hookData: "0x",
             },
-            route: {
-              type: "multi-hop",
-              path: `${sellToken} -> WBTC -> cbBTC`,
-              poolFees: [config.fee, 100],
-              tickSpacings: [config.tickSpacing, 1],
-              gasEstimate: result.gasEstimate?.toString() || "0",
+            {
+              intermediateCurrency: WBTC_ADDRESS,
+              fee: 100,
+              tickSpacing: 1,
+              hooks: ZERO_ADDRESS,
+              hookData: "0x",
             },
-            firstHopFee: config.fee,
-          };
+          ];
+
+          const result = await v4QuoterContract.callStatic.quoteExactOutput({
+            exactCurrency: CBBTC_ADDRESS, // The token we want exact amount of
+            path: path,
+            exactAmount: amount, // The exact output amount we want
+          });
+
+          const inputAmount = result.amountIn.toString();
+
+          // For exact output, we want the minimum input amount
+          if (BigInt(inputAmount) < bestAmount) {
+            bestAmount = BigInt(inputAmount);
+            bestQuote = {
+              inputAmount,
+              metadata: {
+                currencyIn: tokenInAddress,
+                path,
+                amountIn: "0", // Will be set by swap builder
+                amountOutMinimum: amount, // This is the exact amount we want
+              },
+              route: {
+                type: "multi-hop",
+                path: `${sellToken} -> WBTC -> cbBTC`,
+                poolFees: [config.fee, 100],
+                tickSpacings: [config.tickSpacing, 1],
+                gasEstimate: result.gasEstimate?.toString() || "0",
+              },
+              firstHopFee: config.fee,
+            };
+          }
+        } catch (error) {
+          // Silently try next config
         }
-      } catch (error) {
-        // Silently try next config
       }
-    }
 
-    if (!bestQuote) {
-      console.log("[V4] No valid routes found");
-      return null;
-    }
-
-    const expiresAt = new Date(Date.now() + validFor * 1000);
-
-    // Log the best route in the requested format
-    const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
-    console.log(`[V4] Trying: ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`);
-    console.log("[V4] Best quote:", bestQuote.buyAmount, "cbBTC");
-
-    return {
-      buyAmount: bestQuote.buyAmount,
-      expiresAt: expiresAt.toISOString(),
-      route: bestQuote.route,
-      v4Metadata: bestQuote.metadata,
-    };
-  } catch (error) {
-    console.error("[V4] Quote error:", error);
-    return null;
-  }
-}
-
-// ============================================================================
-// V4 Quote Logic (Exact Output)
-// ============================================================================
-
-async function getV4QuoteExactOutput(params: V2V3QuoteParams): Promise<V4QuoteResult | null> {
-  const { sellToken, sellAmount, validFor } = params;
-
-  try {
-    const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
-
-    // If input is already WBTC, try direct WBTC -> cbBTC swap
-    if (tokenInAddress.toLowerCase() === WBTC_ADDRESS.toLowerCase()) {
-      console.log("[V4] Input is WBTC, trying direct WBTC -> cbBTC (exact output) at 0.01%");
-      try {
-        const sortedPair = sortTokens(WBTC_ADDRESS, CBBTC_ADDRESS);
-        const poolKey = {
-          currency0: sortedPair.firstToken,
-          currency1: sortedPair.secondToken,
-          fee: 100, // 0.01%
-          tickSpacing: 1,
-          hooks: ZERO_ADDRESS,
-        };
-
-        const result = await v4QuoterContract.callStatic.quoteExactOutputSingle({
-          poolKey: poolKey,
-          zeroForOne: sortedPair.isFirstToken,
-          exactAmount: sellAmount, // This is the exact output amount (cbBTC)
-          hookData: "0x",
-        });
-
-        const inputAmountNeeded = result.amountIn.toString();
-        const expiresAt = new Date(Date.now() + validFor * 1000);
-
-        console.log(
-          "[V4] ✓ Direct WBTC -> cbBTC (exact output) quote:",
-          inputAmountNeeded,
-          "WBTC needed"
-        );
-
-        return {
-          buyAmount: inputAmountNeeded, // For exact output, this is the required input
-          expiresAt: expiresAt.toISOString(),
-          route: {
-            type: "single-hop",
-            path: "WBTC -> cbBTC",
-            poolFee: 100,
-            tickSpacing: 1,
-            gasEstimate: result.gasEstimate?.toString() || "0",
-          },
-          v4Metadata: {
-            poolKey,
-            isFirstToken: sortedPair.isFirstToken,
-            amountIn: "0", // Will be set by swap builder
-            amountOutMinimum: sellAmount, // This is the exact amount we want
-          },
-        };
-      } catch (error) {
-        console.log(
-          "[V4] ✗ Direct WBTC -> cbBTC (exact output) failed:",
-          error instanceof Error ? error.message : "Unknown error"
-        );
+      if (!bestQuote) {
+        console.log("[V4] No valid routes found (exact output)");
         return null;
       }
-    }
 
-    // Multi-hop: tokenIn -> WBTC -> cbBTC (exact output)
-    // For exact output, we work backwards: specify cbBTC output, get input needed
-    let bestQuote: {
-      inputAmount: string;
-      metadata: V4QuoteMetadata;
-      route: any;
-      firstHopFee: number;
-    } | null = null;
-    let bestAmount = BigInt(2) ** BigInt(256) - BigInt(1); // Start with max value, looking for minimum input
+      const expiresAt = new Date(Date.now() + validFor * 1000);
 
-    for (const config of POOL_CONFIGS) {
-      try {
-        // Build the two-hop path for exact output
-        // Note: For exact output, path is reversed
-        const path: PathKey[] = [
-          {
-            intermediateCurrency: WBTC_ADDRESS, // First hop output (going backwards)
-            fee: 100, // 0.01% - the only WBTC/cbBTC pool on V4
-            tickSpacing: 1,
-            hooks: ZERO_ADDRESS,
-            hookData: "0x",
-          },
-          {
-            intermediateCurrency: tokenInAddress, // Second hop output (going backwards) = our input
-            fee: config.fee,
-            tickSpacing: config.tickSpacing,
-            hooks: ZERO_ADDRESS,
-            hookData: "0x",
-          },
-        ];
+      // Log the best route in the requested format
+      const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
+      console.log(
+        `[V4] Trying (exact output): ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`
+      );
+      console.log("[V4] Best quote (exact output):", bestQuote.inputAmount, "input needed");
 
-        const result = await v4QuoterContract.callStatic.quoteExactOutput({
-          exactCurrency: CBBTC_ADDRESS, // The token we want exact amount of
-          path: path,
-          exactAmount: sellAmount, // The exact output amount we want
-        });
+      return {
+        sellAmount: bestQuote.inputAmount, // For exact output, return the required input
+        expiresAt: expiresAt.toISOString(),
+        route: bestQuote.route,
+        v4Metadata: bestQuote.metadata,
+      };
+    } else {
+      // Exact input: maximize output amount
+      let bestQuote: {
+        buyAmount: string;
+        metadata: V4QuoteMetadata;
+        route: any;
+        firstHopFee: number;
+      } | null = null;
+      let bestAmount = BigInt(0);
 
-        const inputAmount = result.amountIn.toString();
-
-        // For exact output, we want the minimum input amount
-        if (BigInt(inputAmount) < bestAmount) {
-          bestAmount = BigInt(inputAmount);
-          bestQuote = {
-            inputAmount,
-            metadata: {
-              currencyIn: tokenInAddress,
-              path,
-              amountIn: "0", // Will be set by swap builder
-              amountOutMinimum: sellAmount, // This is the exact amount we want
+      for (const config of POOL_CONFIGS) {
+        try {
+          // Build the two-hop path
+          // Key insight: intermediateCurrency is the OUTPUT of each hop
+          const path: PathKey[] = [
+            {
+              intermediateCurrency: WBTC_ADDRESS, // Output of first hop
+              fee: config.fee,
+              tickSpacing: config.tickSpacing,
+              hooks: ZERO_ADDRESS,
+              hookData: "0x",
             },
-            route: {
-              type: "multi-hop",
-              path: `${sellToken} -> WBTC -> cbBTC`,
-              poolFees: [config.fee, 100],
-              tickSpacings: [config.tickSpacing, 1],
-              gasEstimate: result.gasEstimate?.toString() || "0",
+            {
+              intermediateCurrency: CBBTC_ADDRESS, // Output of second hop
+              fee: 100, // 0.01% - the only WBTC/cbBTC pool on V4
+              tickSpacing: 1,
+              hooks: ZERO_ADDRESS,
+              hookData: "0x",
             },
-            firstHopFee: config.fee,
-          };
+          ];
+
+          const result = await v4QuoterContract.callStatic.quoteExactInput({
+            exactCurrency: tokenInAddress,
+            path: path,
+            exactAmount: amount,
+          });
+
+          const outputAmount = result.amountOut.toString();
+
+          if (BigInt(outputAmount) > bestAmount) {
+            bestAmount = BigInt(outputAmount);
+            bestQuote = {
+              buyAmount: outputAmount,
+              metadata: {
+                currencyIn: tokenInAddress,
+                path,
+                amountIn: amount,
+                amountOutMinimum: "0",
+              },
+              route: {
+                type: "multi-hop",
+                path: `${sellToken} -> WBTC -> cbBTC`,
+                poolFees: [config.fee, 100],
+                tickSpacings: [config.tickSpacing, 1],
+                gasEstimate: result.gasEstimate?.toString() || "0",
+              },
+              firstHopFee: config.fee,
+            };
+          }
+        } catch (error) {
+          // Silently try next config
         }
-      } catch (error) {
-        // Silently try next config
       }
+
+      if (!bestQuote) {
+        console.log("[V4] No valid routes found");
+        return null;
+      }
+
+      const expiresAt = new Date(Date.now() + validFor * 1000);
+
+      // Log the best route in the requested format
+      const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
+      console.log(`[V4] Trying: ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`);
+      console.log("[V4] Best quote:", bestQuote.buyAmount, "cbBTC");
+
+      return {
+        buyAmount: bestQuote.buyAmount,
+        expiresAt: expiresAt.toISOString(),
+        route: bestQuote.route,
+        v4Metadata: bestQuote.metadata,
+      };
     }
-
-    if (!bestQuote) {
-      console.log("[V4] No valid routes found (exact output)");
-      return null;
-    }
-
-    const expiresAt = new Date(Date.now() + validFor * 1000);
-
-    // Log the best route in the requested format
-    const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
-    console.log(
-      `[V4] Trying (exact output): ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`
-    );
-    console.log("[V4] Best quote (exact output):", bestQuote.inputAmount, "input needed");
-
-    return {
-      buyAmount: bestQuote.inputAmount, // For exact output, this is the required input
-      expiresAt: expiresAt.toISOString(),
-      route: bestQuote.route,
-      v4Metadata: bestQuote.metadata,
-    };
   } catch (error) {
-    console.error("[V4] Quote error (exact output):", error);
+    console.error("[V4] Quote error:", error);
     return null;
   }
 }
@@ -928,17 +657,19 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
   const { metadata, receiver, slippageBps, validFor, sellToken } = params;
 
   try {
-    console.log("[V4] Building V4 swap transaction to", receiver);
+    console.log("[V4] Building V4 swap actions for client-side execution");
 
     const v4Planner = new V4Planner();
-    const routePlanner = new RoutePlanner();
-
     const deadline = Math.floor(Date.now() / 1000) + validFor;
 
     // Calculate minimum output with slippage
     const amountOut = BigInt(metadata.amountOutMinimum || "0");
     const slippageMultiplier = BigInt(10_000 - slippageBps);
     const amountOutMinimum = ((amountOut * slippageMultiplier) / BigInt(10_000)).toString();
+
+    // Determine input/output currencies
+    let inputCurrency: string;
+    let outputCurrency: string;
 
     if (metadata.poolKey) {
       // Single-hop swap
@@ -951,8 +682,19 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
       };
 
       v4Planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [swapConfig]);
-      v4Planner.addAction(Actions.SETTLE_ALL, [metadata.poolKey.currency0, metadata.amountIn]);
-      v4Planner.addAction(Actions.TAKE_ALL, [metadata.poolKey.currency1, amountOutMinimum]);
+
+      inputCurrency = metadata.isFirstToken
+        ? metadata.poolKey.currency0
+        : metadata.poolKey.currency1;
+      outputCurrency = metadata.isFirstToken
+        ? metadata.poolKey.currency1
+        : metadata.poolKey.currency0;
+
+      // SETTLE: Pull input tokens from sender via Permit2
+      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, metadata.amountIn]);
+
+      // TAKE: Take output tokens directly to receiver
+      v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
     } else if (metadata.path && metadata.currencyIn) {
       // Multi-hop swap
       const swapConfig = {
@@ -963,40 +705,31 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
       };
 
       v4Planner.addAction(Actions.SWAP_EXACT_IN, [swapConfig]);
-      v4Planner.addAction(Actions.SETTLE_ALL, [metadata.currencyIn, metadata.amountIn]);
 
-      // Get final output currency from path
-      const finalCurrency = metadata.path[metadata.path.length - 1].intermediateCurrency;
-      v4Planner.addAction(Actions.TAKE_ALL, [finalCurrency, amountOutMinimum]);
+      inputCurrency = metadata.currencyIn;
+      outputCurrency = metadata.path[metadata.path.length - 1].intermediateCurrency;
+
+      // SETTLE: Pull input tokens from sender via Permit2
+      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, metadata.amountIn]);
+
+      // TAKE: Take output tokens directly to receiver
+      v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
     } else {
       throw new Error("Invalid V4 metadata: missing poolKey or path");
     }
 
     const encodedActions = v4Planner.finalize();
-    routePlanner.addCommand(CommandType.V4_SWAP, [encodedActions]);
-
-    // Encode the execute call for Universal Router
-    // execute(bytes commands, bytes[] inputs, uint256 deadline)
-    const universalRouterInterface = new utils.Interface([
-      "function execute(bytes commands, bytes[] inputs, uint256 deadline) payable",
-    ]);
-
-    const calldata = universalRouterInterface.encodeFunctionData("execute", [
-      routePlanner.commands,
-      routePlanner.inputs,
-      deadline,
-    ]);
+    const expiresAt = new Date(Date.now() + validFor * 1000);
 
     // Determine if we need to send ETH value
     const isNativeEth = sellToken.toUpperCase() === "ETH";
     const value = isNativeEth ? metadata.amountIn : "0";
 
-    const expiresAt = new Date(Date.now() + validFor * 1000);
+    console.log("[V4] Swap actions encoded successfully");
 
-    console.log("[V4] Swap built successfully. CallData length:", calldata.length);
-
+    // Return the encoded actions and metadata for client-side Universal Router execution
     return {
-      calldata,
+      calldata: encodedActions, // This is the encoded V4 actions, not the full UR calldata
       value,
       to: V4_UNIVERSAL_ROUTER,
       buyAmount: amountOutMinimum,
@@ -1004,6 +737,8 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
       route: {
         type: "v4",
         deadline: deadline.toString(),
+        inputToken: inputCurrency,
+        outputToken: outputCurrency,
       },
     };
   } catch (error) {
@@ -1021,59 +756,71 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const sellToken = searchParams.get("sellToken");
     const sellAmount = searchParams.get("sellAmount");
+    const buyAmount = searchParams.get("buyAmount");
     const decimalsParam = searchParams.get("decimals");
     const userAddress = searchParams.get("userAddress");
     const slippageBps = parseInt(searchParams.get("slippageBps") || String(DEFAULT_SLIPPAGE_BPS));
     const validFor = parseInt(searchParams.get("validFor") || String(DEFAULT_VALID_FOR_SECONDS));
     const router = searchParams.get("router"); // "v3", "v4", or null (both)
-    const tradeType = (searchParams.get("tradeType") as "input" | "output") || "input";
 
     // Validate inputs
-    if (!sellToken || !sellAmount || !decimalsParam || !userAddress) {
+    if (!sellToken || !decimalsParam || !userAddress) {
       return NextResponse.json(
-        { error: "Missing required parameters: sellToken, sellAmount, decimals, userAddress" },
+        { error: "Missing required parameters: sellToken, decimals, userAddress" },
+        { status: 400 }
+      );
+    }
+
+    // Validate exactly one of sellAmount or buyAmount is provided
+    if (!sellAmount && !buyAmount) {
+      return NextResponse.json(
+        {
+          error: "Must provide either sellAmount (for exact input) or buyAmount (for exact output)",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (sellAmount && buyAmount) {
+      return NextResponse.json(
+        { error: "Cannot provide both sellAmount and buyAmount - use only one" },
         { status: 400 }
       );
     }
 
     const decimals = parseInt(decimalsParam);
+    const isExactOutput = !!buyAmount;
 
     const quoteParams: V2V3QuoteParams = {
       sellToken,
-      sellAmount,
+      sellAmount: sellAmount || undefined,
+      buyAmount: buyAmount || undefined,
       decimals,
       userAddress,
       slippageBps,
       validFor,
-      tradeType,
     };
 
     // Fetch quotes based on router parameter and trade type
     console.log("\n========================================");
     if (router === "v3") {
       console.log(
-        `Fetching quotes from V2/V3 only (${tradeType === "output" ? "exact output" : "exact input"})...`
+        `Fetching quotes from V2/V3 only (${isExactOutput ? "exact output" : "exact input"})...`
       );
     } else if (router === "v4") {
       console.log(
-        `Fetching quotes from V4 only (${tradeType === "output" ? "exact output" : "exact input"})...`
+        `Fetching quotes from V4 only (${isExactOutput ? "exact output" : "exact input"})...`
       );
     } else {
       console.log(
-        `Fetching quotes from V2/V3 and V4 (${tradeType === "output" ? "exact output" : "exact input"})...`
+        `Fetching quotes from V2/V3 and V4 (${isExactOutput ? "exact output" : "exact input"})...`
       );
     }
     console.log("========================================");
 
-    const isExactOutput = tradeType === "output";
-
     const [v2v3Result, v4Result] = await Promise.all([
       router === "v4" ? Promise.resolve(null) : getV2V3Quote(quoteParams),
-      router === "v3"
-        ? Promise.resolve(null)
-        : isExactOutput
-          ? getV4QuoteExactOutput(quoteParams)
-          : getV4Quote(quoteParams),
+      router === "v3" ? Promise.resolve(null) : getV4Quote(quoteParams),
     ]);
 
     // Compare and select winner
@@ -1099,11 +846,11 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // Both returned quotes, compare amounts
-      const v2v3Amount = BigInt(v2v3Result.buyAmount);
-      const v4Amount = BigInt(v4Result.buyAmount);
-
       if (isExactOutput) {
-        // For exact output, lower input amount is better
+        // For exact output, compare sellAmount (lower input is better)
+        const v2v3Amount = BigInt(v2v3Result.sellAmount!);
+        const v4Amount = BigInt(v4Result.sellAmount!);
+
         if (v4Amount < v2v3Amount) {
           winner = "v4";
           winningQuote = v4Result;
@@ -1121,7 +868,10 @@ export async function GET(request: NextRequest) {
           console.log(`  V4: ${v4Amount.toString()} input required`);
         }
       } else {
-        // For exact input, higher output amount is better
+        // For exact input, compare buyAmount (higher output is better)
+        const v2v3Amount = BigInt(v2v3Result.buyAmount!);
+        const v4Amount = BigInt(v4Result.buyAmount!);
+
         if (v4Amount > v2v3Amount) {
           winner = "v4";
           winningQuote = v4Result;
@@ -1142,9 +892,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Cache the winning quote
-    const cacheKey = generateCacheKey(sellToken, sellAmount, userAddress);
+    const amount = (buyAmount || sellAmount) as string;
+    const cacheKey = generateCacheKey(sellToken, amount, userAddress);
     quoteCache.set(cacheKey, {
       routerType: winner,
+      sellAmount: winningQuote.sellAmount,
       buyAmount: winningQuote.buyAmount,
       expiresAt: new Date(winningQuote.expiresAt),
       route: winningQuote.route,
@@ -1155,6 +907,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       routerType: winner,
+      sellAmount: winningQuote.sellAmount,
       buyAmount: winningQuote.buyAmount,
       expiresAt: winningQuote.expiresAt,
       route: winningQuote.route,
@@ -1239,8 +992,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "V4 metadata not found in cache" }, { status: 500 });
       }
 
-      // Update amountOutMinimum with the cached buyAmount
-      cachedQuote.v4Metadata.amountOutMinimum = cachedQuote.buyAmount;
+      // Update amountOutMinimum with the cached buyAmount if available
+      if (cachedQuote.buyAmount) {
+        cachedQuote.v4Metadata.amountOutMinimum = cachedQuote.buyAmount;
+      }
 
       swapResult = await buildV4Swap({
         metadata: cachedQuote.v4Metadata,

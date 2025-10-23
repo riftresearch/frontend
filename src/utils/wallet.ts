@@ -96,6 +96,8 @@ export const reownModal = createAppKit({
     emailShowWallets: true, // Show wallets directly without email prompt
   },
   allWallets: "SHOW", // Display all available wallets
+  enableEIP6963: true, // Enable modern wallet discovery to prevent conflicts
+  enableInjected: true, // Ensure injected wallets are enabled
 });
 
 // Override the modal open method to prevent it from opening on admin page
