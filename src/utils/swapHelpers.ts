@@ -9,6 +9,7 @@ import { Quote, formatLotAmount, RfqClientError } from "./rfqClient";
 import { createUniswapRouter, UniswapQuoteResponse, UniswapRouterError } from "./uniswapRouter";
 import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
+import { validateBitcoinPayoutAddressWithNetwork } from "./bitcoinUtils";
 
 /**
  * Minimum swap amount in satoshis
@@ -132,13 +133,20 @@ export function getMinSwapValueUsd(bitcoinPrice: number): number {
 /**
  * Get quote for cbBTC -> BTC using RFQ server
  * This is the original getQuote function from SwapWidget, renamed
+ *
+ * @param amount - The amount (either input cbBTC or output BTC depending on mode)
+ * @param mode - "ExactInput" for specifying cbBTC input, "ExactOutput" for specifying BTC output
+ * @returns Quote object or null if failed
  */
-export async function getCBBTCtoBTCQuote(from_amount: string): Promise<Quote | null> {
+export async function getCBBTCtoBTCQuote(
+  amount: string,
+  mode: "ExactInput" | "ExactOutput" = "ExactInput"
+): Promise<Quote | null> {
   // Check if FAKE_RFQ mode is enabled
   const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
 
   if (FAKE_RFQ) {
-    console.log("FAKE_RFQ mode enabled - returning dummy quote");
+    console.log(`FAKE_RFQ mode enabled - returning dummy quote (${mode})`);
     const dummyQuote: Quote = {
       id: "123e4567-e89b-12d3-a456-426614174000",
       market_maker_id: "987f6543-e21c-43d2-b654-426614174111",
@@ -151,7 +159,7 @@ export async function getCBBTCtoBTCQuote(from_amount: string): Promise<Quote | n
             data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
           },
         },
-        amount: from_amount, // Use the input amount
+        amount: amount, // 1:1 for testing
       },
       to: {
         currency: {
@@ -161,7 +169,7 @@ export async function getCBBTCtoBTCQuote(from_amount: string): Promise<Quote | n
             type: "Native",
           },
         },
-        amount: from_amount, // 1:1 for testing (in reality would be slightly less due to fees)
+        amount: amount, // 1:1 for testing
       },
       fee_schedule: {
         protocol_fee_sats: 100,
@@ -181,8 +189,8 @@ export async function getCBBTCtoBTCQuote(from_amount: string): Promise<Quote | n
     let quoteResponse: any;
     try {
       quoteResponse = await rfqClient.requestQuotes({
-        mode: "ExactInput",
-        amount: from_amount,
+        mode,
+        amount,
         from: {
           chain: "ethereum",
           decimals: 8,
@@ -212,7 +220,7 @@ export async function getCBBTCtoBTCQuote(from_amount: string): Promise<Quote | n
     const quoteType = (quoteResponse as any)?.quote?.type;
 
     // if (quoteType !== "success") {
-    //   if (from_amount < 2500n) {
+    //   if (amount < 2500n) {
     //     // this is probably just too small so no one quoted
     //     toastInfo({
     //       title: "Amount too little",
@@ -283,18 +291,18 @@ export async function getERC20ToBTCQuote(
       userAddress,
       slippageBps,
       validFor,
-      router: "v3",
+      // router: "v4",
     });
 
     const cbBTCAmount = uniswapQuote.buyAmount;
     console.log("Uniswap quote: will receive", cbBTCAmount, "cbBTC (in base units)");
 
     // Apply slippage to cbBTC amount for RFQ quote
-    const adjustedCbBTCAmount = applySlippage(cbBTCAmount, slippageBps);
+    const adjustedCbBTCAmount = applySlippage(cbBTCAmount as string, slippageBps);
     console.log("Adjusted cbBTC amount after slippage:", adjustedCbBTCAmount);
 
     // Step 2: Get RFQ quote for cbBTC -> BTC using adjusted amount
-    const rfqQuote = await getCBBTCtoBTCQuote(adjustedCbBTCAmount);
+    const rfqQuote = await getCBBTCtoBTCQuote(adjustedCbBTCAmount, "ExactInput");
 
     if (!rfqQuote) {
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -393,6 +401,159 @@ export function convertInputAmountToFullDecimals(
 }
 
 /**
+ * Response from ERC20 to BTC quote (exact output) combining RFQ and Uniswap
+ */
+export interface ERC20ToBTCQuoteExactOutputResponse {
+  /** Uniswap quote with pricing information (if needed) */
+  uniswapQuote?: UniswapQuoteResponse;
+  /** Required ERC20/ETH input amount (formatted string) */
+  erc20InputAmount: string;
+  /** RFQ quote for cbBTC -> BTC (needed for OTC swap creation) */
+  rfqQuote: Quote;
+  /** Earliest expiration timestamp */
+  expiresAt: Date;
+}
+
+/**
+ * Apply slippage for exact output (increases input amount)
+ *
+ * @param amount - The input amount to apply slippage to (as BigInt or string)
+ * @param slippageBps - Slippage tolerance in basis points (100 bps = 1%)
+ * @returns The adjusted amount as a string
+ */
+export function applySlippageExactOutput(amount: bigint | string, slippageBps?: number): string {
+  const amountBigInt = typeof amount === "string" ? BigInt(amount) : amount;
+  const slippage = slippageBps ?? DEFAULT_SLIPPAGE_BPS;
+  const slippageMultiplier = 1 + slippage / 10000;
+
+  return ((amountBigInt * BigInt(Math.floor(slippageMultiplier * 10000))) / 10000n).toString();
+}
+
+/**
+ * Get combined quote for ERC20/ETH -> BTC using exact output
+ * User specifies desired BTC output, we calculate required input
+ */
+export async function getERC20ToBTCQuoteExactOutput(
+  btcOutputAmount: string,
+  selectedInputToken: TokenData | null,
+  userAddress: string,
+  slippageBps?: number,
+  validFor?: number
+): Promise<ERC20ToBTCQuoteExactOutputResponse | null> {
+  try {
+    if (!selectedInputToken) {
+      throw new Error("No input token selected");
+    }
+
+    // Convert BTC amount to base units (satoshis)
+    const btcAmountInSats = parseUnits(btcOutputAmount, BITCOIN_DECIMALS).toString();
+
+    // Step 1: Get RFQ quote for cbBTC -> BTC using exact output mode
+    console.log("Getting RFQ quote (exact output) for", btcAmountInSats, "sats BTC");
+
+    const rfqQuoteData = await getCBBTCtoBTCQuote(btcAmountInSats, "ExactOutput");
+
+    if (!rfqQuoteData) {
+      throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
+    }
+
+    // The "from" amount is how much cbBTC we need
+    const cbBTCAmountNeeded = rfqQuoteData.from.amount;
+    console.log("RFQ quote: need", cbBTCAmountNeeded, "cbBTC (in base units)");
+
+    // Check if input token is cbBTC
+    const isCbBTC = selectedInputToken.ticker === "cbBTC";
+
+    const cbBTCFormatted = formatUnits(BigInt(cbBTCAmountNeeded), 8);
+    if (isCbBTC) {
+      // For cbBTC, we already have the answer - just format it
+      const expiresAt = new Date(rfqQuoteData.expires_at);
+
+      console.log("Input is cbBTC, returning direct quote:", cbBTCFormatted);
+
+      return {
+        erc20InputAmount: cbBTCFormatted,
+        rfqQuote: rfqQuoteData,
+        expiresAt,
+      };
+    }
+
+    // Step 2: Get Uniswap quote for ERC20/ETH -> cbBTC using exact output
+    const uniswapRouter = createUniswapRouter();
+    const buyToken = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"; // cbBTC
+    const sellToken = selectedInputToken?.address || "ETH";
+
+    console.log(
+      "Getting Uniswap quote (exact output) for",
+      sellToken,
+      "->",
+      cbBTCFormatted,
+      "cbBTC"
+    );
+
+    const uniswapQuote = await uniswapRouter.getQuote({
+      sellToken,
+      buyAmount: cbBTCAmountNeeded, // Exact output: specify desired cbBTC amount
+      decimals: selectedInputToken.decimals,
+      userAddress,
+      slippageBps,
+      validFor,
+      // router: "v4",
+    });
+
+    // For exact output, the API returns the required input amount in buyAmount field
+    const erc20AmountNeeded = uniswapQuote.sellAmount;
+    console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units)");
+
+    // Apply slippage by increasing the input amount
+    const adjustedInputAmount = applySlippageExactOutput(erc20AmountNeeded as string, slippageBps);
+    console.log("Adjusted input amount after slippage:", adjustedInputAmount);
+
+    // Format the input amount for display
+    const erc20InputFormatted = formatUnits(
+      BigInt(adjustedInputAmount),
+      selectedInputToken.decimals
+    );
+
+    // Determine earliest expiration
+    const uniswapExpiration = uniswapQuote.expiresAt;
+    const rfqExpiration = new Date(rfqQuoteData.expires_at);
+    const expiresAt = uniswapExpiration < rfqExpiration ? uniswapExpiration : rfqExpiration;
+
+    console.log("Combined exact output quote complete:", {
+      btcOutputAmount,
+      erc20InputAmount: erc20InputFormatted,
+      expiresAt,
+    });
+
+    return {
+      uniswapQuote,
+      erc20InputAmount: erc20InputFormatted,
+      rfqQuote: rfqQuoteData,
+      expiresAt,
+    };
+  } catch (error: unknown) {
+    console.error("Failed to get ERC20 to BTC quote (exact output):", error);
+
+    // Handle specific error types
+    if (error instanceof RfqClientError) {
+      toastError(error, {
+        title: "RFQ Quote Failed",
+        description: error.message,
+      });
+    } else {
+      const description = error instanceof Error ? error.message : "Unknown error occurred";
+      toastError(error, {
+        title: "Quote Failed",
+        description,
+      });
+    }
+
+    return null;
+  }
+}
+
+/**
  * Calculate USD value for an amount based on swap direction and token prices
  * @param amount - The amount to calculate USD value for
  * @param isSwappingForBTC - Whether we're swapping for BTC (true) or from BTC (false)
@@ -453,4 +614,31 @@ export function calculateUsdValue(
   }
 
   return formatUsdValue(parsed * price);
+}
+
+/**
+ * Validate payout address based on swap direction
+ * @param address - The address to validate
+ * @param isSwappingForBTC - Whether we're swapping for BTC (true) or for ERC20 (false)
+ * @returns Validation result with isValid flag and optional network mismatch details
+ */
+export function validatePayoutAddress(
+  address: string,
+  isSwappingForBTC: boolean
+): { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string } {
+  if (!address) {
+    return { isValid: false };
+  }
+
+  if (!isSwappingForBTC) {
+    // For BTC -> ERC20 swaps, validate Ethereum address for payout
+    const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+    return {
+      isValid: ethAddressRegex.test(address),
+    };
+  } else {
+    // For ERC20 -> BTC swaps, validate Bitcoin address for payout
+    const validation = validateBitcoinPayoutAddressWithNetwork(address, "mainnet");
+    return validation;
+  }
 }

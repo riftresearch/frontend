@@ -56,6 +56,16 @@ export const useStore = create<{
   setRfqQuote: (quote: Quote | null) => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
+  bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
+  setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) => void;
+  payoutAddress: string;
+  setPayoutAddress: (address: string) => void;
+  addressValidation: { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string };
+  setAddressValidation: (validation: {
+    isValid: boolean;
+    networkMismatch?: boolean;
+    detectedNetwork?: string;
+  }) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -98,4 +108,15 @@ export const useStore = create<{
   setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
   slippageBips: 10,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
+  bitcoinDepositInfo: null,
+  setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) =>
+    set({ bitcoinDepositInfo: info }),
+  payoutAddress: "",
+  setPayoutAddress: (address: string) => set({ payoutAddress: address }),
+  addressValidation: { isValid: false },
+  setAddressValidation: (validation: {
+    isValid: boolean;
+    networkMismatch?: boolean;
+    detectedNetwork?: string;
+  }) => set({ addressValidation: validation }),
 }));
