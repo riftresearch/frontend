@@ -2,7 +2,7 @@ import { Flex, Text, Box, Image, Portal, Input } from "@chakra-ui/react";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { BASE_LOGO } from "./SVGs";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useStore } from "@/utils/store";
 import { mainnet, base } from "@reown/appkit/networks";
@@ -23,7 +23,7 @@ interface AssetSelectorModalProps {
   currentAsset: string;
 }
 
-type Network = "ethereum" | "base";
+type Network = "all" | "ethereum" | "base";
 
 export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   isOpen,
@@ -32,17 +32,13 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 }) => {
   const { evmConnectWalletChainId } = useStore();
 
-  // Initialize selectedNetwork based on current chain ID
-  const getNetworkFromChainId = (chainId: number): Network => {
-    return chainId === base.id ? "base" : "ethereum";
-  };
-
-  const [selectedNetwork, setSelectedNetwork] = useState<Network>(
-    getNetworkFromChainId(evmConnectWalletChainId)
-  );
+  const [selectedNetwork, setSelectedNetwork] = useState<Network>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Wagmi hooks for chain switching
   const { isConnected, address } = useAccount();
@@ -62,10 +58,32 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setInputUsdValue,
   } = useStore();
 
-  // Sync selectedNetwork with current chain ID when it changes
+  // Auto-focus search input when modal opens
   useEffect(() => {
-    setSelectedNetwork(getNetworkFromChainId(evmConnectWalletChainId));
-  }, [evmConnectWalletChainId]);
+    if (isOpen && searchInputRef.current) {
+      // Small delay to ensure the modal is fully rendered
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDropdownOpen]);
 
   // Debounce search input
   useEffect(() => {
@@ -89,14 +107,33 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     if (!isOpen) return;
     setIsLoading(true);
     try {
-      const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
       // If there's an active query, use the search index top-10
       if (debouncedQuery.length > 0) {
-        const results = searchTokens(selectedNetwork, debouncedQuery, 10);
+        let results: TokenData[] = [];
 
-        // Get user's wallet tokens for the current chain
-        const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
-        const userTokens = userTokensByChain[chainId] || [];
+        if (selectedNetwork === "all") {
+          // Search both networks and combine results (only Ethereum for now)
+          const ethResults = searchTokens("ethereum", debouncedQuery, 10).map((t) => ({
+            ...t,
+            chainId: 1,
+          }));
+          results = ethResults;
+        } else {
+          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+          results = searchTokens(selectedNetwork, debouncedQuery, 10).map((t) => ({
+            ...t,
+            chainId,
+          }));
+        }
+
+        // Get user's wallet tokens (only Ethereum for now)
+        let userTokens: TokenData[] = [];
+        if (selectedNetwork === "all") {
+          userTokens = userTokensByChain[1] || [];
+        } else {
+          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+          userTokens = userTokensByChain[chainId] || [];
+        }
 
         // Replace balance and usdValue in search results if token is in user's wallet
         const mergedResults = results.map((t) => {
@@ -120,7 +157,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           const q = debouncedQuery.trim().toLowerCase();
           const isAddr = q.startsWith("0x") && /^0x[a-f0-9]{6,40}$/.test(q);
           const existsInCache = mergedResults.find((r) => r.address === q);
-          if (isAddr && !existsInCache) {
+          if (isAddr && !existsInCache && selectedNetwork !== "all") {
             const networkParam = selectedNetwork === "ethereum" ? "ethereum" : "base";
             fetch(`/api/token-metadata?network=${networkParam}&addresses=${q}`)
               .then((res) => (res.ok ? res.json() : null))
@@ -157,16 +194,45 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
       // No query: show wallet tokens if connected and available; otherwise popular tokens
       if (isConnected && address) {
-        const tokens = userTokensByChain[chainId] || [];
+        let tokens: TokenData[] = [];
+        if (selectedNetwork === "all") {
+          // Only Ethereum for now
+          const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
+          tokens = ethTokens;
+        } else {
+          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+          tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
+        }
+
         if (tokens.length > 0) {
           setSearchResults(tokens);
         } else {
-          const popularTokens = chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
+          let popularTokens: TokenData[] = [];
+          if (selectedNetwork === "all") {
+            // Only Ethereum for now
+            const ethPopular = ETHEREUM_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 1 }));
+            popularTokens = ethPopular;
+          } else {
+            const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+            popularTokens = (chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS).map(
+              (t) => ({ ...t, chainId })
+            );
+          }
           preloadImages(popularTokens.map((t) => t.icon).filter(Boolean));
           setSearchResults(popularTokens);
         }
       } else {
-        const popularTokens = chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
+        let popularTokens: TokenData[] = [];
+        if (selectedNetwork === "all") {
+          // Only Ethereum for now
+          const ethPopular = ETHEREUM_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 1 }));
+          popularTokens = ethPopular;
+        } else {
+          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+          popularTokens = (chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS).map(
+            (t) => ({ ...t, chainId })
+          );
+        }
         preloadImages(popularTokens.map((t) => t.icon).filter(Boolean));
         setSearchResults(popularTokens);
       }
@@ -219,26 +285,29 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   };
 
   const handleNetworkSelect = async (network: Network) => {
-    if (!isConnected) {
-      // If wallet is not connected, just update the selected network
-      setSelectedNetwork(network);
+    // Close dropdown
+    setIsDropdownOpen(false);
+
+    // Don't allow selecting "base" yet (coming soon)
+    if (network === "base") {
       return;
     }
 
+    // Update selected network (no wallet switching for "all")
+    setSelectedNetwork(network);
+
+    // If "all" is selected or wallet not connected, just update the filter
+    if (network === "all" || !isConnected) {
+      return;
+    }
+
+    // Switch wallet to the selected network
     try {
       const targetChainId = network === "ethereum" ? mainnet.id : base.id;
-
-      // Switch to the target chain
       await switchChain({ chainId: targetChainId });
-
-      // Update the store with the new chain ID
       setEvmConnectWalletChainId(targetChainId);
-
-      // Update the selected network
-      setSelectedNetwork(network);
     } catch (error) {
       console.error("Failed to switch chain:", error);
-      // You could add a toast notification here for better UX
     }
   };
 
@@ -259,7 +328,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       >
         <Box
           bg="#131313"
-          borderRadius="20px"
+          borderRadius="30px"
           py="24px"
           maxW="520px"
           w="90%"
@@ -358,8 +427,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
             </Flex>
           </Flex> */}
 
-          {/* Search Bar */}
+          {/* Search Bar with Network Dropdown */}
           <Box position="relative" mb="18px" mx="24px">
+            {/* Search Icon */}
             <Box
               position="absolute"
               left="18px"
@@ -384,14 +454,17 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 />
               </svg>
             </Box>
+
+            {/* Search Input */}
             <Input
+              ref={searchInputRef}
               placeholder="Search tokens"
               value={searchQuery}
               onChange={handleSearchChange}
               bg="#212121"
               borderRadius="30px"
               pl="48px"
-              pr="16px"
+              pr="130px"
               py="12px"
               letterSpacing="-0.9px"
               border="none"
@@ -411,6 +484,161 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 outline: "none",
               }}
             />
+
+            {/* Network Dropdown */}
+            <Box
+              ref={dropdownRef}
+              position="absolute"
+              right="8px"
+              top="50%"
+              transform="translateY(-50%)"
+              zIndex={2}
+            >
+              {/* Dropdown Trigger */}
+              <Flex
+                align="center"
+                gap="6px"
+                px="12px"
+                py="6px"
+                bg="#131313"
+                borderRadius="20px"
+                cursor="pointer"
+                _hover={{ bg: "#1f1f1f" }}
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                transition="background 0.15s ease"
+              >
+                <Text
+                  fontSize="13px"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  color={colors.offWhite}
+                  fontWeight="bold"
+                  textTransform="uppercase"
+                >
+                  {selectedNetwork === "all"
+                    ? "All"
+                    : selectedNetwork === "ethereum"
+                      ? "ETH"
+                      : "Base"}
+                </Text>
+                <Box
+                  transform={isDropdownOpen ? "rotate(180deg)" : "rotate(0deg)"}
+                  transition="transform 0.2s ease"
+                >
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
+                    <path
+                      d="M1 1L6 6L11 1"
+                      stroke={colors.textGray}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </Box>
+              </Flex>
+
+              {/* Dropdown Menu */}
+              {isDropdownOpen && (
+                <Box
+                  position="absolute"
+                  top="calc(100% + 8px)"
+                  right="0"
+                  bg="#212121"
+                  borderRadius="12px"
+                  minW="170px"
+                  py="6px"
+                  boxShadow="0 4px 12px rgba(0, 0, 0, 0.4)"
+                  border="1px solid #2a2a2a"
+                >
+                  {/* All Networks */}
+                  <Flex
+                    align="center"
+                    gap="10px"
+                    px="14px"
+                    py="10px"
+                    cursor="pointer"
+                    bg={selectedNetwork === "all" ? "#2a2a2a" : "transparent"}
+                    _hover={{ bg: "#262626" }}
+                    onClick={() => handleNetworkSelect("all")}
+                    transition="background 0.15s ease"
+                  >
+                    <Text
+                      fontSize="13px"
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      color={colors.offWhite}
+                      fontWeight="bold"
+                    >
+                      All Networks
+                    </Text>
+                  </Flex>
+
+                  {/* Ethereum */}
+                  <Flex
+                    align="center"
+                    gap="10px"
+                    px="14px"
+                    py="10px"
+                    cursor="pointer"
+                    bg={selectedNetwork === "ethereum" ? "#2a2a2a" : "transparent"}
+                    _hover={{ bg: "#262626" }}
+                    onClick={() => handleNetworkSelect("ethereum")}
+                    transition="background 0.15s ease"
+                  >
+                    <Box
+                      w="18px"
+                      h="18px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                    >
+                      <Image
+                        src="/images/assets/icons/ETH.svg"
+                        w="18px"
+                        h="18px"
+                        alt="Ethereum"
+                        objectFit="contain"
+                      />
+                    </Box>
+                    <Text
+                      fontSize="13px"
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      color={colors.offWhite}
+                      fontWeight="bold"
+                    >
+                      Ethereum
+                    </Text>
+                  </Flex>
+
+                  {/* Base (Coming Soon) */}
+                  <Flex
+                    align="center"
+                    gap="10px"
+                    px="14px"
+                    py="10px"
+                    cursor="not-allowed"
+                    opacity={0.5}
+                    transition="background 0.15s ease"
+                  >
+                    <Box
+                      w="18px"
+                      h="18px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                    >
+                      <BASE_LOGO width="18" height="18" />
+                    </Box>
+                    <Text
+                      fontSize="13px"
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      color={colors.textGray}
+                      fontWeight="bold"
+                    >
+                      Base (Soon)
+                    </Text>
+                  </Flex>
+                </Box>
+              )}
+            </Box>
           </Box>
 
           <Flex direction="column" gap="4px" mb="20px">
@@ -448,39 +676,71 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     transition="background 0.15s ease"
                     _hover={{ bg: "#1f1f1f" }}
                   >
-                    {/* Token Icon */}
-                    <Flex
-                      w="40px"
-                      h="40px"
-                      borderRadius="50%"
-                      bg="#404040"
-                      align="center"
-                      justify="center"
-                      mr="12px"
-                      overflow="hidden"
-                    >
-                      <Image
-                        src={token.icon}
-                        w="100%"
-                        h="100%"
-                        alt={`${token.ticker} icon`}
-                        objectFit="cover"
-                        // onError={(e) => {
-                        //   const target = e.target as HTMLImageElement;
-                        //   target.style.display = 'none';
-                        //   const fallback = target.nextElementSibling as HTMLElement;
-                        //   if (fallback) fallback.style.display = 'block';
-                        // }}
-                      />
-                      <Text
-                        fontSize="12px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.offWhite}
-                        display="none"
+                    {/* Token Icon with Network Badge */}
+                    <Box position="relative" mr="12px">
+                      <Flex
+                        w="40px"
+                        h="40px"
+                        borderRadius="50%"
+                        bg="#404040"
+                        align="center"
+                        justify="center"
+                        overflow="hidden"
                       >
-                        {token.ticker}
-                      </Text>
-                    </Flex>
+                        <Image
+                          src={token.icon}
+                          w="100%"
+                          h="100%"
+                          alt={`${token.ticker} icon`}
+                          objectFit="cover"
+                        />
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          display="none"
+                        >
+                          {token.ticker}
+                        </Text>
+                      </Flex>
+
+                      {/* Network Badge */}
+                      {token.chainId && (
+                        <Box
+                          position="absolute"
+                          bottom="-2px"
+                          right="-2px"
+                          w="20px"
+                          h="20px"
+                          borderRadius="50%"
+                          bg="#131313"
+                          border="2px solid #131313"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          {token.chainId === 1 ? (
+                            <Image
+                              src="/images/assets/icons/ETH.svg"
+                              w="14px"
+                              h="14px"
+                              alt="Ethereum"
+                              objectFit="contain"
+                            />
+                          ) : token.chainId === 8453 ? (
+                            <Box
+                              w="14px"
+                              h="14px"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                            >
+                              <BASE_LOGO width="14" height="14" />
+                            </Box>
+                          ) : null}
+                        </Box>
+                      )}
+                    </Box>
 
                     {/* Token Info */}
                     <Flex direction="column" flex="1">
