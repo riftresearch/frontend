@@ -269,7 +269,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <Flex justify="space-between" align="center" mb="20px" mx="24px">
+          <Flex justify="space-between" align="center" mb="12px" mt="-2px" mx="24px">
             <Text
               fontSize="16px"
               fontFamily={FONT_FAMILIES.NOSTROMO}
@@ -281,6 +281,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
             <Box
               cursor="pointer"
               onClick={onClose}
+              mt="-2px"
               fontSize="24px"
               color={colors.textGray}
               _hover={{ color: colors.offWhite }}
@@ -358,7 +359,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           </Flex> */}
 
           {/* Search Bar */}
-          <Box position="relative" mb="20px" mx="24px">
+          <Box position="relative" mb="18px" mx="24px">
             <Box
               position="absolute"
               left="18px"
@@ -387,7 +388,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               placeholder="Search tokens"
               value={searchQuery}
               onChange={handleSearchChange}
-              bg="#1f1f1f"
+              bg="#212121"
               borderRadius="30px"
               pl="48px"
               pr="16px"
