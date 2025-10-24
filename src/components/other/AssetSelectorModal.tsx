@@ -180,6 +180,23 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
   if (!isOpen) return null;
 
+  const formatUsdValue = (usdValue: string): string => {
+    // Remove $ and any existing commas
+    const numStr = usdValue.replace(/[$,]/g, "");
+    const num = parseFloat(numStr);
+
+    if (isNaN(num)) return usdValue;
+
+    // Format with commas
+    return (
+      "$" +
+      num.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  };
+
   const handleAssetSelect = async (asset: string, tokenData?: TokenData) => {
     console.log("handleAssetSelect", asset, tokenData);
     if (tokenData) {
@@ -241,25 +258,25 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         onClick={onClose}
       >
         <Box
-          bg="#1a1a1a"
+          bg="#131313"
           borderRadius="20px"
-          p="24px"
+          py="24px"
           maxW="520px"
           w="90%"
           maxH="80vh"
           overflowY="auto"
-          border="2px solid #323232"
+          border="2px solid #232323"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <Flex justify="space-between" align="center" mb="20px">
+          <Flex justify="space-between" align="center" mb="20px" mx="24px">
             <Text
               fontSize="16px"
               fontFamily={FONT_FAMILIES.NOSTROMO}
               color={colors.offWhite}
               fontWeight="bold"
             >
-              Select a network
+              Select a token
             </Text>
             <Box
               cursor="pointer"
@@ -273,7 +290,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           </Flex>
 
           {/* Network Selector */}
-          <Flex gap="12px" mb="20px">
+          {/* <Flex gap="12px" mb="20px">
             <Flex
               direction="column"
               align="center"
@@ -338,144 +355,184 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 Base (Soon)
               </Text>
             </Flex>
-          </Flex>
+          </Flex> */}
 
           {/* Search Bar */}
-          <Input
-            placeholder="Search tokens"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            bg="#2a2a2a"
-            border="1px solid #404040"
-            borderRadius="12px"
-            p="12px 16px"
-            mb="20px"
-            fontSize="16px"
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            color={colors.offWhite}
-            _placeholder={{ color: colors.textGray }}
-            _focus={{
-              borderColor: "#8B5CF6",
-              boxShadow: "0 0 0 1px #8B5CF6",
-            }}
-            _hover={{
-              borderColor: "#666",
-            }}
-          />
+          <Box position="relative" mb="20px" mx="24px">
+            <Box
+              position="absolute"
+              left="18px"
+              top="50%"
+              transform="translateY(-50%)"
+              pointerEvents="none"
+              zIndex={1}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle cx="11" cy="11" r="6" stroke={colors.textGray} strokeWidth="2" />
+                <path
+                  d="M20 20L17 17"
+                  stroke={colors.textGray}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </Box>
+            <Input
+              placeholder="Search tokens"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              bg="#1f1f1f"
+              borderRadius="30px"
+              pl="48px"
+              pr="16px"
+              py="12px"
+              letterSpacing="-0.9px"
+              border="none"
+              h="50px"
+              fontSize="16px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              color={colors.offWhite}
+              _placeholder={{ color: colors.textGray }}
+              _focus={{
+                border: "none",
+                boxShadow: "none",
+                outline: "none",
+              }}
+              _hover={{
+                border: "none",
+                boxShadow: "none",
+                outline: "none",
+              }}
+            />
+          </Box>
 
-          <Flex direction="column" gap="8px" mb="20px">
+          <Flex direction="column" gap="4px" mb="20px">
             {/* Loading state */}
             {isLoading ? (
-              <Flex
-                align="center"
-                justify="center"
-                h="60px"
-                borderRadius="12px"
-                bg="#2a2a2a"
-                border="1px solid #404040"
-              >
-                <Text fontSize="14px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray}>
-                  Loading tokens...
-                </Text>
-              </Flex>
+              <Box mx="12px">
+                <Flex
+                  align="center"
+                  justify="center"
+                  h="60px"
+                  borderRadius="12px"
+                  bg="#131313"
+                  px="12px"
+                >
+                  <Text fontSize="14px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray}>
+                    Loading tokens...
+                  </Text>
+                </Flex>
+              </Box>
             ) : (
               searchResults.map((token, index) => (
-                <Flex
+                <Box
                   key={`${token.address || token.ticker}-${index}`}
-                  align="center"
-                  p="12px 16px"
-                  borderRadius="12px"
-                  bg="#2a2a2a"
-                  border="1px solid #404040"
+                  mx="12px"
                   cursor="pointer"
-                  _hover={{ bg: "#333" }}
                   onClick={() => handleAssetSelect(token.ticker, token)}
                 >
-                  {/* Token Icon */}
                   <Flex
-                    w="40px"
-                    h="40px"
-                    borderRadius="50%"
-                    bg="#404040"
                     align="center"
-                    justify="center"
-                    mr="12px"
-                    overflow="hidden"
+                    py="12px"
+                    px="12px"
+                    letterSpacing="-0.6px"
+                    borderRadius="12px"
+                    bg="#131313"
+                    transition="background 0.15s ease"
+                    _hover={{ bg: "#1f1f1f" }}
                   >
-                    <Image
-                      src={token.icon}
-                      w="100%"
-                      h="100%"
-                      alt={`${token.ticker} icon`}
-                      objectFit="cover"
-                      // onError={(e) => {
-                      //   const target = e.target as HTMLImageElement;
-                      //   target.style.display = 'none';
-                      //   const fallback = target.nextElementSibling as HTMLElement;
-                      //   if (fallback) fallback.style.display = 'block';
-                      // }}
-                    />
-                    <Text
-                      fontSize="12px"
-                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                      color={colors.offWhite}
-                      display="none"
+                    {/* Token Icon */}
+                    <Flex
+                      w="40px"
+                      h="40px"
+                      borderRadius="50%"
+                      bg="#404040"
+                      align="center"
+                      justify="center"
+                      mr="12px"
+                      overflow="hidden"
                     >
-                      {token.ticker}
-                    </Text>
-                  </Flex>
-
-                  {/* Token Info */}
-                  <Flex direction="column" flex="1">
-                    <Text
-                      fontSize="16px"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.offWhite}
-                      fontWeight="bold"
-                    >
-                      {token.name}
-                    </Text>
-                    <Flex align="center" gap="8px">
+                      <Image
+                        src={token.icon}
+                        w="100%"
+                        h="100%"
+                        alt={`${token.ticker} icon`}
+                        objectFit="cover"
+                        // onError={(e) => {
+                        //   const target = e.target as HTMLImageElement;
+                        //   target.style.display = 'none';
+                        //   const fallback = target.nextElementSibling as HTMLElement;
+                        //   if (fallback) fallback.style.display = 'block';
+                        // }}
+                      />
                       <Text
-                        fontSize="14px"
+                        fontSize="12px"
                         fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.textGray}
+                        color={colors.offWhite}
+                        display="none"
                       >
                         {token.ticker}
                       </Text>
-                      {token.address && (
-                        <Text
-                          fontSize="12px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                        >
-                          {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                        </Text>
-                      )}
                     </Flex>
-                  </Flex>
 
-                  {/* Balance Info - show for wallet tokens with balance > 0 */}
-                  {isConnected && token.balance !== "0" && (
-                    <Flex direction="column" align="flex-end">
+                    {/* Token Info */}
+                    <Flex direction="column" flex="1">
                       <Text
                         fontSize="16px"
                         fontFamily={FONT_FAMILIES.NOSTROMO}
                         color={colors.offWhite}
                         fontWeight="bold"
                       >
-                        {token.usdValue}
+                        {token.name}
                       </Text>
-                      <Text
-                        fontSize="14px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.textGray}
-                      >
-                        {token.balance}
-                      </Text>
+                      <Flex align="center" gap="8px">
+                        <Text
+                          fontSize="14px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                        >
+                          {token.ticker}
+                        </Text>
+                        {token.address && (
+                          <Text
+                            fontSize="14px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.darkerGray}
+                          >
+                            {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                          </Text>
+                        )}
+                      </Flex>
                     </Flex>
-                  )}
-                </Flex>
+
+                    {/* Balance Info - show for wallet tokens with balance > 0 */}
+                    {isConnected && token.balance !== "0" && (
+                      <Flex direction="column" align="flex-end">
+                        <Text
+                          fontSize="16px"
+                          fontFamily={FONT_FAMILIES.NOSTROMO}
+                          color={colors.offWhite}
+                          fontWeight="bold"
+                        >
+                          {formatUsdValue(token.usdValue)}
+                        </Text>
+                        <Text
+                          fontSize="14px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                        >
+                          {token.balance}
+                        </Text>
+                      </Flex>
+                    )}
+                  </Flex>
+                </Box>
               ))
             )}
           </Flex>
