@@ -361,17 +361,19 @@ export const ConnectWalletButton: React.FC = () => {
           <Button
             onClick={openChainModal}
             type="button"
-            _hover={{ bg: chainHoverColor }}
-            _active={{ bg: chainColors.background }}
-            bg={chainColors.background}
-            borderRadius={"12px"}
+            _hover={{ bg: colors.swapHoverColor }}
+            _active={{ bg: colors.swapBgColor }}
+            bg={colors.swapBgColor}
+            borderRadius="30px"
             fontFamily={"aux"}
             fontSize={"17px"}
-            paddingX="18px"
+            paddingLeft="16px"
+            paddingRight="22px"
             pt="2px"
             color={colors.offWhite}
+            letterSpacing="-1px"
             h="42px"
-            border={`2.5px solid ${chainColors.border}`}
+            border={`2px solid ${colors.swapBorderColor}`}
             style={{ display: "flex", alignItems: "center" }}
           >
             <Flex alignItems="center" gap="8px">
@@ -382,18 +384,18 @@ export const ConnectWalletButton: React.FC = () => {
           <Button
             onClick={openAccountModal}
             type="button"
-            _hover={{ bg: chainHoverColor }}
-            _active={{ bg: chainColors.background }}
-            bg={chainColors.background}
-            borderRadius="11px"
+            _hover={{ bg: colors.swapHoverColor }}
+            _active={{ bg: colors.swapBgColor }}
+            bg={colors.swapBgColor}
+            borderRadius="30px"
             fontFamily="aux"
             fontSize="17px"
-            fontWeight="bold"
+            letterSpacing="-1px"
             pt="2px"
             px="18px"
             color={colors.offWhite}
             h="42px"
-            border={`2.5px solid ${chainColors.border}`}
+            border={`2px solid ${colors.swapBorderColor}`}
           >
             {displayAddress}
           </Button>

@@ -86,7 +86,10 @@ const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
   return <Image src={src} alt={badge} width={18} height={18} style={{ opacity: 0.9 }} />;
 };
 
-const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
+const Pill: React.FC<{ step: AdminSwapFlowStep; isRefundAvailable?: boolean }> = ({
+  step,
+  isRefundAvailable,
+}) => {
   const displayedLabel = step.label;
   const hasTx = step.txHash && step.txChain;
   const isClickable =
@@ -119,6 +122,14 @@ const Pill: React.FC<{ step: AdminSwapFlowStep }> = ({ step }) => {
   };
 
   const styleByState = () => {
+    // Red pill for failed swaps on in-progress step
+    if (isRefundAvailable && step.state === "inProgress") {
+      return {
+        bg: colorsAnalytics.redBackground,
+        border: colorsAnalytics.red,
+        text: colorsAnalytics.offWhite,
+      };
+    }
     if (step.state === "completed")
       return {
         bg: colorsAnalytics.greenBackground,
@@ -197,7 +208,8 @@ const StepWithTime: React.FC<{
   step: AdminSwapFlowStep;
   previousStepTimestamp?: number;
   currentTime: number;
-}> = ({ step, previousStepTimestamp, currentTime }) => {
+  isRefundAvailable?: boolean;
+}> = ({ step, previousStepTimestamp, currentTime, isRefundAvailable }) => {
   const timeRowHeight = 22; // reserve consistent space above every pill
   const LIVE_TIMER_OFFSET = 13; // Subtract 13 seconds to account for backend processing delay
 
@@ -242,7 +254,7 @@ const StepWithTime: React.FC<{
           {displayDuration || ""}
         </Text>
       </Flex>
-      <Pill step={step} />
+      <Pill step={step} isRefundAvailable={isRefundAvailable} />
     </Flex>
   );
 };
@@ -312,6 +324,10 @@ const Row: React.FC<{
       swap.swapInitialAmountBtc > 0 ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc : 0;
     const riftFeeBtc = swap.riftFeeSats / 100000000; // Convert sats to BTC
     const riftFeeUsd = riftFeeBtc * impliedUsdPerBtc;
+
+    // Check if refund is available
+    const isRefundAvailable =
+      (swap.rawData as any)?.isRefundAvailable || (swap.rawData as any)?.is_refund_available;
 
     // Get timestamp for previous step to calculate live duration
     const getPreviousStepTimestamp = (index: number): number | undefined => {
@@ -453,6 +469,7 @@ const Row: React.FC<{
               step={step}
               previousStepTimestamp={getPreviousStepTimestamp(idx)}
               currentTime={currentTime}
+              isRefundAvailable={isRefundAvailable}
             />
           ))}
           <FinalTime
@@ -624,6 +641,15 @@ export const SwapHistory: React.FC<{
     if (filter === "all") return allMerged;
 
     return allMerged.filter((swap) => {
+      // Check if swap has refund available (failed swaps)
+      const isRefundAvailable =
+        (swap.rawData as any)?.isRefundAvailable || (swap.rawData as any)?.is_refund_available;
+
+      // If filtering for failed, include swaps with isRefundAvailable
+      if (filter === "failed" && isRefundAvailable) {
+        return true;
+      }
+
       // Get the most recent status from the flow (last in-progress or completed step)
       const currentStep =
         swap.flow.find((step) => step.state === "inProgress") || swap.flow[swap.flow.length - 1];

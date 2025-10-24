@@ -125,7 +125,7 @@ const UserRow: React.FC<{ user: TopUser }> = ({ user }) => {
 
   return (
     <Flex w="100%" py="14px" px="16px" align="center" letterSpacing={"-0.8px"}>
-      <Box w="275px">
+      <Box w="430px">
         <Flex
           as="button"
           onClick={() =>
@@ -140,39 +140,39 @@ const UserRow: React.FC<{ user: TopUser }> = ({ user }) => {
           justifyContent="center"
           alignItems="center"
         >
-          <Text fontSize="14px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {displayShortAddress(user.user_evm_account_address)}
+          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+            {user.user_evm_account_address}
           </Text>
         </Flex>
       </Box>
-      <Box w="253px">
-        <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Box w="203px">
+        <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatUSD(volumeUsd)}
         </Text>
-        <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+        <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatBTC(volumeBtc)}
         </Text>
       </Box>
-      <Box w="253px">
-        <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Box w="203px">
+        <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {formatUSD(feesUsd)}
         </Text>
-        <Text fontSize="14px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+        <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {feesSats.toLocaleString()} sats
         </Text>
       </Box>
-      <Box w="190px">
-        <Text fontSize="17px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Box w="180px">
+        <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
           {new Intl.NumberFormat("en-US").format(user.total_swaps)}
         </Text>
       </Box>
-      <Box w="190px">
-        <Text fontSize="16px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Box w="180px">
+        <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {timeAgo(user.first_swap_at)}
         </Text>
       </Box>
-      <Box w="190px">
-        <Text fontSize="16px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Box w="180px">
+        <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
           {timeAgo(user.last_swap_at)}
         </Text>
       </Box>
@@ -375,30 +375,28 @@ export const TopUsers: React.FC<{ heightBlocks?: number }> = ({ heightBlocks = 1
             px="16px"
             pt="16px"
             pb="8px"
-            fontSize="15px"
-            align="center"
+            fontSize="14px"
             fontWeight="bold"
             color={colorsAnalytics.textGray}
-            flexShrink={0}
           >
-            <Box w="275px">
+            <Flex w="430px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>User EVM Account</Text>
-            </Box>
-            <Box w="253px">
+            </Flex>
+            <Flex w="203px" ml="-6px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Volume</Text>
-            </Box>
-            <Box w="253px">
+            </Flex>
+            <Flex w="203px" ml="-6px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Rift Fees</Text>
-            </Box>
-            <Box w="190px">
+            </Flex>
+            <Flex w="180px" ml="-6px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Total Swaps</Text>
-            </Box>
-            <Box w="190px">
+            </Flex>
+            <Flex w="180px" ml="-6px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>First Swap</Text>
-            </Box>
-            <Box w="190px">
+            </Flex>
+            <Flex w="180px" ml="-6px">
               <Text fontFamily={FONT_FAMILIES.SF_PRO}>Latest Swap</Text>
-            </Box>
+            </Flex>
           </Flex>
 
           {/* Rows */}

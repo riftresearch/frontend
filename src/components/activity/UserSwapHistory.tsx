@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { Box, Flex, Text, Spinner, Button } from "@chakra-ui/react";
 import { useAccount } from "wagmi";
@@ -10,6 +10,7 @@ import { ANALYTICS_API_URL } from "@/utils/analyticsClient";
 import { reownModal } from "@/utils/wallet";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
+import { useRouter } from "next/router";
 
 function displayShortTxHash(hash: string): string {
   if (!hash || hash.length < 12) return hash;
@@ -54,12 +55,55 @@ const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
   return <Image src={src} alt={badge} width={18} height={18} style={{ opacity: 0.9 }} />;
 };
 
-const StatusBadge: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
-  const lastStep = swap.flow[swap.flow.length - 1];
-  const isCompleted = lastStep?.state === "completed" && lastStep?.status === "settled";
-  const isInProgress = !isCompleted;
+const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }> = ({
+  swap,
+  onClaimRefund,
+}) => {
+  // Find the current step based on status priority
+  const currentStep =
+    swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
+  const currentStatus = currentStep?.status;
+  const isRefundAvailable = (swap as any).isRefundAvailable;
 
-  if (isCompleted) {
+  console.log(`[STATUS BADGE ${swap.id}]`, {
+    swapId: swap.id,
+    currentStep,
+    currentStatus,
+    isRefundAvailable,
+    allFlowSteps: swap.flow.map((s) => ({ state: s.state, status: s.status })),
+  });
+
+  // Refund Available: show claim refund button
+  if (isRefundAvailable) {
+    return (
+      <Flex
+        as="button"
+        onClick={onClaimRefund}
+        align="center"
+        gap="6px"
+        bg="rgba(255, 143, 40, 0.15)"
+        border="1.5px solid rgba(255, 143, 40, 0.4)"
+        borderRadius="16px"
+        px="12px"
+        h="35px"
+        cursor="pointer"
+        _hover={{ filter: "brightness(1.2)" }}
+      >
+        <Text
+          fontSize="13px"
+          color="#FF8F28"
+          fontWeight="500"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          letterSpacing="-0.5px"
+        >
+          Claim Refund
+        </Text>
+      </Flex>
+    );
+  }
+
+  // Completed: waiting_mm_deposit_confirmed or settled
+  if (currentStatus === "waiting_mm_deposit_confirmed" || currentStatus === "settled") {
     return (
       <Flex
         align="center"
@@ -84,6 +128,36 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
     );
   }
 
+  // Confirming: waiting_user_deposit_confirmed
+  if (currentStatus === "waiting_user_deposit_confirmed") {
+    return (
+      <Flex
+        align="center"
+        gap="6px"
+        bg="rgba(59, 130, 246, 0.15)"
+        border="1.5px solid rgba(59, 130, 246, 0.4)"
+        borderRadius="16px"
+        px="12px"
+        h="35px"
+      >
+        <Spinner size="xs" color="#3b82f6" />
+        <Text
+          fontSize="13px"
+          color="#3b82f6"
+          fontWeight="500"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          letterSpacing="-0.5px"
+        >
+          Confirming
+          <Text as="span" letterSpacing="-2px">
+            ...
+          </Text>
+        </Text>
+      </Flex>
+    );
+  }
+
+  // Swapping: waiting_mm_deposit_initiated (default for other in-progress states)
   return (
     <Flex
       align="center"
@@ -103,104 +177,244 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem }> = ({ swap }) => {
         letterSpacing="-0.5px"
       >
         Swapping
+        <Text as="span" letterSpacing="-2px">
+          ...
+        </Text>
       </Text>
     </Flex>
   );
 };
 
-async function fetchUserSwaps(account: string): Promise<AdminSwapItem[]> {
+async function fetchUserSwaps(
+  account: string,
+  limit: number,
+  offset: number
+): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> {
   try {
-    const url = `${ANALYTICS_API_URL}/api/swaps?account=${account}&limit=50&offset=0`;
+    const url = `${ANALYTICS_API_URL}/api/swaps?account=${account}&limit=${limit}&offset=${offset}`;
     const response = await fetch(url);
 
     if (!response.ok) {
       console.error("Failed to fetch user swaps:", response.status);
-      return [];
+      return { swaps: [], hasMore: false };
     }
 
     const data = await response.json();
+    console.log("[FETCH USER SWAPS] Data:", data);
     if (!data.swaps || !Array.isArray(data.swaps)) {
-      return [];
+      return { swaps: [], hasMore: false };
     }
 
-    return data.swaps.map((row: any) => mapDbRowToAdminSwap(row));
+    const allSwaps = data.swaps.map((row: any) => {
+      const mappedSwap = mapDbRowToAdminSwap(row);
+      // Preserve isRefundAvailable from raw data
+      return {
+        ...mappedSwap,
+        isRefundAvailable: row.isRefundAvailable || row.is_refund_available || false,
+      };
+    });
+
+    // Filter out swaps that are pending or only at waiting_user_deposit_initiated
+    // (these are created but user never deposited)
+    const swaps = allSwaps.filter((swap: AdminSwapItem) => {
+      const currentStep =
+        swap.flow.find((s: AdminSwapFlowStep) => s.state === "inProgress") ||
+        swap.flow[swap.flow.length - 1];
+      const currentStatus = currentStep?.status;
+      // Exclude if pending or only at waiting_user_deposit_initiated
+      return currentStatus !== "pending" && currentStatus !== "waiting_user_deposit_initiated";
+    });
+
+    const hasMore = allSwaps.length === limit; // If we got a full page, there might be more
+
+    return { swaps, hasMore };
   } catch (error) {
     console.error("Error fetching user swaps:", error);
-    return [];
+    return { swaps: [], hasMore: false };
   }
 }
 
 export const UserSwapHistory: React.FC = () => {
   const { address, isConnected } = useAccount();
+  const router = useRouter();
   const [swaps, setSwaps] = useState<AdminSwapItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const pageSize = 12;
+  const fetchingRef = useRef(false);
 
+  // Refund modal state
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [selectedFailedSwap, setSelectedFailedSwap] = useState<AdminSwapItem | null>(null);
+  const [refundAddress, setRefundAddress] = useState("");
+
+  // Fetch initial swaps with retry logic and set up polling
   useEffect(() => {
-    if (isConnected && address) {
-      setLoading(true);
-      fetchUserSwaps(address)
-        .then(setSwaps)
-        .finally(() => setLoading(false));
-    } else {
+    if (!isConnected || !address) {
       setSwaps([]);
+      setPage(0);
+      setHasMore(true);
+      return;
     }
+
+    // Initial fetch with retries
+    const fetchWithRetries = async () => {
+      setLoading(true);
+
+      // First attempt
+      let result = await fetchUserSwaps(address, pageSize, 0);
+
+      // If no swaps found, retry 2 more times with 100ms delay
+      if (result.swaps.length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        result = await fetchUserSwaps(address, pageSize, 0);
+
+        if (result.swaps.length === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          result = await fetchUserSwaps(address, pageSize, 0);
+        }
+      }
+
+      setSwaps(result.swaps);
+      setHasMore(result.hasMore);
+      setPage(1);
+      setLoading(false);
+    };
+
+    fetchWithRetries();
+
+    // Set up polling every 3 seconds - only refresh first page
+    const pollInterval = setInterval(() => {
+      fetchUserSwaps(address, pageSize, 0).then(({ swaps: newSwaps }) => {
+        setSwaps((prev) => {
+          // Update existing swaps and add any new ones from first page
+          const existingIds = new Set(prev.slice(pageSize).map((s) => s.id));
+          const updatedFirstPage = newSwaps.filter((s) => !existingIds.has(s.id));
+          return [...updatedFirstPage, ...prev.slice(pageSize)];
+        });
+      });
+    }, 3000);
+
+    // Cleanup interval on unmount or when address/connection changes
+    return () => clearInterval(pollInterval);
   }, [address, isConnected]);
+
+  // Fetch next page
+  const fetchNextPage = useCallback(async () => {
+    if (loadingMore || !hasMore || fetchingRef.current || !address) return;
+
+    fetchingRef.current = true;
+    setLoadingMore(true);
+
+    try {
+      const offset = page * pageSize;
+      const { swaps: newSwaps, hasMore: more } = await fetchUserSwaps(address, pageSize, offset);
+
+      setSwaps((prev) => {
+        const existingIds = new Set(prev.map((s) => s.id));
+        const filtered = newSwaps.filter((s) => !existingIds.has(s.id));
+        return [...prev, ...filtered];
+      });
+
+      setHasMore(more);
+      setPage((p) => p + 1);
+    } catch (error) {
+      console.error("Error fetching next page:", error);
+    } finally {
+      fetchingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [address, page, pageSize, loadingMore, hasMore]);
+
+  // Handle scroll for infinite loading
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (loadingMore || !hasMore) return;
+      const el = e.currentTarget;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceFromBottom < 100) {
+        fetchNextPage();
+      }
+    },
+    [loadingMore, hasMore, fetchNextPage]
+  );
 
   const handleConnectWallet = async () => {
     await reownModal.open();
   };
 
+  const handleOpenRefundModal = (swap: AdminSwapItem) => {
+    setSelectedFailedSwap(swap);
+    setRefundModalOpen(true);
+    setRefundAddress("");
+  };
+
+  const handleCloseRefundModal = () => {
+    setRefundModalOpen(false);
+    setSelectedFailedSwap(null);
+    setRefundAddress("");
+  };
+
+  const handleClaimRefund = () => {
+    if (!selectedFailedSwap || !refundAddress) return;
+
+    console.log("[CLAIM REFUND] User claiming refund:", {
+      swapId: selectedFailedSwap.id,
+      refundAddress,
+      swap: selectedFailedSwap,
+    });
+
+    // TODO: Implement actual refund claim logic
+    handleCloseRefundModal();
+  };
+
   if (!isConnected) {
     return (
-      <Flex
-        w="100%"
-        direction="column"
-        align="center"
-        justify="center"
-        bg={colors.offBlack}
-        borderRadius="20px"
-        border={`2px solid ${colors.borderGray}`}
-        p="60px"
-        minH="400px"
-      >
-        <Text
-          fontSize="32px"
-          fontFamily={FONT_FAMILIES.NOSTROMO}
-          color={colors.offWhite}
-          mb="16px"
-          textAlign="center"
-        >
-          Swap History
-        </Text>
-        <Text
-          fontSize="16px"
-          fontFamily={FONT_FAMILIES.SF_PRO}
-          color={colors.textGray}
-          mb="32px"
-          textAlign="center"
-        >
-          Connect your wallet to view your swap history and track the status of your current and
-          previous Rift swaps.
-        </Text>
-        <Button
-          onClick={handleConnectWallet}
-          cursor="pointer"
-          color={colors.offWhite}
-          _active={{ bg: colors.swapBgColor }}
-          _hover={{ bg: colors.swapHoverColor }}
-          borderRadius="12px"
-          border={`2.5px solid ${colors.swapBorderColor}`}
-          type="button"
-          fontFamily={FONT_FAMILIES.SF_PRO}
-          fontSize="17px"
-          paddingX="32px"
-          paddingY="12px"
-          bg={colors.swapBgColor}
-          boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
-        >
-          Connect Wallet
-        </Button>
-      </Flex>
+      <GridFlex width="595px" contentPadding="60px" borderRadius="60px">
+        <Flex direction="column" w="100%" align="center">
+          <Text
+            fontSize="32px"
+            fontFamily={FONT_FAMILIES.NOSTROMO}
+            color={colors.offWhite}
+            mb="16px"
+            textAlign="center"
+          >
+            Swap History
+          </Text>
+          <Text
+            fontSize="16px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.textGray}
+            letterSpacing="-0.5px"
+            mb="32px"
+            textAlign="center"
+          >
+            Connect your wallet to view your swap history and track the status of your current and
+            previous Rift swaps.
+          </Text>
+          <Button
+            letterSpacing="-0.5px"
+            onClick={handleConnectWallet}
+            cursor="pointer"
+            color={colors.offWhite}
+            _active={{ bg: colors.swapBgColor }}
+            _hover={{ bg: colors.swapHoverColor }}
+            borderRadius="12px"
+            border={`2.5px solid ${colors.swapBorderColor}`}
+            type="button"
+            fontFamily={FONT_FAMILIES.NOSTROMO}
+            fontSize="17px"
+            paddingX="32px"
+            paddingY="12px"
+            bg={colors.swapBgColor}
+            boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
+          >
+            Sign In with Wallet
+          </Button>
+        </Flex>
+      </GridFlex>
     );
   }
 
@@ -213,27 +427,64 @@ export const UserSwapHistory: React.FC = () => {
             <Spinner size="lg" color={colors.offWhite} />
           </Flex>
         ) : swaps.length === 0 ? (
-          <Flex w="100%" direction="column" align="center" justify="center" py="80px">
-            <Text fontSize="18px" fontFamily={FONT_FAMILIES.SF_PRO} color={colors.textGray}>
-              No swaps found
-            </Text>
+          <Flex w="100%" h="100%" direction="column" align="center" justify="center">
             <Text
-              fontSize="14px"
-              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontSize="18px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              letterSpacing="-0.5px"
               color={colors.textGray}
-              mt="8px"
+              mb="20px"
             >
-              Your swap history will appear here once you make your first swap
+              No swaps history found
             </Text>
+            <Button
+              onClick={() => router.push("/")}
+              cursor="pointer"
+              color={colors.offWhite}
+              _active={{ bg: colors.swapBgColor }}
+              _hover={{ bg: colors.swapHoverColor }}
+              borderRadius="12px"
+              border={`2.5px solid ${colors.swapBorderColor}`}
+              type="button"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              fontSize="17px"
+              paddingX="32px"
+              paddingY="12px"
+              bg={colors.swapBgColor}
+              boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
+            >
+              Create Swap
+            </Button>
           </Flex>
         ) : (
-          <Box w="100%" overflowY="auto" flex="1">
+          <Box
+            w="100%"
+            overflowY="auto"
+            flex="1"
+            mr="8px"
+            onScroll={handleScroll}
+            css={{
+              "&::-webkit-scrollbar": {
+                width: "8px",
+              },
+              "&::-webkit-scrollbar-track": {
+                background: "transparent",
+              },
+              "&::-webkit-scrollbar-thumb": {
+                background: "#333",
+                borderRadius: "4px",
+              },
+              "&::-webkit-scrollbar-thumb:hover": {
+                background: "#444",
+              },
+            }}
+          >
             {/* Table Header */}
             <Flex
               w="100%"
               px="32px"
               py="12px"
-              bg="rgba(255, 255, 255, 0.02)"
+              bg="#090909"
               borderBottom={`1px solid ${colors.borderGray}`}
               fontSize="11px"
               fontFamily={FONT_FAMILIES.SF_PRO}
@@ -241,14 +492,17 @@ export const UserSwapHistory: React.FC = () => {
               fontWeight="600"
               textTransform="uppercase"
               letterSpacing="0.5px"
+              position="sticky"
+              top="0"
+              zIndex={10}
               flexShrink={0}
             >
               <Text flex="0 0 122px">Time</Text>
-              <Text flex="0 0 104px">USD</Text>
-              <Text flex="0 0 150px">Amount</Text>
-              <Text flex="0 0 217px">Deposit Txn</Text>
-              <Text flex="0 0 167px">Direction</Text>
-              <Text flex="0 0 209px">Payout Txn</Text>
+              <Text flex="0 0 135px">USD</Text>
+              <Text flex="0 0 218px">Amount</Text>
+              <Text flex="0 0 246px">Deposit Txn</Text>
+              <Text flex="0 0 188px">Direction</Text>
+              <Text flex="0 0 230px">Payout Txn</Text>
               <Text flex="1">Status</Text>
             </Flex>
 
@@ -328,7 +582,7 @@ export const UserSwapHistory: React.FC = () => {
                   </Flex>
 
                   {/* USD */}
-                  <Flex flex="0 0 104px">
+                  <Flex flex="0 0 135px">
                     <Text
                       fontSize="13px"
                       fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -341,20 +595,30 @@ export const UserSwapHistory: React.FC = () => {
                   </Flex>
 
                   {/* Amount */}
-                  <Flex flex="0 0 150px">
+                  <Flex flex="0 0 218px" gap="4px" align="center">
                     <Text
                       fontSize="13px"
                       fontFamily={FONT_FAMILIES.AUX_MONO}
-                      color={amountColor}
+                      color={colors.offWhite}
                       fontWeight="500"
                       letterSpacing="-0.5px"
                     >
-                      {formatBTC(swap.swapInitialAmountBtc)}
+                      {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                    <Text
+                      fontSize="13px"
+                      fontFamily={FONT_FAMILIES.AUX_MONO}
+                      color={colors.textGray}
+                      fontWeight="500"
+                      letterSpacing="-0.5px"
+                    >
+                      {isBTCtoEVM ? "BTC" : "cbBTC"}
                     </Text>
                   </Flex>
 
                   {/* User Deposit Transaction */}
-                  <Flex flex="0 0 217px">
+                  <Flex flex="0 0 246px">
                     {userTxHash ? (
                       <Flex
                         as="button"
@@ -395,13 +659,13 @@ export const UserSwapHistory: React.FC = () => {
                         color={colors.textGray}
                         letterSpacing="-0.5px"
                       >
-                        Pending...
+                        -
                       </Text>
                     )}
                   </Flex>
 
                   {/* Direction */}
-                  <Flex flex="0 0 167px" align="center" gap="6px">
+                  <Flex flex="0 0 188px" align="center" gap="6px">
                     <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
                     <Text
                       fontSize="12px"
@@ -431,7 +695,7 @@ export const UserSwapHistory: React.FC = () => {
                   </Flex>
 
                   {/* MM Payout Transaction */}
-                  <Flex flex="0 0 209px">
+                  <Flex flex="0 0 230px">
                     {mmTxHash ? (
                       <Flex
                         as="button"
@@ -481,21 +745,174 @@ export const UserSwapHistory: React.FC = () => {
                         color={colors.textGray}
                         letterSpacing="-0.5px"
                       >
-                        Pending...
+                        -
                       </Text>
                     )}
                   </Flex>
 
                   {/* Status */}
                   <Flex flex="1">
-                    <StatusBadge swap={swap} />
+                    <StatusBadge swap={swap} onClaimRefund={() => handleOpenRefundModal(swap)} />
                   </Flex>
                 </Flex>
               );
             })}
+
+            {/* Loading More Indicator */}
+            {loadingMore && (
+              <Flex justify="center" py="20px">
+                <Spinner size="sm" color={colors.offWhite} />
+              </Flex>
+            )}
+
+            {/* End of List Message */}
+            {!hasMore && swaps.length > 0 && (
+              <Flex justify="center" py="20px">
+                <Text
+                  fontSize="12px"
+                  color={colors.textGray}
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                ></Text>
+              </Flex>
+            )}
           </Box>
         )}
       </Flex>
+
+      {/* Refund Modal */}
+      {refundModalOpen && selectedFailedSwap && (
+        <Flex
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          width="100vw"
+          height="100vh"
+          zIndex={999999}
+          bg="rgba(0, 0, 0, 0.85)"
+          align="center"
+          justify="center"
+          style={{
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={handleCloseRefundModal}
+        >
+          <Box
+            bg="#1a1a1a"
+            borderWidth={2}
+            w="500px"
+            maxWidth="90%"
+            borderColor={colors.borderGray}
+            borderRadius="20px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.offWhite}
+            position="relative"
+            p="32px"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <Flex
+              pb="24px"
+              fontSize="24px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              fontWeight="bold"
+              justify="center"
+              align="center"
+            >
+              <Text>Claim Refund</Text>
+            </Flex>
+
+            {/* Body */}
+            <Flex direction="column" gap="24px" pb="8px">
+              <Text
+                fontSize="14px"
+                textAlign="center"
+                lineHeight="1.6"
+                color={colors.textGray}
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                letterSpacing="-0.5px"
+              >
+                The market maker failed to fill your order. Please let us know where to send the
+                refund.
+              </Text>
+
+              {/* Address Input */}
+              <Flex direction="column" gap="8px">
+                <Flex align="center" gap="8px" mb="4px">
+                  <AssetIcon
+                    badge={selectedFailedSwap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                  />
+                  <Text fontSize="13px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                    {selectedFailedSwap.direction === "BTC_TO_EVM" ? "Bitcoin" : "cbBTC"} Address
+                  </Text>
+                </Flex>
+                <input
+                  type="text"
+                  value={refundAddress}
+                  onChange={(e) => setRefundAddress(e.target.value)}
+                  placeholder={
+                    selectedFailedSwap.direction === "BTC_TO_EVM"
+                      ? "Enter Bitcoin address"
+                      : "Enter cbBTC address"
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: "12px",
+                    border: `2px solid ${colors.borderGray}`,
+                    backgroundColor: colors.offBlack,
+                    color: colors.offWhite,
+                    fontFamily: FONT_FAMILIES.AUX_MONO,
+                    fontSize: "14px",
+                    outline: "none",
+                  }}
+                />
+              </Flex>
+
+              {/* Buttons */}
+              <Flex gap="12px" justify="center">
+                <Button
+                  onClick={handleCloseRefundModal}
+                  cursor="pointer"
+                  color={colors.textGray}
+                  _active={{ bg: "rgba(40, 40, 40, 0.5)" }}
+                  _hover={{ bg: "rgba(40, 40, 40, 0.8)" }}
+                  borderRadius="12px"
+                  border={`2px solid ${colors.borderGray}`}
+                  type="button"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  fontSize="15px"
+                  paddingX="24px"
+                  paddingY="10px"
+                  bg="transparent"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleClaimRefund}
+                  cursor="pointer"
+                  color={colors.offWhite}
+                  _active={{ bg: colors.swapBgColor }}
+                  _hover={{ bg: colors.swapHoverColor }}
+                  borderRadius="12px"
+                  border={`2.5px solid ${colors.swapBorderColor}`}
+                  type="button"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  fontSize="15px"
+                  paddingX="24px"
+                  paddingY="10px"
+                  bg={colors.swapBgColor}
+                  disabled={!refundAddress}
+                  opacity={refundAddress ? 1 : 0.5}
+                >
+                  Claim Refund
+                </Button>
+              </Flex>
+            </Flex>
+          </Box>
+        </Flex>
+      )}
     </GridFlex>
   );
 };

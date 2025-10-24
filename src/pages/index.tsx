@@ -22,12 +22,11 @@ export default function Home() {
 
   // Check if we're on localhost
   React.useEffect(() => {
-    // setIsLocalhost(
-    //   typeof window !== "undefined" &&
-    //     (window.location.hostname === "localhost" ||
-    //       window.location.hostname === "127.0.0.1")
-    // );
-    setIsLocalhost(true); // for testing app connect on non localhost
+    setIsLocalhost(
+      typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    );
+    // setIsLocalhost(true); // for testing app connect on non localhost
   }, []);
 
   // Redirect to swap page when swap response is available AND transaction is confirmed
