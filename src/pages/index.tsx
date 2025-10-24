@@ -4,6 +4,7 @@ import { SwapWidget } from "@/components/swap/SwapWidget";
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { RiftLogo } from "@/components/other/RiftLogo";
+import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import useWindowSize from "@/hooks/useWindowSize";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -115,6 +116,7 @@ export default function Home() {
           </Flex>
           <SwapWidget />
         </Flex>
+        <TEEStatusFooter />
       </Flex>
     </>
   );

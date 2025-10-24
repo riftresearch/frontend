@@ -65,6 +65,22 @@ export interface ConnectedMarketMakersResponse {
   market_makers: string[]; // Array of UUIDs as strings
 }
 
+export interface TradingPair {
+  from: Currency;
+  to: Currency;
+  max_amount: string; // Hex string representing U256
+}
+
+export interface MarketMaker {
+  market_maker_id: string; // UUID as string
+  trading_pairs: TradingPair[];
+}
+
+export interface LiquidityResponse {
+  market_makers: MarketMaker[];
+  timestamp: string; // ISO 8601 datetime
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -189,6 +205,14 @@ export class RfqClient {
   }
 
   /**
+   * Get liquidity information from all market makers
+   * Returns available trading pairs and maximum amounts
+   */
+  async getLiquidity(): Promise<LiquidityResponse> {
+    return this.fetchWithTimeout<LiquidityResponse>("/api/v1/liquidity");
+  }
+
+  /**
    * Health check endpoint (alias for getStatus)
    */
   async healthCheck(): Promise<boolean> {
@@ -229,6 +253,12 @@ export const requestQuotes =
 export const getConnectedMarketMakers =
   (client: RfqClient) => (): Promise<ConnectedMarketMakersResponse> =>
     client.getConnectedMarketMakers();
+
+/**
+ * Get liquidity information (functional style)
+ */
+export const getLiquidity = (client: RfqClient) => (): Promise<LiquidityResponse> =>
+  client.getLiquidity();
 
 /**
  * Health check (functional style)
@@ -306,22 +336,8 @@ export const createQuoteRequest = (
 });
 
 /**
- * Example usage:
- *
- * const client = createRfqClient({ baseUrl: "http://localhost:8080" });
- *
- * // Request a quote for swapping 1 ETH to BTC
- * const ethCurrency = createNativeCurrency("ethereum", 18);
- * const btcCurrency = createNativeCurrency("bitcoin", 8);
- * const amount = parseAmountToBaseUnits("1.0", 18);
- *
- * const request = createQuoteRequest(
- *   "ExactInput",
- *   ethCurrency,
- *   btcCurrency,
- *   amount
- * );
- *
- * const response = await client.requestQuotes(request);
- * console.log(`Best quote: ${formatLotAmount(response.quote.to)} BTC`);
+ * Helper function to convert hex amount to decimal string
  */
+export const hexToDecimal = (hexAmount: string): string => {
+  return BigInt(hexAmount).toString();
+};

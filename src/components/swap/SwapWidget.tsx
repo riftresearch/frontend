@@ -1,7 +1,6 @@
 import { Flex } from "@chakra-ui/react";
 import { useRouter } from "next/router";
 import { opaqueBackgroundColor } from "@/utils/constants";
-import { useTDXAttestation } from "@/hooks/useTDXAttestation";
 import useWindowSize from "@/hooks/useWindowSize";
 import { SwapInputAndOutput } from "./SwapInputAndOutput";
 import { SwapButton } from "./SwapButton";
@@ -11,7 +10,6 @@ export const SwapWidget = () => {
   // HOOKS
   // ============================================================================
 
-  const { isValidTEE, isLoading: teeAttestationLoading } = useTDXAttestation();
   const { isMobile } = useWindowSize();
   const router = useRouter();
 
