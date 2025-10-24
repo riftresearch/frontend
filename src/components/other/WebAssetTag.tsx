@@ -126,7 +126,8 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
           />
         )}
       </Flex>
-      {asset !== "BTC" && (
+      {/* TODO: add back network icon when we support other chains */}
+      {/* {asset !== "BTC" && (
         <Flex
           userSelect="none"
           bg={networkBgColor}
@@ -153,7 +154,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
             />
           )}
         </Flex>
-      )}
+      )} */}
     </Flex>
   );
 };

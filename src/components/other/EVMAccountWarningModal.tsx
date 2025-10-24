@@ -87,7 +87,7 @@ export const EVMAccountWarningModal: React.FC<EVMAccountWarningModalProps> = ({
           justify="center"
           align="center"
         >
-          <Text>Sign in with your wallet</Text>
+          <Text>Connect wallet</Text>
         </Flex>
 
         {/* Body */}

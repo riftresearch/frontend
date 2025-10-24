@@ -214,11 +214,11 @@ export const Navbar = ({}) => {
             <Image src="/images/social/x.svg" w="17px" aspectRatio={1} />
           </a>
           <Flex mt="1px">
-            <a href="https://t.me/riftdex" target="_blank" rel="noopener noreferrer">
+            <a href="https://discord.gg/tpr6jMdvFq" target="_blank" rel="noopener noreferrer">
               <Image
-                src="/images/social/telegram.svg"
+                src="/images/social/discord2.svg"
                 objectFit="contain"
-                h="24px"
+                h="25px"
                 aspectRatio={1}
               />
             </a>

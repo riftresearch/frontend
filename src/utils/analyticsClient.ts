@@ -116,15 +116,6 @@ export function formatDuration(startMs: number, endMs: number): string {
 }
 
 export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
-  console.log("🔍 FIND Mapping swap row:", {
-    id: row.id,
-    status: row.status,
-    quote: row.quote,
-    user_deposit_address: row.user_deposit_address,
-    user_evm_account_address: row.user_evm_account_address,
-    bitcoin_usd_at_swap_time: row.bitcoin_usd_at_swap_time,
-  });
-
   // [0] Parse created_at timestamp and BTC price at swap time
   const createdAtMs = new Date(row.created_at).getTime();
   const btcPriceUsd = row.bitcoin_usd_at_swap_time || 0;

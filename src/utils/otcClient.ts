@@ -50,6 +50,22 @@ export interface ConnectedMarketMakersResponse {
   market_makers: string[]; // Array of UUIDs
 }
 
+export interface RefundPayload {
+  swap_id: string; // UUID as string
+  refund_recipient: string;
+  refund_transaction_fee: string; // U256 as string
+}
+
+export interface RefundSwapRequest {
+  payload: RefundPayload;
+  signature: number[]; // byte array (Vec<u8> in Rust)
+}
+
+export interface RefundSwapResponse {
+  success: boolean;
+  message?: string;
+}
+
 export interface OTCServerClientConfig {
   baseUrl: string;
   timeout?: number;
@@ -197,6 +213,16 @@ export class OTCServerClient {
    */
   async getConnectedMarketMakers(): Promise<ConnectedMarketMakersResponse> {
     return this.fetchWithTimeout<ConnectedMarketMakersResponse>("/api/v1/market-makers/connected");
+  }
+
+  /**
+   * Request a refund for a failed swap
+   */
+  async refundSwap(request: RefundSwapRequest): Promise<RefundSwapResponse> {
+    return this.fetchWithTimeout<RefundSwapResponse>("/api/v1/refund", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
   }
 
   /**

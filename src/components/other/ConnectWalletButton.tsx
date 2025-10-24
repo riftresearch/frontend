@@ -34,59 +34,6 @@ export const ConnectWalletButton: React.FC = () => {
     : { background: colors.assetTag.cbbtc.background, border: colors.assetTag.cbbtc.border };
   const chainHoverColor = isEthereum ? "rgba(46, 64, 183, 0.65)" : "rgba(9, 36, 97, 0.65)";
 
-  // SIWE authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isSigningIn, setIsSigningIn] = useState(false);
-
-  // SIWE sign-in function
-  const signInWithEthereum = async (): Promise<void> => {
-    if (!address || !signMessageAsync) return;
-
-    setIsSigningIn(true);
-    try {
-      // Get nonce from server
-      const nonceResponse = await fetch("/api/siwe/nonce");
-      const { nonce } = await nonceResponse.json();
-
-      // Create SIWE message
-      const message = new SiweMessage({
-        domain: window.location.host,
-        address,
-        statement: "Sign in to Rift",
-        uri: window.location.origin,
-        version: "1",
-        chainId,
-        nonce,
-      });
-
-      // Sign the message
-      const signature = await signMessageAsync({
-        message: message.prepareMessage(),
-      });
-
-      // Verify with server
-      const verifyResponse = await fetch("/api/siwe/verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          message: message.prepareMessage(),
-          signature,
-        }),
-      });
-
-      if (!verifyResponse.ok) {
-        throw new Error("SIWE verification failed");
-      }
-
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error("SIWE sign-in failed:", error);
-      // You might want to show a toast notification here
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
   // Fetch user tokens and populate global store when connected or chain changes
   useEffect(() => {
     const fetchWalletTokens = async (
@@ -324,37 +271,18 @@ export const ConnectWalletButton: React.FC = () => {
           color={colors.offWhite}
           _active={{ bg: colors.swapBgColor }}
           _hover={{ bg: colors.swapHoverColor }}
-          borderRadius={"12px"}
-          border={`2.5px solid ${colors.swapBorderColor}`}
-          type="button"
+          borderRadius="30px"
+          border={`2px solid ${colors.swapBorderColor}`}
           fontFamily={FONT_FAMILIES.NOSTROMO}
+          type="button"
           fontSize="17px"
+          letterSpacing="-1px"
           paddingX="28px"
           paddingY={"10px"}
           bg={colors.swapBgColor}
           boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
         >
           Connect Wallet
-        </Button>
-      ) : isSigningIn ? (
-        <Button
-          disabled
-          cursor="not-allowed"
-          color={colors.offWhite}
-          _active={{ bg: colors.swapBgColor }}
-          _hover={{ bg: colors.swapHoverColor }}
-          borderRadius={"12px"}
-          border={`2.5px solid ${colors.swapBorderColor}`}
-          type="button"
-          fontFamily={FONT_FAMILIES.NOSTROMO}
-          fontSize="17px"
-          paddingX="28px"
-          paddingY={"10px"}
-          bg={colors.swapBgColor}
-          boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
-          opacity={0.7}
-        >
-          Signing in...
         </Button>
       ) : (
         <div style={{ display: "flex", gap: 8 }}>
