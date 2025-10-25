@@ -8,10 +8,16 @@ import { Quote } from "./rfqClient";
 
 // Types matching the Rust server structures
 
+export interface Metadata {
+  affiliate?: string;
+  startAsset?: string;
+}
+
 export interface CreateSwapRequest {
   quote: Quote;
   user_destination_address: string;
   user_evm_account_address: string;
+  metadata?: Metadata;
 }
 
 export interface CreateSwapResponse {

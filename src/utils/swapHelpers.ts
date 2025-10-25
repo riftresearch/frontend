@@ -4,12 +4,24 @@
  */
 
 import { Asset, TokenData } from "./types";
-import { rfqClient, GLOBAL_CONFIG, ZERO_USD_DISPLAY, BITCOIN_DECIMALS } from "./constants";
+import {
+  rfqClient,
+  GLOBAL_CONFIG,
+  ZERO_USD_DISPLAY,
+  BITCOIN_DECIMALS,
+  PERMIT2_ADDRESS,
+  UNIVERSAL_ROUTER_ADDRESS,
+} from "./constants";
 import { Quote, formatLotAmount, RfqClientError } from "./rfqClient";
 import { createUniswapRouter, UniswapQuoteResponse, UniswapRouterError } from "./uniswapRouter";
 import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
 import { validateBitcoinPayoutAddressWithNetwork } from "./bitcoinUtils";
+import {
+  AllowanceTransfer,
+  MaxAllowanceTransferAmount,
+  type PermitSingle,
+} from "@uniswap/permit2-sdk";
 
 /**
  * Minimum swap amount in satoshis
@@ -146,7 +158,7 @@ export async function getCBBTCtoBTCQuote(
   const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
 
   if (FAKE_RFQ) {
-    console.log(`FAKE_RFQ mode enabled - returning dummy quote (${mode})`);
+    // console.log(`FAKE_RFQ mode enabled - returning dummy quote (${mode})`);
     const dummyQuote: Quote = {
       id: "123e4567-e89b-12d3-a456-426614174000",
       market_maker_id: "987f6543-e21c-43d2-b654-426614174111",
@@ -283,7 +295,7 @@ export async function getERC20ToBTCQuote(
     const uniswapRouter = createUniswapRouter();
 
     // Step 1: Get Uniswap quote for ERC20/ETH -> cbBTC
-    console.log("Getting Uniswap quote for", sellToken, "->", "cbBTC");
+    // console.log("Getting Uniswap quote for", sellToken, "->", "cbBTC");
     const uniswapQuote = await uniswapRouter.getQuote({
       sellToken,
       sellAmount,
@@ -291,15 +303,15 @@ export async function getERC20ToBTCQuote(
       userAddress,
       slippageBps,
       validFor,
-      // router: "v4",
+      router: "v4",
     });
 
     const cbBTCAmount = uniswapQuote.buyAmount;
-    console.log("Uniswap quote: will receive", cbBTCAmount, "cbBTC (in base units)");
+    // console.log("Uniswap quote: will receive", cbBTCAmount, "cbBTC (in base units)");
 
     // Apply slippage to cbBTC amount for RFQ quote
     const adjustedCbBTCAmount = applySlippage(cbBTCAmount as string, slippageBps);
-    console.log("Adjusted cbBTC amount after slippage:", adjustedCbBTCAmount);
+    // console.log("Adjusted cbBTC amount after slippage:", adjustedCbBTCAmount);
 
     // Step 2: Get RFQ quote for cbBTC -> BTC using adjusted amount
     const rfqQuote = await getCBBTCtoBTCQuote(adjustedCbBTCAmount, "ExactInput");
@@ -317,13 +329,13 @@ export async function getERC20ToBTCQuote(
     const rfqExpiration = new Date(rfqQuote.expires_at);
     const expiresAt = uniswapExpiration < rfqExpiration ? uniswapExpiration : rfqExpiration;
 
-    console.log("Combined quote complete:", {
-      sellToken,
-      sellAmount,
-      cbBTCAmount: cbBTCAmount,
-      btcOutputAmount,
-      expiresAt,
-    });
+    // console.log("Combined quote complete:", {
+    //   sellToken,
+    //   sellAmount,
+    //   cbBTCAmount: cbBTCAmount,
+    //   btcOutputAmount,
+    //   expiresAt,
+    // });
 
     return {
       uniswapQuote,
@@ -449,7 +461,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     const btcAmountInSats = parseUnits(btcOutputAmount, BITCOIN_DECIMALS).toString();
 
     // Step 1: Get RFQ quote for cbBTC -> BTC using exact output mode
-    console.log("Getting RFQ quote (exact output) for", btcAmountInSats, "sats BTC");
+    // console.log("Getting RFQ quote (exact output) for", btcAmountInSats, "sats BTC");
 
     const rfqQuoteData = await getCBBTCtoBTCQuote(btcAmountInSats, "ExactOutput");
 
@@ -459,7 +471,7 @@ export async function getERC20ToBTCQuoteExactOutput(
 
     // The "from" amount is how much cbBTC we need
     const cbBTCAmountNeeded = rfqQuoteData.from.amount;
-    console.log("RFQ quote: need", cbBTCAmountNeeded, "cbBTC (in base units)");
+    // console.log("RFQ quote: need", cbBTCAmountNeeded, "cbBTC (in base units)");
 
     // Check if input token is cbBTC
     const isCbBTC = selectedInputToken.ticker === "cbBTC";
@@ -483,13 +495,13 @@ export async function getERC20ToBTCQuoteExactOutput(
     const buyToken = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"; // cbBTC
     const sellToken = selectedInputToken?.address || "ETH";
 
-    console.log(
-      "Getting Uniswap quote (exact output) for",
-      sellToken,
-      "->",
-      cbBTCFormatted,
-      "cbBTC"
-    );
+    // console.log(
+    //   "Getting Uniswap quote (exact output) for",
+    //   sellToken,
+    //   "->",
+    //   cbBTCFormatted,
+    //   "cbBTC"
+    // );
 
     const uniswapQuote = await uniswapRouter.getQuote({
       sellToken,
@@ -498,16 +510,16 @@ export async function getERC20ToBTCQuoteExactOutput(
       userAddress,
       slippageBps,
       validFor,
-      // router: "v4",
+      router: "v4",
     });
 
     // For exact output, the API returns the required input amount in buyAmount field
     const erc20AmountNeeded = uniswapQuote.sellAmount;
-    console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units)");
+    // console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units)");
 
     // Apply slippage by increasing the input amount
     const adjustedInputAmount = applySlippageExactOutput(erc20AmountNeeded as string, slippageBps);
-    console.log("Adjusted input amount after slippage:", adjustedInputAmount);
+    // console.log("Adjusted input amount after slippage:", adjustedInputAmount);
 
     // Format the input amount for display
     const erc20InputFormatted = formatUnits(
@@ -641,4 +653,53 @@ export function validatePayoutAddress(
     const validation = validateBitcoinPayoutAddressWithNetwork(address, "mainnet");
     return validation;
   }
+}
+
+/**
+ * Build Permit2 permit data for signing
+ * @param nonce - Current nonce from Permit2 contract
+ * @param tokenAddress - Address of the token to permit
+ * @param userAddress - Address of the user signing the permit
+ * @param chainId - Chain ID for the permit
+ * @returns Object containing permit and dataToSign for wagmi's signTypedData
+ */
+export function buildPermitDataToSign(
+  nonce: number,
+  tokenAddress: string,
+  userAddress: string,
+  chainId: number
+) {
+  // Set expiration to 30 days from now
+  const allowanceExpiration = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+
+  // Set signature deadline to 30 minutes from now
+  const sigDeadline = Math.floor(Date.now() / 1000) + 30 * 60;
+
+  const permit: PermitSingle = {
+    details: {
+      token: tokenAddress,
+      amount: MaxAllowanceTransferAmount.toString(), // 2^160-1
+      expiration: allowanceExpiration, // uint48
+      nonce: Number(nonce), // uint48
+    },
+    spender: UNIVERSAL_ROUTER_ADDRESS,
+    sigDeadline,
+  };
+
+  const { domain, types, values } = AllowanceTransfer.getPermitData(
+    permit,
+    PERMIT2_ADDRESS,
+    chainId
+  );
+
+  return {
+    permit,
+    dataToSign: {
+      domain: domain as any,
+      types,
+      primaryType: "PermitSingle" as const,
+      message: values as any,
+      account: userAddress as `0x${string}`,
+    },
+  };
 }

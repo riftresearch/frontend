@@ -1,15 +1,21 @@
 import { Flex, Text, Spinner } from "@chakra-ui/react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
 import {
   useAccount,
   useWriteContract,
   useWaitForTransactionReceipt,
   useSendTransaction,
-  useReadContract,
+  useSignTypedData,
 } from "wagmi";
 import { colors } from "@/utils/colors";
-import { GLOBAL_CONFIG, otcClient } from "@/utils/constants";
+import {
+  GLOBAL_CONFIG,
+  otcClient,
+  UNIVERSAL_ROUTER_ADDRESS,
+  SWAP_ROUTER02_ADDRESS,
+  PERMIT2_ADDRESS,
+} from "@/utils/constants";
 import { BitcoinQRCode } from "@/components/other/BitcoinQRCode";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -17,11 +23,10 @@ import { useStore } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { reownModal } from "@/utils/wallet";
-import { Address, erc20Abi, parseUnits } from "viem";
+import { Address, erc20Abi, parseUnits, maxUint256 } from "viem";
 import { Quote } from "@/utils/rfqClient";
-import { fetchGasParams } from "@/utils/swapHelpers";
-import { UNIVERSAL_ROUTER_ADDRESS } from "@/utils/permit2";
-import { RoutePlanner, CommandType } from "@uniswap/universal-router-sdk";
+import { ApprovalState } from "@/utils/types";
+import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
 
 export const SwapButton = () => {
@@ -34,20 +39,10 @@ export const SwapButton = () => {
   const router = useRouter();
 
   // Local state
-  const [pendingSwapTransaction, setPendingSwapTransaction] = useState<{
-    to: Address;
-    calldata: string;
-    value: string;
-    routerType: "v4" | "v2v3";
-    inputAmount: string;
-    depositAddress?: string;
-    route?: {
-      inputToken?: string;
-      outputToken?: string;
-      [key: string]: any;
-    };
-  } | null>(null);
-  const [needsApproval, setNeedsApproval] = useState(false);
+  const [isSigningPermit, setIsSigningPermit] = useState(false);
+  const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
+  const [isApprovingToken, setIsApprovingToken] = useState(false);
+  const [swapButtonPressed, setSwapButtonPressed] = useState(false);
 
   // Global store
   const {
@@ -66,6 +61,11 @@ export const SwapButton = () => {
     addressValidation,
     setBitcoinDepositInfo,
     bitcoinDepositInfo,
+    permitAllowance,
+    permitDataForSwap,
+    setPermitDataForSwap,
+    approvalState,
+    setApprovalState,
   } = useStore();
 
   // Wagmi hooks for contract interactions
@@ -77,46 +77,21 @@ export const SwapButton = () => {
     error: sendTxError,
   } = useSendTransaction();
 
-  // Token approval hooks
-  const {
-    data: approveHash,
-    writeContract: writeApprove,
-    isPending: isApprovePending,
-    error: approveError,
-  } = useWriteContract();
+  // Permit2 signature hook
+  const { signTypedDataAsync } = useSignTypedData();
 
   // Check token allowance
   const isNativeETH =
     selectedInputToken?.address?.toLowerCase() === "eth" || !selectedInputToken?.address;
 
-  // For V4 swaps, check allowance to Universal Router; for V2/V3, check allowance to SwapRouter02
-  const spenderAddress =
-    pendingSwapTransaction?.routerType === "v4"
-      ? UNIVERSAL_ROUTER_ADDRESS
-      : (pendingSwapTransaction?.to as Address);
-
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: selectedInputToken?.address as Address | undefined,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: [userEvmAccountAddress as Address, spenderAddress],
-    query: {
-      enabled: Boolean(
-        !isNativeETH &&
-          userEvmAccountAddress &&
-          selectedInputToken?.address &&
-          pendingSwapTransaction?.to &&
-          (pendingSwapTransaction?.routerType === "v2v3" ||
-            pendingSwapTransaction?.routerType === "v4")
-      ),
-    },
+  // Wait for approval transaction confirmation
+  const {
+    isLoading: isApprovalConfirming,
+    isSuccess: isApprovalConfirmed,
+    error: approvalTxError,
+  } = useWaitForTransactionReceipt({
+    hash: approvalTxHash,
   });
-
-  // Wait for approval confirmation
-  const { isLoading: isApproveConfirming, isSuccess: isApproveConfirmed } =
-    useWaitForTransactionReceipt({
-      hash: approveHash,
-    });
 
   // Wait for transaction confirmation (use either hash from writeContract or sendTransaction)
   const txHash = hash || sendTxHash;
@@ -128,9 +103,9 @@ export const SwapButton = () => {
     hash: txHash,
   });
 
-  // Button loading state combines pending transaction and confirmation waiting
+  // Button loading state combines pending transaction, permit signing, approval, and confirmation waiting
   const isButtonLoading =
-    isPending || isSendTxPending || isConfirming || isApprovePending || isApproveConfirming;
+    isPending || isSendTxPending || isConfirming || isSigningPermit || isApprovalConfirming;
 
   // Check if all required fields are filled
   const allFieldsFilled =
@@ -145,166 +120,215 @@ export const SwapButton = () => {
   // SWAP-RELATED FUNCTIONS
   // ============================================================================
 
-  // Send OTC request to create swap
-  const sendOTCRequest = async (
-    quote: Quote,
-    user_destination_address: string,
-    user_evm_account_address: string
-  ) => {
-    const currentTime = new Date().getTime();
-    const swap = await otcClient.createSwap({
-      quote,
-      user_destination_address,
-      user_evm_account_address,
-    });
-    const timeTaken = new Date().getTime() - currentTime;
-
-    console.log("got swap from OTC", swap, "in", timeTaken, "ms");
-    if (swap) {
-      setSwapResponse(swap);
+  // Helper function to check if permit is needed
+  const needsPermit = useCallback(() => {
+    if (isNativeETH || !selectedInputToken || !rawInputAmount) {
+      return false;
     }
-    console.log("Returned swap request", swap);
-    // hex to string bigint
-    const amount = BigInt(swap.expected_amount);
-    console.log("amount", amount);
-    // okay, now we need to request money to be sent from the user to the created swap
-    if (swap.deposit_chain === "Ethereum") {
-      try {
-        const gasParams = await fetchGasParams(evmConnectWalletChainId);
-        console.log(
-          "Gas params for cbBTC transfer:",
-          gasParams
-            ? {
-                maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
-                maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
-              }
-            : undefined
-        );
-        writeContract({
-          address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-          abi: erc20Abi,
-          functionName: "transfer",
-          args: [swap.deposit_address as `0x${string}`, amount],
-          ...(gasParams && {
-            maxFeePerGas: gasParams.maxFeePerGas,
-            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-          }),
-        });
-      } catch (error) {
-        console.error("writeContract error caught:", error);
-        // Error will be handled by the writeError useEffect
+
+    // If we already have valid permitDataForSwap, we don't need another permit
+    if (permitDataForSwap?.permit && permitDataForSwap?.signature) {
+      const currentTime = Math.floor(Date.now() / 1000);
+      const permitExpiration = permitDataForSwap.permit.sigDeadline;
+
+      // Check if permit is still valid (not expired) and for the correct token
+      if (
+        permitExpiration > currentTime &&
+        permitDataForSwap.permit.details.token.toLowerCase() ===
+          selectedInputToken.address?.toLowerCase()
+      ) {
+        return false; // Already have valid permit
       }
-    } else if (swap.deposit_chain === "Bitcoin") {
-      // Generate Bitcoin URI and show QR code
-      const amountInBTC = Number(amount) / Math.pow(10, swap.decimals);
-      const bitcoinUri = generateBitcoinURI(
-        swap.deposit_address,
-        amountInBTC,
-        "Rift Exchange Swap"
-      );
+    }
 
-      setBitcoinDepositInfo({
-        address: swap.deposit_address,
-        amount: amountInBTC,
-        uri: bitcoinUri,
-      });
+    if (!permitAllowance) {
+      return true; // No permit allowance info yet, assume needs permit
+    }
 
-      // Show success toast for Bitcoin deposit setup
-      toastSuccess({
-        title: "Bitcoin Deposit Ready",
-        description: "Scan the QR code or send Bitcoin to the address below",
+    const sellAmount = parseUnits(rawInputAmount, selectedInputToken.decimals);
+    const currentTime = Math.floor(Date.now() / 1000);
+    const expirationThreshold = currentTime + 5 * 60; // 5 minutes from now
+
+    // Need permit if allowance is insufficient or expiring soon
+    return (
+      BigInt(permitAllowance.amount) < sellAmount ||
+      Number(permitAllowance.expiration) < expirationThreshold
+    );
+  }, [isNativeETH, selectedInputToken, rawInputAmount, permitAllowance, permitDataForSwap]);
+
+  // Send OTC request to create swap
+  const sendOTCRequest = useCallback(
+    async (quote: Quote, user_destination_address: string, user_evm_account_address: string) => {
+      const currentTime = new Date().getTime();
+      const swap = await otcClient.createSwap({
+        quote,
+        user_destination_address,
+        user_evm_account_address,
+        metadata: selectedInputToken
+          ? {
+              affiliate: "app.rift.trade",
+              startAsset: `${selectedInputToken.ticker}:${selectedInputToken.address || "native"}:${selectedInputToken.icon}`,
+            }
+          : undefined,
       });
-    } else {
-      toastInfo({
-        title: "Invalid deposit chain",
-        description: "Frontend does not not support this deposit chain",
-      });
+      const timeTaken = new Date().getTime() - currentTime;
+
+      console.log("got swap from OTC", swap, "in", timeTaken, "ms");
+      if (swap) {
+        setSwapResponse(swap);
+      }
+      console.log("Returned swap request", swap);
+      // hex to string bigint
+      const amount = BigInt(swap.expected_amount);
+      console.log("amount", amount);
+      // okay, now we need to request money to be sent from the user to the created swap
+      if (swap.deposit_chain === "Ethereum") {
+        try {
+          const gasParams = await fetchGasParams(evmConnectWalletChainId);
+          console.log(
+            "Gas params for cbBTC transfer:",
+            gasParams
+              ? {
+                  maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
+                  maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
+                }
+              : undefined
+          );
+          writeContract({
+            address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+            abi: erc20Abi,
+            functionName: "transfer",
+            args: [swap.deposit_address as `0x${string}`, amount],
+            ...(gasParams && {
+              maxFeePerGas: gasParams.maxFeePerGas,
+              maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+            }),
+          });
+        } catch (error) {
+          console.error("writeContract error caught:", error);
+          // Error will be handled by the writeError useEffect
+        }
+      } else if (swap.deposit_chain === "Bitcoin") {
+        // Generate Bitcoin URI and show QR code
+        const amountInBTC = Number(amount) / Math.pow(10, swap.decimals);
+        const bitcoinUri = generateBitcoinURI(
+          swap.deposit_address,
+          amountInBTC,
+          "Rift Exchange Swap"
+        );
+
+        setBitcoinDepositInfo({
+          address: swap.deposit_address,
+          amount: amountInBTC,
+          uri: bitcoinUri,
+        });
+
+        // Show success toast for Bitcoin deposit setup
+        toastSuccess({
+          title: "Bitcoin Deposit Ready",
+          description: "Scan the QR code or send Bitcoin to the address below",
+        });
+      } else {
+        toastInfo({
+          title: "Invalid deposit chain",
+          description: "Frontend does not not support this deposit chain",
+        });
+        return;
+      }
+    },
+    [evmConnectWalletChainId, setSwapResponse, setBitcoinDepositInfo, writeContract]
+  );
+
+  // Handle Permit2 signature
+  const signPermit2 = useCallback(async () => {
+    console.log("signPermit2", selectedInputToken?.address);
+    if (!selectedInputToken?.address || !userEvmAccountAddress || !permitAllowance) {
+      console.error("Missing required data for permit");
       return;
     }
-  };
 
-  // Main swap handler - routes to appropriate swap function
-  const handleSwap = async () => {
     try {
-      if (!isWalletConnected) {
-        // Open wallet connection modal instead of showing toast
-        await reownModal.open();
-        return;
-      }
+      setIsSigningPermit(true);
 
-      if (isMobile) {
-        toastInfo({
-          title: "Hop on your laptop",
-          description: "This app is too cool for small screens, mobile coming soon!",
-        });
-        return;
-      }
+      // Clear old permit data before signing new one
+      setPermitDataForSwap(null);
 
-      // Check input amount
-      if (
-        !rawInputAmount ||
-        !outputAmount ||
-        parseFloat(rawInputAmount) <= 0 ||
-        parseFloat(outputAmount) <= 0
-      ) {
-        toastInfo({
-          title: "Enter Amount",
-          description: "Please enter a valid amount to swap",
-        });
-        return;
-      }
-
-      // Check payout address
-      if (!payoutAddress) {
-        toastInfo({
-          title: isSwappingForBTC ? "Enter Bitcoin Address" : "Enter Ethereum Address",
-          description: isSwappingForBTC
-            ? "Please enter your Bitcoin address to receive BTC"
-            : "Please enter your Ethereum address to receive cbBTC",
-        });
-        return;
-      }
-
-      if (!addressValidation.isValid) {
-        let description = isSwappingForBTC
-          ? "Please enter a valid Bitcoin payout address"
-          : "Please enter a valid Ethereum address";
-        if (isSwappingForBTC && addressValidation.networkMismatch) {
-          description = `Wrong network: expected ${GLOBAL_CONFIG.underlyingSwappingAssets[0].currency.chain} but detected ${addressValidation.detectedNetwork}`;
-        }
-        toastInfo({
-          title: isSwappingForBTC ? "Invalid Bitcoin Address" : "Invalid Ethereum Address",
-          description,
-        });
-        return;
-      }
-
-      // For cbBTC->BTC swaps, use the direct OTC flow
-      if (isSwappingForBTC && selectedInputToken?.ticker === "cbBTC" && rfqQuote) {
-        await handleCBBTCtoBTCSwap();
-        return;
-      }
-
-      // For ERC20->BTC swaps, use the new Uniswap flow
-      if (isSwappingForBTC && uniswapQuote && rfqQuote) {
-        await handleERC20ToBTCSwap();
-        return;
-      }
-
-      // For BTC->ERC20 swaps, use the existing flow
-      // Note: This flow may need updating based on your requirements
-      toastInfo({
-        title: "BTC to ERC20",
-        description: "BTC to ERC20 swap flow not yet implemented in this component",
+      console.log("Signing Permit2...", {
+        token: selectedInputToken.address,
+        nonce: permitAllowance.nonce,
       });
+
+      const { permit, dataToSign } = buildPermitDataToSign(
+        Number(permitAllowance.nonce),
+        selectedInputToken.address,
+        userEvmAccountAddress,
+        evmConnectWalletChainId
+      );
+
+      console.log("permit", permit);
+      console.log("dataToSign", dataToSign);
+      const signature = await signTypedDataAsync(dataToSign);
+
+      console.log("Permit2 signed successfully");
+      setPermitDataForSwap({ permit, signature });
     } catch (error) {
-      console.error("handleSwap error caught:", error);
-      // Errors will be handled by the writeError useEffect
+      console.error("Permit signing failed:", error);
+      toastError(error, {
+        title: "Permit Signing Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsSigningPermit(false);
     }
-  };
+  }, [
+    selectedInputToken,
+    userEvmAccountAddress,
+    permitAllowance,
+    evmConnectWalletChainId,
+    signTypedDataAsync,
+    setPermitDataForSwap,
+  ]);
+
+  // Approve Permit2 to spend tokens
+  const approvePermit2 = useCallback(async () => {
+    if (!selectedInputToken?.address) {
+      console.error("No token selected for approval");
+      return;
+    }
+
+    try {
+      setApprovalState(ApprovalState.APPROVING);
+      setIsApprovingToken(true);
+      console.log("Approving Permit2 for token:", selectedInputToken.address);
+
+      const gasParams = await fetchGasParams(evmConnectWalletChainId);
+
+      const txConfig: any = {
+        address: selectedInputToken.address as Address,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [PERMIT2_ADDRESS as Address, maxUint256],
+      };
+
+      if (gasParams) {
+        txConfig.maxFeePerGas = gasParams.maxFeePerGas;
+        txConfig.maxPriorityFeePerGas = gasParams.maxPriorityFeePerGas;
+      }
+
+      writeContract(txConfig);
+    } catch (error) {
+      console.error("Permit2 approval failed:", error);
+      setApprovalState(ApprovalState.NEEDS_APPROVAL);
+      setIsApprovingToken(false);
+      toastError(error, {
+        title: "Approval Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }, [selectedInputToken, evmConnectWalletChainId, writeContract, setApprovalState]);
 
   // Handle cbBTC->BTC swap using direct OTC transfer
-  const handleCBBTCtoBTCSwap = async () => {
+  const executeCBBTCtoBTCSwap = useCallback(async () => {
     if (!rfqQuote || !userEvmAccountAddress || !selectedInputToken) {
       toastError(new Error("Missing quote data"), {
         title: "Swap Failed",
@@ -320,6 +344,12 @@ export const SwapButton = () => {
         quote: rfqQuote,
         user_destination_address: payoutAddress,
         user_evm_account_address: userEvmAccountAddress,
+        metadata: selectedInputToken
+          ? {
+              affiliate: "app.rift.trade",
+              startAsset: `${selectedInputToken.ticker}:${selectedInputToken.address || "native"}:${selectedInputToken.icon}`,
+            }
+          : undefined,
       });
 
       const depositAddress = otcSwap.deposit_address;
@@ -375,10 +405,22 @@ export const SwapButton = () => {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  };
+  }, [
+    rfqQuote,
+    userEvmAccountAddress,
+    selectedInputToken,
+    payoutAddress,
+    setSwapResponse,
+    rawInputAmount,
+    evmConnectWalletChainId,
+    writeContract,
+  ]);
 
   // Handle ERC20->BTC swap using Uniswap + OTC
-  const handleERC20ToBTCSwap = async () => {
+  const executeERC20ToBTCSwap = useCallback(async () => {
+    // Clear old permit data when starting a new swap
+    setPermitDataForSwap(null);
+
     // Check fake mode environment variables
     const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
     const FAKE_OTC = process.env.NEXT_PUBLIC_FAKE_OTC === "true";
@@ -424,6 +466,12 @@ export const SwapButton = () => {
           quote: rfqQuote!,
           user_destination_address: payoutAddress,
           user_evm_account_address: userEvmAccountAddress,
+          metadata: selectedInputToken
+            ? {
+                affiliate: "app.rift.trade",
+                startAsset: `${selectedInputToken.ticker}:${selectedInputToken.address || "native"}:${selectedInputToken.icon}`,
+              }
+            : undefined,
         });
 
         depositAddress = otcSwap.deposit_address;
@@ -441,139 +489,30 @@ export const SwapButton = () => {
       const sellAmount = parseUnits(rawInputAmount, decimals).toString();
 
       const swapTransaction = await uniswapRouter.buildSwapTransaction(
-        {
-          sellToken,
-          sellAmount,
-          decimals,
-          userAddress: userEvmAccountAddress,
-          slippageBps: slippageBips,
-          validFor: 480, // 2 minutes
-        },
+        sellToken,
+        sellAmount,
+        decimals,
+        userEvmAccountAddress,
         uniswapQuote.routerType, // Pass the router type from the quote, default to v2v3 in fake mode
-        depositAddress // Set receiver to OTC deposit address
+        depositAddress, // Set receiver to OTC deposit address
+        slippageBips,
+        480, // validFor: 2 minutes
+        permitDataForSwap?.permit,
+        permitDataForSwap?.signature,
+        // V4 fields from stored quote
+        uniswapQuote.poolKey,
+        uniswapQuote.path,
+        uniswapQuote.currencyIn,
+        uniswapQuote.isFirstToken,
+        uniswapQuote.amountIn,
+        uniswapQuote.amountOutMinimum
       );
 
       console.log("Swap transaction built:", swapTransaction);
       console.log("Transaction to:", swapTransaction.to);
       console.log("Transaction value:", swapTransaction.value);
 
-      // Store the pending swap transaction
-      setPendingSwapTransaction({
-        to: swapTransaction.to as Address,
-        calldata: swapTransaction.calldata,
-        value: swapTransaction.value,
-        routerType: swapTransaction.routerType || "v2v3",
-        inputAmount: sellAmount,
-        route: swapTransaction.route,
-        depositAddress: depositAddress,
-      });
-
-      // For native ETH, no approval needed - execute immediately
-      if (sellToken.toLowerCase() === "eth" || !sellToken) {
-        console.log("Native ETH swap, executing immediately...");
-        const gasParams = await fetchGasParams(evmConnectWalletChainId);
-        console.log(
-          "Gas params for ETH swap:",
-          gasParams
-            ? {
-                maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
-                maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
-              }
-            : undefined
-        );
-        const txData = {
-          to: swapTransaction.to as Address,
-          data: swapTransaction.calldata as `0x${string}`,
-          value: BigInt(swapTransaction.value),
-          ...(gasParams && {
-            maxFeePerGas: gasParams.maxFeePerGas,
-            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-          }),
-        };
-        sendTransaction(txData);
-      } else {
-        // For ERC20 tokens, check approval status
-        console.log("ERC20 token swap, checking approval status...");
-        // Explicitly refetch allowance to update UI
-        await refetchAllowance();
-      }
-    } catch (error) {
-      console.error("ERC20->BTC swap failed:", error);
-
-      toastError(error, {
-        title: "Swap Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  };
-
-  // Handle token approval
-  const handleApprove = async () => {
-    if (!selectedInputToken?.address || !pendingSwapTransaction || !rawInputAmount) {
-      console.error("Missing required data for approval");
-      return;
-    }
-
-    try {
-      console.log("Approving token...", {
-        token: selectedInputToken.address,
-        spender: pendingSwapTransaction.to,
-        amount: rawInputAmount,
-      });
-
-      const sellAmount = parseUnits(rawInputAmount, selectedInputToken.decimals);
-
-      const gasParams = await fetchGasParams(evmConnectWalletChainId);
-      console.log(
-        "Gas params for approval:",
-        gasParams
-          ? {
-              maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
-              maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
-            }
-          : undefined
-      );
-
-      // For V4 swaps, approve Universal Router; for V2/V3, approve SwapRouter02
-      const spenderAddress =
-        pendingSwapTransaction.routerType === "v4"
-          ? UNIVERSAL_ROUTER_ADDRESS
-          : pendingSwapTransaction.to;
-
-      console.log(
-        "Approving spender:",
-        spenderAddress,
-        "for router type:",
-        pendingSwapTransaction.routerType
-      );
-
-      writeApprove({
-        address: selectedInputToken.address as Address,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [spenderAddress, sellAmount],
-        ...(gasParams && {
-          maxFeePerGas: gasParams.maxFeePerGas,
-          maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-        }),
-      });
-    } catch (error) {
-      console.error("Approval failed:", error);
-      toastError(error, {
-        title: "Approval Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  };
-
-  // Execute the pending swap transaction
-  const handleExecuteSwap = async () => {
-    if (!pendingSwapTransaction || !userEvmAccountAddress) {
-      console.error("No pending swap transaction or user address");
-      return;
-    }
-
-    try {
+      // Execute the swap transaction
       console.log("Executing swap transaction...");
       const gasParams = await fetchGasParams(evmConnectWalletChainId);
       console.log(
@@ -586,142 +525,165 @@ export const SwapButton = () => {
           : undefined
       );
 
-      // V4 swaps with ERC20 inputs use standard approval to Universal Router
-      if (pendingSwapTransaction.routerType === "v4" && !isNativeETH) {
-        console.log("[V4] Executing V4 swap with standard ERC20 approval");
-
-        // Get deposit address from pending transaction or fall back to user address in FAKE_OTC mode
-        const depositAddress = (pendingSwapTransaction.depositAddress ||
-          userEvmAccountAddress) as Address;
-        console.log("Deposit address:", depositAddress);
-        const deadline = Math.floor(Date.now() / 1000) + 480; // 8 minutes from now
-
-        // Get output token from route metadata
-        const outputToken = pendingSwapTransaction.route?.outputToken as Address;
-
-        // Use RoutePlanner SDK to properly encode Universal Router commands
-        const routePlanner = new RoutePlanner();
-
-        // Add V4_SWAP command with encoded actions from server
-        routePlanner.addCommand(CommandType.V4_SWAP, [
-          pendingSwapTransaction.calldata as `0x${string}`,
-        ]);
-
-        // SWEEP no longer needed - tokens go directly to receiver via TAKE action
-        // routePlanner.addCommand(CommandType.SWEEP, [
-        //   outputToken,
-        //   depositAddress,
-        //   0n, // minAmount: 0 (we already have slippage protection in V4 actions)
-        // ]);
-
-        console.log("[V4] Executing Universal Router with deposit address:", depositAddress);
-
-        // Call UniversalRouter.execute(commands, inputs, deadline)
-        writeContract({
-          address: UNIVERSAL_ROUTER_ADDRESS,
-          abi: [
-            {
-              inputs: [
-                { internalType: "bytes", name: "commands", type: "bytes" },
-                { internalType: "bytes[]", name: "inputs", type: "bytes[]" },
-                { internalType: "uint256", name: "deadline", type: "uint256" },
-              ],
-              name: "execute",
-              outputs: [],
-              stateMutability: "payable",
-              type: "function",
-            },
-          ],
-          functionName: "execute",
-          args: [
-            routePlanner.commands as `0x${string}`,
-            routePlanner.inputs as readonly `0x${string}`[],
-            BigInt(deadline),
-          ],
-          ...(gasParams && {
-            maxFeePerGas: gasParams.maxFeePerGas,
-            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-          }),
-        });
-      } else if (pendingSwapTransaction.routerType === "v4" && isNativeETH) {
-        // V4 swap with ETH - simpler flow using msg.value
-        console.log("[V4] Executing V4 swap with ETH (msg.value)");
-
-        // Get deposit address from pending transaction or fall back to user address in FAKE_OTC mode
-        const depositAddress = (pendingSwapTransaction.depositAddress ||
-          userEvmAccountAddress) as Address;
-
-        const deadline = Math.floor(Date.now() / 1000) + 480;
-
-        // Get output token from route metadata
-        const outputToken = pendingSwapTransaction.route?.outputToken as Address;
-
-        // Use RoutePlanner SDK to properly encode Universal Router commands
-        const routePlanner = new RoutePlanner();
-
-        // Add V4_SWAP command with encoded actions from server
-        routePlanner.addCommand(CommandType.V4_SWAP, [
-          pendingSwapTransaction.calldata as `0x${string}`,
-        ]);
-
-        // SWEEP no longer needed - tokens go directly to receiver via TAKE action
-        // routePlanner.addCommand(CommandType.SWEEP, [
-        //   outputToken,
-        //   depositAddress,
-        //   0n, // minAmount: 0 (we already have slippage protection in V4 actions)
-        // ]);
-
-        console.log("[V4] Executing Universal Router with deposit address:", depositAddress);
-
-        writeContract({
-          address: UNIVERSAL_ROUTER_ADDRESS,
-          abi: [
-            {
-              inputs: [
-                { internalType: "bytes", name: "commands", type: "bytes" },
-                { internalType: "bytes[]", name: "inputs", type: "bytes[]" },
-                { internalType: "uint256", name: "deadline", type: "uint256" },
-              ],
-              name: "execute",
-              outputs: [],
-              stateMutability: "payable",
-              type: "function",
-            },
-          ],
-          functionName: "execute",
-          args: [
-            routePlanner.commands as `0x${string}`,
-            routePlanner.inputs as readonly `0x${string}`[],
-            BigInt(deadline),
-          ],
-          value: BigInt(pendingSwapTransaction.value),
-          ...(gasParams && {
-            maxFeePerGas: gasParams.maxFeePerGas,
-            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-          }),
-        });
+      // Conditional logging based on token type
+      if (swapTransaction.routerType === "v4" && !isNativeETH) {
+        console.log("[V4] Executing V4 swap with ERC20");
+      } else if (swapTransaction.routerType === "v4" && isNativeETH) {
+        console.log("[V4] Executing V4 swap with ETH");
       } else {
-        // V2/V3 swap - use existing sendTransaction flow
         console.log("[V2/V3] Executing V2/V3 swap");
-        const txData = {
-          to: pendingSwapTransaction.to,
-          data: pendingSwapTransaction.calldata as `0x${string}`,
-          value: BigInt(pendingSwapTransaction.value),
-          ...(gasParams && {
-            maxFeePerGas: gasParams.maxFeePerGas,
-            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-          }),
-        };
-        sendTransaction(txData);
       }
+
+      // Execute the transaction
+      sendTransaction({
+        to: swapTransaction.to as Address,
+        data: swapTransaction.calldata as `0x${string}`,
+        value: BigInt(swapTransaction.value),
+        ...(gasParams && {
+          maxFeePerGas: gasParams.maxFeePerGas,
+          maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+        }),
+      });
     } catch (error) {
-      console.error("Swap execution failed:", error);
+      console.error("ERC20->BTC swap failed:", error);
+
       toastError(error, {
         title: "Swap Failed",
         description: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  };
+  }, [
+    uniswapQuote,
+    rfqQuote,
+    userEvmAccountAddress,
+    selectedInputToken,
+    payoutAddress,
+    setSwapResponse,
+    rawInputAmount,
+    slippageBips,
+    evmConnectWalletChainId,
+    sendTransaction,
+    permitDataForSwap,
+    isNativeETH,
+    setPermitDataForSwap,
+  ]);
+
+  // Main swap handler - routes to appropriate swap function
+  const startSwap = useCallback(async () => {
+    try {
+      if (!isWalletConnected) {
+        // Open wallet connection modal instead of showing toast
+        await reownModal.open();
+        return;
+      }
+
+      if (isMobile) {
+        toastInfo({
+          title: "Hop on your laptop",
+          description: "This app is too cool for small screens, mobile coming soon!",
+        });
+        return;
+      }
+
+      // Check input amount
+      if (
+        !rawInputAmount ||
+        !outputAmount ||
+        parseFloat(rawInputAmount) <= 0 ||
+        parseFloat(outputAmount) <= 0
+      ) {
+        toastInfo({
+          title: "Enter Amount",
+          description: "Please enter a valid amount to swap",
+        });
+        return;
+      }
+
+      // Check payout address
+      console.log("Checking payout address:", {
+        payoutAddress,
+        isSwappingForBTC,
+        addressValidation,
+      });
+      if (!payoutAddress) {
+        toastInfo({
+          title: isSwappingForBTC ? "Enter Bitcoin Address" : "Enter Ethereum Address",
+          description: isSwappingForBTC
+            ? "Please enter your Bitcoin address to receive BTC"
+            : "Please enter your Ethereum address to receive cbBTC",
+        });
+        return;
+      }
+
+      if (!addressValidation.isValid) {
+        let description = isSwappingForBTC
+          ? "Please enter a valid Bitcoin payout address"
+          : "Please enter a valid Ethereum address";
+        if (isSwappingForBTC && addressValidation.networkMismatch) {
+          description = `Wrong network: expected ${GLOBAL_CONFIG.underlyingSwappingAssets[0].currency.chain} but detected ${addressValidation.detectedNetwork}`;
+        }
+        toastInfo({
+          title: isSwappingForBTC ? "Invalid Bitcoin Address" : "Invalid Ethereum Address",
+          description,
+        });
+        return;
+      }
+
+      // For cbBTC->BTC swaps, use the direct OTC flow
+      if (isSwappingForBTC && selectedInputToken?.ticker === "cbBTC" && rfqQuote) {
+        await executeCBBTCtoBTCSwap();
+        return;
+      }
+
+      // For ERC20->BTC swaps, use the new Uniswap flow
+      if (isSwappingForBTC && uniswapQuote && rfqQuote) {
+        await executeERC20ToBTCSwap();
+        return;
+      }
+
+      // For BTC->ERC20 swaps, use the existing flow
+      // Note: This flow may need updating based on your requirements
+      toastInfo({
+        title: "BTC to ERC20",
+        description: "BTC to ERC20 swap flow not yet implemented in this component",
+      });
+    } catch (error) {
+      console.error("startSwap error caught:", error);
+      // Errors will be handled by the writeError useEffect
+    }
+  }, [
+    isWalletConnected,
+    isMobile,
+    rawInputAmount,
+    outputAmount,
+    payoutAddress,
+    addressValidation,
+    isSwappingForBTC,
+    selectedInputToken,
+    rfqQuote,
+    uniswapQuote,
+    executeCBBTCtoBTCSwap,
+    executeERC20ToBTCSwap,
+  ]);
+
+  // Unified handler that checks permit and routes to appropriate action
+  const handleSwapButtonClick = useCallback(async () => {
+    // First check if we need token approval to Permit2
+    setSwapButtonPressed(true);
+    if (approvalState === ApprovalState.NEEDS_APPROVAL) {
+      await approvePermit2();
+      return;
+    }
+
+    if (approvalState === ApprovalState.APPROVED) {
+      // Then check if we need Permit2 signature
+      if (needsPermit()) {
+        await signPermit2();
+      } else {
+        await startSwap();
+      }
+    }
+  }, [approvalState, approvePermit2, needsPermit, signPermit2, startSwap]);
 
   // ============================================================================
   // USE EFFECTS
@@ -742,46 +704,7 @@ export const SwapButton = () => {
     if (sendTxError) {
       console.error("Send transaction error:", sendTxError);
     }
-    if (approveError) {
-      console.error("Approve error:", approveError);
-      toastError(approveError, {
-        title: "Approval Failed",
-        description: approveError instanceof Error ? approveError.message : "Unknown error",
-      });
-    }
-  }, [writeError, sendTxError, approveError]);
-
-  // Check if approval is needed when allowance is fetched
-  useEffect(() => {
-    if (!pendingSwapTransaction || isNativeETH) {
-      setNeedsApproval(false);
-      return;
-    }
-
-    if (allowance !== undefined && rawInputAmount && selectedInputToken) {
-      const sellAmount = parseUnits(rawInputAmount, selectedInputToken.decimals);
-      const hasEnoughAllowance = allowance >= sellAmount;
-      setNeedsApproval(!hasEnoughAllowance);
-      console.log("Allowance check:", {
-        allowance: allowance.toString(),
-        sellAmount: sellAmount.toString(),
-        needsApproval: !hasEnoughAllowance,
-      });
-    }
-  }, [allowance, pendingSwapTransaction, rawInputAmount, selectedInputToken, isNativeETH]);
-
-  // Refetch allowance after approval is confirmed
-  useEffect(() => {
-    if (isApproveConfirmed) {
-      console.log("Approval confirmed, refetching allowance...");
-      refetchAllowance();
-
-      toastSuccess({
-        title: "Approval Confirmed",
-        description: "Token approval successful. You can now swap.",
-      });
-    }
-  }, [isApproveConfirmed, refetchAllowance]);
+  }, [writeError, sendTxError]);
 
   // Update store when transaction is confirmed
   useEffect(() => {
@@ -821,12 +744,64 @@ export const SwapButton = () => {
     }
   }, [txError]);
 
+  // Capture approval transaction hash
+  useEffect(() => {
+    if (hash && isApprovingToken) {
+      console.log("Approval transaction hash:", hash);
+      setApprovalTxHash(hash);
+      setIsApprovingToken(false);
+    }
+  }, [hash, isApprovingToken]);
+
+  // Handle approval confirmation and errors
+  useEffect(() => {
+    if (isApprovalConfirmed) {
+      console.log("Permit2 approval confirmed");
+      setApprovalState(ApprovalState.APPROVED);
+      toastSuccess({
+        title: "Approval Confirmed",
+        description: "Permit2 can now spend your tokens",
+      });
+      // Auto-sign permit after approval
+      // if (!isButtonLoading) {
+      //   console.log("Auto-signing permit after approval");
+      //   signPermit2();
+      // }
+    } else if (approvalTxError) {
+      console.error("Approval transaction error:", approvalTxError);
+      setApprovalState(ApprovalState.NEEDS_APPROVAL);
+      toastError(approvalTxError, {
+        title: "Approval Failed",
+        description: "The approval transaction failed on the network",
+      });
+    }
+  }, [isApprovalConfirmed, approvalTxError, setApprovalState, isButtonLoading, signPermit2]);
+
+  useEffect(() => {
+    if (approvalState === ApprovalState.APPROVED) {
+      console.log("Auto-signing permit after approval");
+      if (needsPermit() && swapButtonPressed) {
+        signPermit2();
+      }
+    }
+  }, [approvalState, signPermit2]);
+
+  // Auto-execute swap when permit is signed
+  useEffect(() => {
+    // When permitDataForSwap is set, automatically execute the swap
+    if (permitDataForSwap && !isNativeETH && !isButtonLoading) {
+      console.log("Auto-executing swap after permit signed");
+      startSwap();
+    }
+  }, [permitDataForSwap, isNativeETH, isButtonLoading, startSwap]);
+
   // Handle keyboard events (Enter to submit)
   useEffect(() => {
+    console.log("isButtonLoading", isButtonLoading);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Enter" && allFieldsFilled && !isButtonLoading) {
         event.preventDefault();
-        handleSwap();
+        handleSwapButtonClick();
       }
     };
 
@@ -834,132 +809,87 @@ export const SwapButton = () => {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [allFieldsFilled, isButtonLoading]);
+  }, [allFieldsFilled, isButtonLoading, handleSwapButtonClick]);
 
   // ============================================================================
   // RENDER
   // ============================================================================
 
+  // Determine button text and click handler
+  const getButtonTextAndHandler = () => {
+    // If approving Permit2
+    if (approvalState === ApprovalState.APPROVING || isApprovalConfirming) {
+      return {
+        text: "Approving Permit2...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    // If signing permit
+    if (isSigningPermit) {
+      return {
+        text: "Sign Permit2...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    // If swap transaction is pending/confirming
+    if (isPending || isSendTxPending) {
+      return {
+        text: "Signing Swap...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+    if (isConfirming) {
+      return {
+        text: "Signing Swap...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    // Default: Show "Swap"
+    return {
+      text: "Swap",
+      handler: handleSwapButtonClick,
+      showSpinner: false,
+    };
+  };
+
+  const buttonConfig = getButtonTextAndHandler();
+
   return (
     <Flex direction="column" w="100%">
-      {/* Approval and Swap Buttons */}
-      {pendingSwapTransaction && needsApproval && !isNativeETH ? (
-        // Show Approve button when approval is needed
-        <Flex gap="8px" w="100%" mt="8px">
-          <Flex
-            bg={colors.swapBgColor}
-            _hover={{
-              bg: !isButtonLoading ? colors.swapHoverColor : undefined,
-            }}
-            w="100%"
-            transition="0.2s"
-            h="58px"
-            onClick={isButtonLoading ? undefined : handleApprove}
-            fontSize="18px"
-            align="center"
-            userSelect="none"
-            cursor={!isButtonLoading ? "pointer" : "not-allowed"}
-            borderRadius="16px"
-            justify="center"
-            border="3px solid"
-            borderColor={colors.swapBorderColor}
-            opacity={isButtonLoading ? 0.7 : 1}
-            pointerEvents={isButtonLoading ? "none" : "auto"}
-          >
-            {(isApprovePending || isApproveConfirming) && (
-              <Spinner size="sm" color={colors.offWhite} mr="10px" />
-            )}
-            <Text color={colors.offWhite} fontFamily="Nostromo">
-              {isApprovePending
-                ? "Confirm in Wallet..."
-                : isApproveConfirming
-                  ? "Confirming..."
-                  : `Approve ${selectedInputToken?.ticker || "Token"}`}
-            </Text>
-          </Flex>
-          <Flex
-            bg={colors.swapBgColor}
-            w="100%"
-            transition="0.2s"
-            h="58px"
-            fontSize="18px"
-            align="center"
-            userSelect="none"
-            cursor="not-allowed"
-            borderRadius="16px"
-            justify="center"
-            border="3px solid"
-            borderColor={colors.swapBorderColor}
-            opacity={0.5}
-          >
-            <Text color={colors.offWhite} fontFamily="Nostromo">
-              Swap
-            </Text>
-          </Flex>
-        </Flex>
-      ) : pendingSwapTransaction && !needsApproval && !isNativeETH ? (
-        // Show Swap button when approved
-        <Flex
-          bg={colors.swapBgColor}
-          _hover={{
-            bg: !isButtonLoading ? colors.swapHoverColor : undefined,
-          }}
-          w="100%"
-          mt="8px"
-          transition="0.2s"
-          h="58px"
-          onClick={isButtonLoading ? undefined : handleExecuteSwap}
-          fontSize="18px"
-          align="center"
-          userSelect="none"
-          cursor={!isButtonLoading ? "pointer" : "not-allowed"}
-          borderRadius="16px"
-          justify="center"
-          border="3px solid"
-          borderColor={colors.swapBorderColor}
-          opacity={isButtonLoading ? 0.7 : 1}
-          pointerEvents={isButtonLoading ? "none" : "auto"}
-        >
-          {(isSendTxPending || isConfirming) && (
-            <Spinner size="sm" color={colors.offWhite} mr="10px" />
-          )}
-          <Text color={colors.offWhite} fontFamily="Nostromo">
-            {isSendTxPending ? "Confirm in Wallet..." : isConfirming ? "Confirming..." : "Swap"}
-          </Text>
-        </Flex>
-      ) : (
-        // Show default Swap button for initial swap or native ETH
-        <Flex
-          bg={colors.swapBgColor}
-          _hover={{
-            bg: !isButtonLoading ? colors.swapHoverColor : undefined,
-          }}
-          w="100%"
-          mt="8px"
-          transition="0.2s"
-          h="58px"
-          onClick={isButtonLoading ? undefined : handleSwap}
-          fontSize="18px"
-          align="center"
-          userSelect="none"
-          cursor={!isButtonLoading ? "pointer" : "not-allowed"}
-          borderRadius="16px"
-          justify="center"
-          border="3px solid"
-          borderColor={colors.swapBorderColor}
-          opacity={isButtonLoading ? 0.7 : 1}
-          pointerEvents={isButtonLoading ? "none" : "auto"}
-        >
-          {isButtonLoading && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
-          <Text color={colors.offWhite} fontFamily="Nostromo">
-            {isPending || isSendTxPending
-              ? "Confirm in Wallet..."
-              : isConfirming
-                ? "Confirming..."
-                : "Swap"}
-          </Text>
-        </Flex>
-      )}
+      {/* Single Dynamic Swap Button */}
+      <Flex
+        bg={colors.swapBgColor}
+        _hover={{
+          bg: !isButtonLoading ? colors.swapHoverColor : undefined,
+        }}
+        w="100%"
+        mt="8px"
+        transition="0.2s"
+        h="58px"
+        onClick={isButtonLoading ? undefined : buttonConfig.handler}
+        fontSize="18px"
+        align="center"
+        userSelect="none"
+        cursor={!isButtonLoading ? "pointer" : "not-allowed"}
+        borderRadius="16px"
+        justify="center"
+        border="3px solid"
+        borderColor={colors.swapBorderColor}
+        opacity={isButtonLoading ? 0.7 : 1}
+        pointerEvents={isButtonLoading ? "none" : "auto"}
+      >
+        {buttonConfig.showSpinner && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
+        <Text color={colors.offWhite} fontFamily="Nostromo">
+          {buttonConfig.text}
+        </Text>
+      </Flex>
 
       {/* Bitcoin QR Code Display - Animated (appears after swap initiation) */}
       {bitcoinDepositInfo && (

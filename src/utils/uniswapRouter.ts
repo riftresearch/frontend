@@ -52,6 +52,19 @@ export interface UniswapQuoteResponse {
     gasEstimate?: string;
     routePath?: string;
   };
+  // V4-specific fields
+  poolKey?: {
+    currency0: string;
+    currency1: string;
+    fee: number;
+    tickSpacing: number;
+    hooks: string;
+  };
+  path?: any[]; // PathKey[]
+  currencyIn?: string;
+  isFirstToken?: boolean;
+  amountIn?: string;
+  amountOutMinimum?: string;
 }
 
 /**
@@ -96,6 +109,8 @@ export class UniswapRouterError extends Error {
     this.name = "UniswapRouterError";
   }
 }
+
+import { BigNumber } from "ethers";
 
 /**
  * Uniswap Router Client (calls server-side API)
@@ -169,6 +184,13 @@ export class UniswapRouterClient {
         buyAmount: data.buyAmount,
         expiresAt: new Date(data.expiresAt),
         route: data.route,
+        // V4 fields
+        poolKey: data.poolKey,
+        path: data.path,
+        currencyIn: data.currencyIn,
+        isFirstToken: data.isFirstToken,
+        amountIn: data.amountIn,
+        amountOutMinimum: data.amountOutMinimum,
       };
     } catch (error) {
       if (error instanceof UniswapRouterError) {
@@ -186,26 +208,52 @@ export class UniswapRouterClient {
    * Build a swap transaction ready for execution
    */
   async buildSwapTransaction(
-    request: UniswapQuoteRequest,
+    sellToken: string,
+    sellAmount: string,
+    decimals: number,
+    userAddress: string,
     routerType: "v4" | "v2v3",
-    receiver?: string
+    receiver?: string,
+    slippageBps?: number,
+    validFor?: number,
+    permit?: any,
+    signature?: string,
+    // V4 fields
+    poolKey?: any,
+    path?: any[],
+    currencyIn?: string,
+    isFirstToken?: boolean,
+    amountIn?: string,
+    amountOutMinimum?: string
   ): Promise<UniswapSwapTransaction> {
     try {
+      const body = {
+        routerType,
+        sellToken,
+        sellAmount,
+        decimals,
+        userAddress,
+        receiver,
+        slippageBps,
+        validFor,
+        permit,
+        signature,
+        // V4 fields
+        poolKey,
+        path,
+        currencyIn,
+        isFirstToken,
+        amountIn,
+        amountOutMinimum,
+      };
+
+      console.log("buildSwapTransaction body", body);
       const response = await fetch(this.apiBaseUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          routerType,
-          sellToken: request.sellToken,
-          sellAmount: request.sellAmount,
-          decimals: request.decimals,
-          userAddress: request.userAddress,
-          receiver,
-          slippageBps: request.slippageBps,
-          validFor: request.validFor,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -218,6 +266,7 @@ export class UniswapRouterClient {
       }
 
       const data = await response.json();
+      console.log("buildSwapTransaction response", data);
 
       return {
         calldata: data.calldata,

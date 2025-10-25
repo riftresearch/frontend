@@ -10,14 +10,19 @@ import {
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
-import { GLOBAL_CONFIG, ZERO_USD_DISPLAY } from "@/utils/constants";
+import {
+  GLOBAL_CONFIG,
+  ZERO_USD_DISPLAY,
+  UNIVERSAL_ROUTER_ADDRESS,
+  SWAP_ROUTER02_ADDRESS,
+} from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
 import { InfoSVG } from "../other/SVGs";
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
-import { TokenData } from "@/utils/types";
+import { TokenData, ApprovalState } from "@/utils/types";
 import { Quote, formatLotAmount } from "@/utils/rfqClient";
 import {
   getERC20ToBTCQuote,
@@ -50,6 +55,7 @@ export const SwapInputAndOutput = () => {
   const quoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const outputQuoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const quoteRequestIdRef = useRef(0);
+  const approvalDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Global store
   const {
@@ -74,11 +80,15 @@ export const SwapInputAndOutput = () => {
     setOutputUsdValue,
     setUniswapQuote,
     setRfqQuote,
+    uniswapQuote,
     slippageBips,
     payoutAddress,
     setPayoutAddress,
     addressValidation,
     setAddressValidation,
+    permitAllowance,
+    setPermitAllowance,
+    setApprovalState,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -555,6 +565,7 @@ export const SwapInputAndOutput = () => {
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
 
+    console.log("resetting values");
     // Cleanup debounce timers on unmount
     return () => {
       if (quoteDebounceTimerRef.current) {
@@ -562,6 +573,9 @@ export const SwapInputAndOutput = () => {
       }
       if (outputQuoteDebounceTimerRef.current) {
         clearTimeout(outputQuoteDebounceTimerRef.current);
+      }
+      if (approvalDebounceTimerRef.current) {
+        clearTimeout(approvalDebounceTimerRef.current);
       }
     };
   }, [
@@ -744,6 +758,91 @@ export const SwapInputAndOutput = () => {
     evmConnectWalletChainId,
     inputAssetIdentifier,
   ]);
+
+  // Fetch permit allowance when input amount changes (debounced)
+  useEffect(() => {
+    const fetchApproval = async () => {
+      // Only fetch if:
+      // 1. permitAllowance is null (not yet fetched)
+      // 2. Token is ERC20 (not ETH or cbBTC)
+      // 3. We have a valid input amount
+      if (
+        permitAllowance !== null ||
+        !selectedInputToken?.address ||
+        selectedInputToken.ticker === "cbBTC" ||
+        !userEvmAccountAddress ||
+        !rawInputAmount ||
+        parseFloat(rawInputAmount) <= 0
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/permit-allowance?userAddress=${userEvmAccountAddress}&tokenAddress=${selectedInputToken.address}&rawInputAmount=${rawInputAmount}&decimals=${selectedInputToken.decimals}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Permit allowance data:", data);
+          setPermitAllowance(data);
+
+          // Set approval state based on whether token has allowance to Permit2
+          if (data.permit2HasAllowance) {
+            setApprovalState(ApprovalState.APPROVED);
+          } else {
+            setApprovalState(ApprovalState.NEEDS_APPROVAL);
+          }
+        } else {
+          console.error("Failed to fetch permit allowance");
+        }
+      } catch (error) {
+        console.error("Error fetching permit allowance:", error);
+      }
+    };
+
+    // Clear any existing debounce timer
+    if (approvalDebounceTimerRef.current) {
+      clearTimeout(approvalDebounceTimerRef.current);
+    }
+
+    // Set up debounced approval fetch (250ms delay)
+    if (
+      rawInputAmount &&
+      parseFloat(rawInputAmount) > 0 &&
+      selectedInputToken?.address &&
+      selectedInputToken.ticker !== "cbBTC" &&
+      userEvmAccountAddress &&
+      permitAllowance === null
+    ) {
+      approvalDebounceTimerRef.current = setTimeout(() => {
+        fetchApproval();
+      }, 250);
+    }
+
+    return () => {
+      if (approvalDebounceTimerRef.current) {
+        clearTimeout(approvalDebounceTimerRef.current);
+      }
+    };
+  }, [
+    permitAllowance,
+    selectedInputToken,
+    userEvmAccountAddress,
+    setPermitAllowance,
+    setApprovalState,
+    rawInputAmount,
+  ]);
+
+  // Reset permitAllowance when input token changes
+  useEffect(() => {
+    setPermitAllowance(null);
+  }, [selectedInputToken, setPermitAllowance]);
+
+  // Reset approval state when token or amount changes
+  useEffect(() => {
+    setApprovalState(ApprovalState.UNKNOWN);
+  }, [selectedInputToken, rawInputAmount, setApprovalState]);
 
   // ============================================================================
   // RENDER

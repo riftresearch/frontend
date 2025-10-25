@@ -9,14 +9,9 @@ import { AlphaRouter, SwapOptionsSwapRouter02, SwapType } from "@uniswap/smart-o
 import { CurrencyAmount, Percent, Token, TradeType, ChainId } from "@uniswap/sdk-core";
 import { Contract, providers } from "ethers";
 import { Actions, PathKey, V4Planner } from "@uniswap/v4-sdk";
-import { createHash } from "crypto";
-import {
-  V4_QUOTER_ABI,
-  V4_QUOTER,
-  V4_POOL_MANAGER,
-  V4_UNIVERSAL_ROUTER,
-  V4_PERMIT2,
-} from "./v4ABIs";
+import { V4_QUOTER_ABI, V4_QUOTER, V4_POOL_MANAGER, UNIVERSAL_ROUTER_ADDRESS } from "./v4ABIs";
+import { RoutePlanner, CommandType } from "@uniswap/universal-router-sdk";
+import { encodeFunctionData, encodeAbiParameters } from "viem";
 
 // ============================================================================
 // Constants
@@ -56,53 +51,8 @@ const alphaRouter = new AlphaRouter({
 const v4QuoterContract = new Contract(V4_QUOTER, V4_QUOTER_ABI, provider);
 
 // ============================================================================
-// Quote Cache
+// Quote Cache - REMOVED (now using client-side management)
 // ============================================================================
-
-interface CachedQuote {
-  routerType: "v4" | "v2v3";
-  sellAmount?: string;
-  buyAmount?: string;
-  expiresAt: Date;
-  route: any;
-  v4Metadata?: V4QuoteMetadata;
-}
-
-interface V4QuoteMetadata {
-  poolKey?: {
-    currency0: string;
-    currency1: string;
-    fee: number;
-    tickSpacing: number;
-    hooks: string;
-  };
-  path?: PathKey[];
-  currencyIn?: string;
-  isFirstToken?: boolean;
-  amountIn: string;
-  amountOutMinimum: string;
-}
-
-const quoteCache = new Map<string, CachedQuote>();
-
-// Cache TTL: 2 minutes
-const CACHE_TTL_MS = 120_000;
-
-function generateCacheKey(sellToken: string, sellAmount: string, userAddress: string): string {
-  return createHash("sha256").update(`${sellToken}-${sellAmount}-${userAddress}`).digest("hex");
-}
-
-function cleanExpiredCache() {
-  const now = Date.now();
-  for (const [key, value] of quoteCache.entries()) {
-    if (value.expiresAt.getTime() < now) {
-      quoteCache.delete(key);
-    }
-  }
-}
-
-// Clean cache every minute
-setInterval(cleanExpiredCache, 60_000);
 
 // ============================================================================
 // Helper Functions
@@ -140,6 +90,19 @@ interface QuoteResult {
   buyAmount?: string;
   expiresAt: string;
   route: any;
+  // V4-specific fields (optional, only present for V4 quotes)
+  poolKey?: {
+    currency0: string;
+    currency1: string;
+    fee: number;
+    tickSpacing: number;
+    hooks: string;
+  };
+  path?: PathKey[];
+  currencyIn?: string;
+  isFirstToken?: boolean;
+  amountIn?: string;
+  amountOutMinimum?: string;
 }
 
 async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> {
@@ -256,11 +219,7 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
 // V4 Quote Logic
 // ============================================================================
 
-interface V4QuoteResult extends QuoteResult {
-  v4Metadata: V4QuoteMetadata;
-}
-
-async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null> {
+async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> {
   const { sellToken, sellAmount, buyAmount, validFor } = params;
 
   try {
@@ -318,12 +277,11 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
               tickSpacing: 1,
               gasEstimate: result.gasEstimate?.toString() || "0",
             },
-            v4Metadata: {
-              poolKey,
-              isFirstToken: sortedPair.isFirstToken,
-              amountIn: "0", // Will be set by swap builder
-              amountOutMinimum: amount, // This is the exact amount we want
-            },
+            // V4 fields
+            poolKey,
+            isFirstToken: sortedPair.isFirstToken,
+            amountIn: "0", // Will be set by swap builder
+            amountOutMinimum: amount, // This is the exact amount we want
           };
         } catch (error) {
           console.log(
@@ -366,12 +324,11 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
               tickSpacing: 1,
               gasEstimate: result.gasEstimate?.toString() || "0",
             },
-            v4Metadata: {
-              poolKey,
-              isFirstToken: sortedPair.isFirstToken,
-              amountIn: amount,
-              amountOutMinimum: "0",
-            },
+            // V4 fields
+            poolKey,
+            isFirstToken: sortedPair.isFirstToken,
+            amountIn: amount,
+            amountOutMinimum: "0",
           };
         } catch (error) {
           console.log(
@@ -391,7 +348,10 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
       // Exact output: minimize input amount
       let bestQuote: {
         inputAmount: string;
-        metadata: V4QuoteMetadata;
+        currencyIn: string;
+        path: PathKey[];
+        amountIn: string;
+        amountOutMinimum: string;
         route: any;
         firstHopFee: number;
       } | null = null;
@@ -432,12 +392,10 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
             bestAmount = BigInt(inputAmount);
             bestQuote = {
               inputAmount,
-              metadata: {
-                currencyIn: tokenInAddress,
-                path,
-                amountIn: "0", // Will be set by swap builder
-                amountOutMinimum: amount, // This is the exact amount we want
-              },
+              currencyIn: tokenInAddress,
+              path,
+              amountIn: "0", // Will be set by swap builder
+              amountOutMinimum: amount, // This is the exact amount we want
               route: {
                 type: "multi-hop",
                 path: `${sellToken} -> WBTC -> cbBTC`,
@@ -471,13 +429,20 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
         sellAmount: bestQuote.inputAmount, // For exact output, return the required input
         expiresAt: expiresAt.toISOString(),
         route: bestQuote.route,
-        v4Metadata: bestQuote.metadata,
+        // V4 fields
+        currencyIn: bestQuote.currencyIn,
+        path: bestQuote.path,
+        amountIn: bestQuote.amountIn,
+        amountOutMinimum: bestQuote.amountOutMinimum,
       };
     } else {
       // Exact input: maximize output amount
       let bestQuote: {
         buyAmount: string;
-        metadata: V4QuoteMetadata;
+        currencyIn: string;
+        path: PathKey[];
+        amountIn: string;
+        amountOutMinimum: string;
         route: any;
         firstHopFee: number;
       } | null = null;
@@ -516,12 +481,10 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
             bestAmount = BigInt(outputAmount);
             bestQuote = {
               buyAmount: outputAmount,
-              metadata: {
-                currencyIn: tokenInAddress,
-                path,
-                amountIn: amount,
-                amountOutMinimum: "0",
-              },
+              currencyIn: tokenInAddress,
+              path,
+              amountIn: amount,
+              amountOutMinimum: "0",
               route: {
                 type: "multi-hop",
                 path: `${sellToken} -> WBTC -> cbBTC`,
@@ -553,7 +516,11 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<V4QuoteResult | null
         buyAmount: bestQuote.buyAmount,
         expiresAt: expiresAt.toISOString(),
         route: bestQuote.route,
-        v4Metadata: bestQuote.metadata,
+        // V4 fields
+        currencyIn: bestQuote.currencyIn,
+        path: bestQuote.path,
+        amountIn: bestQuote.amountIn,
+        amountOutMinimum: bestQuote.amountOutMinimum,
       };
     }
   } catch (error) {
@@ -646,15 +613,35 @@ async function buildV2V3Swap(params: V2V3SwapParams): Promise<SwapResult | null>
 // ============================================================================
 
 interface V4SwapParams {
-  metadata: V4QuoteMetadata;
+  poolKey?: any;
+  path?: any[];
+  currencyIn?: string;
+  isFirstToken?: boolean;
+  amountIn: string;
+  amountOutMinimum: string;
   receiver: string;
   slippageBps: number;
   validFor: number;
   sellToken: string;
+  permit?: any;
+  signature?: string;
 }
 
 async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
-  const { metadata, receiver, slippageBps, validFor, sellToken } = params;
+  const {
+    poolKey,
+    path,
+    currencyIn,
+    isFirstToken,
+    amountIn,
+    amountOutMinimum: amountOutMinimumParam,
+    receiver,
+    slippageBps,
+    validFor,
+    sellToken,
+    permit,
+    signature,
+  } = params;
 
   try {
     console.log("[V4] Building V4 swap actions for client-side execution");
@@ -663,7 +650,7 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
     const deadline = Math.floor(Date.now() / 1000) + validFor;
 
     // Calculate minimum output with slippage
-    const amountOut = BigInt(metadata.amountOutMinimum || "0");
+    const amountOut = BigInt(amountOutMinimumParam || "0");
     const slippageMultiplier = BigInt(10_000 - slippageBps);
     const amountOutMinimum = ((amountOut * slippageMultiplier) / BigInt(10_000)).toString();
 
@@ -671,51 +658,47 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
     let inputCurrency: string;
     let outputCurrency: string;
 
-    if (metadata.poolKey) {
+    if (poolKey) {
       // Single-hop swap
       const swapConfig = {
-        poolKey: metadata.poolKey,
-        zeroForOne: metadata.isFirstToken!,
-        amountIn: metadata.amountIn,
+        poolKey: poolKey,
+        zeroForOne: isFirstToken!,
+        amountIn: amountIn,
         amountOutMinimum,
         hookData: "0x",
       };
 
       v4Planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [swapConfig]);
 
-      inputCurrency = metadata.isFirstToken
-        ? metadata.poolKey.currency0
-        : metadata.poolKey.currency1;
-      outputCurrency = metadata.isFirstToken
-        ? metadata.poolKey.currency1
-        : metadata.poolKey.currency0;
+      inputCurrency = isFirstToken ? poolKey.currency0 : poolKey.currency1;
+      outputCurrency = isFirstToken ? poolKey.currency1 : poolKey.currency0;
 
       // SETTLE: Pull input tokens from sender via Permit2
-      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, metadata.amountIn]);
+      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, amountIn]);
 
       // TAKE: Take output tokens directly to receiver
       v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
-    } else if (metadata.path && metadata.currencyIn) {
+    } else if (path && currencyIn) {
       // Multi-hop swap
       const swapConfig = {
-        currencyIn: metadata.currencyIn,
-        path: metadata.path,
-        amountIn: metadata.amountIn,
+        currencyIn: currencyIn,
+        path: path,
+        amountIn: amountIn,
         amountOutMinimum,
       };
 
       v4Planner.addAction(Actions.SWAP_EXACT_IN, [swapConfig]);
 
-      inputCurrency = metadata.currencyIn;
-      outputCurrency = metadata.path[metadata.path.length - 1].intermediateCurrency;
+      inputCurrency = currencyIn;
+      outputCurrency = path[path.length - 1].intermediateCurrency;
 
       // SETTLE: Pull input tokens from sender via Permit2
-      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, metadata.amountIn]);
+      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, amountIn]);
 
       // TAKE: Take output tokens directly to receiver
       v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
     } else {
-      throw new Error("Invalid V4 metadata: missing poolKey or path");
+      throw new Error("Invalid V4 params: missing poolKey or path");
     }
 
     const encodedActions = v4Planner.finalize();
@@ -723,15 +706,86 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
 
     // Determine if we need to send ETH value
     const isNativeEth = sellToken.toUpperCase() === "ETH";
-    const value = isNativeEth ? metadata.amountIn : "0";
+    const value = isNativeEth ? amountIn : "0";
 
-    console.log("[V4] Swap actions encoded successfully");
+    // Build Universal Router calldata using RoutePlanner
+    const routePlanner = new RoutePlanner();
 
-    // Return the encoded actions and metadata for client-side Universal Router execution
+    console.log("permit", permit);
+    console.log("signature", signature);
+    // Add Permit2 commands if permit and signature are provided
+    if (permit && signature) {
+      // Encode Permit2 permit data
+      // const inputsForPermit2Permit = encodeAbiParameters(
+      //   [
+      //     // PermitSingle
+      //     {
+      //       name: "permit",
+      //       type: "tuple",
+      //       components: [
+      //         {
+      //           name: "details",
+      //           type: "tuple",
+      //           components: [
+      //             { name: "token", type: "address" },
+      //             { name: "amount", type: "uint160" },
+      //             { name: "expiration", type: "uint48" },
+      //             { name: "nonce", type: "uint48" },
+      //           ],
+      //         },
+      //         { name: "spender", type: "address" },
+      //         { name: "sigDeadline", type: "uint256" },
+      //       ],
+      //     },
+      //     // signature
+      //     { name: "signature", type: "bytes" },
+      //   ],
+      //   [permit, signature as `0x${string}`]
+      // );
+
+      // console.log("inputsForPermit2Permit", inputsForPermit2Permit);
+      routePlanner.addCommand(CommandType.PERMIT2_PERMIT, [permit, signature as `0x${string}`]);
+    }
+
+    // failing here
+    // routePlanner.addCommand(CommandType.PERMIT2_TRANSFER_FROM, [
+    //   inputCurrency,
+    //   UNIVERSAL_ROUTER_ADDRESS,
+    //   amountIn,
+    // ]);
+
+    routePlanner.addCommand(CommandType.V4_SWAP, [encodedActions as `0x${string}`]);
+
+    // Encode the Universal Router execute() function call
+    const encodedCalldata = encodeFunctionData({
+      abi: [
+        {
+          inputs: [
+            { internalType: "bytes", name: "commands", type: "bytes" },
+            { internalType: "bytes[]", name: "inputs", type: "bytes[]" },
+            { internalType: "uint256", name: "deadline", type: "uint256" },
+          ],
+          name: "execute",
+          outputs: [],
+          stateMutability: "payable",
+          type: "function",
+        },
+      ],
+      functionName: "execute",
+      args: [
+        routePlanner.commands as `0x${string}`,
+        routePlanner.inputs as readonly `0x${string}`[],
+        BigInt(deadline),
+      ],
+    });
+
+    console.log("[V4] Universal Router transaction calldata encoded successfully");
+
+    // Return the full Universal Router transaction data for sendTransaction
     return {
-      calldata: encodedActions, // This is the encoded V4 actions, not the full UR calldata
+      calldata: encodedCalldata,
       value,
-      to: V4_UNIVERSAL_ROUTER,
+      to: UNIVERSAL_ROUTER_ADDRESS,
       buyAmount: amountOutMinimum,
       expiresAt: expiresAt.toISOString(),
       route: {
@@ -826,7 +880,6 @@ export async function GET(request: NextRequest) {
     // Compare and select winner
     let winner: "v2v3" | "v4";
     let winningQuote: QuoteResult;
-    let v4Metadata: V4QuoteMetadata | undefined;
 
     if (!v2v3Result && !v4Result) {
       return NextResponse.json({ error: "No routes found for this swap" }, { status: 404 });
@@ -837,7 +890,6 @@ export async function GET(request: NextRequest) {
       if (v4Result) {
         winner = "v4";
         winningQuote = v4Result;
-        v4Metadata = v4Result.v4Metadata;
         console.log("\n✓ V4 wins (only available route)");
       } else {
         winner = "v2v3";
@@ -854,7 +906,6 @@ export async function GET(request: NextRequest) {
         if (v4Amount < v2v3Amount) {
           winner = "v4";
           winningQuote = v4Result;
-          v4Metadata = v4Result.v4Metadata;
           const improvement = Number(((v2v3Amount - v4Amount) * BigInt(10000)) / v2v3Amount) / 100;
           console.log(`\n✓ V4 wins! (-${improvement.toFixed(2)}% less input required)`);
           console.log(`  V4: ${v4Amount.toString()} input required`);
@@ -875,7 +926,6 @@ export async function GET(request: NextRequest) {
         if (v4Amount > v2v3Amount) {
           winner = "v4";
           winningQuote = v4Result;
-          v4Metadata = v4Result.v4Metadata;
           const improvement = Number(((v4Amount - v2v3Amount) * BigInt(10000)) / v2v3Amount) / 100;
           console.log(`\n✓ V4 wins! (+${improvement.toFixed(2)}% better)`);
           console.log(`  V4: ${v4Amount.toString()} cbBTC`);
@@ -891,18 +941,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Cache the winning quote
-    const amount = (buyAmount || sellAmount) as string;
-    const cacheKey = generateCacheKey(sellToken, amount, userAddress);
-    quoteCache.set(cacheKey, {
-      routerType: winner,
-      sellAmount: winningQuote.sellAmount,
-      buyAmount: winningQuote.buyAmount,
-      expiresAt: new Date(winningQuote.expiresAt),
-      route: winningQuote.route,
-      v4Metadata,
-    });
-
     console.log("========================================\n");
 
     return NextResponse.json({
@@ -911,6 +949,13 @@ export async function GET(request: NextRequest) {
       buyAmount: winningQuote.buyAmount,
       expiresAt: winningQuote.expiresAt,
       route: winningQuote.route,
+      // V4 fields (if present)
+      poolKey: winningQuote.poolKey,
+      path: winningQuote.path,
+      currencyIn: winningQuote.currencyIn,
+      isFirstToken: winningQuote.isFirstToken,
+      amountIn: winningQuote.amountIn,
+      amountOutMinimum: winningQuote.amountOutMinimum,
     });
   } catch (error) {
     console.error("Quote error:", error);
@@ -940,6 +985,15 @@ export async function POST(request: NextRequest) {
       receiver,
       slippageBps,
       validFor,
+      permit,
+      signature,
+      // V4 fields
+      poolKey,
+      path,
+      currencyIn,
+      isFirstToken,
+      amountIn,
+      amountOutMinimum,
     } = body;
 
     // Validate inputs
@@ -957,29 +1011,6 @@ export async function POST(request: NextRequest) {
     const finalValidFor = validFor || DEFAULT_VALID_FOR_SECONDS;
     const recipient = receiver || userAddress;
 
-    // Look up cached quote
-    const cacheKey = generateCacheKey(sellToken, sellAmount, userAddress);
-    const cachedQuote = quoteCache.get(cacheKey);
-
-    if (!cachedQuote) {
-      return NextResponse.json(
-        {
-          error: "Quote expired or not found. Please fetch a new quote via GET request.",
-        },
-        { status: 404 }
-      );
-    }
-
-    // Verify the routerType matches
-    if (cachedQuote.routerType !== routerType) {
-      return NextResponse.json(
-        {
-          error: `Router type mismatch. Cached quote is for ${cachedQuote.routerType}, but ${routerType} was requested.`,
-        },
-        { status: 400 }
-      );
-    }
-
     console.log("\n========================================");
     console.log(`Building ${routerType.toUpperCase()} swap transaction`);
     console.log("Receiver:", recipient);
@@ -987,24 +1018,25 @@ export async function POST(request: NextRequest) {
 
     let swapResult: SwapResult | null = null;
 
+    console.log("router type for swap", routerType);
     if (routerType === "v4") {
-      if (!cachedQuote.v4Metadata) {
-        return NextResponse.json({ error: "V4 metadata not found in cache" }, { status: 500 });
-      }
-
-      // Update amountOutMinimum with the cached buyAmount if available
-      if (cachedQuote.buyAmount) {
-        cachedQuote.v4Metadata.amountOutMinimum = cachedQuote.buyAmount;
-      }
-
+      console.log("building v4 swap");
       swapResult = await buildV4Swap({
-        metadata: cachedQuote.v4Metadata,
+        poolKey,
+        path,
+        currencyIn,
+        isFirstToken,
+        amountIn,
+        amountOutMinimum,
         receiver: recipient,
         slippageBps: finalSlippageBps,
         validFor: finalValidFor,
         sellToken,
+        permit,
+        signature,
       });
     } else {
+      console.log("building v3 swap");
       swapResult = await buildV2V3Swap({
         sellToken,
         sellAmount,

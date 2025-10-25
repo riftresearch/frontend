@@ -64,6 +64,24 @@ export type TokenPrice = {
   confidence: number;
 };
 
+export type PermitAllowance = {
+  amount: string; // uint160
+  expiration: string; // uint48
+  nonce: string; // uint48
+};
+
+export type PermitDataForSwap = {
+  permit: any; // PermitSingle from permit2-sdk
+  signature: string; // Hex signature from signTypedData
+};
+
+export enum ApprovalState {
+  UNKNOWN = "UNKNOWN",
+  NEEDS_APPROVAL = "NEEDS_APPROVAL",
+  APPROVING = "APPROVING",
+  APPROVED = "APPROVED",
+}
+
 export type VirtualMachine = EVM | Bitcoin | SVM;
 
 export type SupportedChain = {
