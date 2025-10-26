@@ -9,10 +9,10 @@
 export interface UniswapQuoteRequest {
   /** Token to sell (address or "ETH" for native) */
   sellToken: string;
-  /** Amount to sell in base units (for exact input) - provide either this OR buyAmount */
-  sellAmount?: string;
-  /** Amount to buy in base units (for exact output) - provide either this OR sellAmount */
-  buyAmount?: string;
+  /** Amount in (for exact input) - provide either this OR amountOut */
+  amountIn?: string;
+  /** Amount out (for exact output) - provide either this OR amountIn */
+  amountOut?: string;
   /** Token decimals */
   decimals: number;
   /** Slippage tolerance in basis points (100 bps = 1%) */
@@ -31,10 +31,10 @@ export interface UniswapQuoteRequest {
 export interface UniswapQuoteResponse {
   /** Router type that provided the best quote */
   routerType: "v4" | "v2v3";
-  /** Amount to sell (in base units) - returned for exact output quotes */
-  sellAmount?: string;
-  /** Amount of cbBTC to receive (in base units) - returned for exact input quotes */
-  buyAmount?: string;
+  /** Amount in (with slippage applied) */
+  amountIn: string;
+  /** Amount out (with slippage applied) */
+  amountOut: string;
   /** When the quote expires */
   expiresAt: Date;
   /** Additional route information */
@@ -63,8 +63,7 @@ export interface UniswapQuoteResponse {
   path?: any[]; // PathKey[]
   currencyIn?: string;
   isFirstToken?: boolean;
-  amountIn?: string;
-  amountOutMinimum?: string;
+  isExactOutputSwap?: boolean;
 }
 
 /**
@@ -127,16 +126,16 @@ export class UniswapRouterClient {
    */
   async getQuote(request: UniswapQuoteRequest): Promise<UniswapQuoteResponse> {
     try {
-      // Validate exactly one of sellAmount or buyAmount is provided
-      if (!request.sellAmount && !request.buyAmount) {
+      // Validate exactly one of amountIn or amountOut is provided
+      if (!request.amountIn && !request.amountOut) {
         throw new UniswapRouterError(
-          "Must provide either sellAmount (for exact input) or buyAmount (for exact output)",
+          "Must provide either amountIn (for exact input) or amountOut (for exact output)",
           "INVALID_PARAMS"
         );
       }
-      if (request.sellAmount && request.buyAmount) {
+      if (request.amountIn && request.amountOut) {
         throw new UniswapRouterError(
-          "Cannot provide both sellAmount and buyAmount - use only one",
+          "Cannot provide both amountIn and amountOut - use only one",
           "INVALID_PARAMS"
         );
       }
@@ -147,12 +146,12 @@ export class UniswapRouterClient {
         userAddress: request.userAddress,
       });
 
-      // Add either sellAmount or buyAmount
-      if (request.sellAmount) {
-        params.append("sellAmount", request.sellAmount);
+      // Add either amountIn or amountOut
+      if (request.amountIn) {
+        params.append("amountIn", request.amountIn);
       }
-      if (request.buyAmount) {
-        params.append("buyAmount", request.buyAmount);
+      if (request.amountOut) {
+        params.append("amountOut", request.amountOut);
       }
 
       if (request.slippageBps !== undefined) {
@@ -180,8 +179,8 @@ export class UniswapRouterClient {
 
       return {
         routerType: data.routerType,
-        sellAmount: data.sellAmount,
-        buyAmount: data.buyAmount,
+        amountIn: data.amountIn,
+        amountOut: data.amountOut,
         expiresAt: new Date(data.expiresAt),
         route: data.route,
         // V4 fields
@@ -189,8 +188,7 @@ export class UniswapRouterClient {
         path: data.path,
         currencyIn: data.currencyIn,
         isFirstToken: data.isFirstToken,
-        amountIn: data.amountIn,
-        amountOutMinimum: data.amountOutMinimum,
+        isExactOutputSwap: data.isExactOutputSwap,
       };
     } catch (error) {
       if (error instanceof UniswapRouterError) {
@@ -209,10 +207,10 @@ export class UniswapRouterClient {
    */
   async buildSwapTransaction(
     sellToken: string,
-    sellAmount: string,
     decimals: number,
     userAddress: string,
     routerType: "v4" | "v2v3",
+    amountIn: string,
     receiver?: string,
     slippageBps?: number,
     validFor?: number,
@@ -223,14 +221,13 @@ export class UniswapRouterClient {
     path?: any[],
     currencyIn?: string,
     isFirstToken?: boolean,
-    amountIn?: string,
-    amountOutMinimum?: string
+    amountOut?: string,
+    isExactOutputSwap?: boolean
   ): Promise<UniswapSwapTransaction> {
     try {
       const body = {
         routerType,
         sellToken,
-        sellAmount,
         decimals,
         userAddress,
         receiver,
@@ -244,7 +241,8 @@ export class UniswapRouterClient {
         currencyIn,
         isFirstToken,
         amountIn,
-        amountOutMinimum,
+        amountOut,
+        isExactOutputSwap,
       };
 
       console.log("buildSwapTransaction body", body);

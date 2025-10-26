@@ -81,8 +81,9 @@ export const SwapButton = () => {
   const { signTypedDataAsync } = useSignTypedData();
 
   // Check token allowance
-  const isNativeETH =
-    selectedInputToken?.address?.toLowerCase() === "eth" || !selectedInputToken?.address;
+  const isNativeETH = selectedInputToken?.ticker === "ETH";
+
+  const isCbBTC = selectedInputToken?.ticker === "cbBTC";
 
   // Wait for approval transaction confirmation
   const {
@@ -122,7 +123,7 @@ export const SwapButton = () => {
 
   // Helper function to check if permit is needed
   const needsPermit = useCallback(() => {
-    if (isNativeETH || !selectedInputToken || !rawInputAmount) {
+    if (isNativeETH || isCbBTC || !selectedInputToken || !rawInputAmount) {
       return false;
     }
 
@@ -484,28 +485,27 @@ export const SwapButton = () => {
       console.log("Building Uniswap swap transaction with, deposit address: ", depositAddress);
 
       const uniswapRouter = createUniswapRouter();
-      const sellToken = selectedInputToken?.address || "ETH";
+      const sellToken = selectedInputToken.address;
       const decimals = selectedInputToken.decimals;
-      const sellAmount = parseUnits(rawInputAmount, decimals).toString();
 
       const swapTransaction = await uniswapRouter.buildSwapTransaction(
         sellToken,
-        sellAmount,
         decimals,
         userEvmAccountAddress,
         uniswapQuote.routerType, // Pass the router type from the quote, default to v2v3 in fake mode
+        uniswapQuote.amountIn,
         depositAddress, // Set receiver to OTC deposit address
         slippageBips,
         480, // validFor: 2 minutes
-        permitDataForSwap?.permit,
-        permitDataForSwap?.signature,
+        permitDataForSwap?.permit || null,
+        permitDataForSwap?.signature || "",
         // V4 fields from stored quote
         uniswapQuote.poolKey,
         uniswapQuote.path,
         uniswapQuote.currencyIn,
         uniswapQuote.isFirstToken,
-        uniswapQuote.amountIn,
-        uniswapQuote.amountOutMinimum
+        uniswapQuote.amountOut,
+        uniswapQuote.isExactOutputSwap
       );
 
       console.log("Swap transaction built:", swapTransaction);
@@ -599,12 +599,6 @@ export const SwapButton = () => {
         return;
       }
 
-      // Check payout address
-      console.log("Checking payout address:", {
-        payoutAddress,
-        isSwappingForBTC,
-        addressValidation,
-      });
       if (!payoutAddress) {
         toastInfo({
           title: isSwappingForBTC ? "Enter Bitcoin Address" : "Enter Ethereum Address",
@@ -670,6 +664,12 @@ export const SwapButton = () => {
   const handleSwapButtonClick = useCallback(async () => {
     // First check if we need token approval to Permit2
     setSwapButtonPressed(true);
+    if (isNativeETH || isCbBTC) {
+      await startSwap();
+      return;
+    }
+
+    console.log("approvalStat in swap button click", approvalState);
     if (approvalState === ApprovalState.NEEDS_APPROVAL) {
       await approvePermit2();
       return;
@@ -780,6 +780,7 @@ export const SwapButton = () => {
   useEffect(() => {
     if (approvalState === ApprovalState.APPROVED) {
       console.log("Auto-signing permit after approval");
+      console.log("permitDataForSwap", permitDataForSwap);
       if (needsPermit() && swapButtonPressed) {
         signPermit2();
       }
@@ -797,7 +798,6 @@ export const SwapButton = () => {
 
   // Handle keyboard events (Enter to submit)
   useEffect(() => {
-    console.log("isButtonLoading", isButtonLoading);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Enter" && allFieldsFilled && !isButtonLoading) {
         event.preventDefault();

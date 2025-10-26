@@ -285,7 +285,7 @@ export async function getCBBTCtoBTCQuote(
  */
 export async function getERC20ToBTCQuote(
   sellToken: string,
-  sellAmount: string,
+  amountIn: string,
   decimals: number,
   userAddress: string,
   slippageBps?: number,
@@ -298,7 +298,7 @@ export async function getERC20ToBTCQuote(
     // console.log("Getting Uniswap quote for", sellToken, "->", "cbBTC");
     const uniswapQuote = await uniswapRouter.getQuote({
       sellToken,
-      sellAmount,
+      amountIn,
       decimals,
       userAddress,
       slippageBps,
@@ -306,11 +306,13 @@ export async function getERC20ToBTCQuote(
       router: "v4",
     });
 
-    const cbBTCAmount = uniswapQuote.buyAmount;
+    console.log("uniswapQuote", uniswapQuote);
+
+    const cbBTCAmount = uniswapQuote.amountOut;
     // console.log("Uniswap quote: will receive", cbBTCAmount, "cbBTC (in base units)");
 
-    // Apply slippage to cbBTC amount for RFQ quote
-    const adjustedCbBTCAmount = applySlippage(cbBTCAmount as string, slippageBps);
+    // Apply slippage to cbBTC amount for RFQ quote (already applied in quote, but doublecheck)
+    const adjustedCbBTCAmount = cbBTCAmount;
     // console.log("Adjusted cbBTC amount after slippage:", adjustedCbBTCAmount);
 
     // Step 2: Get RFQ quote for cbBTC -> BTC using adjusted amount
@@ -331,7 +333,7 @@ export async function getERC20ToBTCQuote(
 
     // console.log("Combined quote complete:", {
     //   sellToken,
-    //   sellAmount,
+    //   amountIn,
     //   cbBTCAmount: cbBTCAmount,
     //   btcOutputAmount,
     //   expiresAt,
@@ -505,7 +507,7 @@ export async function getERC20ToBTCQuoteExactOutput(
 
     const uniswapQuote = await uniswapRouter.getQuote({
       sellToken,
-      buyAmount: cbBTCAmountNeeded, // Exact output: specify desired cbBTC amount
+      amountOut: BigInt(cbBTCAmountNeeded).toString(), // Convert hex to decimal string
       decimals: selectedInputToken.decimals,
       userAddress,
       slippageBps,
@@ -513,19 +515,14 @@ export async function getERC20ToBTCQuoteExactOutput(
       router: "v4",
     });
 
-    // For exact output, the API returns the required input amount in buyAmount field
-    const erc20AmountNeeded = uniswapQuote.sellAmount;
-    // console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units)");
+    console.log("uniswapQuote", uniswapQuote);
 
-    // Apply slippage by increasing the input amount
-    const adjustedInputAmount = applySlippageExactOutput(erc20AmountNeeded as string, slippageBps);
-    // console.log("Adjusted input amount after slippage:", adjustedInputAmount);
+    // For exact output, the API returns the required input amount in amountIn field (with slippage already applied)
+    const erc20AmountNeeded = uniswapQuote.amountIn;
+    // console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units, slippage included)");
 
     // Format the input amount for display
-    const erc20InputFormatted = formatUnits(
-      BigInt(adjustedInputAmount),
-      selectedInputToken.decimals
-    );
+    const erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
 
     // Determine earliest expiration
     const uniswapExpiration = uniswapQuote.expiresAt;

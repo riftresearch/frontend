@@ -36,7 +36,7 @@ export type SVM = {
 export type TokenData = {
   name: string;
   ticker: string;
-  address: string | null;
+  address: string;
   balance: string;
   usdValue: string;
   icon: string;

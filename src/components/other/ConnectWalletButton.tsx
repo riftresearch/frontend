@@ -22,9 +22,13 @@ const getCustomChainName = (chainId: number): string => {
 export const ConnectWalletButton: React.FC = () => {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
-  const chainId = useStore((state) => state.evmConnectWalletChainId);
-  const setUserTokensForChain = useStore((state) => state.setUserTokensForChain);
-  const setSearchResults = useStore((state) => state.setSearchResults);
+  const {
+    selectedInputToken,
+    setSelectedInputToken,
+    evmConnectWalletChainId: chainId,
+    setUserTokensForChain,
+    setSearchResults,
+  } = useStore();
   const chains = useChains();
 
   // Get chain-specific colors
@@ -104,20 +108,12 @@ export const ConnectWalletButton: React.FC = () => {
         const ethTokenData: TokenData = {
           name: "Ethereum",
           ticker: "ETH",
-          address: null, // ETH native token address
+          address: "0x0000000000000000000000000000000000000000", // ETH native token address
           balance: balanceEth.toFixed(6),
           usdValue: `$${usdValue.toFixed(2)}`,
           icon: ETH_ICON,
           decimals: 18,
         };
-
-        // console.log("[UserETH] built ETH asset entry", {
-        //   chainId: cid,
-        //   address: walletAddress,
-        //   balanceEth,
-        //   price: ethPrice,
-        //   usdValue,
-        // });
 
         return ethTokenData;
       } catch (e) {
@@ -136,14 +132,6 @@ export const ConnectWalletButton: React.FC = () => {
         fetchWalletTokens(address, chainId),
         fetchUserEth(address, chainId),
       ]);
-
-      // console.log("[Wallet] fetched token balances", {
-      //   chainId,
-      //   address,
-      //   count: walletTokens.length,
-      //   tokens: walletTokens,
-      //   ethToken: ethToken ? "ETH included" : "ETH excluded (low value)",
-      // });
 
       // If no tokens and no ETH, set empty array
       if (walletTokens.length === 0 && !ethToken) {
@@ -227,10 +215,24 @@ export const ConnectWalletButton: React.FC = () => {
       setUserTokensForChain(chainId, sorted);
       // Also populate global search results so the modal shows wallet tokens instantly
       setSearchResults(sorted);
+      if (
+        selectedInputToken?.ticker === "ETH" &&
+        selectedInputToken.balance !== ethToken?.balance
+      ) {
+        setSelectedInputToken(ethToken);
+      }
     };
 
     loadAndStore();
-  }, [isConnected, address, chainId, setUserTokensForChain]);
+  }, [
+    isConnected,
+    address,
+    chainId,
+    setUserTokensForChain,
+    selectedInputToken,
+    setSelectedInputToken,
+    setSearchResults,
+  ]);
 
   // Format the user's address for display
   const displayAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";

@@ -15,6 +15,7 @@ import {
   ZERO_USD_DISPLAY,
   UNIVERSAL_ROUTER_ADDRESS,
   SWAP_ROUTER02_ADDRESS,
+  ETHEREUM_POPULAR_TOKENS,
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
@@ -89,6 +90,7 @@ export const SwapInputAndOutput = () => {
     permitAllowance,
     setPermitAllowance,
     setApprovalState,
+    setSelectedInputToken,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -151,6 +153,7 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
+      console.log("selectedInputToken", selectedInputToken);
       if (!selectedInputToken) {
         return;
       }
@@ -210,6 +213,7 @@ export const SwapInputAndOutput = () => {
         } else {
           // For other ERC20 tokens, use combined quote with Uniswap
           const sellToken = selectedInputToken?.address || "ETH";
+          console.log("sellToken", sellToken);
           const quoteResponse = await getERC20ToBTCQuote(
             sellToken,
             sellAmount,
@@ -622,6 +626,11 @@ export const SwapInputAndOutput = () => {
     fetchETHandBTCPrice();
   }, [setBtcPrice, setEthPrice]);
 
+  useEffect(() => {
+    const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
+    setSelectedInputToken(ETH_TOKEN);
+  }, [setSelectedInputToken]);
+
   // Fetch ERC20 token price when selected token changes
   useEffect(() => {
     fetchErc20TokenPrice(selectedInputToken);
@@ -769,6 +778,7 @@ export const SwapInputAndOutput = () => {
       if (
         permitAllowance !== null ||
         !selectedInputToken?.address ||
+        selectedInputToken.ticker === "ETH" ||
         selectedInputToken.ticker === "cbBTC" ||
         !userEvmAccountAddress ||
         !rawInputAmount ||
@@ -842,7 +852,7 @@ export const SwapInputAndOutput = () => {
   // Reset approval state when token or amount changes
   useEffect(() => {
     setApprovalState(ApprovalState.UNKNOWN);
-  }, [selectedInputToken, rawInputAmount, setApprovalState]);
+  }, [selectedInputToken, setApprovalState]);
 
   // ============================================================================
   // RENDER

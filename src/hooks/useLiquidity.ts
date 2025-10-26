@@ -33,6 +33,15 @@ export function useMaxLiquidity() {
     queryKey: ["liquidity"],
     queryFn: async () => {
       try {
+        if (process.env.NEXT_PUBLIC_FAKE_RFQ === "true") {
+          return {
+            market_makers: [],
+            timestamp: new Date().toISOString(),
+            maxCbBTCLiquidity: "0",
+            maxBTCLiquidity: "0",
+          };
+        }
+
         const liquidity = await rfqClient.getLiquidity();
         console.log(`Fetched liquidity from ${liquidity.market_makers.length} market makers`);
 

@@ -58,6 +58,21 @@ const v4QuoterContract = new Contract(V4_QUOTER, V4_QUOTER_ABI, provider);
 // Helper Functions
 // ============================================================================
 
+/**
+ * Apply slippage tolerance to an amount
+ * @param amount - The amount to apply slippage to
+ * @param slippageBps - Slippage tolerance in basis points
+ * @param isAmountIn - True if this is an input amount (increases it), false if output (decreases it)
+ * @returns The amount with slippage applied
+ */
+function applySlippage(amount: string, slippageBps: number, isAmountIn: boolean): string {
+  const amountBigInt = BigInt(amount);
+  const slippageMultiplier = isAmountIn
+    ? BigInt(10_000 + slippageBps) // Increase amountIn for exact output protection
+    : BigInt(10_000 - slippageBps); // Decrease amountOut for exact input protection
+  return ((amountBigInt * slippageMultiplier) / BigInt(10_000)).toString();
+}
+
 function sortTokens(
   token0: string,
   token1: string
@@ -75,10 +90,10 @@ function sortTokens(
 // V2/V3 Quote Logic (AlphaRouter)
 // ============================================================================
 
-interface V2V3QuoteParams {
+interface QuoteParams {
   sellToken: string;
-  sellAmount?: string;
-  buyAmount?: string;
+  amountIn?: string;
+  amountOut?: string;
   decimals: number;
   userAddress: string;
   slippageBps: number;
@@ -86,8 +101,8 @@ interface V2V3QuoteParams {
 }
 
 interface QuoteResult {
-  sellAmount?: string;
-  buyAmount?: string;
+  amountIn: string;
+  amountOut: string;
   expiresAt: string;
   route: any;
   // V4-specific fields (optional, only present for V4 quotes)
@@ -101,25 +116,24 @@ interface QuoteResult {
   path?: PathKey[];
   currencyIn?: string;
   isFirstToken?: boolean;
-  amountIn?: string;
-  amountOutMinimum?: string;
+  isExactOutputSwap?: boolean;
 }
 
-async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> {
-  const { sellToken, sellAmount, buyAmount, decimals, userAddress, slippageBps, validFor } = params;
+async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
+  const { sellToken, amountIn, amountOut, decimals, userAddress, slippageBps, validFor } = params;
 
   try {
-    // Validate exactly one of sellAmount or buyAmount is provided
-    if (!sellAmount && !buyAmount) {
-      throw new Error("Must provide either sellAmount or buyAmount");
+    // Validate exactly one of amountIn or amountOut is provided
+    if (!amountIn && !amountOut) {
+      throw new Error("Must provide either amountIn or amountOut");
     }
-    if (sellAmount && buyAmount) {
-      throw new Error("Cannot provide both sellAmount and buyAmount");
+    if (amountIn && amountOut) {
+      throw new Error("Cannot provide both amountIn and amountOut");
     }
 
     // Determine trade type and amount
-    const isExactOutput = !!buyAmount;
-    const amount = (buyAmount || sellAmount) as string;
+    const isExactOutput = !!amountOut;
+    const amount = (amountOut || amountIn) as string;
 
     // Determine token address
     const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
@@ -176,37 +190,40 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
       })
       .join(" | ");
 
-    // For exact output: return sellAmount (required input)
-    // For exact input: return buyAmount (expected output)
-    const result: QuoteResult = isExactOutput
-      ? {
-          sellAmount: quotedAmount,
-          expiresAt: expiresAt.toISOString(),
-          route: {
-            quote: route.quote.toExact(),
-            quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
-            estimatedGasUsed: route.estimatedGasUsed.toString(),
-            gasPriceWei: route.gasPriceWei.toString(),
-            routePath,
-          },
-        }
-      : {
-          buyAmount: quotedAmount,
-          expiresAt: expiresAt.toISOString(),
-          route: {
-            quote: route.quote.toExact(),
-            quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
-            estimatedGasUsed: route.estimatedGasUsed.toString(),
-            gasPriceWei: route.gasPriceWei.toString(),
-            routePath,
-          },
-        };
+    // Apply slippage and return both amountIn and amountOut
+    let finalAmountIn: string;
+    let finalAmountOut: string;
+
+    if (isExactOutput) {
+      // For exact output: amountOut is known, amountIn needs slippage protection (increase it)
+      finalAmountOut = amount;
+      finalAmountIn = applySlippage(quotedAmount, slippageBps, true);
+    } else {
+      // For exact input: amountIn is known, amountOut needs slippage protection (decrease it)
+      finalAmountIn = amount;
+      finalAmountOut = applySlippage(quotedAmount, slippageBps, false);
+    }
+
+    const result: QuoteResult = {
+      amountIn: finalAmountIn,
+      amountOut: finalAmountOut,
+      expiresAt: expiresAt.toISOString(),
+      route: {
+        quote: route.quote.toExact(),
+        quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
+        estimatedGasUsed: route.estimatedGasUsed.toString(),
+        gasPriceWei: route.gasPriceWei.toString(),
+        routePath,
+      },
+    };
 
     console.log("[V2/V3] Route:", routePath);
     if (isExactOutput) {
       console.log("[V2/V3] Quote:", quotedAmount, "input required (", result.route.quote, ")");
+      console.log("[V2/V3] With slippage:", finalAmountIn, "max input");
     } else {
       console.log("[V2/V3] Quote:", quotedAmount, "cbBTC output (", result.route.quote, ")");
+      console.log("[V2/V3] With slippage:", finalAmountOut, "min output");
     }
     return result;
   } catch (error) {
@@ -219,26 +236,24 @@ async function getV2V3Quote(params: V2V3QuoteParams): Promise<QuoteResult | null
 // V4 Quote Logic
 // ============================================================================
 
-async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> {
-  const { sellToken, sellAmount, buyAmount, validFor } = params;
+async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
+  const { sellToken, amountIn, amountOut, slippageBps, validFor } = params;
 
   try {
-    // Validate exactly one of sellAmount or buyAmount is provided
-    if (!sellAmount && !buyAmount) {
-      throw new Error("Must provide either sellAmount or buyAmount");
+    // Validate exactly one of amountIn or amountOut is provided
+    if (!amountIn && !amountOut) {
+      throw new Error("Must provide either amountIn or amountOut");
     }
-    if (sellAmount && buyAmount) {
-      throw new Error("Cannot provide both sellAmount and buyAmount");
+    if (amountIn && amountOut) {
+      throw new Error("Cannot provide both amountIn and amountOut");
     }
 
     // Determine trade type and amount
-    const isExactOutput = !!buyAmount;
-    const amount = (buyAmount || sellAmount) as string;
-
-    const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
+    const isExactOutput = !!amountOut;
+    const amount = (amountOut || amountIn) as string;
 
     // If input is already WBTC, try direct WBTC -> cbBTC swap
-    if (tokenInAddress.toLowerCase() === WBTC_ADDRESS.toLowerCase()) {
+    if (sellToken.toLowerCase() === WBTC_ADDRESS.toLowerCase()) {
       if (isExactOutput) {
         console.log("[V4] Input is WBTC, trying direct WBTC -> cbBTC (exact output) at 0.01%");
         try {
@@ -261,14 +276,20 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
           const inputAmountNeeded = result.amountIn.toString();
           const expiresAt = new Date(Date.now() + validFor * 1000);
 
+          // Apply slippage: increase input amount for protection
+          const finalAmountIn = applySlippage(inputAmountNeeded, slippageBps, true);
+          const finalAmountOut = amount; // Exact output amount
+
           console.log(
             "[V4] ✓ Direct WBTC -> cbBTC (exact output) quote:",
             inputAmountNeeded,
             "WBTC needed"
           );
+          console.log("[V4] With slippage:", finalAmountIn, "max input");
 
           return {
-            sellAmount: inputAmountNeeded, // For exact output, return the required input
+            amountIn: finalAmountIn,
+            amountOut: finalAmountOut,
             expiresAt: expiresAt.toISOString(),
             route: {
               type: "single-hop",
@@ -280,8 +301,7 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
             // V4 fields
             poolKey,
             isFirstToken: sortedPair.isFirstToken,
-            amountIn: "0", // Will be set by swap builder
-            amountOutMinimum: amount, // This is the exact amount we want
+            isExactOutputSwap: isExactOutput,
           };
         } catch (error) {
           console.log(
@@ -312,10 +332,16 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
           const outputAmount = result.amountOut.toString();
           const expiresAt = new Date(Date.now() + validFor * 1000);
 
+          // Apply slippage: decrease output amount for protection
+          const finalAmountIn = amount; // Exact input amount
+          const finalAmountOut = applySlippage(outputAmount, slippageBps, false);
+
           console.log("[V4] ✓ Direct WBTC -> cbBTC quote:", outputAmount, "cbBTC");
+          console.log("[V4] With slippage:", finalAmountOut, "min output");
 
           return {
-            buyAmount: outputAmount,
+            amountIn: finalAmountIn,
+            amountOut: finalAmountOut,
             expiresAt: expiresAt.toISOString(),
             route: {
               type: "single-hop",
@@ -327,8 +353,7 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
             // V4 fields
             poolKey,
             isFirstToken: sortedPair.isFirstToken,
-            amountIn: amount,
-            amountOutMinimum: "0",
+            isExactOutputSwap: isExactOutput,
           };
         } catch (error) {
           console.log(
@@ -350,8 +375,6 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
         inputAmount: string;
         currencyIn: string;
         path: PathKey[];
-        amountIn: string;
-        amountOutMinimum: string;
         route: any;
         firstHopFee: number;
       } | null = null;
@@ -364,7 +387,7 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
           // The path only contains intermediate currencies (WBTC), not the final input (tokenIn)
           const path: PathKey[] = [
             {
-              intermediateCurrency: tokenInAddress, // The input token
+              intermediateCurrency: sellToken, // The input token
               fee: config.fee,
               tickSpacing: config.tickSpacing,
               hooks: ZERO_ADDRESS,
@@ -392,10 +415,8 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
             bestAmount = BigInt(inputAmount);
             bestQuote = {
               inputAmount,
-              currencyIn: tokenInAddress,
+              currencyIn: sellToken,
               path,
-              amountIn: "0", // Will be set by swap builder
-              amountOutMinimum: amount, // This is the exact amount we want
               route: {
                 type: "multi-hop",
                 path: `${sellToken} -> WBTC -> cbBTC`,
@@ -418,31 +439,34 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
 
       const expiresAt = new Date(Date.now() + validFor * 1000);
 
+      // Apply slippage: increase input amount for protection
+      const finalAmountIn = applySlippage(bestQuote.inputAmount, slippageBps, true);
+      const finalAmountOut = amount; // Exact output amount
+
       // Log the best route in the requested format
       const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
       console.log(
         `[V4] Trying (exact output): ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`
       );
       console.log("[V4] Best quote (exact output):", bestQuote.inputAmount, "input needed");
+      console.log("[V4] With slippage:", finalAmountIn, "max input");
 
       return {
-        sellAmount: bestQuote.inputAmount, // For exact output, return the required input
+        amountIn: finalAmountIn,
+        amountOut: finalAmountOut,
         expiresAt: expiresAt.toISOString(),
         route: bestQuote.route,
         // V4 fields
         currencyIn: bestQuote.currencyIn,
         path: bestQuote.path,
-        amountIn: bestQuote.amountIn,
-        amountOutMinimum: bestQuote.amountOutMinimum,
+        isExactOutputSwap: isExactOutput,
       };
     } else {
       // Exact input: maximize output amount
       let bestQuote: {
-        buyAmount: string;
+        outputAmount: string;
         currencyIn: string;
         path: PathKey[];
-        amountIn: string;
-        amountOutMinimum: string;
         route: any;
         firstHopFee: number;
       } | null = null;
@@ -470,7 +494,7 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
           ];
 
           const result = await v4QuoterContract.callStatic.quoteExactInput({
-            exactCurrency: tokenInAddress,
+            exactCurrency: sellToken,
             path: path,
             exactAmount: amount,
           });
@@ -480,11 +504,9 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
           if (BigInt(outputAmount) > bestAmount) {
             bestAmount = BigInt(outputAmount);
             bestQuote = {
-              buyAmount: outputAmount,
-              currencyIn: tokenInAddress,
+              outputAmount: outputAmount,
+              currencyIn: sellToken,
               path,
-              amountIn: amount,
-              amountOutMinimum: "0",
               route: {
                 type: "multi-hop",
                 path: `${sellToken} -> WBTC -> cbBTC`,
@@ -507,20 +529,25 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
 
       const expiresAt = new Date(Date.now() + validFor * 1000);
 
+      // Apply slippage: decrease output amount for protection
+      const finalAmountIn = amount; // Exact input amount
+      const finalAmountOut = applySlippage(bestQuote.outputAmount, slippageBps, false);
+
       // Log the best route in the requested format
       const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
       console.log(`[V4] Trying: ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`);
-      console.log("[V4] Best quote:", bestQuote.buyAmount, "cbBTC");
+      console.log("[V4] Best quote:", bestQuote.outputAmount, "cbBTC");
+      console.log("[V4] With slippage:", finalAmountOut, "min output");
 
       return {
-        buyAmount: bestQuote.buyAmount,
+        amountIn: finalAmountIn,
+        amountOut: finalAmountOut,
         expiresAt: expiresAt.toISOString(),
         route: bestQuote.route,
         // V4 fields
         currencyIn: bestQuote.currencyIn,
         path: bestQuote.path,
-        amountIn: bestQuote.amountIn,
-        amountOutMinimum: bestQuote.amountOutMinimum,
+        isExactOutputSwap: isExactOutput,
       };
     }
   } catch (error) {
@@ -535,7 +562,7 @@ async function getV4Quote(params: V2V3QuoteParams): Promise<QuoteResult | null> 
 
 interface V2V3SwapParams {
   sellToken: string;
-  sellAmount: string;
+  amountIn: string;
   decimals: number;
   userAddress: string;
   receiver: string;
@@ -553,7 +580,7 @@ interface SwapResult {
 }
 
 async function buildV2V3Swap(params: V2V3SwapParams): Promise<SwapResult | null> {
-  const { sellToken, sellAmount, decimals, receiver, slippageBps, validFor } = params;
+  const { sellToken, amountIn, decimals, receiver, slippageBps, validFor } = params;
 
   try {
     const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
@@ -570,7 +597,7 @@ async function buildV2V3Swap(params: V2V3SwapParams): Promise<SwapResult | null>
 
     console.log("[V2/V3] Building swap transaction for", sellToken, "->", "cbBTC", "to", receiver);
     const route = await alphaRouter.route(
-      CurrencyAmount.fromRawAmount(tokenIn, sellAmount),
+      CurrencyAmount.fromRawAmount(tokenIn, amountIn),
       tokenOut,
       TradeType.EXACT_INPUT,
       options
@@ -618,13 +645,13 @@ interface V4SwapParams {
   currencyIn?: string;
   isFirstToken?: boolean;
   amountIn: string;
-  amountOutMinimum: string;
+  amountOut: string;
   receiver: string;
-  slippageBps: number;
   validFor: number;
   sellToken: string;
   permit?: any;
   signature?: string;
+  isExactOutputSwap: boolean;
 }
 
 async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
@@ -634,78 +661,93 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
     currencyIn,
     isFirstToken,
     amountIn,
-    amountOutMinimum: amountOutMinimumParam,
+    amountOut,
     receiver,
-    slippageBps,
     validFor,
     sellToken,
     permit,
     signature,
+    isExactOutputSwap,
   } = params;
 
   try {
     console.log("[V4] Building V4 swap actions for client-side execution");
+    console.log("[V4] Swap type:", isExactOutputSwap ? "EXACT_OUTPUT" : "EXACT_INPUT");
 
     const v4Planner = new V4Planner();
     const deadline = Math.floor(Date.now() / 1000) + validFor;
 
-    // Calculate minimum output with slippage
-    const amountOut = BigInt(amountOutMinimumParam || "0");
-    const slippageMultiplier = BigInt(10_000 - slippageBps);
-    const amountOutMinimum = ((amountOut * slippageMultiplier) / BigInt(10_000)).toString();
+    console.log("amountIn", amountIn);
+    console.log("amountOut", amountOut);
 
-    // Determine input/output currencies
-    let inputCurrency: string;
-    let outputCurrency: string;
+    // Define currencies once - they're the same regardless of swap type
+    const inputCurrency = currencyIn!;
+    const outputCurrency = CBBTC_ADDRESS;
 
     if (poolKey) {
       // Single-hop swap
-      const swapConfig = {
-        poolKey: poolKey,
-        zeroForOne: isFirstToken!,
-        amountIn: amountIn,
-        amountOutMinimum,
-        hookData: "0x",
-      };
-
-      v4Planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [swapConfig]);
-
-      inputCurrency = isFirstToken ? poolKey.currency0 : poolKey.currency1;
-      outputCurrency = isFirstToken ? poolKey.currency1 : poolKey.currency0;
-
-      // SETTLE: Pull input tokens from sender via Permit2
-      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, amountIn]);
-
-      // TAKE: Take output tokens directly to receiver
-      v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
+      if (isExactOutputSwap) {
+        // Exact output: user specifies exact output, accepts spending up to amountIn
+        const swapConfig = {
+          poolKey: poolKey,
+          zeroForOne: isFirstToken!,
+          amountOut: amountOut,
+          amountInMaximum: amountIn,
+          hookData: "0x",
+        };
+        console.log("swapConfig (EXACT_OUT_SINGLE)", swapConfig);
+        v4Planner.addAction(Actions.SWAP_EXACT_OUT_SINGLE, [swapConfig]);
+      } else {
+        // Exact input: user specifies exact input, expects at least amountOut
+        const swapConfig = {
+          poolKey: poolKey,
+          zeroForOne: isFirstToken!,
+          amountIn: amountIn,
+          amountOutMinimum: amountOut,
+          hookData: "0x",
+        };
+        console.log("swapConfig (EXACT_IN_SINGLE)", swapConfig);
+        v4Planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [swapConfig]);
+      }
     } else if (path && currencyIn) {
       // Multi-hop swap
-      const swapConfig = {
-        currencyIn: currencyIn,
-        path: path,
-        amountIn: amountIn,
-        amountOutMinimum,
-      };
-
-      v4Planner.addAction(Actions.SWAP_EXACT_IN, [swapConfig]);
-
-      inputCurrency = currencyIn;
-      outputCurrency = path[path.length - 1].intermediateCurrency;
-
-      // SETTLE: Pull input tokens from sender via Permit2
-      v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, amountIn]);
-
-      // TAKE: Take output tokens directly to receiver
-      v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
+      if (isExactOutputSwap) {
+        // Exact output: user specifies exact output, accepts spending up to amountIn
+        const swapConfig = {
+          currencyOut: outputCurrency,
+          path: path,
+          amountOut: amountOut,
+          amountInMaximum: amountIn,
+        };
+        console.log("swapConfig (EXACT_OUT)", swapConfig);
+        v4Planner.addAction(Actions.SWAP_EXACT_OUT, [swapConfig]);
+      } else {
+        // Exact input: user specifies exact input, expects at least amountOut
+        const swapConfig = {
+          currencyIn: currencyIn,
+          path: path,
+          amountIn: amountIn,
+          amountOutMinimum: amountOut,
+        };
+        console.log("swapConfig (EXACT_IN)", swapConfig);
+        v4Planner.addAction(Actions.SWAP_EXACT_IN, [swapConfig]);
+      }
     } else {
       throw new Error("Invalid V4 params: missing poolKey or path");
     }
+
+    // SETTLE and TAKE actions are the same regardless of swap type
+    // SETTLE: Pull input tokens from sender via Permit2
+    v4Planner.addAction(Actions.SETTLE_ALL, [inputCurrency, amountIn]);
+
+    // TAKE: Take output tokens directly to receiver
+    v4Planner.addAction(Actions.TAKE_PORTION, [outputCurrency, receiver, 10000]);
 
     const encodedActions = v4Planner.finalize();
     const expiresAt = new Date(Date.now() + validFor * 1000);
 
     // Determine if we need to send ETH value
-    const isNativeEth = sellToken.toUpperCase() === "ETH";
+    const isNativeEth = sellToken === "0x0000000000000000000000000000000000000000";
     const value = isNativeEth ? amountIn : "0";
 
     // Build Universal Router calldata using RoutePlanner
@@ -713,46 +755,10 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
 
     console.log("permit", permit);
     console.log("signature", signature);
-    // Add Permit2 commands if permit and signature are provided
+    // Only add Permit2 commands if both permit and signature are provided
     if (permit && signature) {
-      // Encode Permit2 permit data
-      // const inputsForPermit2Permit = encodeAbiParameters(
-      //   [
-      //     // PermitSingle
-      //     {
-      //       name: "permit",
-      //       type: "tuple",
-      //       components: [
-      //         {
-      //           name: "details",
-      //           type: "tuple",
-      //           components: [
-      //             { name: "token", type: "address" },
-      //             { name: "amount", type: "uint160" },
-      //             { name: "expiration", type: "uint48" },
-      //             { name: "nonce", type: "uint48" },
-      //           ],
-      //         },
-      //         { name: "spender", type: "address" },
-      //         { name: "sigDeadline", type: "uint256" },
-      //       ],
-      //     },
-      //     // signature
-      //     { name: "signature", type: "bytes" },
-      //   ],
-      //   [permit, signature as `0x${string}`]
-      // );
-
-      // console.log("inputsForPermit2Permit", inputsForPermit2Permit);
       routePlanner.addCommand(CommandType.PERMIT2_PERMIT, [permit, signature as `0x${string}`]);
     }
-
-    // failing here
-    // routePlanner.addCommand(CommandType.PERMIT2_TRANSFER_FROM, [
-    //   inputCurrency,
-    //   UNIVERSAL_ROUTER_ADDRESS,
-    //   amountIn,
-    // ]);
 
     routePlanner.addCommand(CommandType.V4_SWAP, [encodedActions as `0x${string}`]);
 
@@ -786,7 +792,7 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
       calldata: encodedCalldata,
       value,
       to: UNIVERSAL_ROUTER_ADDRESS,
-      buyAmount: amountOutMinimum,
+      buyAmount: amountOut,
       expiresAt: expiresAt.toISOString(),
       route: {
         type: "v4",
@@ -809,8 +815,8 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const sellToken = searchParams.get("sellToken");
-    const sellAmount = searchParams.get("sellAmount");
-    const buyAmount = searchParams.get("buyAmount");
+    const amountIn = searchParams.get("amountIn");
+    const amountOut = searchParams.get("amountOut");
     const decimalsParam = searchParams.get("decimals");
     const userAddress = searchParams.get("userAddress");
     const slippageBps = parseInt(searchParams.get("slippageBps") || String(DEFAULT_SLIPPAGE_BPS));
@@ -825,30 +831,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Validate exactly one of sellAmount or buyAmount is provided
-    if (!sellAmount && !buyAmount) {
+    // Validate exactly one of amountIn or amountOut is provided
+    if (!amountIn && !amountOut) {
       return NextResponse.json(
         {
-          error: "Must provide either sellAmount (for exact input) or buyAmount (for exact output)",
+          error: "Must provide either amountIn (for exact input) or amountOut (for exact output)",
         },
         { status: 400 }
       );
     }
 
-    if (sellAmount && buyAmount) {
+    if (amountIn && amountOut) {
       return NextResponse.json(
-        { error: "Cannot provide both sellAmount and buyAmount - use only one" },
+        { error: "Cannot provide both amountIn and amountOut - use only one" },
         { status: 400 }
       );
     }
 
     const decimals = parseInt(decimalsParam);
-    const isExactOutput = !!buyAmount;
+    const isExactOutput = !!amountOut;
 
-    const quoteParams: V2V3QuoteParams = {
+    const quoteParams: QuoteParams = {
       sellToken,
-      sellAmount: sellAmount || undefined,
-      buyAmount: buyAmount || undefined,
+      amountIn: amountIn || undefined,
+      amountOut: amountOut || undefined,
       decimals,
       userAddress,
       slippageBps,
@@ -899,9 +905,9 @@ export async function GET(request: NextRequest) {
     } else {
       // Both returned quotes, compare amounts
       if (isExactOutput) {
-        // For exact output, compare sellAmount (lower input is better)
-        const v2v3Amount = BigInt(v2v3Result.sellAmount!);
-        const v4Amount = BigInt(v4Result.sellAmount!);
+        // For exact output, compare amountIn (lower input is better)
+        const v2v3Amount = BigInt(v2v3Result.amountIn);
+        const v4Amount = BigInt(v4Result.amountIn);
 
         if (v4Amount < v2v3Amount) {
           winner = "v4";
@@ -919,9 +925,9 @@ export async function GET(request: NextRequest) {
           console.log(`  V4: ${v4Amount.toString()} input required`);
         }
       } else {
-        // For exact input, compare buyAmount (higher output is better)
-        const v2v3Amount = BigInt(v2v3Result.buyAmount!);
-        const v4Amount = BigInt(v4Result.buyAmount!);
+        // For exact input, compare amountOut (higher output is better)
+        const v2v3Amount = BigInt(v2v3Result.amountOut);
+        const v4Amount = BigInt(v4Result.amountOut);
 
         if (v4Amount > v2v3Amount) {
           winner = "v4";
@@ -945,8 +951,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       routerType: winner,
-      sellAmount: winningQuote.sellAmount,
-      buyAmount: winningQuote.buyAmount,
+      amountIn: winningQuote.amountIn,
+      amountOut: winningQuote.amountOut,
       expiresAt: winningQuote.expiresAt,
       route: winningQuote.route,
       // V4 fields (if present)
@@ -954,8 +960,7 @@ export async function GET(request: NextRequest) {
       path: winningQuote.path,
       currencyIn: winningQuote.currencyIn,
       isFirstToken: winningQuote.isFirstToken,
-      amountIn: winningQuote.amountIn,
-      amountOutMinimum: winningQuote.amountOutMinimum,
+      isExactOutputSwap: winningQuote.isExactOutputSwap,
     });
   } catch (error) {
     console.error("Quote error:", error);
@@ -979,7 +984,6 @@ export async function POST(request: NextRequest) {
     const {
       routerType,
       sellToken,
-      sellAmount,
       decimals,
       userAddress,
       receiver,
@@ -993,18 +997,26 @@ export async function POST(request: NextRequest) {
       currencyIn,
       isFirstToken,
       amountIn,
-      amountOutMinimum,
+      amountOut,
+      isExactOutputSwap,
     } = body;
 
     // Validate inputs
-    if (!routerType || !sellToken || !sellAmount || decimals === undefined || !userAddress) {
+    if (!routerType || !sellToken || !amountIn || decimals === undefined || !userAddress) {
       return NextResponse.json(
         {
           error:
-            "Missing required parameters: routerType, sellToken, sellAmount, decimals, userAddress",
+            "Missing required parameters: routerType, sellToken, amountIn, decimals, userAddress",
         },
         { status: 400 }
       );
+    }
+
+    // Validate V4-specific requirements
+    if (routerType === "v4") {
+      if (!amountOut) {
+        return NextResponse.json({ error: "V4 swaps require amountOut" }, { status: 400 });
+      }
     }
 
     const finalSlippageBps = slippageBps || DEFAULT_SLIPPAGE_BPS;
@@ -1026,20 +1038,20 @@ export async function POST(request: NextRequest) {
         path,
         currencyIn,
         isFirstToken,
-        amountIn,
-        amountOutMinimum,
+        amountIn: amountIn!,
+        amountOut: amountOut!,
         receiver: recipient,
-        slippageBps: finalSlippageBps,
         validFor: finalValidFor,
         sellToken,
-        permit,
-        signature,
+        permit: permit!,
+        signature: signature!,
+        isExactOutputSwap: isExactOutputSwap || false,
       });
     } else {
       console.log("building v3 swap");
       swapResult = await buildV2V3Swap({
         sellToken,
-        sellAmount,
+        amountIn: amountIn!,
         decimals,
         userAddress,
         receiver: recipient,

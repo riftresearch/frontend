@@ -101,7 +101,7 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
     return {
       name: "Ethereum",
       ticker: "ETH",
-      address: null,
+      address: "0x0000000000000000000000000000000000000000",
       balance: "0",
       usdValue: "$0.00",
       icon: ETH_ICON,
@@ -126,7 +126,7 @@ export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) 
     return {
       name: "Ethereum",
       ticker: "ETH",
-      address: null,
+      address: "0x0000000000000000000000000000000000000000",
       balance: "0",
       usdValue: "$0.00",
       icon: ETH_ICON,
