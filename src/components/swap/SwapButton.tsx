@@ -492,7 +492,7 @@ export const SwapButton = () => {
         sellToken,
         decimals,
         userEvmAccountAddress,
-        uniswapQuote.routerType, // Pass the router type from the quote, default to v2v3 in fake mode
+        uniswapQuote.routerType, // Pass the router type from the quote
         uniswapQuote.amountIn,
         depositAddress, // Set receiver to OTC deposit address
         slippageBips,
@@ -505,7 +505,7 @@ export const SwapButton = () => {
         uniswapQuote.currencyIn,
         uniswapQuote.isFirstToken,
         uniswapQuote.amountOut,
-        uniswapQuote.isExactOutputSwap
+        uniswapQuote.isExactOutput
       );
 
       console.log("Swap transaction built:", swapTransaction);

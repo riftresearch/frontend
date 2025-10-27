@@ -5,13 +5,27 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { AlphaRouter, SwapOptionsSwapRouter02, SwapType } from "@uniswap/smart-order-router";
-import { CurrencyAmount, Percent, Token, TradeType, ChainId } from "@uniswap/sdk-core";
+import {
+  AlphaRouter,
+  SwapOptionsSwapRouter02,
+  SwapOptionsUniversalRouter,
+  SwapOptions,
+  SwapType,
+} from "@uniswap/smart-order-router";
+import {
+  CurrencyAmount,
+  Percent,
+  Token,
+  TradeType,
+  ChainId,
+  NativeCurrency,
+  Ether,
+} from "@uniswap/sdk-core";
 import { Contract, providers } from "ethers";
 import { Actions, PathKey, V4Planner } from "@uniswap/v4-sdk";
 import { V4_QUOTER_ABI, V4_QUOTER, V4_POOL_MANAGER, UNIVERSAL_ROUTER_ADDRESS } from "./v4ABIs";
-import { RoutePlanner, CommandType } from "@uniswap/universal-router-sdk";
-import { encodeFunctionData, encodeAbiParameters } from "viem";
+import { RoutePlanner, CommandType, UniversalRouterVersion } from "@uniswap/universal-router-sdk";
+import { encodeFunctionData, encodeAbiParameters, parseSignature } from "viem";
 
 // ============================================================================
 // Constants
@@ -87,7 +101,7 @@ function sortTokens(
 }
 
 // ============================================================================
-// V2/V3 Quote Logic (AlphaRouter)
+// V3 Quote Logic (AlphaRouter)
 // ============================================================================
 
 interface QuoteParams {
@@ -98,6 +112,12 @@ interface QuoteParams {
   userAddress: string;
   slippageBps: number;
   validFor: number;
+}
+
+interface MethodParameters {
+  calldata: string;
+  value: string;
+  to: string;
 }
 
 interface QuoteResult {
@@ -116,10 +136,11 @@ interface QuoteResult {
   path?: PathKey[];
   currencyIn?: string;
   isFirstToken?: boolean;
-  isExactOutputSwap?: boolean;
+  isExactOutput?: boolean;
+  methodParameters?: MethodParameters;
 }
 
-async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
+async function getV3Quote(params: QuoteParams): Promise<QuoteResult | null> {
   const { sellToken, amountIn, amountOut, decimals, userAddress, slippageBps, validFor } = params;
 
   try {
@@ -136,16 +157,19 @@ async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
     const amount = (amountOut || amountIn) as string;
 
     // Determine token address
-    const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
-    const tokenIn = new Token(ChainId.MAINNET, tokenInAddress, decimals);
+    const isNativeEth = sellToken === "0x0000000000000000000000000000000000000000";
+    const tokenIn = isNativeEth
+      ? Ether.onChain(ChainId.MAINNET)
+      : new Token(ChainId.MAINNET, sellToken, decimals);
     const tokenOut = new Token(ChainId.MAINNET, CBBTC_ADDRESS, 8, "cbBTC", "Coinbase Wrapped BTC");
 
     // Configure swap options
-    const options: SwapOptionsSwapRouter02 = {
-      recipient: userAddress,
+    const options: SwapOptionsUniversalRouter = {
+      // recipient: userAddress,
+      // inputTokenPermit:
       slippageTolerance: new Percent(slippageBps, 10_000),
-      deadline: Math.floor(Date.now() / 1000 + validFor),
-      type: SwapType.SWAP_ROUTER_02,
+      type: SwapType.UNIVERSAL_ROUTER,
+      version: UniversalRouterVersion.V2_0,
     };
 
     // Determine trade type
@@ -153,7 +177,7 @@ async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
 
     // Get route from AlphaRouter
     console.log(
-      `[V2/V3] Fetching AlphaRouter quote for ${sellToken} -> cbBTC (${isExactOutput ? "exact output" : "exact input"})`
+      `[V3] Fetching AlphaRouter quote for ${sellToken} -> cbBTC (${isExactOutput ? "exact output" : "exact input"})`
     );
 
     const route = isExactOutput
@@ -171,10 +195,12 @@ async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
         );
 
     if (!route || !route.methodParameters) {
-      console.log("[V2/V3] No route found");
+      console.log("[V3] No route found");
       return null;
     }
 
+    // console.log("path", route.trade.swaps[0].route.path);
+    // console.log("pools", route.trade.swaps[0].route.pools);
     // Calculate expiration
     const expiresAt = new Date(Date.now() + validFor * 1000);
 
@@ -208,6 +234,7 @@ async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
       amountIn: finalAmountIn,
       amountOut: finalAmountOut,
       expiresAt: expiresAt.toISOString(),
+      methodParameters: route.methodParameters,
       route: {
         quote: route.quote.toExact(),
         quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
@@ -215,19 +242,20 @@ async function getV2V3Quote(params: QuoteParams): Promise<QuoteResult | null> {
         gasPriceWei: route.gasPriceWei.toString(),
         routePath,
       },
+      isExactOutput: isExactOutput,
     };
 
-    console.log("[V2/V3] Route:", routePath);
+    console.log("[V3] Route:", routePath);
     if (isExactOutput) {
-      console.log("[V2/V3] Quote:", quotedAmount, "input required (", result.route.quote, ")");
-      console.log("[V2/V3] With slippage:", finalAmountIn, "max input");
+      console.log("[V3] Quote:", quotedAmount, "input required (", result.route.quote, ")");
+      console.log("[V3] With slippage:", finalAmountIn, "max input");
     } else {
-      console.log("[V2/V3] Quote:", quotedAmount, "cbBTC output (", result.route.quote, ")");
-      console.log("[V2/V3] With slippage:", finalAmountOut, "min output");
+      console.log("[V3] Quote:", quotedAmount, "cbBTC output (", result.route.quote, ")");
+      console.log("[V3] With slippage:", finalAmountOut, "min output");
     }
     return result;
   } catch (error) {
-    console.error("[V2/V3] Quote error:", error);
+    console.error("[V3] Quote error:", error);
     return null;
   }
 }
@@ -301,7 +329,7 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             // V4 fields
             poolKey,
             isFirstToken: sortedPair.isFirstToken,
-            isExactOutputSwap: isExactOutput,
+            isExactOutput: isExactOutput,
           };
         } catch (error) {
           console.log(
@@ -353,7 +381,7 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             // V4 fields
             poolKey,
             isFirstToken: sortedPair.isFirstToken,
-            isExactOutputSwap: isExactOutput,
+            isExactOutput: isExactOutput,
           };
         } catch (error) {
           console.log(
@@ -459,7 +487,7 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
         // V4 fields
         currencyIn: bestQuote.currencyIn,
         path: bestQuote.path,
-        isExactOutputSwap: isExactOutput,
+        isExactOutput: isExactOutput,
       };
     } else {
       // Exact input: maximize output amount
@@ -535,7 +563,8 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
 
       // Log the best route in the requested format
       const feePercent = (bestQuote.firstHopFee / 10000).toFixed(2);
-      console.log(`[V4] Trying: ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`);
+      // console.log(`[V4] Trying: ${sellToken} -(${feePercent}%)-> WBTC -(0.01%)-> cbBTC`);
+      console.log("[V4] Route:", bestQuote.route.path);
       console.log("[V4] Best quote:", bestQuote.outputAmount, "cbBTC");
       console.log("[V4] With slippage:", finalAmountOut, "min output");
 
@@ -547,7 +576,7 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
         // V4 fields
         currencyIn: bestQuote.currencyIn,
         path: bestQuote.path,
-        isExactOutputSwap: isExactOutput,
+        isExactOutput: isExactOutput,
       };
     }
   } catch (error) {
@@ -557,80 +586,109 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
 }
 
 // ============================================================================
-// V2/V3 Swap Building (AlphaRouter)
+// V3 Swap Building (AlphaRouter)
 // ============================================================================
 
-interface V2V3SwapParams {
+interface V3SwapParams {
   sellToken: string;
-  amountIn: string;
+  amountIn?: string;
+  amountOut?: string;
   decimals: number;
   userAddress: string;
   receiver: string;
   slippageBps: number;
   validFor: number;
+  signature?: string;
+  permit?: any;
+  isExactOutput?: boolean;
 }
 
-interface SwapResult {
+interface ExecuteSwapParams {
   calldata: string;
   value: string;
   to: string;
-  buyAmount: string;
-  expiresAt: string;
-  route: any;
 }
 
-async function buildV2V3Swap(params: V2V3SwapParams): Promise<SwapResult | null> {
-  const { sellToken, amountIn, decimals, receiver, slippageBps, validFor } = params;
+async function buildV3Swap(params: V3SwapParams): Promise<ExecuteSwapParams | null> {
+  const {
+    sellToken,
+    amountIn,
+    amountOut,
+    decimals,
+    receiver,
+    userAddress,
+    slippageBps,
+    validFor,
+    signature,
+    permit,
+    isExactOutput,
+  } = params;
 
   try {
-    const tokenInAddress = sellToken.toUpperCase() === "ETH" ? WETH_ADDRESS : sellToken;
-    const tokenIn = new Token(ChainId.MAINNET, tokenInAddress, decimals);
+    // Set tokenIn and tokenOut
+    const isNativeEth = sellToken === "0x0000000000000000000000000000000000000000";
+    const tokenIn = isNativeEth
+      ? Ether.onChain(ChainId.MAINNET)
+      : new Token(ChainId.MAINNET, sellToken, decimals);
     const tokenOut = new Token(ChainId.MAINNET, CBBTC_ADDRESS, 8, "cbBTC", "Coinbase Wrapped BTC");
 
     // Configure swap options with the receiver as recipient
-    const options: SwapOptionsSwapRouter02 = {
+    const options: SwapOptionsUniversalRouter = {
       recipient: receiver,
       slippageTolerance: new Percent(slippageBps, 10_000),
-      deadline: Math.floor(Date.now() / 1000 + validFor),
-      type: SwapType.SWAP_ROUTER_02,
+      type: SwapType.UNIVERSAL_ROUTER,
+      version: UniversalRouterVersion.V2_0,
+      // safeMode: false,
+      // simulate: {
+      //   fromAddress: userAddress,
+      // },
     };
 
-    console.log("[V2/V3] Building swap transaction for", sellToken, "->", "cbBTC", "to", receiver);
-    const route = await alphaRouter.route(
-      CurrencyAmount.fromRawAmount(tokenIn, amountIn),
-      tokenOut,
-      TradeType.EXACT_INPUT,
-      options
-    );
+    // console.log("signature", signature);
+    // console.log("permit", permit);
+    // Add inputTokenPermit if signature and permit are provided
+    if (signature && permit) {
+      const { v, r, s } = parseSignature(signature as any);
+      options.inputTokenPermit = {
+        signature: signature,
+        details: permit.details,
+        spender: permit.spender,
+        sigDeadline: permit.sigDeadline,
+      };
+    }
+    console.log("options", options);
+
+    console.log("[V3] Building swap transaction for", sellToken, "->", "cbBTC", "to", receiver);
+
+    // Call AlphaRouter based on trade type
+    const route = isExactOutput
+      ? await alphaRouter.route(
+          CurrencyAmount.fromRawAmount(tokenOut, amountOut!),
+          tokenIn,
+          TradeType.EXACT_OUTPUT,
+          options
+        )
+      : await alphaRouter.route(
+          CurrencyAmount.fromRawAmount(tokenIn, amountIn!),
+          tokenOut,
+          TradeType.EXACT_INPUT,
+          options
+        );
 
     if (!route || !route.methodParameters) {
-      console.error("[V2/V3] No route found");
+      console.error("[V3] No route found");
       return null;
     }
 
-    const expiresAt = new Date(Date.now() + validFor * 1000);
-
-    console.log(
-      "[V2/V3] Swap built successfully. Output:",
-      route.quote.numerator.toString(),
-      "cbBTC"
-    );
+    console.log("[V3] Swap built successfully. Output:", route.quote.numerator.toString(), "cbBTC");
 
     return {
       calldata: route.methodParameters.calldata,
       value: route.methodParameters.value,
       to: route.methodParameters.to,
-      buyAmount: route.quote.numerator.toString(),
-      expiresAt: expiresAt.toISOString(),
-      route: {
-        quote: route.quote.toExact(),
-        quoteGasAdjusted: route.quoteGasAdjusted.toExact(),
-        estimatedGasUsed: route.estimatedGasUsed.toString(),
-        gasPriceWei: route.gasPriceWei.toString(),
-      },
     };
   } catch (error) {
-    console.error("[V2/V3] Swap build error:", error);
+    console.error("[V3] Swap build error:", error);
     return null;
   }
 }
@@ -651,10 +709,10 @@ interface V4SwapParams {
   sellToken: string;
   permit?: any;
   signature?: string;
-  isExactOutputSwap: boolean;
+  isExactOutput: boolean;
 }
 
-async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
+async function buildV4Swap(params: V4SwapParams): Promise<ExecuteSwapParams | null> {
   const {
     poolKey,
     path,
@@ -667,12 +725,12 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
     sellToken,
     permit,
     signature,
-    isExactOutputSwap,
+    isExactOutput,
   } = params;
 
   try {
     console.log("[V4] Building V4 swap actions for client-side execution");
-    console.log("[V4] Swap type:", isExactOutputSwap ? "EXACT_OUTPUT" : "EXACT_INPUT");
+    console.log("[V4] Swap type:", isExactOutput ? "EXACT_OUTPUT" : "EXACT_INPUT");
 
     const v4Planner = new V4Planner();
     const deadline = Math.floor(Date.now() / 1000) + validFor;
@@ -686,7 +744,7 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
 
     if (poolKey) {
       // Single-hop swap
-      if (isExactOutputSwap) {
+      if (isExactOutput) {
         // Exact output: user specifies exact output, accepts spending up to amountIn
         const swapConfig = {
           poolKey: poolKey,
@@ -711,7 +769,7 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
       }
     } else if (path && currencyIn) {
       // Multi-hop swap
-      if (isExactOutputSwap) {
+      if (isExactOutput) {
         // Exact output: user specifies exact output, accepts spending up to amountIn
         const swapConfig = {
           currencyOut: outputCurrency,
@@ -792,14 +850,6 @@ async function buildV4Swap(params: V4SwapParams): Promise<SwapResult | null> {
       calldata: encodedCalldata,
       value,
       to: UNIVERSAL_ROUTER_ADDRESS,
-      buyAmount: amountOut,
-      expiresAt: expiresAt.toISOString(),
-      route: {
-        type: "v4",
-        deadline: deadline.toString(),
-        inputToken: inputCurrency,
-        outputToken: outputCurrency,
-      },
     };
   } catch (error) {
     console.error("[V4] Swap build error:", error);
@@ -865,7 +915,7 @@ export async function GET(request: NextRequest) {
     console.log("\n========================================");
     if (router === "v3") {
       console.log(
-        `Fetching quotes from V2/V3 only (${isExactOutput ? "exact output" : "exact input"})...`
+        `Fetching quotes from V3 only (${isExactOutput ? "exact output" : "exact input"})...`
       );
     } else if (router === "v4") {
       console.log(
@@ -873,75 +923,75 @@ export async function GET(request: NextRequest) {
       );
     } else {
       console.log(
-        `Fetching quotes from V2/V3 and V4 (${isExactOutput ? "exact output" : "exact input"})...`
+        `Fetching quotes from V3 and V4 (${isExactOutput ? "exact output" : "exact input"})...`
       );
     }
     console.log("========================================");
 
-    const [v2v3Result, v4Result] = await Promise.all([
-      router === "v4" ? Promise.resolve(null) : getV2V3Quote(quoteParams),
+    const [v3Result, v4Result] = await Promise.all([
+      router === "v4" ? Promise.resolve(null) : getV3Quote(quoteParams),
       router === "v3" ? Promise.resolve(null) : getV4Quote(quoteParams),
     ]);
 
     // Compare and select winner
-    let winner: "v2v3" | "v4";
+    let winner: "v3" | "v4";
     let winningQuote: QuoteResult;
 
-    if (!v2v3Result && !v4Result) {
+    if (!v3Result && !v4Result) {
       return NextResponse.json({ error: "No routes found for this swap" }, { status: 404 });
     }
 
-    if (!v4Result || !v2v3Result) {
+    if (!v4Result || !v3Result) {
       // Only one router returned a quote
       if (v4Result) {
         winner = "v4";
         winningQuote = v4Result;
         console.log("\n✓ V4 wins (only available route)");
       } else {
-        winner = "v2v3";
-        winningQuote = v2v3Result!;
-        console.log("\n✓ V2/V3 wins (only available route)");
+        winner = "v3";
+        winningQuote = v3Result!;
+        console.log("\n✓ V3 wins (only available route)");
       }
     } else {
       // Both returned quotes, compare amounts
       if (isExactOutput) {
         // For exact output, compare amountIn (lower input is better)
-        const v2v3Amount = BigInt(v2v3Result.amountIn);
+        const v3Amount = BigInt(v3Result.amountIn);
         const v4Amount = BigInt(v4Result.amountIn);
 
-        if (v4Amount < v2v3Amount) {
+        if (v4Amount < v3Amount) {
           winner = "v4";
           winningQuote = v4Result;
-          const improvement = Number(((v2v3Amount - v4Amount) * BigInt(10000)) / v2v3Amount) / 100;
+          const improvement = Number(((v3Amount - v4Amount) * BigInt(10000)) / v3Amount) / 100;
           console.log(`\n✓ V4 wins! (-${improvement.toFixed(2)}% less input required)`);
           console.log(`  V4: ${v4Amount.toString()} input required`);
-          console.log(`  V2/V3: ${v2v3Amount.toString()} input required`);
+          console.log(`  V3: ${v3Amount.toString()} input required`);
         } else {
-          winner = "v2v3";
-          winningQuote = v2v3Result;
-          const improvement = Number(((v4Amount - v2v3Amount) * BigInt(10000)) / v4Amount) / 100;
-          console.log(`\n✓ V2/V3 wins! (-${improvement.toFixed(2)}% less input required)`);
-          console.log(`  V2/V3: ${v2v3Amount.toString()} input required`);
+          winner = "v3";
+          winningQuote = v3Result;
+          const improvement = Number(((v4Amount - v3Amount) * BigInt(10000)) / v4Amount) / 100;
+          console.log(`\n✓ V3 wins! (-${improvement.toFixed(2)}% less input required)`);
+          console.log(`  V3: ${v3Amount.toString()} input required`);
           console.log(`  V4: ${v4Amount.toString()} input required`);
         }
       } else {
         // For exact input, compare amountOut (higher output is better)
-        const v2v3Amount = BigInt(v2v3Result.amountOut);
+        const v3Amount = BigInt(v3Result.amountOut);
         const v4Amount = BigInt(v4Result.amountOut);
 
-        if (v4Amount > v2v3Amount) {
+        if (v4Amount > v3Amount) {
           winner = "v4";
           winningQuote = v4Result;
-          const improvement = Number(((v4Amount - v2v3Amount) * BigInt(10000)) / v2v3Amount) / 100;
+          const improvement = Number(((v4Amount - v3Amount) * BigInt(10000)) / v3Amount) / 100;
           console.log(`\n✓ V4 wins! (+${improvement.toFixed(2)}% better)`);
           console.log(`  V4: ${v4Amount.toString()} cbBTC`);
-          console.log(`  V2/V3: ${v2v3Amount.toString()} cbBTC`);
+          console.log(`  V3: ${v3Amount.toString()} cbBTC`);
         } else {
-          winner = "v2v3";
-          winningQuote = v2v3Result;
-          const improvement = Number(((v2v3Amount - v4Amount) * BigInt(10000)) / v4Amount) / 100;
-          console.log(`\n✓ V2/V3 wins! (+${improvement.toFixed(2)}% better)`);
-          console.log(`  V2/V3: ${v2v3Amount.toString()} cbBTC`);
+          winner = "v3";
+          winningQuote = v3Result;
+          const improvement = Number(((v3Amount - v4Amount) * BigInt(10000)) / v4Amount) / 100;
+          console.log(`\n✓ V3 wins! (+${improvement.toFixed(2)}% better)`);
+          console.log(`  V3: ${v3Amount.toString()} cbBTC`);
           console.log(`  V4: ${v4Amount.toString()} cbBTC`);
         }
       }
@@ -960,7 +1010,7 @@ export async function GET(request: NextRequest) {
       path: winningQuote.path,
       currencyIn: winningQuote.currencyIn,
       isFirstToken: winningQuote.isFirstToken,
-      isExactOutputSwap: winningQuote.isExactOutputSwap,
+      isExactOutput: winningQuote.isExactOutput,
     });
   } catch (error) {
     console.error("Quote error:", error);
@@ -998,7 +1048,7 @@ export async function POST(request: NextRequest) {
       isFirstToken,
       amountIn,
       amountOut,
-      isExactOutputSwap,
+      isExactOutput,
     } = body;
 
     // Validate inputs
@@ -1028,7 +1078,7 @@ export async function POST(request: NextRequest) {
     console.log("Receiver:", recipient);
     console.log("========================================");
 
-    let swapResult: SwapResult | null = null;
+    let swapResult: ExecuteSwapParams | null = null;
 
     console.log("router type for swap", routerType);
     if (routerType === "v4") {
@@ -1045,18 +1095,22 @@ export async function POST(request: NextRequest) {
         sellToken,
         permit: permit!,
         signature: signature!,
-        isExactOutputSwap: isExactOutputSwap || false,
+        isExactOutput: isExactOutput || false,
       });
     } else {
       console.log("building v3 swap");
-      swapResult = await buildV2V3Swap({
+      swapResult = await buildV3Swap({
         sellToken,
-        amountIn: amountIn!,
+        amountIn,
+        amountOut,
         decimals,
         userAddress,
         receiver: recipient,
         slippageBps: finalSlippageBps,
         validFor: finalValidFor,
+        signature,
+        permit,
+        isExactOutput,
       });
     }
 

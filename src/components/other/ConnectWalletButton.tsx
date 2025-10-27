@@ -109,7 +109,7 @@ export const ConnectWalletButton: React.FC = () => {
           name: "Ethereum",
           ticker: "ETH",
           address: "0x0000000000000000000000000000000000000000", // ETH native token address
-          balance: balanceEth.toFixed(6),
+          balance: balanceEth.toString(),
           usdValue: `$${usdValue.toFixed(2)}`,
           icon: ETH_ICON,
           decimals: 18,
@@ -133,6 +133,7 @@ export const ConnectWalletButton: React.FC = () => {
         fetchUserEth(address, chainId),
       ]);
 
+      // console.log("walletTokens", walletTokens);
       // If no tokens and no ETH, set empty array
       if (walletTokens.length === 0 && !ethToken) {
         setUserTokensForChain(chainId, []);
@@ -183,7 +184,7 @@ export const ConnectWalletButton: React.FC = () => {
             name: tokenData.name,
             ticker: tokenData.ticker,
             address: t.address,
-            balance: Number(balanceStr).toFixed(6),
+            balance: balanceStr,
             usdValue: `$${usd.toFixed(2)}`,
             icon: tokenData.icon || FALLBACK_TOKEN_ICON,
             decimals: tokenData.decimals || decimals,

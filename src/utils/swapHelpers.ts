@@ -303,7 +303,7 @@ export async function getERC20ToBTCQuote(
       userAddress,
       slippageBps,
       validFor,
-      router: "v4",
+      // router: "v3",
     });
 
     console.log("uniswapQuote", uniswapQuote);
@@ -512,7 +512,7 @@ export async function getERC20ToBTCQuoteExactOutput(
       userAddress,
       slippageBps,
       validFor,
-      router: "v4",
+      // router: "v3",
     });
 
     console.log("uniswapQuote", uniswapQuote);

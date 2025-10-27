@@ -21,7 +21,7 @@ export interface UniswapQuoteRequest {
   validFor?: number;
   /** User's wallet address */
   userAddress: string;
-  /** Router to use: "v3" for V2/V3 only, "v4" for V4 only, or undefined for both */
+  /** Router to use: "v3" for V3 only, "v4" for V4 only, or undefined for both */
   router?: "v3" | "v4";
 }
 
@@ -30,7 +30,7 @@ export interface UniswapQuoteRequest {
  */
 export interface UniswapQuoteResponse {
   /** Router type that provided the best quote */
-  routerType: "v4" | "v2v3";
+  routerType: "v4" | "v3";
   /** Amount in (with slippage applied) */
   amountIn: string;
   /** Amount out (with slippage applied) */
@@ -63,36 +63,22 @@ export interface UniswapQuoteResponse {
   path?: any[]; // PathKey[]
   currencyIn?: string;
   isFirstToken?: boolean;
-  isExactOutputSwap?: boolean;
+  isExactOutput?: boolean;
 }
 
 /**
  * Uniswap swap transaction ready for execution
  */
-export interface UniswapSwapTransaction {
-  /** Transaction calldata (for V2/V3) or encoded V4 actions (for V4) */
+export interface UniversalRouterTransaction {
+  /** Transaction calldata **/
   calldata: string;
   /** Transaction value (for ETH swaps) */
   value: string;
-  /** Target address (SwapRouter02 for V2/V3, UniversalRouter for V4) */
+  // Target address (Universal Router)
   to: string;
-  /** Buy amount of cbBTC */
-  buyAmount: string;
-  /** Expiration timestamp */
-  expiresAt: Date;
+
   /** Router type that generated this transaction */
-  routerType?: "v4" | "v2v3";
-  /** Additional route information */
-  route?: {
-    quote?: string;
-    quoteGasAdjusted?: string;
-    estimatedGasUsed?: string;
-    gasPriceWei?: string;
-    type?: string;
-    deadline?: string;
-    inputToken?: string;
-    outputToken?: string;
-  };
+  routerType?: "v4" | "v3";
 }
 
 /**
@@ -188,7 +174,7 @@ export class UniswapRouterClient {
         path: data.path,
         currencyIn: data.currencyIn,
         isFirstToken: data.isFirstToken,
-        isExactOutputSwap: data.isExactOutputSwap,
+        isExactOutput: data.isExactOutput,
       };
     } catch (error) {
       if (error instanceof UniswapRouterError) {
@@ -209,7 +195,7 @@ export class UniswapRouterClient {
     sellToken: string,
     decimals: number,
     userAddress: string,
-    routerType: "v4" | "v2v3",
+    routerType: "v4" | "v3",
     amountIn: string,
     receiver?: string,
     slippageBps?: number,
@@ -222,8 +208,8 @@ export class UniswapRouterClient {
     currencyIn?: string,
     isFirstToken?: boolean,
     amountOut?: string,
-    isExactOutputSwap?: boolean
-  ): Promise<UniswapSwapTransaction> {
+    isExactOutput?: boolean
+  ): Promise<UniversalRouterTransaction> {
     try {
       const body = {
         routerType,
@@ -242,7 +228,7 @@ export class UniswapRouterClient {
         isFirstToken,
         amountIn,
         amountOut,
-        isExactOutputSwap,
+        isExactOutput,
       };
 
       console.log("buildSwapTransaction body", body);
@@ -270,10 +256,7 @@ export class UniswapRouterClient {
         calldata: data.calldata,
         value: data.value,
         to: data.to,
-        buyAmount: data.buyAmount,
-        expiresAt: new Date(data.expiresAt),
         routerType,
-        route: data.route,
       };
     } catch (error) {
       if (error instanceof UniswapRouterError) {

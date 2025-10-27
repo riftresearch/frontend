@@ -517,7 +517,7 @@ export const SwapInputAndOutput = () => {
 
     // Set flag to indicate we should quote for input field
     getQuoteForInputRef.current = true;
-
+    console.log("currentInputBalance", currentInputBalance);
     // Set the balance as the input amount
     setRawInputAmount(currentInputBalance);
     setLastEditedField("input");
@@ -977,7 +977,7 @@ export const SwapInputAndOutput = () => {
                   fontFamily="Aux"
                   userSelect="none"
                 >
-                  {currentInputBalance} {currentInputTicker}
+                  {currentInputBalance.slice(0, 8)} {currentInputTicker}
                 </Text>
               )}
             </Flex>
