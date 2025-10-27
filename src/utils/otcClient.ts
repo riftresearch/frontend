@@ -67,9 +67,15 @@ export interface RefundSwapRequest {
   signature: number[]; // byte array (Vec<u8> in Rust)
 }
 
+export type RefundSwapReason =
+  | "MarketMakerNeverInitiatedDeposit"
+  | "MarketMakerDepositNeverConfirmed";
+
 export interface RefundSwapResponse {
-  success: boolean;
-  message?: string;
+  swap_id: string; // UUID of the refunded swap
+  reason: RefundSwapReason; // Why refund was allowed
+  tx_data: string; // Hex-encoded signed transaction (ready to broadcast)
+  tx_chain: "Bitcoin" | "Ethereum"; // Which chain to broadcast on
 }
 
 export interface OTCServerClientConfig {

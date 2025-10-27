@@ -12,9 +12,10 @@ import { reownModal } from "@/utils/wallet";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
-import { otcClient } from "@/utils/constants";
+import { otcClient, rfqClient } from "@/utils/constants";
 import {
   createSignedRefundRequest,
+  executeCompleteRefund,
   formatRefundError,
   validateRefundAddress,
 } from "@/utils/refundHelpers";
@@ -81,8 +82,12 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
   //   allFlowSteps: swap.flow.map((s) => ({ state: s.state, status: s.status })),
   // });
 
-  // Refunded: refunding_user or refunding_mm (regardless of isRefundAvailable)
-  if (currentStatus === "refunding_user" || currentStatus === "refunding_mm") {
+  // Refunded: refunding_user, refunding_mm, or user_refunded_detected (regardless of isRefundAvailable)
+  if (
+    currentStatus === "refunding_user" ||
+    currentStatus === "refunding_mm" ||
+    currentStatus === "user_refunded_detected"
+  ) {
     return (
       <Flex
         align="center"
@@ -239,14 +244,129 @@ async function fetchUserSwaps(
       return { swaps: [], hasMore: false };
     }
 
-    const allSwaps = data.swaps.map((row: any) => {
-      const mappedSwap = mapDbRowToAdminSwap(row);
-      // Preserve isRefundAvailable from raw data
-      return {
-        ...mappedSwap,
-        isRefundAvailable: row.isRefundAvailable || row.is_refund_available || false,
-      };
-    });
+    const allSwaps = await Promise.all(
+      data.swaps.map(async (row: any) => {
+        const mappedSwap = mapDbRowToAdminSwap(row);
+
+        // Check if refund is available based on server flag and balance check
+        let isRefundAvailable = false;
+        let shouldMarkAsRefunded = false;
+        if (row.isRefundAvailable || row.is_refund_available) {
+          console.log(
+            `[BALANCE CHECK] Swap ${mappedSwap.id}: Server says refund available, checking balance...`
+          );
+          // Server says refund is available, now check if user has already withdrawn funds
+          // by looking up if the deposit address has any balance
+          const userDepositAddress = row.user_deposit_address;
+          const userDepositChain = row.quote.from_chain; // ethereum or bitcoin
+
+          if (userDepositChain === "bitcoin") {
+            // look up if the deposit address has any balance from the electrs endpoint
+            try {
+              const electrsUrl = `https://electrs.riftnodes.com/address/${userDepositAddress}`;
+              const electrsResponse = await fetch(electrsUrl);
+              if (!electrsResponse.ok) {
+                console.warn(`Failed to fetch Bitcoin balance for ${userDepositAddress}`);
+                isRefundAvailable = false; // Default to not available if we can't check
+              } else {
+                const electrsData = await electrsResponse.json();
+                // Check if address has any confirmed or unconfirmed balance
+                const totalBalance =
+                  (electrsData.chain_stats?.funded_txo_sum || 0) -
+                  (electrsData.chain_stats?.spent_txo_sum || 0);
+                const mempoolBalance =
+                  (electrsData.mempool_stats?.funded_txo_sum || 0) -
+                  (electrsData.mempool_stats?.spent_txo_sum || 0);
+                const hasBalance = totalBalance + mempoolBalance > 0;
+                isRefundAvailable = hasBalance;
+                shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
+                console.log(
+                  `[BALANCE CHECK] Bitcoin balance for ${userDepositAddress}: ${totalBalance + mempoolBalance} sats, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
+                );
+              }
+            } catch (error) {
+              console.warn(`Error checking Bitcoin balance for ${userDepositAddress}:`, error);
+              isRefundAvailable = false; // Default to not available if we can't check
+            }
+          } else {
+            // look up if the deposit address has any cbBTC balance using token-balance API
+            try {
+              const cbBTCAddress = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
+              // Use the existing token-balance API to check cbBTC balance
+              const chainId = 1;
+              const response = await fetch(
+                `/api/token-balance?wallet=${userDepositAddress}&chainId=${chainId}`
+              );
+              if (!response.ok) {
+                console.warn(`Failed to fetch EVM balance for ${userDepositAddress}`);
+                isRefundAvailable = false; // Default to not available if we can't check
+              } else {
+                const data = await response.json();
+
+                // Look for cbBTC token in the results
+                if (data.result?.result) {
+                  const cbBTCToken = data.result.result.find(
+                    (token: any) => token.address?.toLowerCase() === cbBTCAddress.toLowerCase()
+                  );
+                  if (cbBTCToken) {
+                    const balance = BigInt(cbBTCToken.totalBalance || "0");
+                    const hasBalance = balance > 0n;
+                    isRefundAvailable = hasBalance;
+                    shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
+                    console.log(
+                      `[BALANCE CHECK] cbBTC balance for ${userDepositAddress}: ${balance.toString()}, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
+                    );
+                  } else {
+                    isRefundAvailable = false; // No cbBTC token found
+                    shouldMarkAsRefunded = true; // No token found means withdrawn
+                    console.log(
+                      `[BALANCE CHECK] No cbBTC token found for ${userDepositAddress}, shouldMarkAsRefunded: true`
+                    );
+                  }
+                } else {
+                  isRefundAvailable = false; // No tokens found
+                  shouldMarkAsRefunded = true; // No tokens means withdrawn
+                }
+              }
+            } catch (error) {
+              console.warn(`Error checking cbBTC balance for ${userDepositAddress}:`, error);
+              isRefundAvailable = false; // Default to not available if we can't check
+            }
+          }
+        }
+
+        // If server says refund available but balance is 0, mark as refunded
+        if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
+          console.log(`[REFUND DETECTED] Swap ${mappedSwap.id}: Balance is 0, marking as refunded`);
+          console.log(
+            `[REFUND DETECTED] Current flow:`,
+            mappedSwap.flow.map((s) => ({ status: s.status, state: s.state }))
+          );
+
+          // Mark all in-progress steps as completed
+          mappedSwap.flow.forEach((step) => {
+            if (step.state === "inProgress") {
+              step.state = "completed";
+            }
+          });
+
+          // Update the last step to show refunded status
+          const lastStep = mappedSwap.flow[mappedSwap.flow.length - 1];
+          lastStep.status = "user_refunded_detected";
+          lastStep.state = "completed";
+
+          console.log(
+            `[REFUND DETECTED] Updated flow:`,
+            mappedSwap.flow.map((s) => ({ status: s.status, state: s.state }))
+          );
+        }
+
+        return {
+          ...mappedSwap,
+          isRefundAvailable,
+        };
+      })
+    );
 
     // Filter out swaps that are pending or only at waiting_user_deposit_initiated
     // (these are created but user never deposited)
@@ -258,6 +378,8 @@ async function fetchUserSwaps(
       // Exclude if pending or only at waiting_user_deposit_initiated
       return currentStatus !== "pending" && currentStatus !== "waiting_user_deposit_initiated";
     });
+
+    console.log("[FETCH USER SWAPS] Swaps after filtering:", swaps);
 
     const hasMore = allSwaps.length === limit; // If we got a full page, there might be more
 
@@ -487,24 +609,17 @@ export const UserSwapHistory: React.FC = () => {
       });
 
       // Create signed refund request
-      const signedRequest = await createSignedRefundRequest(
+      const { refundResponse, transactionHash } = await executeCompleteRefund(
+        otcClient,
         walletClient,
         selectedFailedSwap.id,
         refundAddress,
         "0" // Default fee of 0 - can be adjusted if needed
       );
 
-      console.log("[CLAIM REFUND] Signed request created:", {
-        payload: signedRequest.payload,
-        signatureLength: signedRequest.signature.length,
-        signaturePreview: signedRequest.signature.slice(0, 10),
-      });
-      console.log("[CLAIM REFUND] Sending to server...");
+      console.log("[CLAIM REFUND] refund processed, response:", refundResponse);
 
-      // Send refund request to server
-      const response = await otcClient.refundSwap(signedRequest);
-
-      console.log("[CLAIM REFUND] Server response:", response);
+      console.log("[CLAIM REFUND] Server response:", transactionHash);
 
       setRefundStatus("success");
       toastSuccess({
@@ -771,7 +886,8 @@ export const UserSwapHistory: React.FC = () => {
                   swap.flow[swap.flow.length - 1];
                 const isRefunded =
                   currentStep?.status === "refunding_user" ||
-                  currentStep?.status === "refunding_mm";
+                  currentStep?.status === "refunding_mm" ||
+                  (currentStep?.status as string) === "user_refunded_detected";
 
                 return (
                   <Flex

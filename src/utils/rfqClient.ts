@@ -6,6 +6,7 @@
 // Types matching the Rust server responses
 
 export type ChainType = "bitcoin" | "ethereum";
+export type ChainTypeBroadcast = "Bitcoin" | "Ethereum";
 
 export interface TokenIdentifier {
   type: "Native" | "Address";
@@ -83,22 +84,6 @@ export interface LiquidityResponse {
 
 export interface ErrorResponse {
   error: string;
-}
-
-export interface RefundPayload {
-  swap_id: string; // UUID as string
-  refund_recipient: string;
-  refund_transaction_fee: string; // U256 as string
-}
-
-export interface RefundSwapRequest {
-  payload: RefundPayload;
-  signature: number[]; // byte array (Vec<u8> in Rust)
-}
-
-export interface RefundSwapResponse {
-  success: boolean;
-  message?: string;
 }
 
 export interface RfqClientConfig {
@@ -229,16 +214,6 @@ export class RfqClient {
   }
 
   /**
-   * Request a refund for a failed swap
-   */
-  async refundSwap(request: RefundSwapRequest): Promise<RefundSwapResponse> {
-    return this.fetchWithTimeout<RefundSwapResponse>("/api/v1/refund", {
-      method: "POST",
-      body: request,
-    });
-  }
-
-  /**
    * Health check endpoint (alias for getStatus)
    */
   async healthCheck(): Promise<boolean> {
@@ -285,14 +260,6 @@ export const getConnectedMarketMakers =
  */
 export const getLiquidity = (client: RfqClient) => (): Promise<LiquidityResponse> =>
   client.getLiquidity();
-
-/**
- * Request a refund for a failed swap (functional style)
- */
-export const refundSwap =
-  (client: RfqClient) =>
-  (request: RefundSwapRequest): Promise<RefundSwapResponse> =>
-    client.refundSwap(request);
 
 /**
  * Health check (functional style)

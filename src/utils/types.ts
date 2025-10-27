@@ -163,7 +163,8 @@ export type AdminSwapFlowStatus =
   | "waiting_mm_deposit_confirmed"
   | "settled"
   | "refunding_user" // refund in progress to user
-  | "refunding_mm"; // refund in progress to market maker
+  | "refunding_mm" // refund in progress to market maker
+  | "user_refunded_detected"; // refund detected (balance withdrawn)
 
 export interface AdminSwapFlowStep {
   status: AdminSwapFlowStatus;
