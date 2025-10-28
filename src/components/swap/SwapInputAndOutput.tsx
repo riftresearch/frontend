@@ -196,6 +196,19 @@ export const SwapInputAndOutput = () => {
           setIsLoadingQuote(false);
           return;
         }
+
+        // Check if input value exceeds maximum BTC liquidity
+        if (
+          parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
+          usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
+        ) {
+          console.log("Input value exceeds maximum BTC liquidity");
+          setUniswapQuote(null);
+          setRfqQuote(null);
+          setOutputAmount("");
+          setIsLoadingQuote(false);
+          return;
+        }
       }
 
       try {
@@ -273,6 +286,7 @@ export const SwapInputAndOutput = () => {
       btcPrice,
       slippageBips,
       setFeeOverview,
+      liquidity,
     ]
   );
 
@@ -299,6 +313,19 @@ export const SwapInputAndOutput = () => {
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Output value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
+          setUniswapQuote(null);
+          setRfqQuote(null);
+          setRawInputAmount("");
+          setIsLoadingQuote(false);
+          return;
+        }
+
+        // Check if output value exceeds maximum BTC liquidity
+        if (
+          parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
+          usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
+        ) {
+          console.log("Output value exceeds maximum BTC liquidity");
           setUniswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
@@ -385,6 +412,7 @@ export const SwapInputAndOutput = () => {
       slippageBips,
       erc20Price,
       setFeeOverview,
+      liquidity,
     ]
   );
 
@@ -404,6 +432,53 @@ export const SwapInputAndOutput = () => {
       }
 
       if (!selectedInputToken) {
+        return;
+      }
+
+      // Calculate USD value for min swap and max liquidity checks
+      const amountValue = parseFloat(amountToQuote);
+      let usdValue = 0;
+
+      if (mode === "ExactInput") {
+        // Input is BTC
+        if (btcPrice) {
+          usdValue = amountValue * btcPrice;
+        }
+      } else {
+        // Output is ERC20
+        if (erc20Price) {
+          usdValue = amountValue * erc20Price;
+        }
+      }
+
+      // Check minimum swap threshold
+      if (btcPrice && !isAboveMinSwap(usdValue, btcPrice)) {
+        console.log("Value below minimum swap threshold");
+        setUniswapQuote(null);
+        setRfqQuote(null);
+        setIsLoadingQuote(false);
+        if (mode === "ExactInput") {
+          setOutputAmount("");
+        } else {
+          setRawInputAmount("");
+        }
+        return;
+      }
+
+      // Check maximum liquidity
+      if (
+        parseFloat(liquidity.maxCbBTCLiquidityInUsd) > 0 &&
+        usdValue > parseFloat(liquidity.maxCbBTCLiquidityInUsd)
+      ) {
+        console.log("Value exceeds maximum cbBTC liquidity");
+        setUniswapQuote(null);
+        setRfqQuote(null);
+        setIsLoadingQuote(false);
+        if (mode === "ExactInput") {
+          setOutputAmount("");
+        } else {
+          setRawInputAmount("");
+        }
         return;
       }
 
@@ -505,6 +580,8 @@ export const SwapInputAndOutput = () => {
       btcPrice,
       erc20Price,
       setFeeOverview,
+      liquidity,
+      selectedOutputToken?.decimals,
     ]
   );
 
