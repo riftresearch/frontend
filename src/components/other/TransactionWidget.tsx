@@ -6,13 +6,14 @@ import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toastSuccess, toastError } from "@/utils/toast";
+import router from "next/router";
 
 // Step configuration
 const steps = [
   {
     id: "1-WaitingUserDepositInitiated",
-    label: "AWAITING CBBTC DEPOSIT",
-    description: "Waiting for your CBBTC deposit...",
+    label: "AWAITING DEPOSIT",
+    description: "Waiting for your ERC-20 deposit...",
   },
   {
     id: "2-WaitingUserDepositConfirmed",
@@ -21,8 +22,8 @@ const steps = [
   },
   {
     id: "3-WaitingMMDepositInitiated",
-    label: "FINDING LIQUIDITY",
-    description: "Connecting to a market maker...",
+    label: "FILLING ORDER",
+    description: "A market maker is filling your order...",
   },
   {
     id: "4-WaitingMMDepositConfirmed",
@@ -45,13 +46,10 @@ function StepCarousel({ swapId }: { swapId?: string }) {
 
   // Check if we're in the settled state (step 4 or 5)
   const isSettled =
-    depositFlowState === "4-WaitingMMDepositConfirmed" ||
-    depositFlowState === "5-Settled";
+    depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
 
   // Find current step index
-  const currentStepIndex = steps.findIndex(
-    (step) => step.id === depositFlowState
-  );
+  const currentStepIndex = steps.findIndex((step) => step.id === depositFlowState);
 
   // Initialize carousel state based on current step (for direct page loads)
   useEffect(() => {
@@ -104,9 +102,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
           // For settled step, mark it complete after slide animation
           if (isSettled) {
             setTimeout(() => {
-              setCompletedSteps(
-                (prev) => new Set([...prev, steps[currentStepIndex].id])
-              );
+              setCompletedSteps((prev) => new Set([...prev, steps[currentStepIndex].id]));
               setTimeout(() => {
                 setShowButtons(true);
               }, 500);
@@ -129,13 +125,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
       }
     }
     setPreviousStepIndex(currentStepIndex);
-  }, [
-    currentStepIndex,
-    previousStepIndex,
-    isInitialized,
-    completedSteps,
-    isSettled,
-  ]);
+  }, [currentStepIndex, previousStepIndex, isInitialized, completedSteps, isSettled]);
 
   if (currentStepIndex === -1) return null;
 
@@ -177,7 +167,8 @@ function StepCarousel({ swapId }: { swapId?: string }) {
 
   const handleNewSwap = () => {
     // Reset to initial state for new swap
-    window.location.reload(); // Simple approach, could be more sophisticated
+    // redirect to home page
+    router.push("/");
   };
 
   return (
@@ -231,11 +222,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
               animate={{ opacity }}
               transition={{ duration: 0.8, ease: "easeOut" }}
             >
-              <Flex
-                direction="column"
-                alignItems="center"
-                justifyContent="center"
-              >
+              <Flex direction="column" alignItems="center" justifyContent="center">
                 {/* Title with checkmark/spinner on left side */}
                 <Flex alignItems="center" justifyContent="center" gap="12px">
                   {/* Loading Spinner or Checkmark - on the left side */}
@@ -286,12 +273,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
                           alignItems="center"
                           justifyContent="center"
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="white"
-                          >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                           </svg>
                         </Box>
@@ -318,11 +300,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
                     }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
                   >
-                    <Text
-                      fontFamily="Nostromo"
-                      fontWeight="bold"
-                      letterSpacing="1px"
-                    >
+                    <Text fontFamily="Nostromo" fontWeight="bold" letterSpacing="1px">
                       {step.label}
                     </Text>
                   </motion.div>
@@ -484,8 +462,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
   const currentSwapId = swapId || swapResponse?.swap_id;
   const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
   const isSettled =
-    depositFlowState === "4-WaitingMMDepositConfirmed" ||
-    depositFlowState === "5-Settled";
+    depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
   const showLoadingDots = countdownValue === 0 && !isSettled;
 
   return (
@@ -509,12 +486,10 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
         bottom: 0,
         borderRadius: "40px",
         padding: "3px",
-        background:
-          "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+        background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
         mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
         maskComposite: "xor",
-        WebkitMask:
-          "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+        WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
         WebkitMaskComposite: "xor",
       }}
     >
@@ -542,8 +517,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
             "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           maskComposite: "xor",
-          WebkitMask:
-            "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           WebkitMaskComposite: "xor",
         }}
       >

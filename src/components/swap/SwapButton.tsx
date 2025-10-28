@@ -66,6 +66,7 @@ export const SwapButton = () => {
     setPermitDataForSwap,
     approvalState,
     setApprovalState,
+    isOtcServerDead,
   } = useStore();
 
   // Wagmi hooks for contract interactions
@@ -861,23 +862,23 @@ export const SwapButton = () => {
       <Flex
         bg={colors.swapBgColor}
         _hover={{
-          bg: !isButtonLoading ? colors.swapHoverColor : undefined,
+          bg: !isButtonLoading && !isOtcServerDead ? colors.swapHoverColor : undefined,
         }}
         w="100%"
         mt="8px"
         transition="0.2s"
         h="58px"
-        onClick={isButtonLoading ? undefined : buttonConfig.handler}
+        onClick={isButtonLoading || isOtcServerDead ? undefined : buttonConfig.handler}
         fontSize="18px"
         align="center"
         userSelect="none"
-        cursor={!isButtonLoading ? "pointer" : "not-allowed"}
+        cursor={!isButtonLoading && !isOtcServerDead ? "pointer" : "not-allowed"}
         borderRadius="16px"
         justify="center"
         border="3px solid"
         borderColor={colors.swapBorderColor}
-        opacity={isButtonLoading ? 0.7 : 1}
-        pointerEvents={isButtonLoading ? "none" : "auto"}
+        opacity={isButtonLoading || isOtcServerDead ? 0.5 : 1}
+        pointerEvents={isButtonLoading || isOtcServerDead ? "none" : "auto"}
       >
         {buttonConfig.showSpinner && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
         <Text color={colors.offWhite} fontFamily="Nostromo">

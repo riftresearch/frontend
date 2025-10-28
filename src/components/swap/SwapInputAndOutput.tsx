@@ -49,6 +49,7 @@ export const SwapInputAndOutput = () => {
   const getQuoteForInputRef = useRef(true);
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
+  const [exceedsUserBalance, setExceedsUserBalance] = useState(false);
 
   // Refs
   const quoteRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -95,6 +96,7 @@ export const SwapInputAndOutput = () => {
     setSelectedOutputToken,
     setFeeOverview,
     feeOverview,
+    isOtcServerDead,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -1013,6 +1015,23 @@ export const SwapInputAndOutput = () => {
     setApprovalState(ApprovalState.UNKNOWN);
   }, [selectedInputToken, setApprovalState]);
 
+  // Check if input amount exceeds user balance
+  useEffect(() => {
+    if (!rawInputAmount || !currentInputBalance || parseFloat(rawInputAmount) <= 0) {
+      setExceedsUserBalance(false);
+      return;
+    }
+
+    const inputFloat = parseFloat(rawInputAmount);
+    const balanceFloat = parseFloat(currentInputBalance);
+
+    if (inputFloat > balanceFloat) {
+      setExceedsUserBalance(true);
+    } else {
+      setExceedsUserBalance(false);
+    }
+  }, [rawInputAmount, currentInputBalance]);
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -1057,7 +1076,7 @@ export const SwapInputAndOutput = () => {
               ml="-5px"
               p="0px"
               letterSpacing="-6px"
-              color={colors.offWhite}
+              color={exceedsUserBalance ? colors.red : colors.offWhite}
               _active={{ border: "none", boxShadow: "none", outline: "none" }}
               _focus={{ border: "none", boxShadow: "none", outline: "none" }}
               _selected={{
@@ -1070,19 +1089,58 @@ export const SwapInputAndOutput = () => {
               _placeholder={{
                 color: inputStyle?.light_text_color || "#4A90E2",
               }}
+              disabled={isOtcServerDead}
+              cursor={isOtcServerDead ? "not-allowed" : "text"}
+              opacity={isOtcServerDead ? 0.5 : 1}
             />
 
-            <Text
-              color={!rawInputAmount ? colors.offWhite : colors.textGray}
-              fontSize="14px"
-              mt="6px"
-              ml="1px"
-              letterSpacing="-1px"
-              fontWeight="normal"
-              fontFamily="Aux"
-            >
-              {inputUsdValue}
-            </Text>
+            <Flex>
+              {exceedsUserBalance ? (
+                <>
+                  <Text
+                    color={colors.redHover}
+                    fontSize="14px"
+                    mt="6px"
+                    ml="1px"
+                    mr="8px"
+                    letterSpacing="-1px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    {currentInputBalance && parseFloat(currentInputBalance) > 0
+                      ? "Exceeds available balance - "
+                      : "You don't have any of this token"}
+                  </Text>
+                  {currentInputBalance && parseFloat(currentInputBalance) > 0 && (
+                    <Text
+                      fontSize="14px"
+                      mt="7px"
+                      color={inputStyle?.border_color_light || colors.textGray}
+                      cursor="pointer"
+                      onClick={handleMaxClick}
+                      _hover={{ textDecoration: "underline" }}
+                      letterSpacing="-1.5px"
+                      fontWeight="normal"
+                      fontFamily="Aux"
+                    >
+                      {parseFloat(currentInputBalance).toFixed(4)} {currentInputTicker} Max
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text
+                  color={!rawInputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  mt="6px"
+                  ml="1px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                >
+                  {inputUsdValue}
+                </Text>
+              )}
+            </Flex>
           </Flex>
 
           <Spacer />
@@ -1228,6 +1286,9 @@ export const SwapInputAndOutput = () => {
               _placeholder={{
                 color: outputStyle?.light_text_color || "#805530",
               }}
+              disabled={isOtcServerDead}
+              cursor={isOtcServerDead ? "not-allowed" : "text"}
+              opacity={isOtcServerDead ? 0.5 : 1}
             />
 
             <Text

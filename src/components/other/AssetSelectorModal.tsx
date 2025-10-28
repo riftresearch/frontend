@@ -658,6 +658,38 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   </Text>
                 </Flex>
               </Box>
+            ) : searchResults.length === 0 && debouncedQuery.length > 0 ? (
+              <Box mx="12px">
+                <Flex
+                  direction="column"
+                  align="center"
+                  justify="center"
+                  h="120px"
+                  borderRadius="12px"
+                  bg="#131313"
+                  px="20px"
+                  gap="8px"
+                >
+                  <Text
+                    fontSize="16px"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    color={colors.offWhite}
+                    fontWeight="bold"
+                    textAlign="center"
+                  >
+                    No results found
+                  </Text>
+                  <Text
+                    fontSize="14px"
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    color={colors.textGray}
+                    textAlign="center"
+                    lineHeight="1.5"
+                  >
+                    Try searching by token name or paste a contract address
+                  </Text>
+                </Flex>
+              </Box>
             ) : (
               searchResults.map((token, index) => (
                 <Box

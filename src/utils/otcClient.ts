@@ -5,6 +5,7 @@
 
 import { randomBytes } from "crypto";
 import { Quote } from "./rfqClient";
+import { useStore } from "./store";
 
 // Types matching the Rust server structures
 
@@ -147,6 +148,11 @@ export class OTCServerClient {
       if (!response.ok) {
         const errorText = await response.text();
         console.log("OTC Server Error:", errorText); // TODO: auto refresh the MM quote if this happens
+
+        // Set OTC server dead flag on error
+        const { setIsOtcServerDead } = useStore.getState();
+        setIsOtcServerDead(true);
+
         throw new OTCServerError(response.status, response.statusText, errorText);
       }
 
@@ -161,6 +167,11 @@ export class OTCServerClient {
       if (error instanceof OTCServerError) {
         throw error;
       }
+
+      // Set OTC server dead flag on timeout or network errors
+      const { setIsOtcServerDead } = useStore.getState();
+      setIsOtcServerDead(true);
+
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error(`Request timeout after ${this.timeout}ms`);
       }

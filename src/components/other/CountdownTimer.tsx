@@ -15,14 +15,11 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   const [previousState, setPreviousState] = useState("0-not-started");
   const [showTimer, setShowTimer] = useState(false);
   const [hideNumber, setHideNumber] = useState(false);
-  const [initialCountdownValue, setInitialCountdownValue] = useState(60); // Track the starting value
+  const [initialCountdownValue, setInitialCountdownValue] = useState(120); // Track the starting value
 
   useEffect(() => {
     // Reset progress only when starting fresh from state 0
-    if (
-      depositFlowState === "1-WaitingUserDepositInitiated" &&
-      previousState === "0-not-started"
-    ) {
+    if (depositFlowState === "1-WaitingUserDepositInitiated" && previousState === "0-not-started") {
       // Capture the initial countdown value for progress calculations
       setInitialCountdownValue(countdownValue);
       // Trigger entrance animation
@@ -65,8 +62,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
 
   // Smooth progress animation
   useEffect(() => {
-    const targetProgress =
-      countdownValue <= 0 ? 0 : (countdownValue / initialCountdownValue) * 100;
+    const targetProgress = countdownValue <= 0 ? 0 : (countdownValue / initialCountdownValue) * 100;
     const startProgress =
       countdownValue <= 0
         ? (1 / initialCountdownValue) * 100 // Start from 1 when going to 0
@@ -85,8 +81,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
 
       // Smooth easing
       const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const currentProgress =
-        startProgress - (startProgress - targetProgress) * easeProgress;
+      const currentProgress = startProgress - (startProgress - targetProgress) * easeProgress;
 
       setSmoothProgress(currentProgress);
 

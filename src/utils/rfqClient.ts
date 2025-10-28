@@ -3,6 +3,8 @@
  * Provides async/functional/declarative access to quote aggregation services
  */
 
+import { useStore } from "./store";
+
 // Types matching the Rust server responses
 
 export type ChainType = "bitcoin" | "ethereum";
@@ -159,6 +161,10 @@ export class RfqClient {
           errorResponse = { error: response.statusText };
         }
 
+        // Set OTC server dead flag on error
+        const { setIsOtcServerDead } = useStore.getState();
+        setIsOtcServerDead(true);
+
         throw new RfqClientError(
           errorResponse?.error ?? `HTTP ${response.status}`,
           response.status,
@@ -171,6 +177,11 @@ export class RfqClient {
       if (error instanceof RfqClientError) {
         throw error;
       }
+
+      // Set OTC server dead flag on timeout or network errors
+      const { setIsOtcServerDead } = useStore.getState();
+      setIsOtcServerDead(true);
+
       if (error instanceof Error && error.name === "AbortError") {
         throw new RfqClientError(`Request timeout after ${this.timeout}ms`);
       }

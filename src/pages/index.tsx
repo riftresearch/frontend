@@ -11,9 +11,11 @@ import { FONT_FAMILIES } from "@/utils/font";
 import OrangeText from "@/components/other/OrangeText";
 import { useStore } from "@/utils/store";
 import { useRouter } from "next/router";
+import { MaintenanceBanner } from "@/components/other/MaintenanceBanner";
 
 export default function Home() {
   const { isTablet, isMobile } = useWindowSize();
+  const { isOtcServerDead } = useStore();
   const { swapResponse, transactionConfirmed } = useStore();
   const router = useRouter();
   const [isLocalhost, setIsLocalhost] = React.useState(false);
@@ -116,6 +118,7 @@ export default function Home() {
           <SwapWidget />
         </Flex>
         <TEEStatusFooter />
+        {isOtcServerDead && <MaintenanceBanner />}
       </Flex>
     </>
   );

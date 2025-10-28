@@ -22,6 +22,7 @@ import {
   MaxAllowanceTransferAmount,
   type PermitSingle,
 } from "@uniswap/permit2-sdk";
+import { useStore } from "./store";
 
 /**
  * Minimum swap amount in satoshis
@@ -292,6 +293,11 @@ export async function callRFQ(
       });
     } catch (error) {
       console.error("RFQ request failed:", error);
+
+      // Set OTC server dead flag on error
+      const { setIsOtcServerDead } = useStore.getState();
+      setIsOtcServerDead(true);
+
       toastInfo({
         title: "Quote Request Failed",
       });
@@ -325,6 +331,10 @@ export async function callRFQ(
     return quote;
   } catch (error: unknown) {
     console.error("RFQ request failed:", error);
+
+    // Set OTC server dead flag on error
+    const { setIsOtcServerDead } = useStore.getState();
+    setIsOtcServerDead(true);
 
     // Normalize error message
     const description = (() => {
