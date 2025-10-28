@@ -33,12 +33,12 @@ function LiquidityIndicator({ label, usdValue, isLoading, isError }: LiquidityIn
   };
 
   return (
-    <Flex align="center" gap="4px">
-      <Text fontSize="10px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
+    <Flex align="center" gap="4px" letterSpacing="-0.5px">
+      <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
         {label}:
       </Text>
       <Text
-        fontSize="10px"
+        fontSize="11px"
         color={getStatusColor()}
         fontFamily={FONT_FAMILIES.AUX_MONO}
         fontWeight="bold"
@@ -196,7 +196,7 @@ export function TEEStatusFooter() {
             fontWeight="bold"
             letterSpacing="0.5px"
           >
-            MAX LIQUIDITY
+            MAX LIQUIDITY:
           </Text>
 
           <LiquidityIndicator

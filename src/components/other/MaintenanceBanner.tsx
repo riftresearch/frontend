@@ -26,6 +26,7 @@ export const MaintenanceBanner = () => {
           borderRadius="50%"
           bg="#FFF"
           animation="pulse 2s ease-in-out infinite"
+          // @ts-ignore
           sx={{
             "@keyframes pulse": {
               "0%, 100%": {

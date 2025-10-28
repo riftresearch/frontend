@@ -414,6 +414,7 @@ export const SwapInputAndOutput = () => {
       slippageBips,
       erc20Price,
       setFeeOverview,
+      liquidity,
     ]
   );
 
@@ -587,6 +588,8 @@ export const SwapInputAndOutput = () => {
       btcPrice,
       erc20Price,
       setFeeOverview,
+      liquidity,
+      selectedOutputToken?.decimals,
     ]
   );
 
