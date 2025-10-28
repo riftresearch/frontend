@@ -616,7 +616,8 @@ export const SwapInputAndOutput = () => {
     setOutputAmount("");
     setInputUsdValue(ZERO_USD_DISPLAY);
     setOutputUsdValue(ZERO_USD_DISPLAY);
-
+    setHasNoRoutesError(false);
+    setFeeOverview(null);
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
     setHasStartedTyping(false);
