@@ -52,6 +52,7 @@ export const SwapButton = () => {
     selectedInputToken,
     evmConnectWalletChainId,
     rawInputAmount,
+    fullPrecisionInputAmount,
     outputAmount,
     isSwappingForBTC,
     uniswapQuote,
@@ -148,7 +149,9 @@ export const SwapButton = () => {
       return true; // No permit allowance info yet, assume needs permit
     }
 
-    const sellAmount = parseUnits(rawInputAmount, selectedInputToken.decimals);
+    // Use full precision amount if available, otherwise use displayed amount
+    const amountToCheck = fullPrecisionInputAmount || rawInputAmount;
+    const sellAmount = parseUnits(amountToCheck, selectedInputToken.decimals);
     const currentTime = Math.floor(Date.now() / 1000);
     const expirationThreshold = currentTime + 5 * 60; // 5 minutes from now
 
@@ -157,7 +160,14 @@ export const SwapButton = () => {
       BigInt(permitAllowance.amount) < sellAmount ||
       Number(permitAllowance.expiration) < expirationThreshold
     );
-  }, [isNativeETH, selectedInputToken, rawInputAmount, permitAllowance, permitDataForSwap]);
+  }, [
+    isNativeETH,
+    selectedInputToken,
+    rawInputAmount,
+    fullPrecisionInputAmount,
+    permitAllowance,
+    permitDataForSwap,
+  ]);
 
   // Handle Permit2 signature
   const signPermit2 = useCallback(async () => {
@@ -284,7 +294,9 @@ export const SwapButton = () => {
 
       // Step 2: Initiate ERC20 transfer of cbBTC to deposit address
       const decimals = selectedInputToken.decimals;
-      const transferAmount = parseUnits(rawInputAmount, decimals);
+      // Use full precision amount if available, otherwise use displayed amount
+      const amountToTransfer = fullPrecisionInputAmount || rawInputAmount;
+      const transferAmount = parseUnits(amountToTransfer, decimals);
 
       console.log("Initiating cbBTC transfer to deposit address...");
 

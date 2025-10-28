@@ -31,6 +31,8 @@ export const useStore = create<{
   setIsSwappingForBTC: (value: boolean) => void;
   rawInputAmount: string;
   setRawInputAmount: (value: string) => void;
+  fullPrecisionInputAmount: string | null;
+  setFullPrecisionInputAmount: (value: string | null) => void;
   outputAmount: string;
   setOutputAmount: (value: string) => void;
   searchResults: TokenData[];
@@ -97,6 +99,8 @@ export const useStore = create<{
   setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
   rawInputAmount: "",
   setRawInputAmount: (value: string) => set({ rawInputAmount: value }),
+  fullPrecisionInputAmount: null,
+  setFullPrecisionInputAmount: (value: string | null) => set({ fullPrecisionInputAmount: value }),
   outputAmount: "",
   setOutputAmount: (value: string) => set({ outputAmount: value }),
   searchResults: [],
