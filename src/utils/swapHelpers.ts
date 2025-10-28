@@ -12,7 +12,7 @@ import {
   PERMIT2_ADDRESS,
   UNIVERSAL_ROUTER_ADDRESS,
 } from "./constants";
-import { Quote, formatLotAmount, RfqClientError } from "./rfqClient";
+import { Quote, formatLotAmount, RfqClientError, Currency } from "./rfqClient";
 import { createUniswapRouter, UniswapQuoteResponse, UniswapRouterError } from "./uniswapRouter";
 import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
@@ -82,16 +82,38 @@ const DEFAULT_SLIPPAGE_BPS = 10; // 0.1% = 10 basis points
 
 /**
  * Response from ERC20 to BTC quote combining Uniswap and RFQ
+ * Supports both exact input and exact output modes
  */
 export interface ERC20ToBTCQuoteResponse {
-  /** Uniswap quote with pricing information */
-  uniswapQuote: UniswapQuoteResponse;
-  /** Final BTC output amount (formatted string) */
-  btcOutputAmount: string;
+  /** Uniswap quote with pricing information (optional for cbBTC direct swaps) */
+  uniswapQuote?: UniswapQuoteResponse;
+  /** Final BTC output amount (formatted string) - for exact input mode */
+  btcOutputAmount?: string;
+  /** Required ERC20/ETH input amount (formatted string) - for exact output mode */
+  erc20InputAmount?: string;
   /** RFQ quote for cbBTC -> BTC (needed for OTC swap creation) */
   rfqQuote: Quote;
   /** Earliest expiration timestamp */
   expiresAt: Date;
+}
+
+/**
+ * Fee breakdown overview for a swap
+ */
+export interface FeeOverview {
+  networkFee: {
+    fee: string;
+    description: string;
+  };
+  erc20Fee: {
+    fee: string;
+    description: string;
+  };
+  protocolFee: {
+    fee: string;
+    description: string;
+  };
+  totalFees: string;
 }
 
 /**
@@ -107,6 +129,60 @@ export function applySlippage(amount: bigint | string, slippageBps?: number): st
   const slippageMultiplier = 1 - slippage / 10000;
 
   return ((amountBigInt * BigInt(Math.floor(slippageMultiplier * 10000))) / 10000n).toString();
+}
+
+/**
+ * Calculate fee breakdown for a swap
+ *
+ * @param rfqNetworkFee - Network fee in satoshis from RFQ
+ * @param rfqProtocolFee - Protocol fee in satoshis from RFQ
+ * @param cbBTCOut - cbBTC output amount (in base units)
+ * @param erc20In - ERC20 input amount (in base units)
+ * @param erc20Price - Price of ERC20 token in USD
+ * @param bitcoinPrice - Price of Bitcoin in USD
+ * @returns Fee breakdown with USD values
+ */
+export function calculateFees(
+  rfqNetworkFee: number,
+  rfqProtocolFee: number,
+  cbBTCOut: string,
+  erc20In: string,
+  erc20Price: number,
+  bitcoinPrice: number,
+  decimals: number
+): FeeOverview {
+  // Convert network fee from satoshis to BTC and then to USD
+  const networkFeeBTC = parseFloat(formatUnits(BigInt(rfqNetworkFee), BITCOIN_DECIMALS));
+  const networkFeeUSD = networkFeeBTC * bitcoinPrice;
+
+  // Convert protocol fee from satoshis to BTC and then to USD
+  const protocolFeeBTC = parseFloat(formatUnits(BigInt(rfqProtocolFee), BITCOIN_DECIMALS));
+  const protocolFeeUSD = protocolFeeBTC * bitcoinPrice;
+
+  // Calculate ERC20 fee: erc20In * erc20Price - cbBTCOut * bitcoinPrice
+  const erc20InValue = parseFloat(formatUnits(BigInt(erc20In), decimals)) * erc20Price;
+  const cbBTCOutValue = parseFloat(formatUnits(BigInt(cbBTCOut), BITCOIN_DECIMALS)) * bitcoinPrice;
+  const erc20FeeUSD = erc20InValue - cbBTCOutValue;
+
+  // Calculate total fees
+  const totalFeesUSD = networkFeeUSD + protocolFeeUSD + erc20FeeUSD;
+  const feeOverview: FeeOverview = {
+    networkFee: {
+      fee: formatUsdValue(networkFeeUSD),
+      description: "Network fee",
+    },
+    erc20Fee: {
+      fee: formatUsdValue(erc20FeeUSD),
+      description: "Erc20 swap fee",
+    },
+    protocolFee: {
+      fee: formatUsdValue(protocolFeeUSD),
+      description: "Protocol fee",
+    },
+    totalFees: formatUsdValue(totalFeesUSD),
+  };
+  console.log("feeOverview", feeOverview);
+  return feeOverview;
 }
 
 /**
@@ -150,12 +226,33 @@ export function getMinSwapValueUsd(bitcoinPrice: number): number {
  * @param mode - "ExactInput" for specifying cbBTC input, "ExactOutput" for specifying BTC output
  * @returns Quote object or null if failed
  */
-export async function getCBBTCtoBTCQuote(
+export async function callRFQ(
   amount: string,
-  mode: "ExactInput" | "ExactOutput" = "ExactInput"
+  mode: "ExactInput" | "ExactOutput" = "ExactInput",
+  isSwappingForBTC: boolean
 ): Promise<Quote | null> {
   // Check if FAKE_RFQ mode is enabled
   const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
+
+  const CBBTC_CURRENCY = {
+    chain: "ethereum",
+    decimals: 8,
+    token: {
+      type: "Address",
+      data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+    },
+  } as Currency;
+
+  const BTC_CURRENCY = {
+    chain: "bitcoin",
+    decimals: 8,
+    token: {
+      type: "Native",
+    },
+  } as Currency;
+
+  const fromCurrency = isSwappingForBTC ? CBBTC_CURRENCY : BTC_CURRENCY;
+  const toCurrency = isSwappingForBTC ? BTC_CURRENCY : CBBTC_CURRENCY;
 
   if (FAKE_RFQ) {
     // console.log(`FAKE_RFQ mode enabled - returning dummy quote (${mode})`);
@@ -163,24 +260,11 @@ export async function getCBBTCtoBTCQuote(
       id: "123e4567-e89b-12d3-a456-426614174000",
       market_maker_id: "987f6543-e21c-43d2-b654-426614174111",
       from: {
-        currency: {
-          chain: "ethereum",
-          decimals: 8,
-          token: {
-            type: "Address",
-            data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-          },
-        },
+        currency: fromCurrency,
         amount: amount, // 1:1 for testing
       },
       to: {
-        currency: {
-          chain: "bitcoin",
-          decimals: 8,
-          token: {
-            type: "Native",
-          },
-        },
+        currency: toCurrency,
         amount: amount, // 1:1 for testing
       },
       fee_schedule: {
@@ -203,22 +287,8 @@ export async function getCBBTCtoBTCQuote(
       quoteResponse = await rfqClient.requestQuotes({
         mode,
         amount,
-        from: {
-          chain: "ethereum",
-          decimals: 8,
-          token: {
-            type: "Address",
-            // NOTE: Addresses right now need to be checksummed
-            data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-          },
-        },
-        to: {
-          chain: "bitcoin",
-          decimals: 8,
-          token: {
-            type: "Native",
-          },
-        },
+        from: fromCurrency,
+        to: toCurrency,
       });
     } catch (error) {
       console.error("RFQ request failed:", error);
@@ -250,7 +320,7 @@ export async function getCBBTCtoBTCQuote(
 
     // if we're here, we have a success quote
     const quote = (quoteResponse as any).quote.data;
-    // console.log("got quote from RFQ", quoteResponse, "in", timeTaken, "ms");
+    console.log("got quote from RFQ", quoteResponse, "in", timeTaken, "ms");
 
     return quote;
   } catch (error: unknown) {
@@ -282,6 +352,7 @@ export async function getCBBTCtoBTCQuote(
 /**
  * Get combined quote for ERC20/ETH -> BTC
  * This combines Uniswap (ERC20 -> cbBTC) with RFQ (cbBTC -> BTC)
+ * For cbBTC input, skips Uniswap and goes direct to RFQ
  */
 export async function getERC20ToBTCQuote(
   sellToken: string,
@@ -292,6 +363,33 @@ export async function getERC20ToBTCQuote(
   validFor?: number
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
+    // Check if input token is cbBTC
+    const isCbBTC = sellToken.toLowerCase() === "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf";
+
+    if (isCbBTC) {
+      // For cbBTC, skip Uniswap and go directly to RFQ
+      console.log("Input is cbBTC, using direct RFQ quote");
+
+      const rfqQuote = await callRFQ(amountIn, "ExactInput", true);
+
+      if (!rfqQuote) {
+        throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
+      }
+
+      // Format BTC output amount
+      const btcOutputAmount = formatLotAmount(rfqQuote.to);
+      const expiresAt = new Date(rfqQuote.expires_at);
+
+      console.log("Input is cbBTC, returning direct quote:", btcOutputAmount);
+
+      return {
+        btcOutputAmount,
+        rfqQuote,
+        expiresAt,
+      };
+    }
+
+    // For non-cbBTC tokens, use Uniswap + RFQ flow
     const uniswapRouter = createUniswapRouter();
 
     // Step 1: Get Uniswap quote for ERC20/ETH -> cbBTC
@@ -316,7 +414,7 @@ export async function getERC20ToBTCQuote(
     // console.log("Adjusted cbBTC amount after slippage:", adjustedCbBTCAmount);
 
     // Step 2: Get RFQ quote for cbBTC -> BTC using adjusted amount
-    const rfqQuote = await getCBBTCtoBTCQuote(adjustedCbBTCAmount, "ExactInput");
+    const rfqQuote = await callRFQ(adjustedCbBTCAmount, "ExactInput", true);
 
     if (!rfqQuote) {
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -415,20 +513,6 @@ export function convertInputAmountToFullDecimals(
 }
 
 /**
- * Response from ERC20 to BTC quote (exact output) combining RFQ and Uniswap
- */
-export interface ERC20ToBTCQuoteExactOutputResponse {
-  /** Uniswap quote with pricing information (if needed) */
-  uniswapQuote?: UniswapQuoteResponse;
-  /** Required ERC20/ETH input amount (formatted string) */
-  erc20InputAmount: string;
-  /** RFQ quote for cbBTC -> BTC (needed for OTC swap creation) */
-  rfqQuote: Quote;
-  /** Earliest expiration timestamp */
-  expiresAt: Date;
-}
-
-/**
  * Apply slippage for exact output (increases input amount)
  *
  * @param amount - The input amount to apply slippage to (as BigInt or string)
@@ -453,7 +537,7 @@ export async function getERC20ToBTCQuoteExactOutput(
   userAddress: string,
   slippageBps?: number,
   validFor?: number
-): Promise<ERC20ToBTCQuoteExactOutputResponse | null> {
+): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     if (!selectedInputToken) {
       throw new Error("No input token selected");
@@ -465,7 +549,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     // Step 1: Get RFQ quote for cbBTC -> BTC using exact output mode
     // console.log("Getting RFQ quote (exact output) for", btcAmountInSats, "sats BTC");
 
-    const rfqQuoteData = await getCBBTCtoBTCQuote(btcAmountInSats, "ExactOutput");
+    const rfqQuoteData = await callRFQ(btcAmountInSats, "ExactOutput", true);
 
     if (!rfqQuoteData) {
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -515,7 +599,7 @@ export async function getERC20ToBTCQuoteExactOutput(
       // router: "v3",
     });
 
-    console.log("uniswapQuote", uniswapQuote);
+    // console.log("uniswapQuote", uniswapQuote);
 
     // For exact output, the API returns the required input amount in amountIn field (with slippage already applied)
     const erc20AmountNeeded = uniswapQuote.amountIn;
@@ -563,24 +647,20 @@ export async function getERC20ToBTCQuoteExactOutput(
 }
 
 /**
- * Calculate USD value for an amount based on swap direction and token prices
+ * Calculate USD value for an amount based on token ticker
  * @param amount - The amount to calculate USD value for
- * @param isSwappingForBTC - Whether we're swapping for BTC (true) or from BTC (false)
- * @param selectedInputToken - The selected input token (for ERC20 price lookup)
+ * @param ticker - The token ticker (e.g., "BTC", "ETH", "USDC")
  * @param ethPrice - Current ETH price in USD
  * @param btcPrice - Current BTC price in USD
  * @param erc20Price - Current ERC20 token price in USD (optional)
- * @param isInputField - Whether this is for the input field (true) or output field (false)
  * @returns Formatted USD value string
  */
 export function calculateUsdValue(
   amount: string,
-  isSwappingForBTC: boolean,
-  selectedInputToken: TokenData | null,
+  ticker: string,
   ethPrice: number | null,
   btcPrice: number | null,
-  erc20Price: number | null,
-  isInputField: boolean
+  erc20Price: number | null
 ): string {
   const parsed = parseFloat(amount);
 
@@ -590,32 +670,14 @@ export function calculateUsdValue(
 
   let price: number | null = null;
 
-  if (isInputField) {
-    // Input field logic
-    if (isSwappingForBTC) {
-      // Input is ERC20 or ETH
-      if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
-        price = ethPrice;
-      } else if (selectedInputToken.address) {
-        price = erc20Price;
-      }
-    } else {
-      // Input is BTC
-      price = btcPrice;
-    }
+  if (ticker === "BTC") {
+    price = btcPrice;
+  } else if (ticker === "ETH") {
+    price = ethPrice;
+  } else if (ticker === "cbBTC") {
+    price = btcPrice;
   } else {
-    // Output field logic
-    if (isSwappingForBTC) {
-      // Output is BTC
-      price = btcPrice;
-    } else {
-      // Output is ERC20 or ETH
-      if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
-        price = ethPrice;
-      } else if (selectedInputToken.address) {
-        price = erc20Price;
-      }
-    }
+    price = erc20Price;
   }
 
   if (price === null) {
@@ -623,6 +685,69 @@ export function calculateUsdValue(
   }
 
   return formatUsdValue(parsed * price);
+}
+
+/**
+ * Calculate exchange rate normalized to 1 BTC with USD value
+ * @param isSwappingForBTC - Whether swapping for BTC (true) or from BTC (false)
+ * @param inputAmount - Input amount (already formatted as decimal string)
+ * @param outputAmount - Output amount (already formatted as decimal string)
+ * @param ethPrice - Current ETH price in USD
+ * @param btcPrice - Current BTC price in USD
+ * @param erc20Price - Current ERC20 token price in USD (optional)
+ * @param ticker - Token ticker for the non-BTC asset
+ * @param decimals - Token decimals for the non-BTC asset
+ * @returns Formatted exchange rate string: "1 BTC = X ticker ($Y)"
+ */
+export function calculateExchangeRate(
+  isSwappingForBTC: boolean,
+  inputAmount: string,
+  outputAmount: string,
+  ethPrice: number | null,
+  btcPrice: number | null,
+  erc20Price: number | null,
+  ticker: string
+): string {
+  const inputParsed = parseFloat(inputAmount);
+  const outputParsed = parseFloat(outputAmount);
+
+  // Validate inputs
+  if (
+    !inputAmount ||
+    !outputAmount ||
+    !Number.isFinite(inputParsed) ||
+    !Number.isFinite(outputParsed) ||
+    inputParsed <= 0 ||
+    outputParsed <= 0
+  ) {
+    return `1 BTC = -- ${ticker}`;
+  }
+
+  let exchangeRate: number;
+
+  if (isSwappingForBTC) {
+    // Swapping for BTC: input is ERC20/ETH, output is BTC
+    // Calculate how much input needed for 1 BTC
+    exchangeRate = inputParsed / outputParsed;
+  } else {
+    // Swapping from BTC: input is BTC, output is ERC20/ETH
+    // Calculate how much output received for 1 BTC
+    exchangeRate = outputParsed / inputParsed;
+  }
+
+  // Format to 6 decimal places
+  const formattedRate = exchangeRate.toFixed(5);
+
+  // Calculate USD value of the exchange rate
+  const usdValue = calculateUsdValue(
+    exchangeRate.toString(),
+    ticker,
+    ethPrice,
+    btcPrice,
+    erc20Price
+  );
+
+  return `1 BTC = ${formattedRate} ${ticker} (${usdValue})`;
 }
 
 /**

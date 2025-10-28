@@ -191,7 +191,6 @@ export class RfqClient {
    * Request quotes from connected market makers
    */
   async requestQuotes(request: QuoteRequest): Promise<QuoteResponse> {
-    console.log("requestQuotes", request);
     return this.fetchWithTimeout<QuoteResponse>("/api/v1/quotes/request", {
       method: "POST",
       body: request,

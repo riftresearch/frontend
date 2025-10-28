@@ -157,89 +157,6 @@ export const SwapButton = () => {
     );
   }, [isNativeETH, selectedInputToken, rawInputAmount, permitAllowance, permitDataForSwap]);
 
-  // Send OTC request to create swap
-  const sendOTCRequest = useCallback(
-    async (quote: Quote, user_destination_address: string, user_evm_account_address: string) => {
-      const currentTime = new Date().getTime();
-      const swap = await otcClient.createSwap({
-        quote,
-        user_destination_address,
-        user_evm_account_address,
-        metadata: selectedInputToken
-          ? {
-              affiliate: "app.rift.trade",
-              startAsset: `${selectedInputToken.ticker}:${selectedInputToken.address || "native"}:${selectedInputToken.icon}`,
-            }
-          : undefined,
-      });
-      const timeTaken = new Date().getTime() - currentTime;
-
-      console.log("got swap from OTC", swap, "in", timeTaken, "ms");
-      if (swap) {
-        setSwapResponse(swap);
-      }
-      console.log("Returned swap request", swap);
-      // hex to string bigint
-      const amount = BigInt(swap.expected_amount);
-      console.log("amount", amount);
-      // okay, now we need to request money to be sent from the user to the created swap
-      if (swap.deposit_chain === "Ethereum") {
-        try {
-          const gasParams = await fetchGasParams(evmConnectWalletChainId);
-          console.log(
-            "Gas params for cbBTC transfer:",
-            gasParams
-              ? {
-                  maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
-                  maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
-                }
-              : undefined
-          );
-          writeContract({
-            address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-            abi: erc20Abi,
-            functionName: "transfer",
-            args: [swap.deposit_address as `0x${string}`, amount],
-            ...(gasParams && {
-              maxFeePerGas: gasParams.maxFeePerGas,
-              maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-            }),
-          });
-        } catch (error) {
-          console.error("writeContract error caught:", error);
-          // Error will be handled by the writeError useEffect
-        }
-      } else if (swap.deposit_chain === "Bitcoin") {
-        // Generate Bitcoin URI and show QR code
-        const amountInBTC = Number(amount) / Math.pow(10, swap.decimals);
-        const bitcoinUri = generateBitcoinURI(
-          swap.deposit_address,
-          amountInBTC,
-          "Rift Exchange Swap"
-        );
-
-        setBitcoinDepositInfo({
-          address: swap.deposit_address,
-          amount: amountInBTC,
-          uri: bitcoinUri,
-        });
-
-        // Show success toast for Bitcoin deposit setup
-        toastSuccess({
-          title: "Bitcoin Deposit Ready",
-          description: "Scan the QR code or send Bitcoin to the address below",
-        });
-      } else {
-        toastInfo({
-          title: "Invalid deposit chain",
-          description: "Frontend does not not support this deposit chain",
-        });
-        return;
-      }
-    },
-    [evmConnectWalletChainId, setSwapResponse, setBitcoinDepositInfo, writeContract]
-  );
-
   // Handle Permit2 signature
   const signPermit2 = useCallback(async () => {
     console.log("signPermit2", selectedInputToken?.address);
@@ -249,6 +166,7 @@ export const SwapButton = () => {
     }
 
     try {
+      setSwapButtonPressed(true);
       setIsSigningPermit(true);
 
       // Clear old permit data before signing new one
@@ -280,6 +198,7 @@ export const SwapButton = () => {
       });
     } finally {
       setIsSigningPermit(false);
+      setSwapButtonPressed(false);
     }
   }, [
     selectedInputToken,
@@ -298,6 +217,7 @@ export const SwapButton = () => {
     }
 
     try {
+      setSwapButtonPressed(true);
       setApprovalState(ApprovalState.APPROVING);
       setIsApprovingToken(true);
       console.log("Approving Permit2 for token:", selectedInputToken.address);
@@ -321,6 +241,7 @@ export const SwapButton = () => {
       console.error("Permit2 approval failed:", error);
       setApprovalState(ApprovalState.NEEDS_APPROVAL);
       setIsApprovingToken(false);
+      setSwapButtonPressed(false);
       toastError(error, {
         title: "Approval Failed",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -568,6 +489,67 @@ export const SwapButton = () => {
     setPermitDataForSwap,
   ]);
 
+  // Handle BTC->cbBTC swap using OTC
+  const executeBTCtoCBBTCSwap = useCallback(async () => {
+    if (!rfqQuote || !userEvmAccountAddress || !selectedInputToken) {
+      toastError(new Error("Missing quote data"), {
+        title: "Swap Failed",
+        description: "Please refresh the quote and try again",
+      });
+      return;
+    }
+
+    try {
+      // Step 1: Create OTC swap to get Bitcoin deposit address
+      console.log("Creating OTC swap for BTC->cbBTC...");
+      const otcSwap = await otcClient.createSwap({
+        quote: rfqQuote,
+        user_destination_address: userEvmAccountAddress,
+        user_evm_account_address: userEvmAccountAddress,
+        metadata: {
+          affiliate: "app.rift.trade",
+          startAsset: "native:BTC",
+        },
+      });
+
+      console.log("OTC swap created:", otcSwap);
+
+      // Store swap response in state
+      setSwapResponse(otcSwap);
+
+      // Step 2: Generate Bitcoin URI and show QR code
+      const amount = BigInt(otcSwap.expected_amount);
+      const amountInBTC = Number(amount) / Math.pow(10, otcSwap.decimals);
+      const bitcoinUri = generateBitcoinURI(otcSwap.deposit_address, amountInBTC, "Rift Swap");
+
+      setBitcoinDepositInfo({
+        address: otcSwap.deposit_address,
+        amount: amountInBTC,
+        uri: bitcoinUri,
+      });
+
+      // Show success toast for Bitcoin deposit setup
+      toastSuccess({
+        title: "Bitcoin Deposit Ready",
+        description: "Scan the QR code or send Bitcoin to the address below",
+      });
+    } catch (error) {
+      console.error("BTC->cbBTC swap failed:", error);
+
+      toastError(error, {
+        title: "Swap Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }, [
+    rfqQuote,
+    userEvmAccountAddress,
+    selectedInputToken,
+    payoutAddress,
+    setSwapResponse,
+    setBitcoinDepositInfo,
+  ]);
+
   // Main swap handler - routes to appropriate swap function
   const startSwap = useCallback(async () => {
     try {
@@ -599,20 +581,16 @@ export const SwapButton = () => {
         return;
       }
 
-      if (!payoutAddress) {
+      if (!payoutAddress && isSwappingForBTC) {
         toastInfo({
           title: isSwappingForBTC ? "Enter Bitcoin Address" : "Enter Ethereum Address",
-          description: isSwappingForBTC
-            ? "Please enter your Bitcoin address to receive BTC"
-            : "Please enter your Ethereum address to receive cbBTC",
+          description: "Please enter your Bitcoin address to receive BTC",
         });
         return;
       }
 
-      if (!addressValidation.isValid) {
-        let description = isSwappingForBTC
-          ? "Please enter a valid Bitcoin payout address"
-          : "Please enter a valid Ethereum address";
+      if (!addressValidation.isValid && isSwappingForBTC) {
+        let description = "Please enter a valid Bitcoin payout address";
         if (isSwappingForBTC && addressValidation.networkMismatch) {
           description = `Wrong network: expected ${GLOBAL_CONFIG.underlyingSwappingAssets[0].currency.chain} but detected ${addressValidation.detectedNetwork}`;
         }
@@ -622,6 +600,8 @@ export const SwapButton = () => {
         });
         return;
       }
+
+      setSwapButtonPressed(true);
 
       // For cbBTC->BTC swaps, use the direct OTC flow
       if (isSwappingForBTC && selectedInputToken?.ticker === "cbBTC" && rfqQuote) {
@@ -635,14 +615,20 @@ export const SwapButton = () => {
         return;
       }
 
-      // For BTC->ERC20 swaps, use the existing flow
-      // Note: This flow may need updating based on your requirements
+      // For BTC->cbBTC swaps
+      if (!isSwappingForBTC && rfqQuote) {
+        await executeBTCtoCBBTCSwap();
+        return;
+      }
+
+      // Other swap types not yet implemented
       toastInfo({
-        title: "BTC to ERC20",
-        description: "BTC to ERC20 swap flow not yet implemented in this component",
+        title: "Swap Not Supported",
+        description: "This swap type is not yet implemented",
       });
     } catch (error) {
       console.error("startSwap error caught:", error);
+      setSwapButtonPressed(false);
       // Errors will be handled by the writeError useEffect
     }
   }, [
@@ -658,13 +644,13 @@ export const SwapButton = () => {
     uniswapQuote,
     executeCBBTCtoBTCSwap,
     executeERC20ToBTCSwap,
+    executeBTCtoCBBTCSwap,
   ]);
 
   // Unified handler that checks permit and routes to appropriate action
   const handleSwapButtonClick = useCallback(async () => {
     // First check if we need token approval to Permit2
-    setSwapButtonPressed(true);
-    if (isNativeETH || isCbBTC) {
+    if (isNativeETH || isCbBTC || !isSwappingForBTC) {
       await startSwap();
       return;
     }
@@ -846,6 +832,14 @@ export const SwapButton = () => {
     if (isConfirming) {
       return {
         text: "Signing Swap...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    if (swapButtonPressed) {
+      return {
+        text: "",
         handler: undefined,
         showSpinner: true,
       };

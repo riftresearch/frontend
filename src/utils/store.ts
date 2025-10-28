@@ -3,6 +3,7 @@ import { CreateSwapResponse } from "./otcClient";
 import { TokenData, PermitAllowance, PermitDataForSwap, ApprovalState } from "./types";
 import { Quote } from "./rfqClient";
 import { UniswapQuoteResponse } from "./uniswapRouter";
+import { FeeOverview } from "./swapHelpers";
 
 type DepositFlowState =
   | "0-not-started"
@@ -24,6 +25,8 @@ export const useStore = create<{
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
   selectedInputToken: TokenData | null;
   setSelectedInputToken: (token: TokenData | null) => void;
+  selectedOutputToken: TokenData | null;
+  setSelectedOutputToken: (token: TokenData | null) => void;
   isSwappingForBTC: boolean;
   setIsSwappingForBTC: (value: boolean) => void;
   rawInputAmount: string;
@@ -72,6 +75,8 @@ export const useStore = create<{
   setPermitDataForSwap: (data: PermitDataForSwap | null) => void;
   approvalState: ApprovalState;
   setApprovalState: (state: ApprovalState) => void;
+  feeOverview: FeeOverview | null;
+  setFeeOverview: (overview: FeeOverview | null) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -82,6 +87,8 @@ export const useStore = create<{
     })),
   selectedInputToken: null,
   setSelectedInputToken: (token: TokenData | null) => set({ selectedInputToken: token }),
+  selectedOutputToken: null,
+  setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
   isSwappingForBTC: true,
   setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
   rawInputAmount: "",
@@ -131,4 +138,6 @@ export const useStore = create<{
   setPermitDataForSwap: (data: PermitDataForSwap | null) => set({ permitDataForSwap: data }),
   approvalState: ApprovalState.UNKNOWN,
   setApprovalState: (state: ApprovalState) => set({ approvalState: state }),
+  feeOverview: null,
+  setFeeOverview: (overview: FeeOverview | null) => set({ feeOverview: overview }),
 }));

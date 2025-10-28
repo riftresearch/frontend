@@ -18,6 +18,7 @@ interface WebAssetTagProps {
   px?: string | number;
   pointer?: boolean;
   cursor?: string;
+  isOutput?: boolean;
 }
 
 const WebAssetTag: React.FC<WebAssetTagProps> = ({
@@ -30,19 +31,22 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
   px,
   pointer,
   cursor = "default",
+  isOutput = false,
 }) => {
   const { isMobile } = useWindowSize();
-  const { evmConnectWalletChainId, selectedInputToken } = useStore();
+  const { evmConnectWalletChainId, selectedInputToken, selectedOutputToken } = useStore();
 
   const adjustedH = (h ?? isMobile) ? "30px" : "36px";
   const adjustedFontSize = fontSize ?? `calc(${adjustedH} / 2 + 0px)`;
   const arrowSize = fontSize ?? `calc(${adjustedH} / 2.5)`;
   const adjustedBorderRadius = `calc(${adjustedH} / 4)`;
 
-  const displayTicker = asset === "BTC" ? "BTC" : selectedInputToken?.ticker || "ETH";
+  // Select the appropriate token based on isOutput flag
+  const selectedToken = isOutput ? selectedOutputToken : selectedInputToken;
+  const displayTicker = asset === "BTC" ? "BTC" : selectedToken?.ticker || "ETH";
 
   // Use selected token's icon if available and valid, otherwise fallback
-  const iconUrl = asset === "BTC" ? BTC_ICON : selectedInputToken?.icon || ETH_ICON;
+  const iconUrl = asset === "BTC" ? BTC_ICON : selectedToken?.icon || ETH_ICON;
 
   const colorKey = asset === "BTC" ? "btc" : (displayTicker || asset).toLowerCase();
   const colorDef = colors.assetTag[colorKey as keyof typeof colors.assetTag] || colors.assetTag.eth;
@@ -118,7 +122,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
         >
           {displayTicker}
         </Text>
-        {asset !== "BTC" && (
+        {asset !== "BTC" && asset !== "CBBTC" && (
           <FaChevronDown
             size={arrowSize}
             color="white"

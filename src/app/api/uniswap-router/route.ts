@@ -638,10 +638,6 @@ async function buildV3Swap(params: V3SwapParams): Promise<ExecuteSwapParams | nu
       slippageTolerance: new Percent(slippageBps, 10_000),
       type: SwapType.UNIVERSAL_ROUTER,
       version: UniversalRouterVersion.V2_0,
-      // safeMode: false,
-      // simulate: {
-      //   fromAddress: userAddress,
-      // },
     };
 
     // console.log("signature", signature);
