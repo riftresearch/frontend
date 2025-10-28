@@ -436,6 +436,59 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
+      // Calculate USD value for min swap and max liquidity checks
+      const amountValue = parseFloat(amountToQuote);
+      let usdValue = 0;
+
+      if (mode === "ExactInput") {
+        // Input is BTC
+        if (btcPrice) {
+          usdValue = amountValue * btcPrice;
+        }
+      } else {
+        // Output is ERC20
+        if (selectedOutputToken?.ticker === "cbBTC" && btcPrice) {
+          usdValue = amountValue * btcPrice;
+        } else if (erc20Price) {
+          usdValue = amountValue * erc20Price;
+        }
+      }
+
+      // console.log("usdValue", usdValue);
+      // console.log("btcPrice", btcPrice);
+      // console.log("isAboveMinSwap", isAboveMinSwap(usdValue, btcPrice || 0));
+      // console.log("liquidity", liquidity);
+      // Check minimum swap threshold
+      if (btcPrice && !isAboveMinSwap(usdValue, btcPrice)) {
+        console.log("Value below minimum swap threshold");
+        setUniswapQuote(null);
+        setRfqQuote(null);
+        setIsLoadingQuote(false);
+        if (mode === "ExactInput") {
+          setOutputAmount("");
+        } else {
+          setRawInputAmount("");
+        }
+        return;
+      }
+
+      // Check maximum liquidity
+      if (
+        parseFloat(liquidity.maxCbBTCLiquidityInUsd) > 0 &&
+        usdValue > parseFloat(liquidity.maxCbBTCLiquidityInUsd)
+      ) {
+        console.log("Value exceeds maximum cbBTC liquidity");
+        setUniswapQuote(null);
+        setRfqQuote(null);
+        setIsLoadingQuote(false);
+        if (mode === "ExactInput") {
+          setOutputAmount("");
+        } else {
+          setRawInputAmount("");
+        }
+        return;
+      }
+
       try {
         // Convert amount to base units (satoshis for BTC)
         const decimals =

@@ -204,9 +204,12 @@ export const SwapButton = () => {
       setPermitDataForSwap({ permit, signature });
     } catch (error) {
       console.error("Permit signing failed:", error);
-      toastError(error, {
+      toastInfo({
         title: "Permit Signing Failed",
         description: error instanceof Error ? error.message : "Unknown error",
+        customStyle: {
+          background: `${colors.assetTag.btc.background}`,
+        },
       });
     } finally {
       setIsSigningPermit(false);
@@ -696,16 +699,6 @@ export const SwapButton = () => {
     }
   }, [isPending, isSendTxPending]);
 
-  // Handle transaction errors
-  useEffect(() => {
-    if (writeError) {
-      console.error("Write contract error:", writeError);
-    }
-    if (sendTxError) {
-      console.error("Send transaction error:", sendTxError);
-    }
-  }, [writeError, sendTxError]);
-
   // Update store when transaction is confirmed
   useEffect(() => {
     if (isConfirmed) {
@@ -713,7 +706,7 @@ export const SwapButton = () => {
     }
   }, [isConfirmed, setTransactionConfirmed]);
 
-  // Handle writeContract errors (user declined in wallet)
+  // Handle user declined transaction in wallet
   useEffect(() => {
     if (writeError || sendTxError) {
       const error = writeError || sendTxError;
@@ -723,9 +716,13 @@ export const SwapButton = () => {
         title: "Transaction Declined",
         description: "The user declined the transaction request",
         customStyle: {
-          background: `linear-gradient(155deg, ${colors.currencyCard.btc.background} 0%, ${colors.assetTag.btc.background} 42%, ${colors.RiftOrange} 100%)`,
+          background: `${colors.assetTag.btc.background}`,
         },
       });
+      // Reset swap button state
+      setSwapButtonPressed(false);
+      setIsApprovingToken(false);
+      setIsSigningPermit(false);
     }
   }, [writeError, sendTxError]);
 
@@ -738,9 +735,13 @@ export const SwapButton = () => {
         title: "Transaction Failed",
         description: "The transaction failed on the network",
         customStyle: {
-          background: `linear-gradient(155deg, ${colors.currencyCard.btc.background} 0%, ${colors.assetTag.btc.background} 42%, ${colors.RiftOrange} 100%)`,
+          background: `${colors.assetTag.btc.background}`,
         },
       });
+      // Reset swap button state
+      setSwapButtonPressed(false);
+      setIsApprovingToken(false);
+      setIsSigningPermit(false);
     }
   }, [txError]);
 
@@ -762,18 +763,20 @@ export const SwapButton = () => {
         title: "Approval Confirmed",
         description: "Permit2 can now spend your tokens",
       });
-      // Auto-sign permit after approval
-      // if (!isButtonLoading) {
-      //   console.log("Auto-signing permit after approval");
-      //   signPermit2();
-      // }
     } else if (approvalTxError) {
       console.error("Approval transaction error:", approvalTxError);
       setApprovalState(ApprovalState.NEEDS_APPROVAL);
-      toastError(approvalTxError, {
+      toastInfo({
         title: "Approval Failed",
         description: "The approval transaction failed on the network",
+        customStyle: {
+          background: `${colors.assetTag.btc.background}`,
+        },
       });
+      // Reset swap button state
+      setSwapButtonPressed(false);
+      setIsApprovingToken(false);
+      setApprovalTxHash(undefined);
     }
   }, [isApprovalConfirmed, approvalTxError, setApprovalState, isButtonLoading, signPermit2]);
 
