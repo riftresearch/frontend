@@ -170,11 +170,11 @@ export function calculateFees(
   const feeOverview: FeeOverview = {
     networkFee: {
       fee: formatUsdValue(networkFeeUSD),
-      description: "Network fee",
+      description: "Gas fee",
     },
     erc20Fee: {
       fee: formatUsdValue(erc20FeeUSD),
-      description: "Erc20 swap fee",
+      description: "Swap fee",
     },
     protocolFee: {
       fee: formatUsdValue(protocolFeeUSD),
@@ -772,7 +772,7 @@ export function calculateExchangeRate(
     erc20Price
   );
 
-  return `1 BTC = ${formattedRate} ${ticker} (${usdValue})`;
+  return `1 BTC = ${formattedRate} ${ticker}`;
 }
 
 /**

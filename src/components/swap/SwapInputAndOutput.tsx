@@ -1,4 +1,4 @@
-import { Flex, Text, Input, Spacer, Button } from "@chakra-ui/react";
+import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
@@ -28,8 +28,10 @@ import {
   validatePayoutAddress,
   calculateExchangeRate,
   calculateFees,
+  getMinSwapValueUsd,
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
+import { useMaxLiquidity } from "@/hooks/useLiquidity";
 
 export const SwapInputAndOutput = () => {
   // ============================================================================
@@ -37,6 +39,9 @@ export const SwapInputAndOutput = () => {
   // ============================================================================
 
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
+
+  // Liquidity hook
+  const liquidity = useMaxLiquidity();
 
   // Local state
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">("input");
@@ -50,6 +55,10 @@ export const SwapInputAndOutput = () => {
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
   const [exceedsUserBalance, setExceedsUserBalance] = useState(false);
+  const [exceedsMarketMakerLiquidity, setExceedsMarketMakerLiquidity] = useState(false);
+  const [belowMinimumSwap, setBelowMinimumSwap] = useState(false);
+  const [inputBelowMinimum, setInputBelowMinimum] = useState(false);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
 
   // Refs
   const quoteRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -57,6 +66,7 @@ export const SwapInputAndOutput = () => {
   const outputQuoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const quoteRequestIdRef = useRef(0);
   const approvalDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const fullPrecisionInputRef = useRef<string | null>(null);
 
   // Global store
   const {
@@ -183,6 +193,7 @@ export const SwapInputAndOutput = () => {
           setUniswapQuote(null);
           setRfqQuote(null);
           setOutputAmount("");
+          setIsLoadingQuote(false);
           return;
         }
       }
@@ -217,6 +228,7 @@ export const SwapInputAndOutput = () => {
           setUniswapQuote(quoteResponse.uniswapQuote || null);
           setRfqQuote(quoteResponse.rfqQuote);
           setOutputAmount(quoteResponse.btcOutputAmount || "");
+          setIsLoadingQuote(false);
 
           // Calculate and set fee overview
           if (btcPrice && erc20Price) {
@@ -237,6 +249,7 @@ export const SwapInputAndOutput = () => {
           setRfqQuote(null);
           setOutputAmount("");
           setFeeOverview(null);
+          setIsLoadingQuote(false);
         }
       } catch (error) {
         console.error("Failed to fetch quote:", error);
@@ -244,6 +257,7 @@ export const SwapInputAndOutput = () => {
         setRfqQuote(null);
         setOutputAmount("");
         setFeeOverview(null);
+        setIsLoadingQuote(false);
       }
     },
     [
@@ -288,6 +302,7 @@ export const SwapInputAndOutput = () => {
           setUniswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
+          setIsLoadingQuote(false);
           return;
         }
       }
@@ -314,7 +329,19 @@ export const SwapInputAndOutput = () => {
         if (quoteResponse) {
           setUniswapQuote(quoteResponse.uniswapQuote || null);
           setRfqQuote(quoteResponse.rfqQuote);
-          setRawInputAmount(quoteResponse.erc20InputAmount || "");
+
+          // Truncate input amount to 8 decimals for display
+          const inputAmount = quoteResponse.erc20InputAmount || "";
+          const truncatedInput = (() => {
+            const parts = inputAmount.split(".");
+            if (parts.length === 2 && parts[1].length > 8) {
+              return `${parts[0]}.${parts[1].substring(0, 8)}`;
+            }
+            return inputAmount;
+          })();
+
+          setRawInputAmount(truncatedInput);
+          setIsLoadingQuote(false);
 
           // Calculate and set fee overview
           if (btcPrice && erc20Price) {
@@ -335,6 +362,7 @@ export const SwapInputAndOutput = () => {
           setRfqQuote(null);
           setRawInputAmount("");
           setFeeOverview(null);
+          setIsLoadingQuote(false);
         }
       } catch (error) {
         console.error("Failed to fetch exact output quote:", error);
@@ -342,6 +370,7 @@ export const SwapInputAndOutput = () => {
         setRfqQuote(null);
         setRawInputAmount("");
         setFeeOverview(null);
+        setIsLoadingQuote(false);
       }
     },
     [
@@ -399,14 +428,31 @@ export const SwapInputAndOutput = () => {
           // Clear Uniswap quote (not needed for BTC -> cbBTC)
           setUniswapQuote(null);
           setRfqQuote(rfqQuoteResponse);
+          setIsLoadingQuote(false);
 
           if (mode === "ExactInput") {
-            // Set output amount (ERC20/ETH)
-            setOutputAmount(formatLotAmount(rfqQuoteResponse.to));
+            // Set output amount (ERC20/ETH) - truncate to 8 decimals
+            const outputAmount = formatLotAmount(rfqQuoteResponse.to);
+            const truncatedOutput = (() => {
+              const parts = outputAmount.split(".");
+              if (parts.length === 2 && parts[1].length > 8) {
+                return `${parts[0]}.${parts[1].substring(0, 8)}`;
+              }
+              return outputAmount;
+            })();
+            setOutputAmount(truncatedOutput);
           } else {
-            // Set input amount (BTC)
+            // Set input amount (BTC) - truncate to 8 decimals
             console.log("rfqQuoteResponse.from", rfqQuoteResponse);
-            setRawInputAmount(formatLotAmount(rfqQuoteResponse.from));
+            const inputAmount = formatLotAmount(rfqQuoteResponse.from);
+            const truncatedInput = (() => {
+              const parts = inputAmount.split(".");
+              if (parts.length === 2 && parts[1].length > 8) {
+                return `${parts[0]}.${parts[1].substring(0, 8)}`;
+              }
+              return inputAmount;
+            })();
+            setRawInputAmount(truncatedInput);
           }
 
           // Calculate and set fee overview (erc20Fee will be $0.00)
@@ -427,6 +473,7 @@ export const SwapInputAndOutput = () => {
           setUniswapQuote(null);
           setRfqQuote(null);
           setFeeOverview(null);
+          setIsLoadingQuote(false);
           if (mode === "ExactInput") {
             setOutputAmount("");
           } else {
@@ -438,6 +485,7 @@ export const SwapInputAndOutput = () => {
         setUniswapQuote(null);
         setRfqQuote(null);
         setFeeOverview(null);
+        setIsLoadingQuote(false);
         if (mode === "ExactInput") {
           setOutputAmount("");
         } else {
@@ -505,13 +553,14 @@ export const SwapInputAndOutput = () => {
       value = "0.";
     }
 
-    // Allow empty string, numbers, and decimal point
-    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+    // Allow empty string, numbers, and decimal point (max 8 decimals)
+    if (value === "" || /^\d*\.?\d{0,8}$/.test(value)) {
       setRawInputAmount(value);
       setLastEditedField("input");
       setHasStartedTyping(true);
-      // Reset adjusted max flag when user manually edits
+      // Reset adjusted max flag and full precision when user manually edits
       setIsAtAdjustedMax(false);
+      fullPrecisionInputRef.current = null;
 
       // Update USD value using helper
       const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "" : "BTC";
@@ -526,6 +575,7 @@ export const SwapInputAndOutput = () => {
         // Clear output if input is empty or 0
         setOutputAmount("");
         setOutputUsdValue(ZERO_USD_DISPLAY);
+        setIsLoadingQuote(false);
       }
 
       // Clear any existing debounce timer
@@ -536,19 +586,25 @@ export const SwapInputAndOutput = () => {
       // Set up debounced quote fetch (125ms delay)
       // Pass the value directly to avoid stale closure issues
       if (value && parseFloat(value) > 0 && getQuoteForInputRef.current) {
+        // Show loading state
+        setIsLoadingQuote(true);
+
         // Increment request ID and capture it
         quoteRequestIdRef.current += 1;
         const currentRequestId = quoteRequestIdRef.current;
 
+        // Use full precision if available, otherwise use displayed value
+        const amountToQuote = fullPrecisionInputRef.current || value;
+
         if (isSwappingForBTC) {
           // Fetch exact input quote for ERC20/ETH -> BTC
           quoteDebounceTimerRef.current = setTimeout(() => {
-            fetchERC20ToBTCQuote(value, currentRequestId);
+            fetchERC20ToBTCQuote(amountToQuote, currentRequestId);
           }, 125);
         } else {
           // Fetch exact input quote for BTC -> ERC20/ETH
           quoteDebounceTimerRef.current = setTimeout(() => {
-            fetchBTCtoERC20Quote(value, "ExactInput", currentRequestId);
+            fetchBTCtoERC20Quote(amountToQuote, "ExactInput", currentRequestId);
           }, 125);
         }
       }
@@ -577,8 +633,8 @@ export const SwapInputAndOutput = () => {
       value = "0.";
     }
 
-    // Allow empty string, numbers, and decimal point
-    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+    // Allow empty string, numbers, and decimal point (max 8 decimals)
+    if (value === "" || /^\d*\.?\d{0,8}$/.test(value)) {
       setOutputAmount(value);
       setLastEditedField("output");
       setHasStartedTyping(true);
@@ -596,6 +652,7 @@ export const SwapInputAndOutput = () => {
         // Clear input if output is empty or 0
         setRawInputAmount("");
         setInputUsdValue(ZERO_USD_DISPLAY);
+        setIsLoadingQuote(false);
       }
 
       // Clear any existing debounce timer
@@ -603,8 +660,24 @@ export const SwapInputAndOutput = () => {
         clearTimeout(outputQuoteDebounceTimerRef.current);
       }
 
-      // Set up debounced quote fetch (125ms delay)
+      // Set up debounced quote fetch (75ms delay)
       if (value && parseFloat(value) > 0 && !getQuoteForInputRef.current) {
+        // Check if output is below minimum (3000 sats = 0.00003 BTC)
+        const MIN_SATS = 3000;
+        const minBtc = MIN_SATS / 100_000_000;
+        const outputFloat = parseFloat(value);
+
+        if (outputFloat < minBtc) {
+          // Don't fetch quote if below minimum
+          setRawInputAmount("");
+          setInputUsdValue(ZERO_USD_DISPLAY);
+          setIsLoadingQuote(false);
+          return;
+        }
+
+        // Show loading state
+        setIsLoadingQuote(true);
+
         // Increment request ID and capture it
         quoteRequestIdRef.current += 1;
         const currentRequestId = quoteRequestIdRef.current;
@@ -613,12 +686,12 @@ export const SwapInputAndOutput = () => {
           // Fetch exact output quote for ERC20/ETH -> BTC
           outputQuoteDebounceTimerRef.current = setTimeout(() => {
             fetchERC20ToBTCQuoteExactOutput(value, currentRequestId);
-          }, 125);
+          }, 75);
         } else {
           // Fetch exact output quote for BTC -> ERC20/ETH
           outputQuoteDebounceTimerRef.current = setTimeout(() => {
             fetchBTCtoERC20Quote(value, "ExactOutput", currentRequestId);
-          }, 125);
+          }, 75);
         }
       }
     }
@@ -685,12 +758,24 @@ export const SwapInputAndOutput = () => {
       setIsAtAdjustedMax(false);
     }
 
-    // Set the balance as the input amount
-    setRawInputAmount(adjustedInputAmount);
+    // Limit to 8 decimal places for display
+    const truncatedAmount = (() => {
+      const parts = adjustedInputAmount.split(".");
+      if (parts.length === 2 && parts[1].length > 8) {
+        return `${parts[0]}.${parts[1].substring(0, 8)}`;
+      }
+      return adjustedInputAmount;
+    })();
+
+    // Store full precision for quoting
+    fullPrecisionInputRef.current = adjustedInputAmount;
+
+    // Set the truncated balance as the displayed input amount
+    setRawInputAmount(truncatedAmount);
     setLastEditedField("input");
     setHasStartedTyping(true);
 
-    // Update USD value using helper
+    // Update USD value using full precision
     const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
     const usdValue = calculateUsdValue(
       adjustedInputAmount,
@@ -705,6 +790,9 @@ export const SwapInputAndOutput = () => {
     setUniswapQuote(null);
     setRfqQuote(null);
 
+    // Set loading state
+    setIsLoadingQuote(true);
+
     // Clear any existing debounce timer
     if (quoteDebounceTimerRef.current) {
       clearTimeout(quoteDebounceTimerRef.current);
@@ -717,13 +805,135 @@ export const SwapInputAndOutput = () => {
       const currentRequestId = quoteRequestIdRef.current;
 
       if (isSwappingForBTC) {
-        // Fetch exact input quote for ERC20/ETH -> BTC
+        // Fetch exact input quote for ERC20/ETH -> BTC using full precision
         fetchERC20ToBTCQuote(adjustedInputAmount, currentRequestId);
       } else {
         // there is no max button for BTC -> ERC20/ETH
         // Fetch exact input quote for BTC -> ERC20/ETH
         // fetchBTCtoERC20Quote(adjustedInputAmount, "ExactInput", currentRequestId);
       }
+    }
+  };
+
+  const handleOutputMaxClick = () => {
+    // Set flag to indicate we should quote for output field
+    getQuoteForInputRef.current = false;
+
+    // Determine the max liquidity based on swap direction
+    let maxLiquidityBtc: number;
+    if (isSwappingForBTC) {
+      // ERC20 -> BTC: Use maxBTCLiquidity
+      const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
+      maxLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
+    } else {
+      // BTC -> ERC20 (cbBTC): Use maxCbBTCLiquidity
+      const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
+      maxLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
+    }
+
+    const maxOutputAmount = maxLiquidityBtc.toString();
+
+    // Limit to 8 decimal places for display
+    const truncatedOutputAmount = (() => {
+      const parts = maxOutputAmount.split(".");
+      if (parts.length === 2 && parts[1].length > 8) {
+        return `${parts[0]}.${parts[1].substring(0, 8)}`;
+      }
+      return maxOutputAmount;
+    })();
+
+    // Set the truncated max liquidity as the output amount
+    setOutputAmount(truncatedOutputAmount);
+    setLastEditedField("output");
+    setHasStartedTyping(true);
+
+    // Update USD value using helper
+    const outputTicker = isSwappingForBTC ? "BTC" : selectedOutputToken?.ticker || "cbBTC";
+    const usdValue = calculateUsdValue(
+      truncatedOutputAmount,
+      outputTicker,
+      ethPrice,
+      btcPrice,
+      erc20Price
+    );
+    setOutputUsdValue(usdValue);
+
+    // Clear existing quotes when max is clicked
+    setUniswapQuote(null);
+    setRfqQuote(null);
+
+    // Set loading state
+    setIsLoadingQuote(true);
+
+    // Clear any existing debounce timer
+    if (outputQuoteDebounceTimerRef.current) {
+      clearTimeout(outputQuoteDebounceTimerRef.current);
+    }
+
+    // Fetch quote immediately (no debounce for MAX button)
+    if (parseFloat(truncatedOutputAmount) > 0) {
+      // Increment request ID and capture it
+      quoteRequestIdRef.current += 1;
+      const currentRequestId = quoteRequestIdRef.current;
+
+      if (isSwappingForBTC) {
+        // Fetch exact output quote for ERC20/ETH -> BTC
+        fetchERC20ToBTCQuoteExactOutput(truncatedOutputAmount, currentRequestId);
+      } else {
+        // Fetch exact output quote for BTC -> ERC20/ETH
+        fetchBTCtoERC20Quote(truncatedOutputAmount, "ExactOutput", currentRequestId);
+      }
+    }
+  };
+
+  const handleMinimumClick = () => {
+    // Set flag to indicate we should quote for output field
+    getQuoteForInputRef.current = false;
+
+    // Set minimum output to 3000 sats (0.00003 BTC)
+    const MIN_SATS = 3000;
+    const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
+    const minOutputAmountStr = minBtc.toString();
+
+    // Set the minimum amount as the output amount
+    setOutputAmount(minOutputAmountStr);
+    setLastEditedField("output");
+    setHasStartedTyping(true);
+
+    // Update USD value
+    const outputTicker = isSwappingForBTC ? "BTC" : selectedOutputToken?.ticker || "cbBTC";
+    const usdValue = calculateUsdValue(
+      minOutputAmountStr,
+      outputTicker,
+      ethPrice,
+      btcPrice,
+      erc20Price
+    );
+    setOutputUsdValue(usdValue);
+
+    // Clear existing quotes
+    setUniswapQuote(null);
+    setRfqQuote(null);
+
+    // Set loading state
+    setIsLoadingQuote(true);
+
+    // Clear any existing debounce timer
+    if (outputQuoteDebounceTimerRef.current) {
+      clearTimeout(outputQuoteDebounceTimerRef.current);
+    }
+
+    // Fetch quote immediately (no debounce for MIN button)
+    // Increment request ID and capture it
+    quoteRequestIdRef.current += 1;
+    const currentRequestId = quoteRequestIdRef.current;
+
+    if (isSwappingForBTC) {
+      // Fetch exact output quote for ERC20/ETH -> BTC
+      fetchERC20ToBTCQuoteExactOutput(minOutputAmountStr, currentRequestId);
+    } else {
+      // Fetch exact output quote for BTC -> ERC20/ETH
+      fetchBTCtoERC20Quote(minOutputAmountStr, "ExactOutput", currentRequestId);
     }
   };
 
@@ -1039,6 +1249,138 @@ export const SwapInputAndOutput = () => {
     }
   }, [rawInputAmount, currentInputBalance]);
 
+  // Check if output amount exceeds market maker liquidity
+  useEffect(() => {
+    if (!outputAmount || parseFloat(outputAmount) <= 0) {
+      setExceedsMarketMakerLiquidity(false);
+      return;
+    }
+
+    // Skip check if user balance is already exceeded (takes priority)
+    if (exceedsUserBalance) {
+      setExceedsMarketMakerLiquidity(false);
+      return;
+    }
+
+    const outputFloat = parseFloat(outputAmount);
+
+    // Direction dependent: check the appropriate liquidity based on swap direction
+    if (isSwappingForBTC) {
+      // ERC20 -> BTC: Check maxBTCLiquidity
+      const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
+      if (maxBtcLiquiditySats && maxBtcLiquiditySats !== "0") {
+        const maxBtcLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
+        if (outputFloat > maxBtcLiquidityBtc) {
+          setExceedsMarketMakerLiquidity(true);
+        } else {
+          setExceedsMarketMakerLiquidity(false);
+        }
+      } else {
+        setExceedsMarketMakerLiquidity(false);
+      }
+    } else {
+      // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
+      const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
+      if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
+        const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
+        if (outputFloat > maxCbBtcLiquidityBtc) {
+          setExceedsMarketMakerLiquidity(true);
+        } else {
+          setExceedsMarketMakerLiquidity(false);
+        }
+      } else {
+        setExceedsMarketMakerLiquidity(false);
+      }
+    }
+  }, [
+    outputAmount,
+    isSwappingForBTC,
+    liquidity.maxBTCLiquidity,
+    liquidity.maxCbBTCLiquidity,
+    exceedsUserBalance,
+  ]);
+
+  // Check if output amount is below minimum swap amount (3000 sats)
+  // OR if input amount would result in below minimum output
+  useEffect(() => {
+    // Skip check if user balance is already exceeded (takes priority)
+    if (exceedsUserBalance) {
+      setBelowMinimumSwap(false);
+      return;
+    }
+
+    const MIN_SATS = 3000;
+    const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
+
+    // Check 1: If output exists, check if it's below minimum
+    if (outputAmount && parseFloat(outputAmount) > 0) {
+      const outputFloat = parseFloat(outputAmount);
+      if (outputFloat < minBtc) {
+        setBelowMinimumSwap(true);
+        return;
+      } else {
+        setBelowMinimumSwap(false);
+        return;
+      }
+    }
+
+    // If neither condition is met, clear the flag
+    setBelowMinimumSwap(false);
+  }, [outputAmount, exceedsUserBalance]);
+
+  // Check if input amount would result in below minimum output
+  useEffect(() => {
+    // Skip check if user balance is already exceeded (takes priority)
+    if (exceedsUserBalance) {
+      setInputBelowMinimum(false);
+      return;
+    }
+
+    // Check if input exists but output is empty/zero (quote was blocked)
+    if (
+      rawInputAmount &&
+      parseFloat(rawInputAmount) > 0 &&
+      (!outputAmount || parseFloat(outputAmount) <= 0)
+    ) {
+      const inputFloat = parseFloat(rawInputAmount);
+
+      // Get the price of the input token
+      let price: number | null = null;
+      const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
+
+      if (inputTicker === "ETH") {
+        price = ethPrice;
+      } else if (inputTicker === "BTC") {
+        price = btcPrice;
+      } else if (selectedInputToken?.address) {
+        price = erc20Price;
+      }
+
+      // Calculate USD value and check against minimum
+      if (price && btcPrice) {
+        const usdValue = inputFloat * price;
+        const minSwapUsd = getMinSwapValueUsd(btcPrice);
+
+        if (usdValue < minSwapUsd && usdValue > 0) {
+          setInputBelowMinimum(true);
+          return;
+        }
+      }
+    }
+
+    // If condition is not met, clear the flag
+    setInputBelowMinimum(false);
+  }, [
+    outputAmount,
+    rawInputAmount,
+    exceedsUserBalance,
+    isSwappingForBTC,
+    selectedInputToken,
+    ethPrice,
+    btcPrice,
+    erc20Price,
+  ]);
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -1070,57 +1412,63 @@ export const SwapInputAndOutput = () => {
               </Text>
             </Flex>
 
-            <Input
-              value={rawInputAmount}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              fontFamily="Aux"
-              border="none"
-              bg="transparent"
-              outline="none"
-              mt="6px"
-              mr="-150px"
-              ml="-5px"
-              p="0px"
-              letterSpacing="-6px"
-              color={exceedsUserBalance ? colors.red : colors.offWhite}
-              _active={{ border: "none", boxShadow: "none", outline: "none" }}
-              _focus={{ border: "none", boxShadow: "none", outline: "none" }}
-              _selected={{
-                border: "none",
-                boxShadow: "none",
-                outline: "none",
-              }}
-              fontSize="46px"
-              placeholder="0.0"
-              _placeholder={{
-                color: inputStyle?.light_text_color || "#4A90E2",
-              }}
-              disabled={isOtcServerDead}
-              cursor={isOtcServerDead ? "not-allowed" : "text"}
-              opacity={isOtcServerDead ? 0.5 : 1}
-            />
+            {isLoadingQuote && !getQuoteForInputRef.current ? (
+              <Flex align="center" mt="6px" ml="-5px">
+                <Spinner size="lg" color={inputStyle?.border_color_light || colors.textGray} />
+              </Flex>
+            ) : (
+              <Input
+                value={rawInputAmount}
+                onChange={handleInputChange}
+                onKeyDown={handleInputKeyDown}
+                fontFamily="Aux"
+                border="none"
+                bg="transparent"
+                outline="none"
+                mt="6px"
+                mr="-150px"
+                ml="-5px"
+                p="0px"
+                letterSpacing="-6px"
+                color={exceedsUserBalance || inputBelowMinimum ? colors.red : colors.offWhite}
+                _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                _selected={{
+                  border: "none",
+                  boxShadow: "none",
+                  outline: "none",
+                }}
+                fontSize="46px"
+                placeholder="0.0"
+                _placeholder={{
+                  color: inputStyle?.light_text_color || "#4A90E2",
+                }}
+                disabled={isOtcServerDead}
+                cursor={isOtcServerDead ? "not-allowed" : "text"}
+                opacity={isOtcServerDead ? 0.5 : 1}
+              />
+            )}
 
             <Flex>
               {exceedsUserBalance ? (
                 <>
                   <Text
                     color={colors.redHover}
-                    fontSize="14px"
+                    fontSize="13px"
                     mt="6px"
                     ml="1px"
                     mr="8px"
-                    letterSpacing="-1px"
+                    letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
                     {currentInputBalance && parseFloat(currentInputBalance) > 0
-                      ? "Exceeds available balance - "
+                      ? "Exceeds your balance - "
                       : "You don't have any of this token"}
                   </Text>
                   {currentInputBalance && parseFloat(currentInputBalance) > 0 && (
                     <Text
-                      fontSize="14px"
+                      fontSize="13px"
                       mt="7px"
                       color={inputStyle?.border_color_light || colors.textGray}
                       cursor="pointer"
@@ -1133,6 +1481,39 @@ export const SwapInputAndOutput = () => {
                       {parseFloat(currentInputBalance).toFixed(4)} {currentInputTicker} Max
                     </Text>
                   )}
+                </>
+              ) : inputBelowMinimum ? (
+                <>
+                  <Text
+                    color={colors.redHover}
+                    fontSize="13px"
+                    mt="6px"
+                    ml="1px"
+                    mr="8px"
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    Below minimum -
+                  </Text>
+                  <Text
+                    fontSize="13px"
+                    mt="7px"
+                    color={inputStyle?.border_color_light || colors.textGray}
+                    cursor="pointer"
+                    onClick={handleMinimumClick}
+                    _hover={{ textDecoration: "underline" }}
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    {(() => {
+                      const MIN_SATS = 3000;
+                      const minBtc = MIN_SATS / 100_000_000;
+                      const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
+                      return `${minBtc.toFixed(5)} ${ticker} Min`;
+                    })()}
+                  </Text>
                 </>
               ) : (
                 <Text
@@ -1267,48 +1648,128 @@ export const SwapInputAndOutput = () => {
               You Receive
             </Text>
 
-            <Input
-              value={outputAmount}
-              onChange={handleOutputChange}
-              onKeyDown={handleOutputKeyDown}
-              fontFamily="Aux"
-              border="none"
-              bg="transparent"
-              outline="none"
-              mt="6px"
-              mr="-150px"
-              ml="-5px"
-              p="0px"
-              letterSpacing="-6px"
-              color={colors.offWhite}
-              _active={{ border: "none", boxShadow: "none", outline: "none" }}
-              _focus={{ border: "none", boxShadow: "none", outline: "none" }}
-              _selected={{
-                border: "none",
-                boxShadow: "none",
-                outline: "none",
-              }}
-              fontSize="46px"
-              placeholder="0.0"
-              _placeholder={{
-                color: outputStyle?.light_text_color || "#805530",
-              }}
-              disabled={isOtcServerDead}
-              cursor={isOtcServerDead ? "not-allowed" : "text"}
-              opacity={isOtcServerDead ? 0.5 : 1}
-            />
+            {isLoadingQuote && getQuoteForInputRef.current ? (
+              <Flex align="center" mt="6px" ml="-5px">
+                <Spinner size="lg" color={outputStyle?.border_color_light || colors.textGray} />
+              </Flex>
+            ) : (
+              <Input
+                value={outputAmount}
+                onChange={handleOutputChange}
+                onKeyDown={handleOutputKeyDown}
+                fontFamily="Aux"
+                border="none"
+                bg="transparent"
+                outline="none"
+                mt="6px"
+                mr="-150px"
+                ml="-5px"
+                p="0px"
+                letterSpacing="-6px"
+                color={
+                  exceedsMarketMakerLiquidity || belowMinimumSwap ? colors.red : colors.offWhite
+                }
+                _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                _selected={{
+                  border: "none",
+                  boxShadow: "none",
+                  outline: "none",
+                }}
+                fontSize="46px"
+                placeholder="0.0"
+                _placeholder={{
+                  color: outputStyle?.light_text_color || "#805530",
+                }}
+                disabled={isOtcServerDead}
+                cursor={isOtcServerDead ? "not-allowed" : "text"}
+                opacity={isOtcServerDead ? 0.5 : 1}
+              />
+            )}
 
-            <Text
-              color={!outputAmount ? colors.offWhite : colors.textGray}
-              fontSize="14px"
-              mt="6px"
-              ml="1px"
-              letterSpacing="-1px"
-              fontWeight="normal"
-              fontFamily="Aux"
-            >
-              {outputUsdValue}
-            </Text>
+            <Flex>
+              {exceedsMarketMakerLiquidity ? (
+                <>
+                  <Text
+                    color={colors.redHover}
+                    fontSize="13px"
+                    mt="6px"
+                    ml="1px"
+                    mr="8px"
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    Exceeds available liquidity -
+                  </Text>
+                  <Text
+                    fontSize="13px"
+                    mt="7px"
+                    color={outputStyle?.border_color_light || colors.textGray}
+                    cursor="pointer"
+                    onClick={handleOutputMaxClick}
+                    _hover={{ textDecoration: "underline" }}
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    {(() => {
+                      const maxLiquiditySats = isSwappingForBTC
+                        ? liquidity.maxBTCLiquidity
+                        : liquidity.maxCbBTCLiquidity;
+                      const maxLiquidityBtc = Number(maxLiquiditySats) / 100_000_000;
+                      const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
+                      return `${maxLiquidityBtc.toFixed(4)} ${ticker} Max`;
+                    })()}
+                  </Text>
+                </>
+              ) : belowMinimumSwap ? (
+                <>
+                  <Text
+                    color={colors.redHover}
+                    fontSize="13px"
+                    mt="6px"
+                    ml="1px"
+                    mr="8px"
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    Below minimum -
+                  </Text>
+                  <Text
+                    fontSize="13px"
+                    mt="7px"
+                    color={outputStyle?.border_color_light || colors.textGray}
+                    cursor="pointer"
+                    onClick={handleMinimumClick}
+                    _hover={{ textDecoration: "underline" }}
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    {(() => {
+                      const MIN_SATS = 3000;
+                      const minBtc = MIN_SATS / 100_000_000;
+                      const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
+                      return `${minBtc.toFixed(5)} ${ticker} Min`;
+                    })()}
+                  </Text>
+                </>
+              ) : (
+                <Text
+                  color={!outputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  mt="6px"
+                  ml="1px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                >
+                  {outputUsdValue}
+                </Text>
+              )}
+            </Flex>
           </Flex>
 
           <Spacer />
