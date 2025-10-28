@@ -447,6 +447,10 @@ export async function getERC20ToBTCQuote(
     //   expiresAt,
     // });
 
+    // Clear "no routes" error on successful quote
+    const { setHasNoRoutesError } = useStore.getState();
+    setHasNoRoutesError(false);
+
     return {
       uniswapQuote,
       btcOutputAmount,
@@ -458,10 +462,11 @@ export async function getERC20ToBTCQuote(
 
     // Handle specific error types
     if (error instanceof UniswapRouterError) {
-      toastError(error, {
-        title: "Uniswap Quote Failed",
-        description: error.message,
-      });
+      // Check if it's a "no routes found" error
+      if (error.message.includes("No routes found")) {
+        const { setHasNoRoutesError } = useStore.getState();
+        setHasNoRoutesError(true);
+      }
     } else if (error instanceof RfqClientError) {
       toastError(error, {
         title: "RFQ Quote Failed",
@@ -629,6 +634,10 @@ export async function getERC20ToBTCQuoteExactOutput(
       expiresAt,
     });
 
+    // Clear "no routes" error on successful quote
+    const { setHasNoRoutesError } = useStore.getState();
+    setHasNoRoutesError(false);
+
     return {
       uniswapQuote,
       erc20InputAmount: erc20InputFormatted,
@@ -639,7 +648,13 @@ export async function getERC20ToBTCQuoteExactOutput(
     console.error("Failed to get ERC20 to BTC quote (exact output):", error);
 
     // Handle specific error types
-    if (error instanceof RfqClientError) {
+    if (error instanceof UniswapRouterError) {
+      // Check if it's a "no routes found" error
+      if (error.message.includes("No routes found")) {
+        const { setHasNoRoutesError } = useStore.getState();
+        setHasNoRoutesError(true);
+      }
+    } else if (error instanceof RfqClientError) {
       toastError(error, {
         title: "RFQ Quote Failed",
         description: error.message,

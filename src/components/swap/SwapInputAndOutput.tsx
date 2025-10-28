@@ -97,6 +97,7 @@ export const SwapInputAndOutput = () => {
     setFeeOverview,
     feeOverview,
     isOtcServerDead,
+    setHasNoRoutesError,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -187,6 +188,9 @@ export const SwapInputAndOutput = () => {
       }
 
       try {
+        // Clear any previous "no routes" error
+        setHasNoRoutesError(false);
+
         // Convert amount to base units
         const decimals = selectedInputToken.decimals;
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
@@ -289,6 +293,9 @@ export const SwapInputAndOutput = () => {
       }
 
       try {
+        // Clear any previous "no routes" error
+        setHasNoRoutesError(false);
+
         const quoteResponse = await getERC20ToBTCQuoteExactOutput(
           btcAmountToQuote,
           selectedInputToken,

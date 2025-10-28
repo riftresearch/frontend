@@ -79,6 +79,8 @@ export const useStore = create<{
   setFeeOverview: (overview: FeeOverview | null) => void;
   isOtcServerDead: boolean;
   setIsOtcServerDead: (value: boolean) => void;
+  hasNoRoutesError: boolean;
+  setHasNoRoutesError: (value: boolean) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -144,4 +146,6 @@ export const useStore = create<{
   setFeeOverview: (overview: FeeOverview | null) => set({ feeOverview: overview }),
   isOtcServerDead: false,
   setIsOtcServerDead: (value: boolean) => set({ isOtcServerDead: value }),
+  hasNoRoutesError: false,
+  setHasNoRoutesError: (value: boolean) => set({ hasNoRoutesError: value }),
 }));

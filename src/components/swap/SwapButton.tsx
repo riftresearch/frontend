@@ -67,6 +67,7 @@ export const SwapButton = () => {
     approvalState,
     setApprovalState,
     isOtcServerDead,
+    hasNoRoutesError,
   } = useStore();
 
   // Wagmi hooks for contract interactions
@@ -804,6 +805,15 @@ export const SwapButton = () => {
 
   // Determine button text and click handler
   const getButtonTextAndHandler = () => {
+    // If there's a "no routes found" error, disable button with message
+    if (hasNoRoutesError) {
+      return {
+        text: "No routes found",
+        handler: undefined,
+        showSpinner: false,
+      };
+    }
+
     // If approving Permit2
     if (approvalState === ApprovalState.APPROVING || isApprovalConfirming) {
       return {
@@ -862,23 +872,30 @@ export const SwapButton = () => {
       <Flex
         bg={colors.swapBgColor}
         _hover={{
-          bg: !isButtonLoading && !isOtcServerDead ? colors.swapHoverColor : undefined,
+          bg:
+            !isButtonLoading && !isOtcServerDead && !hasNoRoutesError
+              ? colors.swapHoverColor
+              : undefined,
         }}
         w="100%"
         mt="8px"
         transition="0.2s"
         h="58px"
-        onClick={isButtonLoading || isOtcServerDead ? undefined : buttonConfig.handler}
+        onClick={
+          isButtonLoading || isOtcServerDead || hasNoRoutesError ? undefined : buttonConfig.handler
+        }
         fontSize="18px"
         align="center"
         userSelect="none"
-        cursor={!isButtonLoading && !isOtcServerDead ? "pointer" : "not-allowed"}
+        cursor={
+          !isButtonLoading && !isOtcServerDead && !hasNoRoutesError ? "pointer" : "not-allowed"
+        }
         borderRadius="16px"
         justify="center"
         border="3px solid"
         borderColor={colors.swapBorderColor}
-        opacity={isButtonLoading || isOtcServerDead ? 0.5 : 1}
-        pointerEvents={isButtonLoading || isOtcServerDead ? "none" : "auto"}
+        opacity={isButtonLoading || isOtcServerDead || hasNoRoutesError ? 0.5 : 1}
+        pointerEvents={isButtonLoading || isOtcServerDead || hasNoRoutesError ? "none" : "auto"}
       >
         {buttonConfig.showSpinner && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
         <Text color={colors.offWhite} fontFamily="Nostromo">
