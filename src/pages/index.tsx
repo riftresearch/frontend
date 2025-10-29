@@ -13,6 +13,7 @@ import OrangeText from "@/components/other/OrangeText";
 import { useStore } from "@/utils/store";
 import { useRouter } from "next/router";
 import { MaintenanceBanner } from "@/components/other/MaintenanceBanner";
+import { IS_FRONTEND_PAUSED } from "@/utils/constants";
 
 export default function Home() {
   const { isTablet, isMobile } = useWindowSize();
@@ -40,7 +41,7 @@ export default function Home() {
   }, [swapResponse?.swap_id, transactionConfirmed, router]);
 
   // Coming soon page for non-localhost
-  if (!isLocalhost) {
+  if (!isLocalhost && IS_FRONTEND_PAUSED) {
     return (
       <>
         <OpenGraph />

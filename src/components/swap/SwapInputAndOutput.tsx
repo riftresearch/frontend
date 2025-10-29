@@ -838,10 +838,12 @@ export const SwapInputAndOutput = () => {
     getQuoteForInputRef.current = true;
     console.log("currentInputBalance", currentInputBalance);
 
-    // Clear error flags
+    // Clear ALL error flags
     setExceedsUserBalance(false);
+    setExceedsAvailableBTCLiquidity(false);
     setExceedsAvailableCBBTCLiquidity(false);
     setInputBelowMinimum(false);
+    setBelowMinimumSwap(false);
 
     let adjustedInputAmount = currentInputBalance;
 
@@ -946,10 +948,12 @@ export const SwapInputAndOutput = () => {
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
 
-    // Clear error flags (both output AND input related since they can cascade)
+    // Clear ALL error flags (both output AND input related since they can cascade)
     setExceedsAvailableBTCLiquidity(false);
+    setExceedsAvailableCBBTCLiquidity(false);
     setBelowMinimumSwap(false);
-    setExceedsAvailableCBBTCLiquidity(false); // Clear input error too, especially for BTC -> cbBTC
+    setExceedsUserBalance(false);
+    setInputBelowMinimum(false);
 
     // Determine the max liquidity based on swap direction
     let maxLiquidityBtc: number;
@@ -1022,10 +1026,12 @@ export const SwapInputAndOutput = () => {
     // Set flag to indicate we should quote for input field
     getQuoteForInputRef.current = true;
 
-    // Clear error flags
+    // Clear ALL error flags
     setExceedsUserBalance(false);
+    setExceedsAvailableBTCLiquidity(false);
     setExceedsAvailableCBBTCLiquidity(false);
     setInputBelowMinimum(false);
+    setBelowMinimumSwap(false);
 
     // Get max cbBTC liquidity for BTC -> cbBTC swap
     const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
@@ -1085,9 +1091,12 @@ export const SwapInputAndOutput = () => {
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
 
-    // Clear error flags
-    setBelowMinimumSwap(false);
+    // Clear ALL error flags
+    setExceedsUserBalance(false);
+    setExceedsAvailableBTCLiquidity(false);
+    setExceedsAvailableCBBTCLiquidity(false);
     setInputBelowMinimum(false);
+    setBelowMinimumSwap(false);
 
     // Set minimum output to 3000 sats (0.00003 BTC)
     const minOutputAmountStr = MIN_BTC.toString();

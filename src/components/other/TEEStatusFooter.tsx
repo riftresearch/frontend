@@ -13,11 +13,18 @@ import useWindowSize from "@/hooks/useWindowSize";
 interface LiquidityIndicatorProps {
   label: string;
   usdValue: string;
+  satsValue: string;
   isLoading: boolean;
   isError: boolean;
 }
 
-function LiquidityIndicator({ label, usdValue, isLoading, isError }: LiquidityIndicatorProps) {
+function LiquidityIndicator({
+  label,
+  usdValue,
+  satsValue,
+  isLoading,
+  isError,
+}: LiquidityIndicatorProps) {
   const getStatusColor = () => {
     if (isLoading) return colors.text.blue;
     if (isError) return colors.red;
@@ -32,20 +39,73 @@ function LiquidityIndicator({ label, usdValue, isLoading, isError }: LiquidityIn
     return `$${(num / 1000000).toFixed(1)}M`;
   };
 
+  const getTooltipText = () => {
+    if (isLoading || isError) return null;
+
+    const sats = parseFloat(satsValue);
+    const btc = sats / 100_000_000;
+
+    return `${btc.toFixed(8)} ${label}\n${sats.toLocaleString()} sats`;
+  };
+
+  const tooltipText = getTooltipText();
+
+  if (!tooltipText) {
+    return (
+      <Flex align="center" gap="4px" letterSpacing="-0.5px">
+        <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
+          {label}:
+        </Text>
+        <Text
+          fontSize="11px"
+          color={getStatusColor()}
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          fontWeight="bold"
+        >
+          {isLoading ? "..." : isError ? "ERR" : formatUsdValue(usdValue)}
+        </Text>
+      </Flex>
+    );
+  }
+
   return (
-    <Flex align="center" gap="4px" letterSpacing="-0.5px">
-      <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
-        {label}:
-      </Text>
-      <Text
-        fontSize="11px"
-        color={getStatusColor()}
-        fontFamily={FONT_FAMILIES.AUX_MONO}
-        fontWeight="bold"
-      >
-        {isLoading ? "..." : isError ? "ERR" : formatUsdValue(usdValue)}
-      </Text>
-    </Flex>
+    <Tooltip.Root openDelay={200} closeDelay={300}>
+      <Tooltip.Trigger asChild>
+        <Box cursor="help" p="2px" m="-2px">
+          <Flex align="center" gap="4px" letterSpacing="-0.5px">
+            <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
+              {label}:
+            </Text>
+            <Text
+              fontSize="11px"
+              color={getStatusColor()}
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              fontWeight="bold"
+            >
+              {formatUsdValue(usdValue)}
+            </Text>
+          </Flex>
+        </Box>
+      </Tooltip.Trigger>
+      <Tooltip.Positioner>
+        <Tooltip.Content
+          bg={colors.offBlackLighter}
+          color={colors.offWhite}
+          borderRadius="8px"
+          px="12px"
+          py="8px"
+          fontSize="11px"
+          whiteSpace="pre-line"
+          border={`1px solid ${colors.borderGray}`}
+          boxShadow="0 4px 12px rgba(0, 0, 0, 0.3)"
+        >
+          <Tooltip.Arrow />
+          <Text fontFamily={FONT_FAMILIES.AUX_MONO} lineHeight="1.6">
+            {tooltipText}
+          </Text>
+        </Tooltip.Content>
+      </Tooltip.Positioner>
+    </Tooltip.Root>
   );
 }
 
@@ -202,6 +262,7 @@ export function TEEStatusFooter() {
           <LiquidityIndicator
             label="BTC"
             usdValue={liquidity.maxBTCLiquidityInUsd}
+            satsValue={liquidity.maxBTCLiquidity}
             isLoading={liquidity.isLoading}
             isError={liquidity.isError}
           />
@@ -209,6 +270,7 @@ export function TEEStatusFooter() {
           <LiquidityIndicator
             label="cbBTC"
             usdValue={liquidity.maxCbBTCLiquidityInUsd}
+            satsValue={liquidity.maxCbBTCLiquidity}
             isLoading={liquidity.isLoading}
             isError={liquidity.isError}
           />
