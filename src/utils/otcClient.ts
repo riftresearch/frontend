@@ -128,61 +128,106 @@ export class OTCServerClient {
   }
 
   /**
-   * Performs a fetch request with timeout and error handling
+   * Performs a single fetch attempt with timeout
+   */
+  private async fetchAttempt<T>(
+    url: string,
+    controller: AbortController,
+    options?: RequestInit
+  ): Promise<T> {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        ...this.headers,
+        ...options?.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log("OTC Server Error:", errorText);
+
+      throw new OTCServerError(response.status, response.statusText, errorText);
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (contentType?.includes("application/json")) {
+      return await response.json();
+    }
+
+    // For non-JSON responses (like health check)
+    return (await response.text()) as unknown as T;
+  }
+
+  /**
+   * Performs a fetch request with timeout, retry logic, and error handling
    */
   private async fetchWithTimeout<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          ...this.headers,
-          ...options?.headers,
-        },
-      });
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff: 1s, 2s, 4s
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log("OTC Server Error:", errorText); // TODO: auto refresh the MM quote if this happens
+    const { setOtcRetryCount, setIsRetryingOtcServer, setIsOtcServerDead } = useStore.getState();
 
-        // Set OTC server dead flag on error
-        const { setIsOtcServerDead } = useStore.getState();
-        setIsOtcServerDead(true);
+    let lastError: Error | null = null;
 
-        throw new OTCServerError(response.status, response.statusText, errorText);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      try {
+        // Set retrying flag on retry attempts (not on first attempt)
+        if (attempt > 0) {
+          console.log(
+            `OTC retry attempt ${attempt}/${MAX_RETRIES}, waiting ${RETRY_DELAYS[attempt - 1]}ms...`
+          );
+          setIsRetryingOtcServer(true);
+          setOtcRetryCount(attempt);
+
+          // Wait before retry with exponential backoff
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt - 1]));
+        }
+
+        const result = await this.fetchAttempt<T>(url, controller, options);
+
+        // Success! Clear all error flags
+        setIsOtcServerDead(false);
+        setIsRetryingOtcServer(false);
+        setOtcRetryCount(0);
+
+        clearTimeout(timeoutId);
+        return result;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // If this was the last attempt, mark server as dead
+        if (attempt === MAX_RETRIES) {
+          console.error(`OTC request failed after ${MAX_RETRIES} retries`);
+          setIsOtcServerDead(true);
+          setIsRetryingOtcServer(false);
+          setOtcRetryCount(0);
+
+          if (error instanceof OTCServerError) {
+            throw error;
+          }
+          if (error instanceof Error && error.name === "AbortError") {
+            throw new Error(`Request timeout after ${this.timeout}ms`);
+          }
+          throw error;
+        }
+
+        // Continue to next retry attempt
+        console.log(
+          `OTC request failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), will retry...`
+        );
       }
-
-      // Set OTC server alive flag on successful response
-      const { setIsOtcServerDead } = useStore.getState();
-      setIsOtcServerDead(false);
-
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("application/json")) {
-        return await response.json();
-      }
-
-      // For non-JSON responses (like health check)
-      return (await response.text()) as unknown as T;
-    } catch (error) {
-      if (error instanceof OTCServerError) {
-        throw error;
-      }
-
-      // Set OTC server dead flag on timeout or network errors
-      const { setIsOtcServerDead } = useStore.getState();
-      setIsOtcServerDead(true);
-
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error(`Request timeout after ${this.timeout}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
     }
+
+    // This should never be reached, but TypeScript needs it
+    throw new Error(lastError?.message ?? "All retry attempts failed");
   }
 
   /**

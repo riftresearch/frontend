@@ -127,7 +127,44 @@ export class RfqClient {
   }
 
   /**
-   * Performs a fetch request with timeout and error handling
+   * Performs a single fetch attempt with timeout
+   */
+  private async fetchAttempt<T>(
+    url: string,
+    controller: AbortController,
+    options?: {
+      method?: string;
+      body?: any;
+    }
+  ): Promise<T> {
+    const response = await fetch(url, {
+      method: options?.method ?? "GET",
+      signal: controller.signal,
+      headers: this.headers,
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    if (!response.ok) {
+      let errorResponse: ErrorResponse | undefined;
+      try {
+        errorResponse = await response.json();
+      } catch {
+        // If response is not JSON, use status text
+        errorResponse = { error: response.statusText };
+      }
+
+      throw new RfqClientError(
+        errorResponse?.error ?? `HTTP ${response.status}`,
+        response.status,
+        errorResponse
+      );
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Performs a fetch request with timeout, retry logic, and error handling
    */
   private async fetchWithTimeout<T>(
     endpoint: string,
@@ -141,58 +178,68 @@ export class RfqClient {
       ? `${this.baseUrl}${endpoint}?${options.params.toString()}`
       : `${this.baseUrl}${endpoint}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff: 1s, 2s, 4s
 
-    try {
-      const response = await fetch(url, {
-        method: options?.method ?? "GET",
-        signal: controller.signal,
-        headers: this.headers,
-        body: options?.body ? JSON.stringify(options.body) : undefined,
-      });
+    const { setOtcRetryCount, setIsRetryingOtcServer, setIsOtcServerDead } = useStore.getState();
 
-      if (!response.ok) {
-        let errorResponse: ErrorResponse | undefined;
-        try {
-          errorResponse = await response.json();
-        } catch {
-          // If response is not JSON, use status text
-          errorResponse = { error: response.statusText };
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      try {
+        // Set retrying flag on retry attempts (not on first attempt)
+        if (attempt > 0) {
+          console.log(
+            `RFQ retry attempt ${attempt}/${MAX_RETRIES}, waiting ${RETRY_DELAYS[attempt - 1]}ms...`
+          );
+          setIsRetryingOtcServer(true);
+          setOtcRetryCount(attempt);
+
+          // Wait before retry with exponential backoff
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt - 1]));
         }
 
-        // Set OTC server dead flag on error
-        const { setIsOtcServerDead } = useStore.getState();
-        setIsOtcServerDead(true);
+        const result = await this.fetchAttempt<T>(url, controller, options);
 
-        throw new RfqClientError(
-          errorResponse?.error ?? `HTTP ${response.status}`,
-          response.status,
-          errorResponse
+        // Success! Clear all error flags
+        setIsOtcServerDead(false);
+        setIsRetryingOtcServer(false);
+        setOtcRetryCount(0);
+
+        clearTimeout(timeoutId);
+        return result;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // If this was the last attempt, mark server as dead
+        if (attempt === MAX_RETRIES) {
+          console.error(`RFQ request failed after ${MAX_RETRIES} retries`);
+          setIsOtcServerDead(true);
+          setIsRetryingOtcServer(false);
+          setOtcRetryCount(0);
+
+          if (error instanceof RfqClientError) {
+            throw error;
+          }
+          if (error instanceof Error && error.name === "AbortError") {
+            throw new RfqClientError(`Request timeout after ${this.timeout}ms`);
+          }
+          throw new RfqClientError(lastError.message);
+        }
+
+        // Continue to next retry attempt
+        console.log(
+          `RFQ request failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), will retry...`
         );
       }
-
-      // Set OTC server alive flag on successful response
-      const { setIsOtcServerDead } = useStore.getState();
-      setIsOtcServerDead(false);
-
-      return await response.json();
-    } catch (error) {
-      if (error instanceof RfqClientError) {
-        throw error;
-      }
-
-      // Set OTC server dead flag on timeout or network errors
-      const { setIsOtcServerDead } = useStore.getState();
-      setIsOtcServerDead(true);
-
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new RfqClientError(`Request timeout after ${this.timeout}ms`);
-      }
-      throw new RfqClientError(error instanceof Error ? error.message : "Unknown error occurred");
-    } finally {
-      clearTimeout(timeoutId);
     }
+
+    // This should never be reached, but TypeScript needs it
+    throw new RfqClientError(lastError?.message ?? "All retry attempts failed");
   }
 
   /**

@@ -66,6 +66,7 @@ export const SwapButton = () => {
     approvalState,
     setApprovalState,
     isOtcServerDead,
+    isRetryingOtcServer,
     hasNoRoutesError,
     exceedsAvailableBTCLiquidity,
     exceedsAvailableCBBTCLiquidity,
@@ -909,7 +910,33 @@ export const SwapButton = () => {
     inputBelowMinimum;
 
   const isButtonDisabled =
-    isButtonLoading || isOtcServerDead || hasNoRoutesError || hasValidationError;
+    isButtonLoading ||
+    isOtcServerDead ||
+    isRetryingOtcServer ||
+    hasNoRoutesError ||
+    hasValidationError;
+
+  const handleButtonClick = () => {
+    if (isRetryingOtcServer) {
+      toastInfo({
+        title: "Service Temporarily Unavailable",
+        description: "Rift is currently down for maintenance. Please try again later.",
+      });
+      return;
+    }
+
+    if (isOtcServerDead) {
+      toastInfo({
+        title: "Service Unavailable",
+        description: "Rift is currently down for maintenance. Please try again later.",
+      });
+      return;
+    }
+
+    if (!isButtonDisabled && buttonConfig.handler) {
+      buttonConfig.handler();
+    }
+  };
 
   return (
     <Flex direction="column" w="100%">
@@ -923,7 +950,7 @@ export const SwapButton = () => {
         mt="8px"
         transition="0.2s"
         h="58px"
-        onClick={isButtonDisabled ? undefined : buttonConfig.handler}
+        onClick={handleButtonClick}
         fontSize="18px"
         align="center"
         userSelect="none"

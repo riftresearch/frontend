@@ -148,7 +148,10 @@ export const SwapInputAndOutput = () => {
   const fetchErc20TokenPrice = useCallback(
     async (tokenData: TokenData | null) => {
       // Only fetch if token has an address (ERC20 token, not ETH)
-      if (!tokenData?.address) {
+      if (
+        !tokenData?.address ||
+        tokenData.address === "0x0000000000000000000000000000000000000000"
+      ) {
         setErc20Price(null);
         return;
       }
@@ -156,6 +159,7 @@ export const SwapInputAndOutput = () => {
       const chainName =
         evmConnectWalletChainId === 1 || !evmConnectWalletChainId ? "ethereum" : "base";
       try {
+        console.log(`Fetching ERC20 price for ${tokenData.ticker} (${tokenData.address})`);
         const response = await fetch(
           `/api/token-price?chain=${chainName}&addresses=${tokenData.address}`
         );
@@ -164,8 +168,13 @@ export const SwapInputAndOutput = () => {
           const key = `${chainName}:${tokenData.address.toLowerCase()}`;
           const coin = data?.coins?.[key];
           if (coin && typeof coin.price === "number") {
+            console.log(`ERC20 price for ${tokenData.ticker}: $${coin.price}`);
             setErc20Price(coin.price);
+          } else {
+            console.warn(`No price data found for ${tokenData.ticker} at key ${key}`);
           }
+        } else {
+          console.error(`Failed to fetch price for ${tokenData.ticker}: ${response.status}`);
         }
       } catch (error) {
         console.error("Failed to fetch ERC20 price:", error);
@@ -185,6 +194,7 @@ export const SwapInputAndOutput = () => {
       }
 
       if (!selectedInputToken) {
+        console.log("no selected input token");
         return;
       }
 
@@ -674,7 +684,11 @@ export const SwapInputAndOutput = () => {
 
       // Update USD value using helper
       const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "" : "BTC";
+      console.log(
+        `Calculating USD for input: amount=${value}, ticker=${inputTicker}, ethPrice=${ethPrice}, btcPrice=${btcPrice}, erc20Price=${erc20Price}`
+      );
       const usdValue = calculateUsdValue(value, inputTicker, ethPrice, btcPrice, erc20Price);
+      console.log(`Calculated USD value: ${usdValue}`);
       setInputUsdValue(usdValue);
 
       // Clear existing quotes when user types
@@ -1203,7 +1217,10 @@ export const SwapInputAndOutput = () => {
 
       // Restore selected tokens
       if (savedState.selectedInputToken) {
+        console.log("Setting selected input token from cookie:", savedState.selectedInputToken);
         setSelectedInputToken(savedState.selectedInputToken);
+        // console log selectedInputToken
+        console.log("selectedInputToken cookie", selectedInputToken);
       }
 
       if (savedState.selectedOutputToken) {

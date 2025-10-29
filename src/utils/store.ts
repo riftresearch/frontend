@@ -81,6 +81,10 @@ export const useStore = create<{
   setFeeOverview: (overview: FeeOverview | null) => void;
   isOtcServerDead: boolean;
   setIsOtcServerDead: (value: boolean) => void;
+  isRetryingOtcServer: boolean;
+  setIsRetryingOtcServer: (value: boolean) => void;
+  otcRetryCount: number;
+  setOtcRetryCount: (value: number) => void;
   hasNoRoutesError: boolean;
   setHasNoRoutesError: (value: boolean) => void;
   exceedsAvailableBTCLiquidity: boolean;
@@ -99,7 +103,15 @@ export const useStore = create<{
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
-  selectedInputToken: null,
+  selectedInputToken: {
+    name: "Ethereum",
+    ticker: "ETH",
+    address: "0x0000000000000000000000000000000000000000",
+    balance: "0",
+    usdValue: "$0.00",
+    icon: "/images/eth_icon.svg",
+    decimals: 18,
+  },
   setSelectedInputToken: (token: TokenData | null) => set({ selectedInputToken: token }),
   selectedOutputToken: null,
   setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
@@ -158,6 +170,10 @@ export const useStore = create<{
   setFeeOverview: (overview: FeeOverview | null) => set({ feeOverview: overview }),
   isOtcServerDead: false,
   setIsOtcServerDead: (value: boolean) => set({ isOtcServerDead: value }),
+  isRetryingOtcServer: false,
+  setIsRetryingOtcServer: (value: boolean) => set({ isRetryingOtcServer: value }),
+  otcRetryCount: 0,
+  setOtcRetryCount: (value: number) => set({ otcRetryCount: value }),
   hasNoRoutesError: false,
   setHasNoRoutesError: (value: boolean) => set({ hasNoRoutesError: value }),
   exceedsAvailableBTCLiquidity: false,
