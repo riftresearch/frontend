@@ -27,7 +27,7 @@ import { useStore } from "./store";
 /**
  * Minimum swap amount in satoshis
  */
-const MIN_SWAP_SATS = 3000;
+export const MIN_SWAP_SATS = 3000;
 
 /**
  * Fetch gas parameters from the API
@@ -503,6 +503,15 @@ export function formatUsdValue(value: number): string {
  */
 export function satsToBtc(sats: number): string {
   return formatUnits(BigInt(sats), BITCOIN_DECIMALS);
+}
+
+/**
+ * Convert BTC to satoshis
+ * @param btc - Amount in BTC (as string or number)
+ * @returns Amount in satoshis as bigint
+ */
+export function btcToSats(btc: string | number): bigint {
+  return parseUnits(btc.toString(), BITCOIN_DECIMALS);
 }
 
 /**

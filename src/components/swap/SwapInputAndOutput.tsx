@@ -29,9 +29,14 @@ import {
   calculateExchangeRate,
   calculateFees,
   getMinSwapValueUsd,
+  satsToBtc,
+  MIN_SWAP_SATS,
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
+
+// Calculate minimum BTC amount once
+const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
 
 export const SwapInputAndOutput = () => {
   // ============================================================================
@@ -631,6 +636,19 @@ export const SwapInputAndOutput = () => {
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    // clear errors
+    console.log("sameer clearing errors");
+    console.log("sameer exceedsUserBalance", exceedsUserBalance);
+    console.log("sameer inputExceedsLiquidity", inputExceedsLiquidity);
+    console.log("sameer inputBelowMinimum", inputBelowMinimum);
+    console.log("sameer belowMinimumSwap", belowMinimumSwap);
+    console.log("sameer exceedsMarketMakerLiquidity", exceedsMarketMakerLiquidity);
+    setExceedsUserBalance(false);
+    setInputExceedsLiquidity(false);
+    setInputBelowMinimum(false);
+    setBelowMinimumSwap(false);
+    setExceedsMarketMakerLiquidity(false);
+
     let value = e.target.value;
 
     // If first character is "0" or ".", replace with "0."
@@ -748,11 +766,9 @@ export const SwapInputAndOutput = () => {
       // Set up debounced quote fetch (75ms delay)
       if (value && parseFloat(value) > 0 && !getQuoteForInputRef.current) {
         // Check if output is below minimum (3000 sats = 0.00003 BTC)
-        const MIN_SATS = 3000;
-        const minBtc = MIN_SATS / 100_000_000;
         const outputFloat = parseFloat(value);
 
-        if (outputFloat < minBtc) {
+        if (outputFloat < MIN_BTC) {
           // Don't fetch quote if below minimum
           setRawInputAmount("");
           setInputUsdValue(ZERO_USD_DISPLAY);
@@ -919,11 +935,11 @@ export const SwapInputAndOutput = () => {
     if (isSwappingForBTC) {
       // ERC20 -> BTC: Use maxBTCLiquidity
       const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
-      maxLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
+      maxLiquidityBtc = parseFloat(satsToBtc(Number(maxBtcLiquiditySats)));
     } else {
       // BTC -> ERC20 (cbBTC): Use maxCbBTCLiquidity
       const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-      maxLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
+      maxLiquidityBtc = parseFloat(satsToBtc(Number(maxCbBtcLiquiditySats)));
     }
 
     const maxOutputAmount = maxLiquidityBtc.toString();
@@ -992,7 +1008,7 @@ export const SwapInputAndOutput = () => {
 
     // Get max cbBTC liquidity for BTC -> cbBTC swap
     const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-    const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
+    const maxCbBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxCbBtcLiquiditySats)));
 
     // Truncate to 8 decimals for display
     const maxInputAmount = maxCbBtcLiquidityBtc.toString();
@@ -1053,9 +1069,7 @@ export const SwapInputAndOutput = () => {
     setInputBelowMinimum(false);
 
     // Set minimum output to 3000 sats (0.00003 BTC)
-    const MIN_SATS = 3000;
-    const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
-    const minOutputAmountStr = minBtc.toString();
+    const minOutputAmountStr = MIN_BTC.toString();
 
     // Set the minimum amount as the output amount
     setOutputAmount(minOutputAmountStr);
@@ -1431,10 +1445,8 @@ export const SwapInputAndOutput = () => {
       // ERC20 -> BTC: Check maxBTCLiquidity
       const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
       if (maxBtcLiquiditySats && maxBtcLiquiditySats !== "0") {
-        const maxBtcLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
-        // Add small tolerance (0.1%) to account for rounding when using Max button
-        const tolerance = maxBtcLiquidityBtc * 0.001;
-        if (outputFloat > maxBtcLiquidityBtc + tolerance) {
+        const maxBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxBtcLiquiditySats)));
+        if (outputFloat > maxBtcLiquidityBtc) {
           setExceedsMarketMakerLiquidity(true);
         } else {
           setExceedsMarketMakerLiquidity(false);
@@ -1446,10 +1458,8 @@ export const SwapInputAndOutput = () => {
       // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
       const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
       if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
-        const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
-        // Add small tolerance (0.1%) to account for rounding when using Max button
-        const tolerance = maxCbBtcLiquidityBtc * 0.001;
-        if (outputFloat > maxCbBtcLiquidityBtc + tolerance) {
+        const maxCbBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxCbBtcLiquiditySats)));
+        if (outputFloat > maxCbBtcLiquidityBtc) {
           setExceedsMarketMakerLiquidity(true);
         } else {
           setExceedsMarketMakerLiquidity(false);
@@ -1497,10 +1507,10 @@ export const SwapInputAndOutput = () => {
     // BTC -> cbBTC: Check if input BTC exceeds maxCbBTCLiquidity
     const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
     if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
-      const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
-      // Add small tolerance (0.1%) to account for rounding and fees when using Max button
-      const tolerance = maxCbBtcLiquidityBtc * 0.001;
-      if (inputFloat > maxCbBtcLiquidityBtc + tolerance) {
+      const maxCbBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxCbBtcLiquiditySats)));
+      console.log("[sameer] maxCbBtcLiquidityBtc", maxCbBtcLiquidityBtc);
+      console.log("[sameer] inputFloat", inputFloat);
+      if (inputFloat > maxCbBtcLiquidityBtc) {
         setInputExceedsLiquidity(true);
       } else {
         setInputExceedsLiquidity(false);
@@ -1531,13 +1541,10 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
-    const MIN_SATS = 3000;
-    const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
-
     // Check if output exists and is below minimum
     if (outputAmount && parseFloat(outputAmount) > 0) {
       const outputFloat = parseFloat(outputAmount);
-      if (outputFloat < minBtc) {
+      if (outputFloat < MIN_BTC) {
         setBelowMinimumSwap(true);
         return;
       } else {
@@ -1572,13 +1579,10 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
-    const MIN_SATS = 3000;
-    const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
-
     // Check 1: If output exists and is below minimum (user typed in input, got small output)
     if (outputAmount && parseFloat(outputAmount) > 0) {
       const outputFloat = parseFloat(outputAmount);
-      if (outputFloat < minBtc) {
+      if (outputFloat < MIN_BTC) {
         setInputBelowMinimum(true);
         return;
       }
@@ -1763,7 +1767,9 @@ export const SwapInputAndOutput = () => {
                   >
                     {(() => {
                       const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-                      const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
+                      const maxCbBtcLiquidityBtc = parseFloat(
+                        satsToBtc(Number(maxCbBtcLiquiditySats))
+                      );
                       return `${maxCbBtcLiquidityBtc.toFixed(4)} BTC Max`;
                     })()}
                   </Text>
@@ -1794,10 +1800,8 @@ export const SwapInputAndOutput = () => {
                     fontFamily="Aux"
                   >
                     {(() => {
-                      const MIN_SATS = 3000;
-                      const minBtc = MIN_SATS / 100_000_000;
                       const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
-                      return `${minBtc.toFixed(5)} ${ticker} Min`;
+                      return `${MIN_BTC.toFixed(5)} ${ticker} Min`;
                     })()}
                   </Text>
                 </>
@@ -2003,7 +2007,7 @@ export const SwapInputAndOutput = () => {
                       const maxLiquiditySats = isSwappingForBTC
                         ? liquidity.maxBTCLiquidity
                         : liquidity.maxCbBTCLiquidity;
-                      const maxLiquidityBtc = Number(maxLiquiditySats) / 100_000_000;
+                      const maxLiquidityBtc = parseFloat(satsToBtc(Number(maxLiquiditySats)));
                       const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
                       return `${maxLiquidityBtc.toFixed(4)} ${ticker} Max`;
                     })()}
@@ -2035,10 +2039,8 @@ export const SwapInputAndOutput = () => {
                     fontFamily="Aux"
                   >
                     {(() => {
-                      const MIN_SATS = 3000;
-                      const minBtc = MIN_SATS / 100_000_000;
                       const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
-                      return `${minBtc.toFixed(5)} ${ticker} Min`;
+                      return `${MIN_BTC.toFixed(5)} ${ticker} Min`;
                     })()}
                   </Text>
                 </>

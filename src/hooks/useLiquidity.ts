@@ -9,6 +9,7 @@ import {
   TradingPair,
   hexToDecimal,
 } from "@/utils/rfqClient";
+import { satsToBtc } from "@/utils/swapHelpers";
 
 /**
  * Extended liquidity response with calculated max liquidity values
@@ -99,7 +100,7 @@ export function useMaxLiquidity() {
   const maxCbBTCLiquidityInUsd = useMemo(() => {
     if (!query.data?.maxCbBTCLiquidity || !btcPrice) return "0";
     const satoshis = Number(query.data.maxCbBTCLiquidity);
-    const btcAmount = satoshis / 100_000_000; // Convert satoshis to BTC
+    const btcAmount = parseFloat(satsToBtc(satoshis));
     const usdValue = btcAmount * btcPrice;
     console.log(
       `Calculating cbBTC USD: ${satoshis} sats = ${btcAmount} BTC * $${btcPrice} = $${usdValue}`
@@ -110,7 +111,7 @@ export function useMaxLiquidity() {
   const maxBTCLiquidityInUsd = useMemo(() => {
     if (!query.data?.maxBTCLiquidity || !btcPrice) return "0";
     const satoshis = Number(query.data.maxBTCLiquidity);
-    const btcAmount = satoshis / 100_000_000; // Convert satoshis to BTC
+    const btcAmount = parseFloat(satsToBtc(satoshis));
     const usdValue = btcAmount * btcPrice;
     console.log(
       `Calculating BTC USD: ${satoshis} sats = ${btcAmount} BTC * $${btcPrice} = $${usdValue}`
