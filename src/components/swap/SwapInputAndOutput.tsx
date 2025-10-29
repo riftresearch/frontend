@@ -328,17 +328,8 @@ export const SwapInputAndOutput = () => {
         }
 
         // Check if output value exceeds maximum BTC liquidity
-        if (
-          parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
-          usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
-        ) {
-          console.log("Output value exceeds maximum BTC liquidity");
-          setUniswapQuote(null);
-          setRfqQuote(null);
-          setRawInputAmount("");
-          setIsLoadingQuote(false);
-          return;
-        }
+        // Don't block the quote fetch - let it fail and show error in UI
+        // This allows the user to see the error message on the output field
       }
 
       try {
@@ -1405,66 +1396,156 @@ export const SwapInputAndOutput = () => {
     const inputFloat = parseFloat(rawInputAmount);
     const balanceFloat = parseFloat(currentInputBalance);
 
+    // Show "exceeds user balance" if:
+    // 1. Input exceeds balance, AND
+    // 2. Input amount (in USD) < MM liquidity (in USD)
+    //
+    // If input (in USD) >= MM liquidity, show "exceeds MM liquidity" instead
+
     if (inputFloat > balanceFloat) {
-      setExceedsUserBalance(true);
+      // Check if INPUT amount is less than MM liquidity (compare in USD)
+      const mmLiquidityUsdStr = isSwappingForBTC
+        ? liquidity.maxBTCLiquidityInUsd
+        : liquidity.maxCbBTCLiquidityInUsd;
+
+      const mmLiquidityUsd = parseFloat(mmLiquidityUsdStr);
+
+      if (mmLiquidityUsd > 0) {
+        // Calculate input USD value
+        let price: number | null = null;
+        if (isSwappingForBTC) {
+          // ERC20 -> BTC
+          if (selectedInputToken?.ticker === "ETH") {
+            price = ethPrice;
+          } else if (selectedInputToken?.address) {
+            price = erc20Price;
+          }
+        } else {
+          // BTC -> ERC20
+          price = btcPrice;
+        }
+
+        if (price) {
+          const inputUsdValue = inputFloat * price;
+
+          // If input USD value < MM liquidity USD, show "exceeds balance"
+          // If input USD value >= MM liquidity USD, don't show this error (defer to MM liquidity check)
+          if (inputUsdValue < mmLiquidityUsd) {
+            setExceedsUserBalance(true);
+          } else {
+            setExceedsUserBalance(false);
+          }
+        } else {
+          // No price data, default to showing balance error
+          setExceedsUserBalance(true);
+        }
+      } else {
+        // No liquidity data, default to showing balance error
+        setExceedsUserBalance(true);
+      }
     } else {
       setExceedsUserBalance(false);
     }
-  }, [rawInputAmount, currentInputBalance]);
+  }, [
+    rawInputAmount,
+    currentInputBalance,
+    isSwappingForBTC,
+    liquidity.maxBTCLiquidityInUsd,
+    liquidity.maxCbBTCLiquidityInUsd,
+    selectedInputToken,
+    ethPrice,
+    erc20Price,
+    btcPrice,
+  ]);
 
-  // Check if output amount exceeds market maker liquidity
+  // Check if input/output amount exceeds market maker liquidity
   useEffect(() => {
-    if (!outputAmount || parseFloat(outputAmount) <= 0) {
-      setExceedsMarketMakerLiquidity(false);
-      return;
-    }
-
-    // Skip check if user balance is already exceeded (takes priority)
+    // Skip check if user balance is already exceeded AND user balance < MM liquidity
+    // (User balance error takes priority in that case)
     if (exceedsUserBalance) {
       setExceedsMarketMakerLiquidity(false);
       return;
     }
 
-    const outputFloat = parseFloat(outputAmount);
+    // Check based on which field user is editing
+    if (lastEditedField === "input") {
+      // For ERC20 -> BTC: Check if input exceeds MM liquidity
+      if (isSwappingForBTC) {
+        const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
+        if (!maxBtcLiquiditySats || maxBtcLiquiditySats === "0") {
+          setExceedsMarketMakerLiquidity(false);
+          return;
+        }
 
-    // Direction dependent: check the appropriate liquidity based on swap direction
-    if (isSwappingForBTC) {
-      // ERC20 -> BTC: Check maxBTCLiquidity
-      const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
-      if (maxBtcLiquiditySats && maxBtcLiquiditySats !== "0") {
-        const maxBtcLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
-        // Add small tolerance (0.1%) to account for rounding when using Max button
-        const tolerance = maxBtcLiquidityBtc * 0.001;
-        if (outputFloat > maxBtcLiquidityBtc + tolerance) {
-          setExceedsMarketMakerLiquidity(true);
-        } else {
-          setExceedsMarketMakerLiquidity(false);
+        // Check input (ERC20 sent) - convert to USD and compare with MM liquidity in USD
+        if (rawInputAmount && parseFloat(rawInputAmount) > 0 && currentInputBalance) {
+          const inputFloat = parseFloat(rawInputAmount);
+
+          // If user has more than MM liquidity (in terms of what they can swap)
+          // and they're trying to swap more than MM liquidity, show the error
+          let price: number | null = null;
+          if (selectedInputToken?.ticker === "ETH") {
+            price = ethPrice;
+          } else if (selectedInputToken?.address) {
+            price = erc20Price;
+          }
+
+          if (price && btcPrice) {
+            const inputUsdValue = inputFloat * price;
+            const mmLiquidityUsd = parseFloat(liquidity.maxBTCLiquidityInUsd);
+
+            if (mmLiquidityUsd > 0 && inputUsdValue > mmLiquidityUsd) {
+              setExceedsMarketMakerLiquidity(true);
+              return;
+            }
+          }
         }
+
+        setExceedsMarketMakerLiquidity(false);
       } else {
+        // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
         setExceedsMarketMakerLiquidity(false);
       }
+    } else if (lastEditedField === "output") {
+      // Check output (BTC or cbBTC received)
+      if (!outputAmount || parseFloat(outputAmount) <= 0) {
+        setExceedsMarketMakerLiquidity(false);
+        return;
+      }
+
+      const outputFloat = parseFloat(outputAmount);
+      const maxLiquiditySats = isSwappingForBTC
+        ? liquidity.maxBTCLiquidity
+        : liquidity.maxCbBTCLiquidity;
+
+      if (maxLiquiditySats && maxLiquiditySats !== "0") {
+        const maxLiquidityBtc = Number(maxLiquiditySats) / 100_000_000;
+        const tolerance = maxLiquidityBtc * 0.001;
+
+        if (outputFloat > maxLiquidityBtc + tolerance) {
+          setExceedsMarketMakerLiquidity(true);
+          return;
+        }
+      }
+
+      setExceedsMarketMakerLiquidity(false);
     } else {
-      // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
-      const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-      if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
-        const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
-        // Add small tolerance (0.1%) to account for rounding when using Max button
-        const tolerance = maxCbBtcLiquidityBtc * 0.001;
-        if (outputFloat > maxCbBtcLiquidityBtc + tolerance) {
-          setExceedsMarketMakerLiquidity(true);
-        } else {
-          setExceedsMarketMakerLiquidity(false);
-        }
-      } else {
-        setExceedsMarketMakerLiquidity(false);
-      }
+      setExceedsMarketMakerLiquidity(false);
     }
   }, [
+    rawInputAmount,
     outputAmount,
+    lastEditedField,
     isSwappingForBTC,
     liquidity.maxBTCLiquidity,
     liquidity.maxCbBTCLiquidity,
+    liquidity.maxBTCLiquidityInUsd,
     exceedsUserBalance,
+    currentInputBalance,
+    selectedInputToken,
+    ethPrice,
+    erc20Price,
+    btcPrice,
   ]);
 
   // Check if input BTC amount exceeds cbBTC liquidity (BTC -> cbBTC direction)
@@ -1676,7 +1757,10 @@ export const SwapInputAndOutput = () => {
                 p="0px"
                 letterSpacing="-6px"
                 color={
-                  exceedsUserBalance || inputExceedsLiquidity || inputBelowMinimum
+                  exceedsUserBalance ||
+                  (exceedsMarketMakerLiquidity && lastEditedField === "input") ||
+                  inputExceedsLiquidity ||
+                  inputBelowMinimum
                     ? colors.red
                     : colors.offWhite
                 }
@@ -1699,7 +1783,39 @@ export const SwapInputAndOutput = () => {
             )}
 
             <Flex>
-              {exceedsUserBalance ? (
+              {exceedsMarketMakerLiquidity && isSwappingForBTC && lastEditedField === "input" ? (
+                <>
+                  <Text
+                    color={colors.redHover}
+                    fontSize="13px"
+                    mt="6px"
+                    ml="1px"
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    Exceeds available liquidity -
+                  </Text>
+                  <Text
+                    fontSize="13px"
+                    mt="7px"
+                    ml="8px"
+                    color={inputStyle?.border_color_light || colors.textGray}
+                    cursor="pointer"
+                    onClick={handleOutputMaxClick}
+                    _hover={{ textDecoration: "underline" }}
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    {(() => {
+                      const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
+                      const maxBtcLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000;
+                      return `${maxBtcLiquidityBtc.toFixed(4)} BTC Max`;
+                    })()}
+                  </Text>
+                </>
+              ) : exceedsUserBalance ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -1804,7 +1920,7 @@ export const SwapInputAndOutput = () => {
                   fontWeight="normal"
                   fontFamily="Aux"
                 >
-                  {inputUsdValue}
+                  {isLoadingQuote && !getQuoteForInputRef.current ? "..." : inputUsdValue}
                 </Text>
               )}
             </Flex>
@@ -1946,7 +2062,9 @@ export const SwapInputAndOutput = () => {
                 p="0px"
                 letterSpacing="-6px"
                 color={
-                  exceedsMarketMakerLiquidity || belowMinimumSwap ? colors.red : colors.offWhite
+                  (exceedsMarketMakerLiquidity && lastEditedField === "output") || belowMinimumSwap
+                    ? colors.red
+                    : colors.offWhite
                 }
                 _active={{ border: "none", boxShadow: "none", outline: "none" }}
                 _focus={{ border: "none", boxShadow: "none", outline: "none" }}
@@ -1967,7 +2085,7 @@ export const SwapInputAndOutput = () => {
             )}
 
             <Flex>
-              {exceedsMarketMakerLiquidity ? (
+              {exceedsMarketMakerLiquidity && lastEditedField === "output" ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -2043,7 +2161,7 @@ export const SwapInputAndOutput = () => {
                   fontWeight="normal"
                   fontFamily="Aux"
                 >
-                  {outputUsdValue}
+                  {isLoadingQuote && getQuoteForInputRef.current ? "..." : outputUsdValue}
                 </Text>
               )}
             </Flex>
