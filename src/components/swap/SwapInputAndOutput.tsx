@@ -1322,11 +1322,11 @@ export const SwapInputAndOutput = () => {
     const balance = token.balance;
     const amt = parseFloat(balance);
 
-    if (!balance || !Number.isFinite(amt) || amt <= 0) {
-      setCurrentInputBalance(null);
-      setCurrentInputTicker(null);
-      return;
-    }
+    // if (!balance || !Number.isFinite(amt) || amt <= 0) {
+    //   setCurrentInputBalance(null);
+    //   setCurrentInputTicker(null);
+    //   return;
+    // }
 
     setCurrentInputBalance(balance);
     setCurrentInputTicker(token.ticker || null);
@@ -1983,7 +1983,7 @@ export const SwapInputAndOutput = () => {
           <Spacer />
           <Flex mr="8px" py="12px" direction="column" align="flex-end" justify="center" h="100%">
             <Flex direction="row" justify="flex-end" h="21px" align="center">
-              {currentInputBalance && (
+              {currentInputBalance && parseFloat(currentInputBalance) > 0 && (
                 <Tooltip
                   show={showMaxTooltip && selectedInputToken?.ticker === "ETH" && isAtAdjustedMax}
                   onMouseEnter={() => setShowMaxTooltip(true)}
