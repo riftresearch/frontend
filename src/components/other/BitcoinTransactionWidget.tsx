@@ -386,7 +386,6 @@ export function BitcoinTransactionWidget({
                   fontSize="13px"
                   letterSpacing="-0.3px"
                   fontWeight="500"
-                  isTruncated
                   flex="1"
                 >
                   {address}
