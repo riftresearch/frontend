@@ -172,6 +172,10 @@ export class RfqClient {
         );
       }
 
+      // Set OTC server alive flag on successful response
+      const { setIsOtcServerDead } = useStore.getState();
+      setIsOtcServerDead(false);
+
       return await response.json();
     } catch (error) {
       if (error instanceof RfqClientError) {

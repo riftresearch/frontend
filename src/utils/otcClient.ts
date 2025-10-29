@@ -156,6 +156,10 @@ export class OTCServerClient {
         throw new OTCServerError(response.status, response.statusText, errorText);
       }
 
+      // Set OTC server alive flag on successful response
+      const { setIsOtcServerDead } = useStore.getState();
+      setIsOtcServerDead(false);
+
       const contentType = response.headers.get("content-type");
       if (contentType?.includes("application/json")) {
         return await response.json();
