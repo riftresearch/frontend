@@ -260,7 +260,7 @@ export function BitcoinTransactionWidget({
       {/* Top Half - QR Code and Details Section */}
       <Box
         w="100%"
-        h="50%"
+        h="59%"
         borderRadius="40px"
         position="absolute"
         top="0px"
@@ -296,7 +296,7 @@ export function BitcoinTransactionWidget({
             left: "40px",
             width: "28px",
             height: "28px",
-            opacity: 0.6,
+            opacity: 0.5,
           }}
         />
         <img
@@ -306,9 +306,9 @@ export function BitcoinTransactionWidget({
             position: "absolute",
             top: "25px",
             right: "40px",
-            width: "60px",
-            height: "60px",
-            opacity: 0.6,
+            width: "40px",
+            height: "40px",
+            opacity: 0.5,
           }}
         />
         <img
@@ -318,9 +318,9 @@ export function BitcoinTransactionWidget({
             position: "absolute",
             bottom: "25px",
             left: "40px",
-            width: "60px",
-            height: "60px",
-            opacity: 0.6,
+            width: "40px",
+            height: "40px",
+            opacity: 0.5,
           }}
         />
         <img
@@ -332,7 +332,7 @@ export function BitcoinTransactionWidget({
             right: "40px",
             width: "28px",
             height: "28px",
-            opacity: 0.6,
+            opacity: 0.5,
           }}
         />
 
@@ -349,7 +349,7 @@ export function BitcoinTransactionWidget({
             align="center"
             flexShrink={0}
           >
-            <QRCodeSVG value={bitcoinUri} size={180} />
+            <QRCodeSVG value={bitcoinUri} size={160} />
           </Flex>
 
           {/* Address and Amount Details on Right - Stacked Vertically */}

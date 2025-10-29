@@ -34,6 +34,7 @@ import {
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
+import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -72,6 +73,8 @@ export const SwapInputAndOutput = () => {
   const outputQuoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const quoteRequestIdRef = useRef(0);
   const approvalDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialMountRef = useRef(true);
+  const hasLoadedFromCookieRef = useRef(false);
 
   // Global store
   const {
@@ -1161,13 +1164,49 @@ export const SwapInputAndOutput = () => {
     fetchETHandBTCPrice();
   }, [setBtcPrice, setEthPrice]);
 
+  // Load swap state from cookies on initial mount BEFORE setting defaults
   useEffect(() => {
-    const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
-    setSelectedInputToken(ETH_TOKEN);
-  }, [setSelectedInputToken]);
+    if (!isInitialMountRef.current || hasLoadedFromCookieRef.current) return;
+
+    const savedState = loadSwapStateFromCookie();
+    if (savedState) {
+      console.log("Loading swap state from cookie:", savedState);
+
+      // Restore swap direction
+      setIsSwappingForBTC(savedState.isSwappingForBTC);
+
+      // Restore selected tokens
+      if (savedState.selectedInputToken) {
+        setSelectedInputToken(savedState.selectedInputToken);
+      }
+
+      if (savedState.selectedOutputToken) {
+        setSelectedOutputToken(savedState.selectedOutputToken);
+      }
+
+      hasLoadedFromCookieRef.current = true;
+    }
+
+    isInitialMountRef.current = false;
+  }, [setIsSwappingForBTC, setSelectedInputToken, setSelectedOutputToken]);
+
+  // Set default input token if no cookie state was loaded
+  useEffect(() => {
+    // Only set default if:
+    // 1. We've checked for cookies (isInitialMountRef is false)
+    // 2. No token is currently selected
+    // 3. We haven't loaded from cookie
+    if (!isInitialMountRef.current && !selectedInputToken && !hasLoadedFromCookieRef.current) {
+      const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
+      setSelectedInputToken(ETH_TOKEN);
+    }
+  }, [selectedInputToken, setSelectedInputToken]);
 
   // Initialize selectedOutputToken based on swap direction
   useEffect(() => {
+    // Skip if we're still on initial mount and might load from cookie
+    if (isInitialMountRef.current) return;
+
     if (isSwappingForBTC) {
       setSelectedOutputToken(null);
     } else {
@@ -1398,12 +1437,13 @@ export const SwapInputAndOutput = () => {
 
     // Show "exceeds user balance" if:
     // 1. Input exceeds balance, AND
-    // 2. Input amount (in USD) < MM liquidity (in USD)
+    // 2. User's BALANCE (in USD) < MM liquidity (in USD)
     //
-    // If input (in USD) >= MM liquidity, show "exceeds MM liquidity" instead
+    // If user's BALANCE >= MM liquidity, show "exceeds MM liquidity" instead
+    // (This means the user has enough money, but MM doesn't have enough liquidity)
 
     if (inputFloat > balanceFloat) {
-      // Check if INPUT amount is less than MM liquidity (compare in USD)
+      // Check if user's BALANCE is less than MM liquidity (compare in USD)
       const mmLiquidityUsdStr = isSwappingForBTC
         ? liquidity.maxBTCLiquidityInUsd
         : liquidity.maxCbBTCLiquidityInUsd;
@@ -1411,7 +1451,7 @@ export const SwapInputAndOutput = () => {
       const mmLiquidityUsd = parseFloat(mmLiquidityUsdStr);
 
       if (mmLiquidityUsd > 0) {
-        // Calculate input USD value
+        // Calculate user's BALANCE in USD
         let price: number | null = null;
         if (isSwappingForBTC) {
           // ERC20 -> BTC
@@ -1426,11 +1466,11 @@ export const SwapInputAndOutput = () => {
         }
 
         if (price) {
-          const inputUsdValue = inputFloat * price;
+          const balanceUsdValue = balanceFloat * price;
 
-          // If input USD value < MM liquidity USD, show "exceeds balance"
-          // If input USD value >= MM liquidity USD, don't show this error (defer to MM liquidity check)
-          if (inputUsdValue < mmLiquidityUsd) {
+          // If user's balance USD value < MM liquidity USD, show "exceeds balance"
+          // If user's balance USD value >= MM liquidity USD, don't show this error (defer to MM liquidity check)
+          if (balanceUsdValue < mmLiquidityUsd) {
             setExceedsUserBalance(true);
           } else {
             setExceedsUserBalance(false);
@@ -1601,6 +1641,13 @@ export const SwapInputAndOutput = () => {
   // Check if output amount is below minimum swap amount (3000 sats)
   // Only show this error when user is editing the OUTPUT field
   useEffect(() => {
+    // Clear error if output is empty or zero
+    const outputFloat = parseFloat(outputAmount);
+    if (!outputAmount || !Number.isFinite(outputFloat) || outputFloat <= 0) {
+      setBelowMinimumSwap(false);
+      return;
+    }
+
     // Skip check if user balance is already exceeded (takes priority)
     if (exceedsUserBalance) {
       setBelowMinimumSwap(false);
@@ -1614,24 +1661,23 @@ export const SwapInputAndOutput = () => {
     }
 
     // Check if output exists and is below minimum
-    if (outputAmount && parseFloat(outputAmount) > 0) {
-      const outputFloat = parseFloat(outputAmount);
-      if (outputFloat < MIN_BTC) {
-        setBelowMinimumSwap(true);
-        return;
-      } else {
-        setBelowMinimumSwap(false);
-        return;
-      }
+    if (outputFloat < MIN_BTC) {
+      setBelowMinimumSwap(true);
+    } else {
+      setBelowMinimumSwap(false);
     }
-
-    // If neither condition is met, clear the flag
-    setBelowMinimumSwap(false);
   }, [outputAmount, exceedsUserBalance, lastEditedField]);
 
   // Check if input amount would result in below minimum output
   // Only show this error when user is editing the INPUT field
   useEffect(() => {
+    // Clear error if input is empty or zero
+    const inputFloat = parseFloat(rawInputAmount);
+    if (!rawInputAmount || !Number.isFinite(inputFloat) || inputFloat <= 0) {
+      setInputBelowMinimum(false);
+      return;
+    }
+
     // Skip check if user balance is already exceeded (takes priority)
     if (exceedsUserBalance) {
       setInputBelowMinimum(false);
@@ -1652,7 +1698,8 @@ export const SwapInputAndOutput = () => {
     }
 
     // Check 1: If output exists and is below minimum (user typed in input, got small output)
-    if (outputAmount && parseFloat(outputAmount) > 0) {
+    // Also verify input is still > 0 (to handle React batched state updates)
+    if (inputFloat > 0 && outputAmount && parseFloat(outputAmount) > 0) {
       const outputFloat = parseFloat(outputAmount);
       if (outputFloat < MIN_BTC) {
         setInputBelowMinimum(true);
@@ -1661,13 +1708,7 @@ export const SwapInputAndOutput = () => {
     }
 
     // Check 2: If input exists but output is empty/zero (quote was blocked)
-    if (
-      rawInputAmount &&
-      parseFloat(rawInputAmount) > 0 &&
-      (!outputAmount || parseFloat(outputAmount) <= 0)
-    ) {
-      const inputFloat = parseFloat(rawInputAmount);
-
+    if (inputFloat > 0 && (!outputAmount || parseFloat(outputAmount) <= 0)) {
       // Get the price of the input token
       let price: number | null = null;
       const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
@@ -1706,6 +1747,19 @@ export const SwapInputAndOutput = () => {
     lastEditedField,
     isAtAdjustedMax,
   ]);
+
+  // Save swap state to cookies whenever direction or tokens change
+  useEffect(() => {
+    // Skip saving during initial mount while we're loading from cookie
+    if (isInitialMountRef.current) return;
+
+    // Save current state to cookie
+    saveSwapStateToCookie({
+      isSwappingForBTC,
+      selectedInputToken,
+      selectedOutputToken,
+    });
+  }, [isSwappingForBTC, selectedInputToken, selectedOutputToken]);
 
   // ============================================================================
   // RENDER

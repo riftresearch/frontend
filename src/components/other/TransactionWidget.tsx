@@ -531,7 +531,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
             left: "40px", // Doubled horizontal padding: 20px * 2 = 40px
             width: "28px", // 15% bigger: 24px * 1.15 = 27.6px ≈ 28px
             height: "28px",
-            opacity: 0.6,
+            opacity: 0.5,
           }}
         />
         <img
@@ -543,7 +543,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
             right: "40px", // Doubled horizontal padding: 20px * 2 = 40px
             width: "60px", // 2.5x bigger: 24px * 2.5 = 60px
             height: "60px",
-            opacity: 0.6,
+            opacity: 0.5,
           }}
         />
         <img
@@ -555,7 +555,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
             left: "40px", // Doubled horizontal padding: 20px * 2 = 40px
             width: "60px", // 2.5x bigger: 24px * 2.5 = 60px
             height: "60px",
-            opacity: 0.6,
+            opacity: 0.5,
           }}
         />
         <img
@@ -567,7 +567,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
             right: "40px", // Doubled horizontal padding: 20px * 2 = 40px
             width: "28px", // 15% bigger: 24px * 1.15 = 27.6px ≈ 28px
             height: "28px",
-            opacity: 0.6,
+            opacity: 0.5,
           }}
         />
 
