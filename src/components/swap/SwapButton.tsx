@@ -817,17 +817,17 @@ export const SwapButton = () => {
   // Determine button text and click handler
   const getButtonTextAndHandler = () => {
     // Check validation errors first
-    if (exceedsUserBalance) {
+    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity) {
       return {
-        text: `Not enough ${selectedInputToken?.ticker || ""}`,
+        text: "Not enough liquidity",
         handler: undefined,
         showSpinner: false,
       };
     }
 
-    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity) {
+    if (exceedsUserBalance) {
       return {
-        text: "Not enough liquidity",
+        text: `Not enough ${selectedInputToken?.ticker || ""}`,
         handler: undefined,
         showSpinner: false,
       };

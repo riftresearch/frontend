@@ -1529,13 +1529,6 @@ export const SwapInputAndOutput = () => {
 
   // Check if input/output amount exceeds market maker liquidity
   useEffect(() => {
-    // Skip check if user balance is already exceeded AND user balance < MM liquidity
-    // (User balance error takes priority in that case)
-    if (exceedsUserBalance) {
-      setExceedsAvailableBTCLiquidity(false);
-      return;
-    }
-
     // Check based on which field user is editing
     if (lastEditedField === "input") {
       // For ERC20 -> BTC: Check if input exceeds MM liquidity
@@ -1793,6 +1786,14 @@ export const SwapInputAndOutput = () => {
   // ============================================================================
   // RENDER
   // ============================================================================
+  console.log("[sameer] exceedsAvailableBTCLiquidity", exceedsAvailableBTCLiquidity);
+  console.log("[sameer] exceedsAvailableCBBTCLiquidity", exceedsAvailableCBBTCLiquidity);
+  console.log("[sameer] exceedsUserBalance", exceedsUserBalance);
+  // console.log("[sameer] inputBelowMinimum", inputBelowMinimum);
+  // console.log("[sameer] belowMinimumSwap", belowMinimumSwap);
+  // console.log("[sameer] isLoadingQuote", isLoadingQuote);
+  // console.log("[sameer] getQuoteForInputRef.current", getQuoteForInputRef.current);
+  // console.log("[sameer] rawInputAmount", rawInputAmount);
 
   return (
     <Flex w="100%" direction="column">
