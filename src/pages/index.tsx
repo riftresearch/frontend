@@ -117,7 +117,8 @@ export default function Home() {
           </Flex>
           <SwapWidget />
         </Flex>
-        {!process.env.NEXT_PUBLIC_FAKE_OTC && !process.env.NEXT_PUBLIC_FAKE_RFQ && (
+        {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
+        process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (
           <TEEStatusFooter />
         )}
         {isOtcServerDead && <MaintenanceBanner />}

@@ -801,6 +801,11 @@ export const SwapInputAndOutput = () => {
     getQuoteForInputRef.current = true;
     console.log("currentInputBalance", currentInputBalance);
 
+    // Clear error flags
+    setExceedsUserBalance(false);
+    setInputExceedsLiquidity(false);
+    setInputBelowMinimum(false);
+
     let adjustedInputAmount = currentInputBalance;
 
     // If ETH is selected, fetch gas data and adjust for gas costs
@@ -904,6 +909,11 @@ export const SwapInputAndOutput = () => {
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
 
+    // Clear error flags (both output AND input related since they can cascade)
+    setExceedsMarketMakerLiquidity(false);
+    setBelowMinimumSwap(false);
+    setInputExceedsLiquidity(false); // Clear input error too, especially for BTC -> cbBTC
+
     // Determine the max liquidity based on swap direction
     let maxLiquidityBtc: number;
     if (isSwappingForBTC) {
@@ -975,6 +985,11 @@ export const SwapInputAndOutput = () => {
     // Set flag to indicate we should quote for input field
     getQuoteForInputRef.current = true;
 
+    // Clear error flags
+    setExceedsUserBalance(false);
+    setInputExceedsLiquidity(false);
+    setInputBelowMinimum(false);
+
     // Get max cbBTC liquidity for BTC -> cbBTC swap
     const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
     const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
@@ -1032,6 +1047,10 @@ export const SwapInputAndOutput = () => {
   const handleMinimumClick = () => {
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
+
+    // Clear error flags
+    setBelowMinimumSwap(false);
+    setInputBelowMinimum(false);
 
     // Set minimum output to 3000 sats (0.00003 BTC)
     const MIN_SATS = 3000;
@@ -1413,7 +1432,9 @@ export const SwapInputAndOutput = () => {
       const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
       if (maxBtcLiquiditySats && maxBtcLiquiditySats !== "0") {
         const maxBtcLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
-        if (outputFloat > maxBtcLiquidityBtc) {
+        // Add small tolerance (0.1%) to account for rounding when using Max button
+        const tolerance = maxBtcLiquidityBtc * 0.001;
+        if (outputFloat > maxBtcLiquidityBtc + tolerance) {
           setExceedsMarketMakerLiquidity(true);
         } else {
           setExceedsMarketMakerLiquidity(false);
@@ -1426,7 +1447,9 @@ export const SwapInputAndOutput = () => {
       const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
       if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
         const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000; // Convert satoshis to BTC
-        if (outputFloat > maxCbBtcLiquidityBtc) {
+        // Add small tolerance (0.1%) to account for rounding when using Max button
+        const tolerance = maxCbBtcLiquidityBtc * 0.001;
+        if (outputFloat > maxCbBtcLiquidityBtc + tolerance) {
           setExceedsMarketMakerLiquidity(true);
         } else {
           setExceedsMarketMakerLiquidity(false);
@@ -1462,13 +1485,22 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
+    // Skip check if user is editing the output field (lastEditedField === "output")
+    // because the input is being calculated from the output and may temporarily exceed
+    if (lastEditedField === "output") {
+      setInputExceedsLiquidity(false);
+      return;
+    }
+
     const inputFloat = parseFloat(rawInputAmount);
 
     // BTC -> cbBTC: Check if input BTC exceeds maxCbBTCLiquidity
     const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
     if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
       const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
-      if (inputFloat > maxCbBtcLiquidityBtc) {
+      // Add small tolerance (0.1%) to account for rounding and fees when using Max button
+      const tolerance = maxCbBtcLiquidityBtc * 0.001;
+      if (inputFloat > maxCbBtcLiquidityBtc + tolerance) {
         setInputExceedsLiquidity(true);
       } else {
         setInputExceedsLiquidity(false);
@@ -1476,7 +1508,13 @@ export const SwapInputAndOutput = () => {
     } else {
       setInputExceedsLiquidity(false);
     }
-  }, [rawInputAmount, isSwappingForBTC, liquidity.maxCbBTCLiquidity, exceedsUserBalance]);
+  }, [
+    rawInputAmount,
+    isSwappingForBTC,
+    liquidity.maxCbBTCLiquidity,
+    exceedsUserBalance,
+    lastEditedField,
+  ]);
 
   // Check if output amount is below minimum swap amount (3000 sats)
   // OR if input amount would result in below minimum output
