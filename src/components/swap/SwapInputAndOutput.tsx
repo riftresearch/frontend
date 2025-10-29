@@ -1517,7 +1517,7 @@ export const SwapInputAndOutput = () => {
   ]);
 
   // Check if output amount is below minimum swap amount (3000 sats)
-  // OR if input amount would result in below minimum output
+  // Only show this error when user is editing the OUTPUT field
   useEffect(() => {
     // Skip check if user balance is already exceeded (takes priority)
     if (exceedsUserBalance) {
@@ -1525,10 +1525,16 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
+    // Only show this error when user is editing the output field
+    if (lastEditedField !== "output") {
+      setBelowMinimumSwap(false);
+      return;
+    }
+
     const MIN_SATS = 3000;
     const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
 
-    // Check 1: If output exists, check if it's below minimum
+    // Check if output exists and is below minimum
     if (outputAmount && parseFloat(outputAmount) > 0) {
       const outputFloat = parseFloat(outputAmount);
       if (outputFloat < minBtc) {
@@ -1542,9 +1548,10 @@ export const SwapInputAndOutput = () => {
 
     // If neither condition is met, clear the flag
     setBelowMinimumSwap(false);
-  }, [outputAmount, exceedsUserBalance]);
+  }, [outputAmount, exceedsUserBalance, lastEditedField]);
 
   // Check if input amount would result in below minimum output
+  // Only show this error when user is editing the INPUT field
   useEffect(() => {
     // Skip check if user balance is already exceeded (takes priority)
     if (exceedsUserBalance) {
@@ -1552,7 +1559,32 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
-    // Check if input exists but output is empty/zero (quote was blocked)
+    // Only show this error when user is editing the input field
+    if (lastEditedField !== "input") {
+      setInputBelowMinimum(false);
+      return;
+    }
+
+    // Skip check if user clicked MAX (isAtAdjustedMax flag set for ETH gas-adjusted max)
+    // User is using their maximum available balance, so we shouldn't show an error
+    if (isAtAdjustedMax) {
+      setInputBelowMinimum(false);
+      return;
+    }
+
+    const MIN_SATS = 3000;
+    const minBtc = MIN_SATS / 100_000_000; // 0.00003 BTC
+
+    // Check 1: If output exists and is below minimum (user typed in input, got small output)
+    if (outputAmount && parseFloat(outputAmount) > 0) {
+      const outputFloat = parseFloat(outputAmount);
+      if (outputFloat < minBtc) {
+        setInputBelowMinimum(true);
+        return;
+      }
+    }
+
+    // Check 2: If input exists but output is empty/zero (quote was blocked)
     if (
       rawInputAmount &&
       parseFloat(rawInputAmount) > 0 &&
@@ -1595,6 +1627,8 @@ export const SwapInputAndOutput = () => {
     ethPrice,
     btcPrice,
     erc20Price,
+    lastEditedField,
+    isAtAdjustedMax,
   ]);
 
   // ============================================================================
@@ -1745,7 +1779,7 @@ export const SwapInputAndOutput = () => {
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Below minimum -
+                    Below minimum output -
                   </Text>
                   <Text
                     fontSize="13px"
@@ -1986,7 +2020,7 @@ export const SwapInputAndOutput = () => {
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Below minimum -
+                    Below minimum output -
                   </Text>
                   <Text
                     fontSize="13px"
@@ -2122,7 +2156,7 @@ export const SwapInputAndOutput = () => {
           <Flex
             direction="column"
             w="100%"
-            mb="5px"
+            // mb="5px"
             opacity={hasStartedTyping ? 1 : 0}
             transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
             transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"

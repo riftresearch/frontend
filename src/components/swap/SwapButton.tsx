@@ -16,9 +16,7 @@ import {
   SWAP_ROUTER02_ADDRESS,
   PERMIT2_ADDRESS,
 } from "@/utils/constants";
-import { BitcoinQRCode } from "@/components/other/BitcoinQRCode";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
-import { FONT_FAMILIES } from "@/utils/font";
 import { useStore } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
@@ -544,12 +542,6 @@ export const SwapButton = () => {
         amount: amountInBTC,
         uri: bitcoinUri,
       });
-
-      // Show success toast for Bitcoin deposit setup
-      toastSuccess({
-        title: "Bitcoin Deposit Ready",
-        description: "Scan the QR code or send Bitcoin to the address below",
-      });
     } catch (error) {
       console.error("BTC->cbBTC swap failed:", error);
 
@@ -917,56 +909,6 @@ export const SwapButton = () => {
           {buttonConfig.text}
         </Text>
       </Flex>
-
-      {/* Bitcoin QR Code Display - Animated (appears after swap initiation) */}
-      {bitcoinDepositInfo && (
-        <Flex
-          direction="column"
-          w="100%"
-          mt="20px"
-          p="20px"
-          bg="rgba(46, 29, 14, 0.66)"
-          border="2px solid #78491F"
-          borderRadius="16px"
-          opacity={bitcoinDepositInfo ? 1 : 0}
-          transform={bitcoinDepositInfo ? "translateY(0px)" : "translateY(-20px)"}
-          transition="all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-        >
-          <Text
-            fontSize="18px"
-            fontFamily={FONT_FAMILIES.NOSTROMO}
-            color={colors.offWhite}
-            mb="15px"
-            textAlign="center"
-          >
-            Send Bitcoin to Complete Swap
-          </Text>
-          <Text
-            fontSize="14px"
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            color={colors.textGray}
-            mb="20px"
-            textAlign="center"
-          >
-            Scan the QR code or copy the address and amount below
-          </Text>
-          <BitcoinQRCode
-            bitcoinUri={bitcoinDepositInfo.uri}
-            address={bitcoinDepositInfo.address}
-            amount={bitcoinDepositInfo.amount}
-          />
-          <Text
-            fontWeight="normal"
-            fontSize="13px"
-            mt="20px"
-            color={colors.textGray}
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            textAlign="center"
-          >
-            WARNING: Send the exact amount shown above to complete the swap.
-          </Text>
-        </Flex>
-      )}
     </Flex>
   );
 };

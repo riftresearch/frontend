@@ -5,6 +5,7 @@ import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { RiftLogo } from "@/components/other/RiftLogo";
 import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
+import { BitcoinTransactionWidget } from "@/components/other/BitcoinTransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import useWindowSize from "@/hooks/useWindowSize";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -16,7 +17,7 @@ import { MaintenanceBanner } from "@/components/other/MaintenanceBanner";
 export default function Home() {
   const { isTablet, isMobile } = useWindowSize();
   const { isOtcServerDead } = useStore();
-  const { swapResponse, transactionConfirmed } = useStore();
+  const { swapResponse, transactionConfirmed, bitcoinDepositInfo } = useStore();
   const router = useRouter();
   const [isLocalhost, setIsLocalhost] = React.useState(false);
 
@@ -85,37 +86,53 @@ export default function Home() {
         <Navbar />
         <Flex justify="center" align="center" direction="column" minH="calc(100vh - 80px)" p="4">
           <Flex mt="15px"></Flex>
-          <RiftLogo width={isTablet ? "70" : "390"} height={isTablet ? "30" : "70"} />
 
-          <Flex
-            flexDir={"column"}
-            textAlign={"center"}
-            userSelect={"none"}
-            fontSize={isTablet ? "12px" : "15px"}
-            mt={"18px"}
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            color={"#c3c3c3"}
-            cursor={"default"}
-            fontWeight={"normal"}
-            gap={"0px"}
-          >
-            <Text mt="15px" mb="25px">
-              The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
-              <Box
-                as="span"
-                // TODO: go to tech architecture thread
-                onClick={() => (window.location.href = "https://rift.trade")}
-                style={{
-                  textDecoration: "underline",
-                  cursor: "pointer !important",
-                }}
-                fontWeight={"bold"}
+          {/* Only show logo and subheader when NOT on Bitcoin deposit page */}
+          {!bitcoinDepositInfo && (
+            <>
+              <RiftLogo width={isTablet ? "70" : "390"} height={isTablet ? "30" : "70"} />
+
+              <Flex
+                flexDir={"column"}
+                textAlign={"center"}
+                userSelect={"none"}
+                fontSize={isTablet ? "12px" : "15px"}
+                mt={"18px"}
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={"#c3c3c3"}
+                cursor={"default"}
+                fontWeight={"normal"}
+                gap={"0px"}
               >
-                how it works
-              </Box>
-            </Text>
-          </Flex>
-          <SwapWidget />
+                <Text mt="15px" mb="25px">
+                  The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
+                  <Box
+                    as="span"
+                    // TODO: go to tech architecture thread
+                    onClick={() => (window.location.href = "https://rift.trade")}
+                    style={{
+                      textDecoration: "underline",
+                      cursor: "pointer !important",
+                    }}
+                    fontWeight={"bold"}
+                  >
+                    how it works
+                  </Box>
+                </Text>
+              </Flex>
+            </>
+          )}
+
+          {/* Show Bitcoin Transaction Widget when deposit info is available, otherwise show Swap Widget */}
+          {bitcoinDepositInfo ? (
+            <BitcoinTransactionWidget
+              address={bitcoinDepositInfo.address}
+              amount={bitcoinDepositInfo.amount}
+              bitcoinUri={bitcoinDepositInfo.uri}
+            />
+          ) : (
+            <SwapWidget />
+          )}
         </Flex>
         {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
         process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (

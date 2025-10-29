@@ -23,7 +23,7 @@ const steps = [
   {
     id: "3-WaitingMMDepositInitiated",
     label: "FILLING ORDER",
-    description: "A market maker is filling your order...",
+    description: "Market makers are filling your order...",
   },
   {
     id: "4-WaitingMMDepositConfirmed",
