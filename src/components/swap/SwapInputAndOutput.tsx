@@ -637,12 +637,12 @@ export const SwapInputAndOutput = () => {
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     // clear errors
-    console.log("sameer clearing errors");
-    console.log("sameer exceedsUserBalance", exceedsUserBalance);
-    console.log("sameer inputExceedsLiquidity", inputExceedsLiquidity);
-    console.log("sameer inputBelowMinimum", inputBelowMinimum);
-    console.log("sameer belowMinimumSwap", belowMinimumSwap);
-    console.log("sameer exceedsMarketMakerLiquidity", exceedsMarketMakerLiquidity);
+    // console.log("sameer clearing errors");
+    // console.log("sameer exceedsUserBalance", exceedsUserBalance);
+    // console.log("sameer inputExceedsLiquidity", inputExceedsLiquidity);
+    // console.log("sameer inputBelowMinimum", inputBelowMinimum);
+    // console.log("sameer belowMinimumSwap", belowMinimumSwap);
+    // console.log("sameer exceedsMarketMakerLiquidity", exceedsMarketMakerLiquidity);
     setExceedsUserBalance(false);
     setInputExceedsLiquidity(false);
     setInputBelowMinimum(false);
@@ -1478,12 +1478,6 @@ export const SwapInputAndOutput = () => {
 
   // Check if input BTC amount exceeds cbBTC liquidity (BTC -> cbBTC direction)
   useEffect(() => {
-    // Only check for BTC -> cbBTC direction
-    if (isSwappingForBTC) {
-      setInputExceedsLiquidity(false);
-      return;
-    }
-
     if (!rawInputAmount || parseFloat(rawInputAmount) <= 0) {
       setInputExceedsLiquidity(false);
       return;
@@ -1504,23 +1498,46 @@ export const SwapInputAndOutput = () => {
 
     const inputFloat = parseFloat(rawInputAmount);
 
-    // BTC -> cbBTC: Check if input BTC exceeds maxCbBTCLiquidity
-    const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-    if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
-      const maxCbBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxCbBtcLiquiditySats)));
-      console.log("[sameer] maxCbBtcLiquidityBtc", maxCbBtcLiquidityBtc);
-      console.log("[sameer] inputFloat", inputFloat);
-      if (inputFloat > maxCbBtcLiquidityBtc) {
-        setInputExceedsLiquidity(true);
+    // Direction dependent: check the appropriate liquidity based on swap direction
+    if (isSwappingForBTC) {
+      // ERC20 -> BTC: Check if input exceeds maxBTCLiquidity
+      const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
+      if (maxBtcLiquiditySats && maxBtcLiquiditySats !== "0") {
+        const maxBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxBtcLiquiditySats)));
+
+        console.log("[sameer] ERC20->BTC: maxBtcLiquidityBtc", maxBtcLiquidityBtc);
+        console.log("[sameer] ERC20->BTC: inputFloat", inputFloat);
+
+        if (inputFloat > maxBtcLiquidityBtc) {
+          setInputExceedsLiquidity(true);
+        } else {
+          setInputExceedsLiquidity(false);
+        }
       } else {
         setInputExceedsLiquidity(false);
       }
     } else {
-      setInputExceedsLiquidity(false);
+      // BTC -> ERC20 (cbBTC): Check if input exceeds maxCbBTCLiquidity
+      const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
+      if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
+        const maxCbBtcLiquidityBtc = parseFloat(satsToBtc(Number(maxCbBtcLiquiditySats)));
+
+        console.log("[sameer] BTC->cbBTC: maxCbBtcLiquidityBtc", maxCbBtcLiquidityBtc);
+        console.log("[sameer] BTC->cbBTC: inputFloat", inputFloat);
+
+        if (inputFloat > maxCbBtcLiquidityBtc) {
+          setInputExceedsLiquidity(true);
+        } else {
+          setInputExceedsLiquidity(false);
+        }
+      } else {
+        setInputExceedsLiquidity(false);
+      }
     }
   }, [
     rawInputAmount,
     isSwappingForBTC,
+    liquidity.maxBTCLiquidity,
     liquidity.maxCbBTCLiquidity,
     exceedsUserBalance,
     lastEditedField,
