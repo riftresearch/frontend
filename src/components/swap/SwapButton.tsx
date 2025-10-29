@@ -67,6 +67,10 @@ export const SwapButton = () => {
     setApprovalState,
     isOtcServerDead,
     hasNoRoutesError,
+    exceedsAvailableBTCLiquidity,
+    exceedsAvailableCBBTCLiquidity,
+    exceedsUserBalance,
+    inputBelowMinimum,
   } = useStore();
 
   // Wagmi hooks for contract interactions
@@ -812,6 +816,31 @@ export const SwapButton = () => {
 
   // Determine button text and click handler
   const getButtonTextAndHandler = () => {
+    // Check validation errors first
+    if (exceedsUserBalance) {
+      return {
+        text: `Not enough ${selectedInputToken?.ticker || ""}`,
+        handler: undefined,
+        showSpinner: false,
+      };
+    }
+
+    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity) {
+      return {
+        text: "Not enough liquidity",
+        handler: undefined,
+        showSpinner: false,
+      };
+    }
+
+    if (inputBelowMinimum) {
+      return {
+        text: "Swap too small",
+        handler: undefined,
+        showSpinner: false,
+      };
+    }
+
     // If there's a "no routes found" error, disable button with message
     if (hasNoRoutesError) {
       return {
@@ -873,36 +902,38 @@ export const SwapButton = () => {
 
   const buttonConfig = getButtonTextAndHandler();
 
+  const hasValidationError =
+    exceedsUserBalance ||
+    exceedsAvailableBTCLiquidity ||
+    exceedsAvailableCBBTCLiquidity ||
+    inputBelowMinimum;
+
+  const isButtonDisabled =
+    isButtonLoading || isOtcServerDead || hasNoRoutesError || hasValidationError;
+
   return (
     <Flex direction="column" w="100%">
       {/* Single Dynamic Swap Button */}
       <Flex
         bg={colors.swapBgColor}
         _hover={{
-          bg:
-            !isButtonLoading && !isOtcServerDead && !hasNoRoutesError
-              ? colors.swapHoverColor
-              : undefined,
+          bg: !isButtonDisabled ? colors.swapHoverColor : undefined,
         }}
         w="100%"
         mt="8px"
         transition="0.2s"
         h="58px"
-        onClick={
-          isButtonLoading || isOtcServerDead || hasNoRoutesError ? undefined : buttonConfig.handler
-        }
+        onClick={isButtonDisabled ? undefined : buttonConfig.handler}
         fontSize="18px"
         align="center"
         userSelect="none"
-        cursor={
-          !isButtonLoading && !isOtcServerDead && !hasNoRoutesError ? "pointer" : "not-allowed"
-        }
+        cursor={!isButtonDisabled ? "pointer" : "not-allowed"}
         borderRadius="16px"
         justify="center"
         border="3px solid"
         borderColor={colors.swapBorderColor}
-        opacity={isButtonLoading || isOtcServerDead || hasNoRoutesError ? 0.5 : 1}
-        pointerEvents={isButtonLoading || isOtcServerDead || hasNoRoutesError ? "none" : "auto"}
+        opacity={isButtonDisabled ? 0.5 : 1}
+        pointerEvents={isButtonDisabled ? "none" : "auto"}
       >
         {buttonConfig.showSpinner && <Spinner size="sm" color={colors.offWhite} mr="10px" />}
         <Text color={colors.offWhite} fontFamily="Nostromo">

@@ -60,11 +60,7 @@ export const SwapInputAndOutput = () => {
   const getQuoteForInputRef = useRef(true);
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
-  const [exceedsUserBalance, setExceedsUserBalance] = useState(false);
-  const [exceedsMarketMakerLiquidity, setExceedsMarketMakerLiquidity] = useState(false);
-  const [inputExceedsLiquidity, setInputExceedsLiquidity] = useState(false);
   const [belowMinimumSwap, setBelowMinimumSwap] = useState(false);
-  const [inputBelowMinimum, setInputBelowMinimum] = useState(false);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
 
   // Refs
@@ -118,6 +114,14 @@ export const SwapInputAndOutput = () => {
     feeOverview,
     isOtcServerDead,
     setHasNoRoutesError,
+    exceedsAvailableBTCLiquidity,
+    setExceedsAvailableBTCLiquidity,
+    exceedsAvailableCBBTCLiquidity,
+    setExceedsAvailableCBBTCLiquidity,
+    exceedsUserBalance,
+    setExceedsUserBalance,
+    inputBelowMinimum,
+    setInputBelowMinimum,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -219,6 +223,9 @@ export const SwapInputAndOutput = () => {
           setIsLoadingQuote(false);
           return;
         }
+      } else {
+        setIsLoadingQuote(false);
+        return;
       }
 
       try {
@@ -331,8 +338,21 @@ export const SwapInputAndOutput = () => {
         }
 
         // Check if output value exceeds maximum BTC liquidity
-        // Don't block the quote fetch - let it fail and show error in UI
-        // This allows the user to see the error message on the output field
+        // Check if input value exceeds maximum BTC liquidity
+        if (
+          parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
+          usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
+        ) {
+          console.log("Output value exceeds maximum BTC liquidity");
+          setUniswapQuote(null);
+          setRfqQuote(null);
+          setRawInputAmount("");
+          setIsLoadingQuote(false);
+          return;
+        }
+      } else {
+        setIsLoadingQuote(false);
+        return;
       }
 
       try {
@@ -459,7 +479,13 @@ export const SwapInputAndOutput = () => {
       // console.log("isAboveMinSwap", isAboveMinSwap(usdValue, btcPrice || 0));
       // console.log("liquidity", liquidity);
       // Check minimum swap threshold
-      if (btcPrice && !isAboveMinSwap(usdValue, btcPrice)) {
+
+      if (!btcPrice) {
+        setIsLoadingQuote(false);
+        return;
+      }
+
+      if (!isAboveMinSwap(usdValue, btcPrice)) {
         console.log("Value below minimum swap threshold");
         setUniswapQuote(null);
         setRfqQuote(null);
@@ -800,7 +826,7 @@ export const SwapInputAndOutput = () => {
 
     // Clear error flags
     setExceedsUserBalance(false);
-    setInputExceedsLiquidity(false);
+    setExceedsAvailableCBBTCLiquidity(false);
     setInputBelowMinimum(false);
 
     let adjustedInputAmount = currentInputBalance;
@@ -907,9 +933,9 @@ export const SwapInputAndOutput = () => {
     getQuoteForInputRef.current = false;
 
     // Clear error flags (both output AND input related since they can cascade)
-    setExceedsMarketMakerLiquidity(false);
+    setExceedsAvailableBTCLiquidity(false);
     setBelowMinimumSwap(false);
-    setInputExceedsLiquidity(false); // Clear input error too, especially for BTC -> cbBTC
+    setExceedsAvailableCBBTCLiquidity(false); // Clear input error too, especially for BTC -> cbBTC
 
     // Determine the max liquidity based on swap direction
     let maxLiquidityBtc: number;
@@ -984,7 +1010,7 @@ export const SwapInputAndOutput = () => {
 
     // Clear error flags
     setExceedsUserBalance(false);
-    setInputExceedsLiquidity(false);
+    setExceedsAvailableCBBTCLiquidity(false);
     setInputBelowMinimum(false);
 
     // Get max cbBTC liquidity for BTC -> cbBTC swap
@@ -1313,13 +1339,16 @@ export const SwapInputAndOutput = () => {
     const fallbackEth = fallbackList.find((t) => t.ticker?.toUpperCase() === "ETH");
     const token = selectedInputToken || fallbackEth;
 
+    console.log("fallbackList", fallbackList);
+    console.log("fallbackEth", fallbackEth);
+    console.log("token", token);
     if (!token) {
       setCurrentInputBalance(null);
       setCurrentInputTicker(null);
       return;
     }
 
-    const balance = token.balance;
+    const balance = fallbackList.find((t) => t.ticker === token?.ticker)?.balance || "0";
     const amt = parseFloat(balance);
 
     // if (!balance || !Number.isFinite(amt) || amt <= 0) {
@@ -1503,7 +1532,7 @@ export const SwapInputAndOutput = () => {
     // Skip check if user balance is already exceeded AND user balance < MM liquidity
     // (User balance error takes priority in that case)
     if (exceedsUserBalance) {
-      setExceedsMarketMakerLiquidity(false);
+      setExceedsAvailableBTCLiquidity(false);
       return;
     }
 
@@ -1513,7 +1542,7 @@ export const SwapInputAndOutput = () => {
       if (isSwappingForBTC) {
         const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
         if (!maxBtcLiquiditySats || maxBtcLiquiditySats === "0") {
-          setExceedsMarketMakerLiquidity(false);
+          setExceedsAvailableBTCLiquidity(false);
           return;
         }
 
@@ -1535,21 +1564,21 @@ export const SwapInputAndOutput = () => {
             const mmLiquidityUsd = parseFloat(liquidity.maxBTCLiquidityInUsd);
 
             if (mmLiquidityUsd > 0 && inputUsdValue > mmLiquidityUsd) {
-              setExceedsMarketMakerLiquidity(true);
+              setExceedsAvailableBTCLiquidity(true);
               return;
             }
           }
         }
 
-        setExceedsMarketMakerLiquidity(false);
+        setExceedsAvailableBTCLiquidity(false);
       } else {
         // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
-        setExceedsMarketMakerLiquidity(false);
+        setExceedsAvailableBTCLiquidity(false);
       }
     } else if (lastEditedField === "output") {
       // Check output (BTC or cbBTC received)
       if (!outputAmount || parseFloat(outputAmount) <= 0) {
-        setExceedsMarketMakerLiquidity(false);
+        setExceedsAvailableBTCLiquidity(false);
         return;
       }
 
@@ -1563,14 +1592,14 @@ export const SwapInputAndOutput = () => {
         const tolerance = maxLiquidityBtc * 0.001;
 
         if (outputFloat > maxLiquidityBtc + tolerance) {
-          setExceedsMarketMakerLiquidity(true);
+          setExceedsAvailableBTCLiquidity(true);
           return;
         }
       }
 
-      setExceedsMarketMakerLiquidity(false);
+      setExceedsAvailableBTCLiquidity(false);
     } else {
-      setExceedsMarketMakerLiquidity(false);
+      setExceedsAvailableBTCLiquidity(false);
     }
   }, [
     rawInputAmount,
@@ -1592,25 +1621,25 @@ export const SwapInputAndOutput = () => {
   useEffect(() => {
     // Only check for BTC -> cbBTC direction
     if (isSwappingForBTC) {
-      setInputExceedsLiquidity(false);
+      setExceedsAvailableCBBTCLiquidity(false);
       return;
     }
 
     if (!rawInputAmount || parseFloat(rawInputAmount) <= 0) {
-      setInputExceedsLiquidity(false);
+      setExceedsAvailableCBBTCLiquidity(false);
       return;
     }
 
     // Skip check if user balance is already exceeded (takes priority)
     if (exceedsUserBalance) {
-      setInputExceedsLiquidity(false);
+      setExceedsAvailableCBBTCLiquidity(false);
       return;
     }
 
     // Skip check if user is editing the output field (lastEditedField === "output")
     // because the input is being calculated from the output and may temporarily exceed
     if (lastEditedField === "output") {
-      setInputExceedsLiquidity(false);
+      setExceedsAvailableCBBTCLiquidity(false);
       return;
     }
 
@@ -1623,12 +1652,12 @@ export const SwapInputAndOutput = () => {
       console.log("[sameer] maxCbBtcLiquidityBtc", maxCbBtcLiquidityBtc);
       console.log("[sameer] inputFloat", inputFloat);
       if (inputFloat > maxCbBtcLiquidityBtc) {
-        setInputExceedsLiquidity(true);
+        setExceedsAvailableCBBTCLiquidity(true);
       } else {
-        setInputExceedsLiquidity(false);
+        setExceedsAvailableCBBTCLiquidity(false);
       }
     } else {
-      setInputExceedsLiquidity(false);
+      setExceedsAvailableCBBTCLiquidity(false);
     }
   }, [
     rawInputAmount,
@@ -1812,8 +1841,8 @@ export const SwapInputAndOutput = () => {
                 letterSpacing="-6px"
                 color={
                   exceedsUserBalance ||
-                  (exceedsMarketMakerLiquidity && lastEditedField === "input") ||
-                  inputExceedsLiquidity ||
+                  (exceedsAvailableBTCLiquidity && lastEditedField === "input") ||
+                  exceedsAvailableCBBTCLiquidity ||
                   inputBelowMinimum
                     ? colors.red
                     : colors.offWhite
@@ -1837,7 +1866,7 @@ export const SwapInputAndOutput = () => {
             )}
 
             <Flex>
-              {exceedsMarketMakerLiquidity && isSwappingForBTC && lastEditedField === "input" ? (
+              {exceedsAvailableBTCLiquidity && isSwappingForBTC && lastEditedField === "input" ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -1869,39 +1898,7 @@ export const SwapInputAndOutput = () => {
                     })()}
                   </Text>
                 </>
-              ) : exceedsUserBalance ? (
-                <>
-                  <Text
-                    color={colors.redHover}
-                    fontSize="13px"
-                    mt="6px"
-                    ml="1px"
-                    letterSpacing="-1.5px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    {currentInputBalance && parseFloat(currentInputBalance) > 0
-                      ? "Exceeds your balance -"
-                      : "You don't have any of this token"}
-                  </Text>
-                  {currentInputBalance && parseFloat(currentInputBalance) > 0 && (
-                    <Text
-                      fontSize="13px"
-                      mt="7px"
-                      ml="8px"
-                      color={inputStyle?.border_color_light || colors.textGray}
-                      cursor="pointer"
-                      onClick={handleMaxClick}
-                      _hover={{ textDecoration: "underline" }}
-                      letterSpacing="-1.5px"
-                      fontWeight="normal"
-                      fontFamily="Aux"
-                    >
-                      {parseFloat(currentInputBalance).toFixed(4)} {currentInputTicker} Max
-                    </Text>
-                  )}
-                </>
-              ) : inputExceedsLiquidity ? (
+              ) : exceedsAvailableCBBTCLiquidity ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -2116,7 +2113,7 @@ export const SwapInputAndOutput = () => {
                 p="0px"
                 letterSpacing="-6px"
                 color={
-                  (exceedsMarketMakerLiquidity && lastEditedField === "output") || belowMinimumSwap
+                  (exceedsAvailableBTCLiquidity && lastEditedField === "output") || belowMinimumSwap
                     ? colors.red
                     : colors.offWhite
                 }
@@ -2139,7 +2136,7 @@ export const SwapInputAndOutput = () => {
             )}
 
             <Flex>
-              {exceedsMarketMakerLiquidity && lastEditedField === "output" ? (
+              {exceedsAvailableBTCLiquidity && lastEditedField === "output" ? (
                 <>
                   <Text
                     color={colors.redHover}

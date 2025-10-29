@@ -83,6 +83,14 @@ export const useStore = create<{
   setIsOtcServerDead: (value: boolean) => void;
   hasNoRoutesError: boolean;
   setHasNoRoutesError: (value: boolean) => void;
+  exceedsAvailableBTCLiquidity: boolean;
+  setExceedsAvailableBTCLiquidity: (value: boolean) => void;
+  exceedsAvailableCBBTCLiquidity: boolean;
+  setExceedsAvailableCBBTCLiquidity: (value: boolean) => void;
+  exceedsUserBalance: boolean;
+  setExceedsUserBalance: (value: boolean) => void;
+  inputBelowMinimum: boolean;
+  setInputBelowMinimum: (value: boolean) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -152,4 +160,13 @@ export const useStore = create<{
   setIsOtcServerDead: (value: boolean) => set({ isOtcServerDead: value }),
   hasNoRoutesError: false,
   setHasNoRoutesError: (value: boolean) => set({ hasNoRoutesError: value }),
+  exceedsAvailableBTCLiquidity: false,
+  setExceedsAvailableBTCLiquidity: (value: boolean) => set({ exceedsAvailableBTCLiquidity: value }),
+  exceedsAvailableCBBTCLiquidity: false,
+  setExceedsAvailableCBBTCLiquidity: (value: boolean) =>
+    set({ exceedsAvailableCBBTCLiquidity: value }),
+  exceedsUserBalance: false,
+  setExceedsUserBalance: (value: boolean) => set({ exceedsUserBalance: value }),
+  inputBelowMinimum: false,
+  setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
 }));
