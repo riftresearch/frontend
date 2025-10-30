@@ -4,9 +4,11 @@ import { useRouter } from "next/router";
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { TransactionWidget } from "@/components/other/TransactionWidget";
+import { BitcoinTransactionWidget } from "@/components/other/BitcoinTransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useStore } from "@/utils/store";
+import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 
 // Map API status to deposit flow state
 const mapStatusToDepositFlowState = (status: string) => {
@@ -60,12 +62,24 @@ export default function SwapPage() {
     }
   }, [swapStatusInfo?.status, depositFlowState, setDepositFlowState]);
 
-  // Reset countdown only when starting deposit flow (0 -> 1)
+  // Set countdown based on current step
   React.useEffect(() => {
-    if (depositFlowState === "1-WaitingUserDepositInitiated" && previousState === "0-not-started") {
-      setCountdownValue(60);
+    // Only update countdown when step changes or on initial load
+    if (depositFlowState !== previousState) {
+      // Map step to countdown value
+      const countdownMap: Record<string, number> = {
+        "1-WaitingUserDepositInitiated": 120,
+        "2-WaitingUserDepositConfirmed": 100,
+        "3-WaitingMMDepositInitiated": 60,
+      };
+
+      const newCountdown = countdownMap[depositFlowState];
+      if (newCountdown !== undefined) {
+        setCountdownValue(newCountdown);
+      }
+
+      setPreviousState(depositFlowState);
     }
-    setPreviousState(depositFlowState);
   }, [depositFlowState, setCountdownValue, previousState]);
 
   // Reset transaction confirmed state when going back to not-started
@@ -118,6 +132,21 @@ export default function SwapPage() {
     return null;
   }
 
+  // Check if this is a Bitcoin deposit (BTC -> cbBTC swap)
+  const isBitcoinDeposit = swapStatusInfo?.user_deposit?.chain === "Bitcoin";
+  const bitcoinDepositAddress = swapStatusInfo?.user_deposit?.address;
+  const bitcoinExpectedAmount = swapStatusInfo?.user_deposit?.expected_amount;
+  const bitcoinDecimals = swapStatusInfo?.user_deposit?.decimals || 8;
+
+  // Generate Bitcoin URI and amount for QR code
+  let bitcoinUri = "";
+  let bitcoinAmount = 0;
+  if (isBitcoinDeposit && bitcoinDepositAddress && bitcoinExpectedAmount) {
+    const amount = BigInt(bitcoinExpectedAmount);
+    bitcoinAmount = Number(amount) / Math.pow(10, bitcoinDecimals);
+    bitcoinUri = generateBitcoinURI(bitcoinDepositAddress, bitcoinAmount, "Rift Swap");
+  }
+
   return (
     <>
       <OpenGraph />
@@ -132,7 +161,16 @@ export default function SwapPage() {
       >
         <Navbar />
         <Flex justify="center" align="center" direction="column" minH="calc(100vh - 80px)" p="4">
-          <TransactionWidget swapId={currentSwapId} />
+          {isBitcoinDeposit && bitcoinDepositAddress ? (
+            <BitcoinTransactionWidget
+              address={bitcoinDepositAddress}
+              amount={bitcoinAmount}
+              bitcoinUri={bitcoinUri}
+              depositTx={swapStatusInfo?.user_deposit?.deposit_tx}
+            />
+          ) : (
+            <TransactionWidget swapId={currentSwapId} />
+          )}
         </Flex>
       </Flex>
     </>

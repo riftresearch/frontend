@@ -1,49 +1,58 @@
 import { Box, Text, Flex } from "@chakra-ui/react";
 import { QRCodeSVG } from "qrcode.react";
 import { LuCopy } from "react-icons/lu";
-import { useState } from "react";
+import { FiExternalLink } from "react-icons/fi";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import useWindowSize from "@/hooks/useWindowSize";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { toastSuccess, toastError } from "@/utils/toast";
 import WebAssetTag from "./WebAssetTag";
+import { useStore } from "@/utils/store";
 
 interface BitcoinTransactionWidgetProps {
   address: string;
   amount: number;
   bitcoinUri: string;
+  depositTx?: string;
 }
 
 // Step configuration for Bitcoin deposit flow
 const steps = [
   {
-    id: "1-AwaitingBitcoinDeposit",
+    id: "1-WaitingUserDepositInitiated",
     label: "AWAITING BITCOIN DEPOSIT",
     description: "Waiting for your Bitcoin deposit...",
   },
   {
-    id: "2-ConfirmingBitcoinDeposit",
+    id: "2-WaitingUserDepositConfirmed",
     label: "CONFIRMING DEPOSIT",
-    description: "Waiting for Bitcoin confirmations...",
+    description: "Waiting for 2 block confirmations...",
   },
   {
-    id: "3-FillingOrder",
+    id: "3-WaitingMMDepositInitiated",
     label: "FILLING ORDER",
-    description: "A market maker is filling your order...",
+    description: "Market makers are filling your order...",
   },
   {
-    id: "4-SwapComplete",
+    id: "4-WaitingMMDepositConfirmed",
     label: "SWAP COMPLETE",
-    description: "Your swap has been completed!",
+    description: "Bitcoin has been sent to your wallet!",
   },
 ];
 
-function StepCarousel({ isMobile }: { isMobile: boolean }) {
-  // Default to step 0 (Awaiting Bitcoin Deposit)
-  const [currentStepIndex] = useState(0);
-  const [completedSteps] = useState<Set<string>>(new Set());
-  const [slideOffset] = useState(0); // Start at 0 for first step
+function StepCarousel({
+  isMobile,
+  currentStepIndex,
+  completedSteps,
+}: {
+  isMobile: boolean;
+  currentStepIndex: number;
+  completedSteps: Set<string>;
+}) {
+  // Calculate slide offset based on current step
+  const slideOffset = -currentStepIndex * 86; // 86px per step
 
   return (
     <Box position="relative" width="100%" height="100%" overflow="hidden">
@@ -222,8 +231,28 @@ export function BitcoinTransactionWidget({
   address,
   amount,
   bitcoinUri,
+  depositTx,
 }: BitcoinTransactionWidgetProps) {
   const { isMobile } = useWindowSize();
+  const depositFlowState = useStore((state) => state.depositFlowState);
+
+  // Track completed steps
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+
+  // Map deposit flow state to step index
+  const currentStepIndex = steps.findIndex((step) => step.id === depositFlowState);
+  const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
+
+  // Update completed steps when moving forward
+  useEffect(() => {
+    if (validStepIndex > 0) {
+      const newCompletedSteps = new Set(completedSteps);
+      for (let i = 0; i < validStepIndex; i++) {
+        newCompletedSteps.add(steps[i].id);
+      }
+      setCompletedSteps(newCompletedSteps);
+    }
+  }, [validStepIndex]);
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -238,6 +267,12 @@ export function BitcoinTransactionWidget({
         title: "Copy Failed",
         description: `Unable to copy ${label}`,
       });
+    }
+  };
+
+  const handleViewTransaction = () => {
+    if (depositTx) {
+      window.open(`https://mempool.space/tx/${depositTx}`, "_blank");
     }
   };
 
@@ -497,6 +532,43 @@ export function BitcoinTransactionWidget({
           overflow="hidden"
           borderRadius="0 0 40px 40px"
         >
+          {/* View Transaction Button - Only show if past step 1 and we have a deposit tx */}
+          {validStepIndex > 0 && depositTx && (
+            <Flex
+              as="button"
+              onClick={handleViewTransaction}
+              alignItems="center"
+              justifyContent="center"
+              gap="8px"
+              px="18px"
+              py="7px"
+              mt="-10px"
+              mb="-17px"
+              borderRadius="12px"
+              bg="rgba(255, 255, 255, 0.1)"
+              border="1px solid rgba(255, 255, 255, 0.2)"
+              cursor="pointer"
+              transition="all 0.2s"
+              _hover={{
+                bg: "rgba(255, 255, 255, 0.15)",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+              }}
+              _active={{
+                transform: "scale(0.98)",
+              }}
+            >
+              <Text
+                fontSize="10px"
+                color="rgba(255, 255, 255, 0.9)"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                letterSpacing="0.5px"
+              >
+                VIEW TXN IN MEMPOOL
+              </Text>
+              <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+            </Flex>
+          )}
+
           {/* Step Carousel */}
           <Box
             width="100%"
@@ -507,21 +579,49 @@ export function BitcoinTransactionWidget({
             pt="10px"
             overflow="hidden"
           >
-            <StepCarousel isMobile={isMobile} />
+            <StepCarousel
+              isMobile={isMobile}
+              currentStepIndex={validStepIndex}
+              completedSteps={completedSteps}
+            />
           </Box>
         </Box>
       </Box>
 
-      {/* Warning Text - Outside the main container */}
-      <Text
-        fontSize={"12px"}
-        color="rgba(255, 255, 255, 0.5)"
-        fontFamily={FONT_FAMILIES.AUX_MONO}
-        textAlign="center"
-        px={isMobile ? "20px" : "0"}
-      >
-        You must send the exact amount above to complete the swap.
-      </Text>
+      {/* Warning/Status Text - Outside the main container */}
+      {validStepIndex === 0 && (
+        <Text
+          fontSize={"12px"}
+          color="rgba(255, 255, 255, 0.5)"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          textAlign="center"
+          px={isMobile ? "20px" : "0"}
+        >
+          WARNING: Please send the exact amount above to complete the swap.
+        </Text>
+      )}
+      {validStepIndex === 1 && (
+        <Text
+          fontSize={"12px"}
+          color="rgba(255, 255, 255, 0.5)"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          textAlign="center"
+          px={isMobile ? "20px" : "0"}
+        >
+          Estimated time remaining: ~20 minutes
+        </Text>
+      )}
+      {validStepIndex === 2 && (
+        <Text
+          fontSize={"12px"}
+          color="rgba(255, 255, 255, 0.5)"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          textAlign="center"
+          px={isMobile ? "20px" : "0"}
+        >
+          Estimated time remaining: ~10 minutes
+        </Text>
+      )}
     </Flex>
   );
 }

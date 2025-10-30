@@ -882,6 +882,8 @@ export const UserSwapHistory: React.FC = () => {
                     _hover={{ bg: "rgba(28, 28, 28, 0.7)" }}
                     transition="background 0.15s ease"
                     gap="12px"
+                    cursor="pointer"
+                    onClick={() => router.push(`/swap/${swap.id}`)}
                   >
                     {/* Time */}
                     <Flex direction="column" gap="4px">
@@ -978,7 +980,8 @@ export const UserSwapHistory: React.FC = () => {
                       {userTxHash ? (
                         <Flex
                           as="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const url =
                               userTxChain === "BTC"
                                 ? `https://mempool.space/tx/${userTxHash}`
@@ -1097,7 +1100,8 @@ export const UserSwapHistory: React.FC = () => {
                       ) : mmTxHash ? (
                         <Flex
                           as="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const url =
                               mmTxChain === "BTC"
                                 ? `https://mempool.space/tx/${mmTxHash}`

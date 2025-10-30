@@ -548,6 +548,10 @@ export const SwapButton = () => {
         amount: amountInBTC,
         uri: bitcoinUri,
       });
+
+      // Step 3: Redirect to swap tracking page
+      console.log("Redirecting to swap page with ID:", otcSwap.swap_id);
+      router.push(`/swap/${otcSwap.swap_id}`);
     } catch (error) {
       console.error("BTC->cbBTC swap failed:", error);
 
