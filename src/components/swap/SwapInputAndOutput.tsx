@@ -122,6 +122,8 @@ export const SwapInputAndOutput = () => {
     setExceedsUserBalance,
     inputBelowMinimum,
     setInputBelowMinimum,
+    refetchQuote,
+    setRefetchQuote,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -269,6 +271,7 @@ export const SwapInputAndOutput = () => {
           setRfqQuote(quoteResponse.rfqQuote);
           setOutputAmount(quoteResponse.btcOutputAmount || "");
           setIsLoadingQuote(false);
+          setRefetchQuote(false);
 
           // Calculate and set fee overview
           if (btcPrice && erc20Price) {
@@ -290,6 +293,7 @@ export const SwapInputAndOutput = () => {
           setOutputAmount("");
           setFeeOverview(null);
           setIsLoadingQuote(false);
+          setRefetchQuote(false);
         }
       } catch (error) {
         console.error("Failed to fetch quote:", error);
@@ -298,6 +302,7 @@ export const SwapInputAndOutput = () => {
         setOutputAmount("");
         setFeeOverview(null);
         setIsLoadingQuote(false);
+        setRefetchQuote(false);
       }
     },
     [
@@ -400,6 +405,7 @@ export const SwapInputAndOutput = () => {
 
           setRawInputAmount(truncatedInput);
           setIsLoadingQuote(false);
+          setRefetchQuote(false);
 
           // Calculate and set fee overview
           if (btcPrice && erc20Price) {
@@ -421,6 +427,7 @@ export const SwapInputAndOutput = () => {
           setRawInputAmount("");
           setFeeOverview(null);
           setIsLoadingQuote(false);
+          setRefetchQuote(false);
         }
       } catch (error) {
         console.error("Failed to fetch exact output quote:", error);
@@ -429,6 +436,7 @@ export const SwapInputAndOutput = () => {
         setRawInputAmount("");
         setFeeOverview(null);
         setIsLoadingQuote(false);
+        setRefetchQuote(false);
       }
     },
     [
@@ -1796,6 +1804,34 @@ export const SwapInputAndOutput = () => {
     isAtAdjustedMax,
   ]);
 
+  // Handle refetchQuote - fetch quote when refetchQuote is true
+  useEffect(() => {
+    if (!refetchQuote) return;
+
+    const fetchAndExecute = async () => {
+      try {
+        // Increment request ID
+        quoteRequestIdRef.current += 1;
+        const currentRequestId = quoteRequestIdRef.current;
+
+        // Fetch quote based on which field was last edited
+        if (lastEditedField === "input") {
+          console.log("fetching ERC20 to BTC quote");
+          await fetchERC20ToBTCQuote(undefined, currentRequestId);
+        } else {
+          await fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
+        }
+      } catch (error) {
+        console.error("Failed to refetch quote:", error);
+        // Reset refetchQuote even on error
+        setRefetchQuote(false);
+      }
+    };
+
+    fetchAndExecute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchQuote, lastEditedField]);
+
   // Save swap state to cookies whenever direction or tokens change
   useEffect(() => {
     // Skip saving during initial mount while we're loading from cookie
@@ -1812,9 +1848,11 @@ export const SwapInputAndOutput = () => {
   // ============================================================================
   // RENDER
   // ============================================================================
-  console.log("[sameer] exceedsAvailableBTCLiquidity", exceedsAvailableBTCLiquidity);
-  console.log("[sameer] exceedsAvailableCBBTCLiquidity", exceedsAvailableCBBTCLiquidity);
-  console.log("[sameer] exceedsUserBalance", exceedsUserBalance);
+
+  // sameer logs
+  // console.log("[sameer] exceedsAvailableBTCLiquidity", exceedsAvailableBTCLiquidity);
+  // console.log("[sameer] exceedsAvailableCBBTCLiquidity", exceedsAvailableCBBTCLiquidity);
+  // console.log("[sameer] exceedsUserBalance", exceedsUserBalance);
   // console.log("[sameer] inputBelowMinimum", inputBelowMinimum);
   // console.log("[sameer] belowMinimumSwap", belowMinimumSwap);
   // console.log("[sameer] isLoadingQuote", isLoadingQuote);

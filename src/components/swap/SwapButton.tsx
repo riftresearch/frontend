@@ -72,6 +72,10 @@ export const SwapButton = () => {
     exceedsAvailableCBBTCLiquidity,
     exceedsUserBalance,
     inputBelowMinimum,
+    refetchQuote,
+    setRefetchQuote,
+    setUniswapQuote,
+    setRfqQuote,
   } = useStore();
 
   // Wagmi hooks for contract interactions
@@ -378,10 +382,7 @@ export const SwapButton = () => {
       }
     } else {
       if (!uniswapQuote || !rfqQuote || !userEvmAccountAddress || !selectedInputToken) {
-        toastError(new Error("Missing quote data"), {
-          title: "Swap Failed",
-          description: "Please refresh the quote and try again",
-        });
+        setRefetchQuote(true);
         return;
       }
     }
@@ -708,18 +709,47 @@ export const SwapButton = () => {
     if (writeError || sendTxError) {
       const error = writeError || sendTxError;
       console.warn("Transaction error:", error);
-      // Custom BTC orange toast for transaction declined
-      toastInfo({
-        title: "Transaction Declined",
-        description: "The user declined the transaction request",
-        customStyle: {
-          background: `${colors.assetTag.btc.background}`,
-        },
-      });
+
+      // Check if user rejected the request
+      const errorMessage = error?.message || "";
+      const isUserRejection = errorMessage.includes("User rejected the request");
+      const isInternalError = errorMessage.includes("An internal error was received");
+
+      // Custom BTC orange toast based on error type
+      if (isUserRejection) {
+        toastInfo({
+          title: "Transaction Declined",
+          description: "The user declined the transaction request",
+          customStyle: {
+            background: `${colors.assetTag.btc.background}`,
+          },
+        });
+      } else if (isInternalError) {
+        toastInfo({
+          title: "Transaction Failed",
+          description: errorMessage,
+          customStyle: {
+            background: `${colors.assetTag.btc.background}`,
+          },
+        });
+      } else {
+        // Fallback for other errors
+        toastInfo({
+          title: "Transaction Failed",
+          description: "The transaction could not be completed",
+          customStyle: {
+            background: `${colors.assetTag.btc.background}`,
+          },
+        });
+      }
+
       // Reset swap button state
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
       setIsSigningPermit(false);
+      setUniswapQuote(null);
+      setRfqQuote(null);
+      setRefetchQuote(true);
     }
   }, [writeError, sendTxError]);
 
@@ -739,6 +769,7 @@ export const SwapButton = () => {
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
       setIsSigningPermit(false);
+      // setSwapResponse(null);
     }
   }, [txError]);
 

@@ -95,6 +95,8 @@ export const useStore = create<{
   setExceedsUserBalance: (value: boolean) => void;
   inputBelowMinimum: boolean;
   setInputBelowMinimum: (value: boolean) => void;
+  refetchQuote: boolean;
+  setRefetchQuote: (value: boolean) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -185,4 +187,6 @@ export const useStore = create<{
   setExceedsUserBalance: (value: boolean) => set({ exceedsUserBalance: value }),
   inputBelowMinimum: false,
   setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
+  refetchQuote: false,
+  setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
 }));
