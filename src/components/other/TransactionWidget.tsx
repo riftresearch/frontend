@@ -43,7 +43,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
   const [previousStepIndex, setPreviousStepIndex] = useState(-1);
   const [showButtons, setShowButtons] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-
+  const { isMobile } = useWindowSize();
   // Check if we're in the settled state (step 4 or 5)
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
@@ -398,7 +398,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
                 onClick={handleViewTransaction}
                 border="2px solid #3F7244"
                 borderRadius="16px"
-                width="160px"
+                width={isMobile ? "140px" : "160px"}
                 background="rgba(2, 123, 30, 0.25)"
                 padding="8px 16px"
                 cursor="pointer"
@@ -424,7 +424,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
                 as="button"
                 onClick={handleNewSwap}
                 borderRadius="16px"
-                width="160px"
+                width={isMobile ? "140px" : "160px"}
                 border="2px solid #6651B3"
                 background="rgba(86, 50, 168, 0.30)"
                 padding="8px 16px"

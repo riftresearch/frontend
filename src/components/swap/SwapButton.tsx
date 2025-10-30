@@ -574,14 +574,6 @@ export const SwapButton = () => {
         return;
       }
 
-      if (isMobile) {
-        toastInfo({
-          title: "Hop on your laptop",
-          description: "This app is too cool for small screens, mobile coming soon!",
-        });
-        return;
-      }
-
       // Check input amount
       if (
         !rawInputAmount ||

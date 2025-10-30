@@ -137,8 +137,6 @@ export const Navbar = ({}) => {
     }
   };
 
-  if (isMobile) return null;
-
   return (
     <Flex
       width="100%"
@@ -155,82 +153,36 @@ export const Navbar = ({}) => {
         w="100%"
         h="130%"
       ></Flex>
-      {/* {displayWarning == true && (
-        <>
-          <Flex
-            bgGradient="linear(90deg, rgba(223, 111, 19, 1), rgba(39, 46, 221, 1))"
-            zIndex="2"
-            alignSelf={"center"}
-            align={"center"}
-            justify={"center"}
-            w="100%"
-            minH="40px"
-            position="relative"
-          >
-            <GlowingShimmerText>
-              The Rift early alpha is awaiting audits - swaps are limited to 100 USDT - use at your
-              own risk
-            </GlowingShimmerText>
-            <Flex
-              // h='100%'
-              h="38px"
-              w={isSmallLaptop ? "38px" : "100px"}
-              align="center"
-              borderRadius={"4px"}
-              justify={"center"}
-              position="absolute"
-              cursor={"pointer"}
-              right={isSmallLaptop ? "10px" : "10px"}
-              color={isSmallLaptop ? colors.textGray : colors.offWhite}
-              _hover={{ bg: colors.purpleButtonBG, color: colors.offWhite }}
-              onClick={() => {
-                onDismiss("dismissAlphaWarning");
-                setDisplayWarning(false);
-              }}
-            >
-              <Text
-                textShadow={"0px 0px 10px rgba(0, 0, 0, 0.5)"}
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                fontSize="16px"
-              >
-                {isSmallLaptop ? "X" : "DISMISS"}
-              </Text>
-            </Flex>
-          </Flex>
-          <Flex
-            bgGradient="linear(-90deg, rgba(251, 142, 45, 0.5), rgba(69, 76, 251, 0.5))"
-            zIndex="2"
-            alignSelf={"center"}
-            align={"center"}
-            justify={"center"}
-            w="100%"
-            h="2px"
-            mb="-10px"
-          />
-        </>
-      )} */}
 
-      <Flex direction="row" w="100%" px={"30px"} pt="25px" zIndex={400}>
-        <Flex gap="12px">
-          {navItem("Swap", "/")}
-          {navItem("History", "/history")}
-          {/* {navItem('OTC', '/otc')} */}
-        </Flex>
-        <Flex ml="25px" gap="30px" align="center">
-          <a href="https://x.com/riftdex" target="_blank" rel="noopener noreferrer">
-            <Image src="/images/social/x.svg" w="17px" aspectRatio={1} />
-          </a>
-          <Flex mt="1px">
-            <a href="https://discord.gg/tpr6jMdvFq" target="_blank" rel="noopener noreferrer">
-              <Image
-                src="/images/social/discord2.svg"
-                objectFit="contain"
-                h="25px"
-                aspectRatio={1}
-              />
-            </a>
+      <Flex direction="row" w="100%" px={isMobile ? "15px" : "30px"} pt="25px" zIndex={400}>
+        {isMobile ? (
+          <Flex>
+            {router.pathname === "/history" ? navItem("Swap", "/") : navItem("History", "/history")}
           </Flex>
-        </Flex>
+        ) : (
+          <>
+            <Flex gap="12px">
+              {navItem("Swap", "/")}
+              {navItem("History", "/history")}
+              {/* {navItem('OTC', '/otc')} */}
+            </Flex>
+            <Flex ml="25px" gap="30px" align="center">
+              <a href="https://x.com/riftdex" target="_blank" rel="noopener noreferrer">
+                <Image src="/images/social/x.svg" w="17px" aspectRatio={1} />
+              </a>
+              <Flex mt="1px">
+                <a href="https://discord.gg/tpr6jMdvFq" target="_blank" rel="noopener noreferrer">
+                  <Image
+                    src="/images/social/discord2.svg"
+                    objectFit="contain"
+                    h="25px"
+                    aspectRatio={1}
+                  />
+                </a>
+              </Flex>
+            </Flex>
+          </>
+        )}
         <Spacer />
         <Flex
           direction="column"
@@ -261,59 +213,6 @@ export const Navbar = ({}) => {
         </Flex>
         <Spacer />
         <Flex mb="-5px" pr="5px" alignItems="center" gap="10px">
-          {/* {isLocalhost && (
-            <Flex
-              userSelect={"none"}
-              zIndex={1000}
-              alignItems="center"
-              bg={colors.offBlack}
-              borderRadius="6px"
-              p="5px 10px"
-              borderWidth="1px"
-              borderColor={colors.textGray}
-            >
-              <Box
-                as={IoChevronBack}
-                color={colors.textGray}
-                cursor="pointer"
-                fontSize="20px"
-                onClick={() => {
-                  const currentState = useStore.getState().depositFlowState;
-                  const currentStateNumber = parseInt(currentState, 10);
-                  if (currentStateNumber > 0) {
-                    useStore.setState({
-                      depositFlowState: mapStateNumberToString(
-                        currentStateNumber - 1
-                      ),
-                    });
-                  }
-                }}
-              />
-              <Text
-                mx="10px"
-                userSelect={"none"}
-                color={colors.offWhite}
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-              >
-                {depositFlowState}
-              </Text>
-              <Box
-                as={IoChevronForward}
-                color={colors.textGray}
-                cursor="pointer"
-                fontSize="20px"
-                onClick={() => {
-                  const currentState = useStore.getState().depositFlowState;
-                  const currentStateNumber = parseInt(currentState, 10);
-                  useStore.setState({
-                    depositFlowState: mapStateNumberToString(
-                      currentStateNumber + 1
-                    ),
-                  });
-                }}
-              />
-            </Flex>
-          )} */}
           <ConnectWalletButton />
         </Flex>
       </Flex>

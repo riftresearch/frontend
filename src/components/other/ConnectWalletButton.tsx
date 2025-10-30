@@ -13,6 +13,7 @@ import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.js
 import type { TokenData, TokenBalance, TokenPrice } from "@/utils/types";
 import { preloadImages } from "@/utils/imagePreload";
 import { FALLBACK_TOKEN_ICON, ETH_ICON } from "@/utils/constants";
+import useWindowSize from "@/hooks/useWindowSize";
 
 const getCustomChainName = (chainId: number): string => {
   if (chainId === 1337) return "Rift Devnet";
@@ -30,6 +31,7 @@ export const ConnectWalletButton: React.FC = () => {
     setSearchResults,
   } = useStore();
   const chains = useChains();
+  const { isMobile } = useWindowSize();
 
   // Get chain-specific colors
   const isEthereum = chainId === 1;
@@ -278,9 +280,9 @@ export const ConnectWalletButton: React.FC = () => {
           border={`2px solid ${colors.swapBorderColor}`}
           fontFamily={FONT_FAMILIES.NOSTROMO}
           type="button"
-          fontSize="17px"
+          fontSize={isMobile ? "14px" : "17px"}
           letterSpacing="-1px"
-          paddingX="28px"
+          paddingX={isMobile ? "20px" : "28px"}
           paddingY={"10px"}
           bg={colors.swapBgColor}
           boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
@@ -297,19 +299,19 @@ export const ConnectWalletButton: React.FC = () => {
             bg={colors.swapBgColor}
             borderRadius="30px"
             fontFamily={"aux"}
-            fontSize={"17px"}
-            paddingLeft="16px"
-            paddingRight="22px"
-            pt="2px"
+            fontSize={isMobile ? "14px" : "17px"}
+            paddingLeft={isMobile ? "10px" : "16px"}
+            paddingRight={isMobile ? "10px" : "22px"}
+            pt={isMobile ? "0px" : "2px"}
             color={colors.offWhite}
             letterSpacing="-1px"
-            h="42px"
+            h={isMobile ? "36px" : "42px"}
             border={`2px solid ${colors.swapBorderColor}`}
             style={{ display: "flex", alignItems: "center" }}
           >
             <Flex alignItems="center" gap="8px">
               <NetworkIcon />
-              {getChainName()}
+              {!isMobile && getChainName()}
             </Flex>
           </Button>
           <Button
@@ -320,12 +322,12 @@ export const ConnectWalletButton: React.FC = () => {
             bg={colors.swapBgColor}
             borderRadius="30px"
             fontFamily="aux"
-            fontSize="17px"
+            fontSize={isMobile ? "14px" : "17px"}
             letterSpacing="-1px"
-            pt="2px"
-            px="18px"
+            pt={isMobile ? "0px" : "2px"}
+            px={isMobile ? "10px" : "18px"}
             color={colors.offWhite}
-            h="42px"
+            h={isMobile ? "36px" : "42px"}
             border={`2px solid ${colors.swapBorderColor}`}
           >
             {displayAddress}

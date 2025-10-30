@@ -2,6 +2,7 @@ import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
+import useWindowSize from "@/hooks/useWindowSize";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -48,6 +49,9 @@ export const SwapInputAndOutput = () => {
 
   // Liquidity hook
   const liquidity = useMaxLiquidity();
+
+  // Mobile detection
+  const { isMobile } = useWindowSize();
 
   // Local state
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">("input");
@@ -274,13 +278,13 @@ export const SwapInputAndOutput = () => {
           setRefetchQuote(false);
 
           // Calculate and set fee overview
-          if (btcPrice && erc20Price) {
+          if (btcPrice && price) {
             const fees = calculateFees(
               quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
               quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
               quoteResponse.uniswapQuote?.amountOut || "0",
               quoteResponse.uniswapQuote?.amountIn || "0",
-              erc20Price,
+              price,
               btcPrice,
               selectedInputToken.decimals
             );
@@ -338,6 +342,13 @@ export const SwapInputAndOutput = () => {
 
       // Check if the output BTC value is above minimum swap threshold
       const outputValue = parseFloat(btcAmountToQuote);
+
+      let price;
+      if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+        price = ethPrice;
+      } else if (selectedInputToken.address) {
+        price = erc20Price;
+      }
 
       if (btcPrice) {
         const usdValue = outputValue * btcPrice;
@@ -408,13 +419,13 @@ export const SwapInputAndOutput = () => {
           setRefetchQuote(false);
 
           // Calculate and set fee overview
-          if (btcPrice && erc20Price) {
+          if (btcPrice && price) {
             const fees = calculateFees(
               quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
               quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
               quoteResponse.uniswapQuote?.amountOut || "0",
               quoteResponse.uniswapQuote?.amountIn || "0",
-              erc20Price,
+              price,
               btcPrice,
               selectedInputToken.decimals
             );
@@ -478,29 +489,23 @@ export const SwapInputAndOutput = () => {
       const amountValue = parseFloat(amountToQuote);
       let usdValue = 0;
 
-      if (mode === "ExactInput") {
-        // Input is BTC
-        if (btcPrice) {
-          usdValue = amountValue * btcPrice;
-        }
-      } else {
-        // Output is ERC20
-        if (selectedOutputToken?.ticker === "cbBTC" && btcPrice) {
-          usdValue = amountValue * btcPrice;
-        } else if (erc20Price) {
-          usdValue = amountValue * erc20Price;
-        }
+      let price;
+      if (selectedOutputToken?.ticker === "cbBTC") {
+        price = btcPrice;
+      } else if (erc20Price) {
+        price = erc20Price;
       }
-
-      // console.log("usdValue", usdValue);
-      // console.log("btcPrice", btcPrice);
-      // console.log("isAboveMinSwap", isAboveMinSwap(usdValue, btcPrice || 0));
-      // console.log("liquidity", liquidity);
-      // Check minimum swap threshold
-
-      if (!btcPrice) {
+      if (!btcPrice || !price) {
         setIsLoadingQuote(false);
         return;
+      }
+
+      if (mode === "ExactInput") {
+        // Input is BTC
+        usdValue = amountValue * btcPrice;
+      } else {
+        // Output is ERC20
+        usdValue = amountValue * price;
       }
 
       if (!isAboveMinSwap(usdValue, btcPrice)) {
@@ -582,13 +587,13 @@ export const SwapInputAndOutput = () => {
           }
 
           // Calculate and set fee overview (erc20Fee will be $0.00)
-          if (btcPrice && erc20Price) {
+          if (btcPrice && price) {
             const fees = calculateFees(
               rfqQuoteResponse.fee_schedule.network_fee_sats,
               rfqQuoteResponse.fee_schedule.protocol_fee_sats,
               "0",
               "0",
-              erc20Price,
+              price,
               btcPrice,
               selectedOutputToken?.decimals || BITCOIN_DECIMALS
             );
@@ -1919,7 +1924,7 @@ export const SwapInputAndOutput = () => {
                   boxShadow: "none",
                   outline: "none",
                 }}
-                fontSize="46px"
+                fontSize={isMobile ? "28px" : "46px"}
                 placeholder="0.0"
                 _placeholder={{
                   color: inputStyle?.light_text_color || "#4A90E2",
@@ -2189,7 +2194,7 @@ export const SwapInputAndOutput = () => {
                   boxShadow: "none",
                   outline: "none",
                 }}
-                fontSize="46px"
+                fontSize={isMobile ? "28px" : "46px"}
                 placeholder="0.0"
                 _placeholder={{
                   color: outputStyle?.light_text_color || "#805530",
@@ -2417,7 +2422,7 @@ export const SwapInputAndOutput = () => {
               h="60px"
               borderRadius="16px"
             >
-              <Flex direction="row" py="6px" px="8px">
+              <Flex direction="row" py="6px" px="8px" w="100%">
                 <Input
                   value={payoutAddress}
                   onChange={(e) => setPayoutAddress(e.target.value)}
@@ -2429,8 +2434,8 @@ export const SwapInputAndOutput = () => {
                   mr="15px"
                   ml="-4px"
                   p="0px"
-                  w="500px"
-                  letterSpacing="-5px"
+                  w={isMobile ? "100%" : "500px"}
+                  letterSpacing={isMobile ? "-2px" : "-5px"}
                   color={colors.offWhite}
                   _active={{
                     border: "none",
@@ -2447,7 +2452,7 @@ export const SwapInputAndOutput = () => {
                     boxShadow: "none",
                     outline: "none",
                   }}
-                  fontSize="28px"
+                  fontSize={isMobile ? "18px" : "28px"}
                   placeholder="bc1q5d7rjq7g6rd2d..."
                   _placeholder={{
                     color: outputStyle?.light_text_color || "#856549",

@@ -39,7 +39,7 @@ const steps = [
   },
 ];
 
-function StepCarousel() {
+function StepCarousel({ isMobile }: { isMobile: boolean }) {
   // Default to step 0 (Awaiting Bitcoin Deposit)
   const [currentStepIndex] = useState(0);
   const [completedSteps] = useState<Set<string>>(new Set());
@@ -162,11 +162,23 @@ function StepCarousel() {
                   <motion.div
                     initial={{
                       color: isCurrent ? "white" : "rgba(255,255,255,0.6)",
-                      fontSize: isCurrent ? "20px" : "18px",
+                      fontSize: isCurrent
+                        ? isMobile
+                          ? "16px"
+                          : "20px"
+                        : isMobile
+                          ? "14px"
+                          : "18px",
                     }}
                     animate={{
                       color: isCurrent ? "white" : "rgba(255,255,255,0.6)",
-                      fontSize: isCurrent ? "20px" : "18px",
+                      fontSize: isCurrent
+                        ? isMobile
+                          ? "16px"
+                          : "20px"
+                        : isMobile
+                          ? "14px"
+                          : "18px",
                     }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
                   >
@@ -189,7 +201,7 @@ function StepCarousel() {
                 >
                   <Text
                     color="rgba(255,255,255,0.7)"
-                    fontSize="13px"
+                    fontSize={isMobile ? "12px" : "13px"}
                     fontFamily="Aux"
                     mt="4px"
                     textAlign="center"
@@ -233,7 +245,7 @@ export function BitcoinTransactionWidget({
     <Flex direction="column" alignItems="center" gap="20px">
       <Box
         w={isMobile ? "100%" : "805px"}
-        h="510px"
+        h={isMobile ? "600px" : "510px"}
         borderRadius="40px"
         mt="70px"
         boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
@@ -261,7 +273,7 @@ export function BitcoinTransactionWidget({
         {/* Top Half - QR Code and Details Section */}
         <Box
           w="100%"
-          h="59%"
+          h={isMobile ? "65%" : "59%"}
           borderRadius="40px"
           position="absolute"
           top="0px"
@@ -338,7 +350,14 @@ export function BitcoinTransactionWidget({
           />
 
           {/* QR Code and Details - Horizontal Layout */}
-          <Flex direction="row" align="center" justify="center" gap="40px" zIndex={1} px="100px">
+          <Flex
+            direction={isMobile ? "column" : "row"}
+            align="center"
+            justify="center"
+            gap={isMobile ? "20px" : "40px"}
+            zIndex={1}
+            px={isMobile ? "20px" : "100px"}
+          >
             {/* QR Code on Left */}
             <Flex
               py="10px"
@@ -350,15 +369,20 @@ export function BitcoinTransactionWidget({
               align="center"
               flexShrink={0}
             >
-              <QRCodeSVG value={bitcoinUri} size={160} />
+              <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
             </Flex>
 
             {/* Address and Amount Details on Right - Stacked Vertically */}
-            <Flex direction="column" gap="24px" flex="1" maxW="500px">
+            <Flex
+              direction="column"
+              gap={isMobile ? "16px" : "24px"}
+              flex="1"
+              maxW={isMobile ? "100%" : "500px"}
+            >
               {/* Bitcoin Address Section */}
               <Flex direction="column" w="100%">
                 <Text
-                  fontSize="11px"
+                  fontSize={isMobile ? "10px" : "11px"}
                   color="rgba(255,255,255,0.5)"
                   fontFamily={FONT_FAMILIES.NOSTROMO}
                   letterSpacing="1px"
@@ -377,8 +401,8 @@ export function BitcoinTransactionWidget({
                   <Text
                     color={colors.offWhite}
                     fontFamily={FONT_FAMILIES.AUX_MONO}
-                    fontSize="26px"
-                    letterSpacing="-1.8px"
+                    fontSize={isMobile ? "18px" : "26px"}
+                    letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
                     fontWeight="500"
                     flex="1"
                     lineHeight="1.3"
@@ -409,7 +433,7 @@ export function BitcoinTransactionWidget({
               {/* Amount Section */}
               <Flex direction="column" w="100%">
                 <Text
-                  fontSize="11px"
+                  fontSize={isMobile ? "10px" : "11px"}
                   color="rgba(255,255,255,0.5)"
                   fontFamily={FONT_FAMILIES.NOSTROMO}
                   letterSpacing="1px"
@@ -428,8 +452,8 @@ export function BitcoinTransactionWidget({
                   <Text
                     color={colors.offWhite}
                     fontFamily={FONT_FAMILIES.AUX_MONO}
-                    fontSize="26px"
-                    letterSpacing="-1.8px"
+                    fontSize={isMobile ? "18px" : "26px"}
+                    letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
                     fontWeight="500"
                   >
                     {amount.toFixed(8)}
@@ -483,19 +507,20 @@ export function BitcoinTransactionWidget({
             pt="10px"
             overflow="hidden"
           >
-            <StepCarousel />
+            <StepCarousel isMobile={isMobile} />
           </Box>
         </Box>
       </Box>
 
       {/* Warning Text - Outside the main container */}
       <Text
-        fontSize="11px"
+        fontSize={"12px"}
         color="rgba(255, 255, 255, 0.5)"
         fontFamily={FONT_FAMILIES.AUX_MONO}
         textAlign="center"
+        px={isMobile ? "20px" : "0"}
       >
-        WARNING: Send the exact amount shown above to complete the swap.
+        You must send the exact amount above to complete the swap.
       </Text>
     </Flex>
   );
