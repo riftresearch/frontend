@@ -230,45 +230,18 @@ export function BitcoinTransactionWidget({
   };
 
   return (
-    <Box
-      w={isMobile ? "100%" : "805px"}
-      h="510px"
-      borderRadius="40px"
-      mt="70px"
-      boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
-      backdropFilter="blur(9px)"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      position="relative"
-      _before={{
-        content: '""',
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderRadius: "40px",
-        padding: "3px",
-        background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
-        mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-        maskComposite: "xor",
-        WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-        WebkitMaskComposite: "xor",
-      }}
-    >
-      {/* Top Half - QR Code and Details Section */}
+    <Flex direction="column" alignItems="center" gap="20px">
       <Box
-        w="100%"
-        h="59%"
+        w={isMobile ? "100%" : "805px"}
+        h="510px"
         borderRadius="40px"
-        position="absolute"
-        top="0px"
-        background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
+        mt="70px"
+        boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+        backdropFilter="blur(9px)"
         display="flex"
-        backdropFilter="blur(20px)"
         alignItems="center"
         justifyContent="center"
+        position="relative"
         _before={{
           content: '""',
           position: "absolute",
@@ -278,207 +251,252 @@ export function BitcoinTransactionWidget({
           bottom: 0,
           borderRadius: "40px",
           padding: "3px",
-          background:
-            "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
+          background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           maskComposite: "xor",
           WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           WebkitMaskComposite: "xor",
         }}
       >
-        {/* Corner decorations */}
-        <img
-          src="/images/txns/top_left.svg"
-          alt=""
-          style={{
+        {/* Top Half - QR Code and Details Section */}
+        <Box
+          w="100%"
+          h="59%"
+          borderRadius="40px"
+          position="absolute"
+          top="0px"
+          background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
+          display="flex"
+          backdropFilter="blur(20px)"
+          alignItems="center"
+          justifyContent="center"
+          _before={{
+            content: '""',
             position: "absolute",
-            top: "25px",
-            left: "40px",
-            width: "28px",
-            height: "28px",
-            opacity: 0.5,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: "40px",
+            padding: "3px",
+            background:
+              "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
           }}
-        />
-        <img
-          src="/images/txns/top_right.svg"
-          alt=""
-          style={{
-            position: "absolute",
-            top: "25px",
-            right: "40px",
-            width: "40px",
-            height: "40px",
-            opacity: 0.5,
-          }}
-        />
-        <img
-          src="/images/txns/bottom_left.svg"
-          alt=""
-          style={{
-            position: "absolute",
-            bottom: "25px",
-            left: "40px",
-            width: "40px",
-            height: "40px",
-            opacity: 0.5,
-          }}
-        />
-        <img
-          src="/images/txns/bottom_right.svg"
-          alt=""
-          style={{
-            position: "absolute",
-            bottom: "25px",
-            right: "40px",
-            width: "28px",
-            height: "28px",
-            opacity: 0.5,
-          }}
-        />
+        >
+          {/* Corner decorations */}
+          <img
+            src="/images/txns/top_left.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              top: "25px",
+              left: "40px",
+              width: "28px",
+              height: "28px",
+              opacity: 0.5,
+            }}
+          />
+          <img
+            src="/images/txns/top_right.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              top: "25px",
+              right: "40px",
+              width: "40px",
+              height: "40px",
+              opacity: 0.5,
+            }}
+          />
+          <img
+            src="/images/txns/bottom_left.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              bottom: "25px",
+              left: "40px",
+              width: "40px",
+              height: "40px",
+              opacity: 0.5,
+            }}
+          />
+          <img
+            src="/images/txns/bottom_right.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              bottom: "25px",
+              right: "40px",
+              width: "28px",
+              height: "28px",
+              opacity: 0.5,
+            }}
+          />
 
-        {/* QR Code and Details - Horizontal Layout */}
-        <Flex direction="row" align="center" justify="center" gap="40px" zIndex={1} px="60px">
-          {/* QR Code on Left */}
-          <Flex
-            py="10px"
-            px="10px"
-            borderRadius="12px"
-            bg="white"
-            boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-            justify="center"
-            align="center"
-            flexShrink={0}
-          >
-            <QRCodeSVG value={bitcoinUri} size={160} />
-          </Flex>
-
-          {/* Address and Amount Details on Right - Stacked Vertically */}
-          <Flex direction="column" gap="20px" flex="1" maxW="450px">
-            {/* Bitcoin Address Section */}
-            <Flex direction="column" w="100%">
-              <Text
-                fontSize="12px"
-                color="rgba(255,255,255,0.6)"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                letterSpacing="1px"
-                mb="6px"
-              >
-                BITCOIN ADDRESS
-              </Text>
-              <Flex
-                alignItems="center"
-                gap="10px"
-                bg="rgba(255, 255, 255, 0.08)"
-                borderRadius="10px"
-                padding="10px 14px"
-                border="1px solid rgba(255, 255, 255, 0.15)"
-                cursor="pointer"
-                onClick={() => copyToClipboard(address, "Bitcoin Address")}
-                _hover={{
-                  bg: "rgba(255, 255, 255, 0.12)",
-                  borderColor: "rgba(255, 255, 255, 0.25)",
-                }}
-                transition="all 0.2s"
-              >
-                <Text
-                  color={colors.offWhite}
-                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                  fontSize="13px"
-                  letterSpacing="-0.3px"
-                  fontWeight="500"
-                  flex="1"
-                >
-                  {address}
-                </Text>
-                <LuCopy
-                  color="rgba(255, 255, 255, 0.6)"
-                  size={16}
-                  style={{
-                    flexShrink: 0,
-                    cursor: "pointer",
-                  }}
-                />
-              </Flex>
+          {/* QR Code and Details - Horizontal Layout */}
+          <Flex direction="row" align="center" justify="center" gap="40px" zIndex={1} px="100px">
+            {/* QR Code on Left */}
+            <Flex
+              py="10px"
+              px="10px"
+              borderRadius="12px"
+              bg="white"
+              boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
+              justify="center"
+              align="center"
+              flexShrink={0}
+            >
+              <QRCodeSVG value={bitcoinUri} size={160} />
             </Flex>
 
-            {/* Amount Section */}
-            <Flex direction="column" w="100%">
-              <Text
-                fontSize="12px"
-                color="rgba(255,255,255,0.6)"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                letterSpacing="1px"
-                mb="6px"
-              >
-                DEPOSIT AMOUNT
-              </Text>
-              <Flex
-                alignItems="center"
-                gap="10px"
-                bg="rgba(255, 255, 255, 0.08)"
-                borderRadius="10px"
-                padding="10px 14px"
-                border="1px solid rgba(255, 255, 255, 0.15)"
-                cursor="pointer"
-                onClick={() => copyToClipboard(amount.toFixed(8), "Bitcoin Amount")}
-                _hover={{
-                  bg: "rgba(255, 255, 255, 0.12)",
-                  borderColor: "rgba(255, 255, 255, 0.25)",
-                }}
-                transition="all 0.2s"
-              >
+            {/* Address and Amount Details on Right - Stacked Vertically */}
+            <Flex direction="column" gap="24px" flex="1" maxW="500px">
+              {/* Bitcoin Address Section */}
+              <Flex direction="column" w="100%">
                 <Text
-                  color={colors.offWhite}
-                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                  fontSize="16px"
-                  letterSpacing="-0.3px"
-                  fontWeight="600"
+                  fontSize="11px"
+                  color="rgba(255,255,255,0.5)"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  letterSpacing="1px"
+                  mb="8px"
                 >
-                  {amount.toFixed(8)}
+                  BITCOIN ADDRESS
                 </Text>
-                <LuCopy
-                  color="rgba(255, 255, 255, 0.6)"
-                  size={16}
-                  style={{
-                    flexShrink: 0,
-                    cursor: "pointer",
-                  }}
-                />
-                <WebAssetTag asset="BTC" />
+                <Flex
+                  alignItems="flex-end"
+                  gap="12px"
+                  position="relative"
+                  role="group"
+                  cursor="pointer"
+                  onClick={() => copyToClipboard(address, "Bitcoin Address")}
+                >
+                  <Text
+                    color={colors.offWhite}
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="26px"
+                    letterSpacing="-1.8px"
+                    fontWeight="500"
+                    flex="1"
+                    lineHeight="1.3"
+                    wordBreak="break-all"
+                  >
+                    {address}
+                  </Text>
+                  <Box
+                    opacity={0.6}
+                    _groupHover={{
+                      opacity: 1,
+                    }}
+                    transition="opacity 0.2s"
+                    mb="2px"
+                  >
+                    <LuCopy
+                      color="rgba(255, 255, 255, 0.8)"
+                      size={20}
+                      style={{
+                        flexShrink: 0,
+                        cursor: "pointer",
+                      }}
+                    />
+                  </Box>
+                </Flex>
+              </Flex>
+
+              {/* Amount Section */}
+              <Flex direction="column" w="100%">
+                <Text
+                  fontSize="11px"
+                  color="rgba(255,255,255,0.5)"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  letterSpacing="1px"
+                  mb="8px"
+                >
+                  DEPOSIT AMOUNT
+                </Text>
+                <Flex
+                  alignItems="center"
+                  gap="12px"
+                  position="relative"
+                  role="group"
+                  cursor="pointer"
+                  onClick={() => copyToClipboard(amount.toFixed(8), "Bitcoin Amount")}
+                >
+                  <Text
+                    color={colors.offWhite}
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="26px"
+                    letterSpacing="-1.8px"
+                    fontWeight="500"
+                  >
+                    {amount.toFixed(8)}
+                  </Text>
+                  <Box
+                    opacity={0.6}
+                    _groupHover={{
+                      opacity: 1,
+                    }}
+                    transition="opacity 0.2s"
+                  >
+                    <LuCopy
+                      color="rgba(255, 255, 255, 0.8)"
+                      size={20}
+                      style={{
+                        flexShrink: 0,
+                        cursor: "pointer",
+                      }}
+                    />
+                  </Box>
+                  <Box transform="scale(0.7)" transformOrigin="left center">
+                    <WebAssetTag asset="BTC" />
+                  </Box>
+                </Flex>
               </Flex>
             </Flex>
           </Flex>
-        </Flex>
-      </Box>
-
-      {/* Bottom Half - Steps and Warning */}
-      <Box
-        h="50%"
-        bottom="0px"
-        position="absolute"
-        padding="20px"
-        w="100%"
-        display="flex"
-        flexDirection="column"
-        alignItems="center"
-        justifyContent="center"
-      >
-        {/* Step Carousel */}
-        <Box width="100%" height="auto" mb="20px">
-          <StepCarousel />
         </Box>
 
-        {/* Warning Text */}
-        <Text
-          fontSize="11px"
-          color="rgba(255, 255, 255, 0.5)"
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          textAlign="center"
-          mt="auto"
+        {/* Bottom Half - Steps */}
+        <Box
+          h="41%"
+          bottom="0px"
+          position="absolute"
+          padding="30px 20px 20px 20px"
+          w="100%"
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="flex-start"
+          overflow="hidden"
+          borderRadius="0 0 40px 40px"
         >
-          WARNING: Send the exact amount shown above to complete the swap.
-        </Text>
+          {/* Step Carousel */}
+          <Box
+            width="100%"
+            height="auto"
+            flex="1"
+            display="flex"
+            alignItems="flex-start"
+            pt="10px"
+            overflow="hidden"
+          >
+            <StepCarousel />
+          </Box>
+        </Box>
       </Box>
-    </Box>
+
+      {/* Warning Text - Outside the main container */}
+      <Text
+        fontSize="11px"
+        color="rgba(255, 255, 255, 0.5)"
+        fontFamily={FONT_FAMILIES.AUX_MONO}
+        textAlign="center"
+      >
+        WARNING: Send the exact amount shown above to complete the swap.
+      </Text>
+    </Flex>
   );
 }
