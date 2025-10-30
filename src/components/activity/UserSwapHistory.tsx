@@ -20,6 +20,7 @@ import {
   validateRefundAddress,
 } from "@/utils/refundHelpers";
 import { toastSuccess, toastError } from "@/utils/toast";
+import useWindowSize from "@/hooks/useWindowSize";
 
 function displayShortTxHash(hash: string): string {
   if (!hash || hash.length < 12) return hash;
@@ -394,6 +395,7 @@ export const UserSwapHistory: React.FC = () => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
   const router = useRouter();
+  const { isMobile } = useWindowSize();
   const [swaps, setSwaps] = useState<AdminSwapItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -520,11 +522,18 @@ export const UserSwapHistory: React.FC = () => {
   if (isInitialMount) {
     return (
       <>
-        <GridFlex maxW="750px" w="100%" contentPadding="32px" borderRadius="40px" mb="20px">
+        <GridFlex
+          maxW="750px"
+          w="100%"
+          contentPadding={isMobile ? "20px" : "32px"}
+          borderRadius="40px"
+          mb="20px"
+          mt={isMobile ? "80px" : "0"}
+        >
           <Flex direction="column" w="100%" align="center">
             <Text
-              fontSize="36px"
-              mt="-15px"
+              fontSize={isMobile ? "24px" : "36px"}
+              mt={isMobile ? "-8px" : "-15px"}
               fontFamily={FONT_FAMILIES.NOSTROMO}
               color={colorsAnalytics.offWhite}
               textAlign="center"
@@ -532,7 +541,7 @@ export const UserSwapHistory: React.FC = () => {
               Swap History
             </Text>
             <Text
-              fontSize="15px"
+              fontSize={isMobile ? "13px" : "15px"}
               fontFamily={FONT_FAMILIES.AUX_MONO}
               color={colorsAnalytics.textGray}
               mt="-2px"
@@ -654,11 +663,18 @@ export const UserSwapHistory: React.FC = () => {
   if (!isConnected) {
     return (
       <>
-        <GridFlex maxW="750px" w="100%" contentPadding="32px" borderRadius="40px" mb="20px">
+        <GridFlex
+          maxW="750px"
+          w="100%"
+          contentPadding={isMobile ? "20px" : "32px"}
+          borderRadius="40px"
+          mb="20px"
+          mt={isMobile ? "80px" : "0"}
+        >
           <Flex direction="column" w="100%" align="center">
             <Text
-              fontSize="36px"
-              mt="-15px"
+              fontSize={isMobile ? "24px" : "36px"}
+              mt={isMobile ? "-8px" : "-15px"}
               fontFamily={FONT_FAMILIES.NOSTROMO}
               color={colorsAnalytics.offWhite}
               textAlign="center"
@@ -666,7 +682,7 @@ export const UserSwapHistory: React.FC = () => {
               Swap History
             </Text>
             <Text
-              fontSize="15px"
+              fontSize={isMobile ? "13px" : "15px"}
               fontFamily={FONT_FAMILIES.AUX_MONO}
               color={colorsAnalytics.textGray}
               mt="-2px"
@@ -678,10 +694,14 @@ export const UserSwapHistory: React.FC = () => {
             </Text>
           </Flex>
         </GridFlex>
-        <GridFlex width="595px" contentPadding="60px" borderRadius="60px">
+        <GridFlex
+          width={isMobile ? "100%" : "595px"}
+          contentPadding={isMobile ? "40px 20px" : "60px"}
+          borderRadius="60px"
+        >
           <Flex direction="column" w="100%" align="center">
             <Text
-              fontSize="32px"
+              fontSize={isMobile ? "24px" : "32px"}
               fontFamily={FONT_FAMILIES.NOSTROMO}
               color={colors.offWhite}
               mb="16px"
@@ -690,7 +710,7 @@ export const UserSwapHistory: React.FC = () => {
               Swap History
             </Text>
             <Text
-              fontSize="16px"
+              fontSize={isMobile ? "14px" : "16px"}
               fontFamily={FONT_FAMILIES.AUX_MONO}
               color={colors.textGray}
               letterSpacing="-0.5px"
@@ -711,8 +731,8 @@ export const UserSwapHistory: React.FC = () => {
               border={`2.5px solid ${colors.swapBorderColor}`}
               type="button"
               fontFamily={FONT_FAMILIES.NOSTROMO}
-              fontSize="17px"
-              paddingX="32px"
+              fontSize={isMobile ? "15px" : "17px"}
+              paddingX={isMobile ? "24px" : "32px"}
               paddingY="12px"
               bg={colors.swapBgColor}
               boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
@@ -727,11 +747,18 @@ export const UserSwapHistory: React.FC = () => {
 
   return (
     <>
-      <GridFlex maxW="750px" w="100%" contentPadding="32px" borderRadius="40px" mb="20px">
+      <GridFlex
+        maxW="750px"
+        w="100%"
+        contentPadding={isMobile ? "20px" : "32px"}
+        borderRadius="40px"
+        mb="20px"
+        mt={isMobile ? "80px" : "0"}
+      >
         <Flex direction="column" w="100%" align="center">
           <Text
-            fontSize="36px"
-            mt="-15px"
+            fontSize={isMobile ? "24px" : "36px"}
+            mt={isMobile ? "-8px" : "-15px"}
             fontFamily={FONT_FAMILIES.NOSTROMO}
             color={colorsAnalytics.offWhite}
             textAlign="center"
@@ -739,7 +766,7 @@ export const UserSwapHistory: React.FC = () => {
             Swap History
           </Text>
           <Text
-            fontSize="15px"
+            fontSize={isMobile ? "13px" : "15px"}
             fontFamily={FONT_FAMILIES.AUX_MONO}
             color={colorsAnalytics.textGray}
             mt="-2px"
@@ -751,15 +778,15 @@ export const UserSwapHistory: React.FC = () => {
           </Text>
         </Flex>
       </GridFlex>
-      <GridFlex width="100%" borderRadius="40px" heightBlocks={13} contentPadding={0}>
-        <Flex direction="column" w="100%" h="100%">
-          {/* Table */}
+      {isMobile ? (
+        // Mobile: Simple scrollable container
+        <Flex direction="column" w="100%" pb="20px">
           {loading ? (
             <Flex w="100%" justify="center" align="center" py="80px">
               <Spinner size="lg" color={colors.offWhite} />
             </Flex>
           ) : swaps.length === 0 ? (
-            <Flex w="100%" h="100%" direction="column" align="center" justify="center">
+            <Flex w="100%" direction="column" align="center" justify="center" py="80px">
               <Text
                 fontSize="18px"
                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -789,56 +816,8 @@ export const UserSwapHistory: React.FC = () => {
               </Button>
             </Flex>
           ) : (
-            <Box
-              w="100%"
-              overflowY="auto"
-              flex="1"
-              mr="8px"
-              onScroll={handleScroll}
-              css={{
-                "&::-webkit-scrollbar": {
-                  width: "8px",
-                },
-                "&::-webkit-scrollbar-track": {
-                  background: "transparent",
-                },
-                "&::-webkit-scrollbar-thumb": {
-                  background: "#333",
-                  borderRadius: "4px",
-                },
-                "&::-webkit-scrollbar-thumb:hover": {
-                  background: "#444",
-                },
-              }}
-            >
-              {/* Table Header */}
-              <Flex
-                w="100%"
-                px="32px"
-                py="12px"
-                bg="#090909"
-                borderBottom={`1px solid ${colors.borderGray}`}
-                fontSize="11px"
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                color={colors.textGray}
-                fontWeight="600"
-                textTransform="uppercase"
-                letterSpacing="0.5px"
-                position="sticky"
-                top="0"
-                zIndex={10}
-                flexShrink={0}
-              >
-                <Text flex="0 0 122px">Time</Text>
-                <Text flex="0 0 135px">USD</Text>
-                <Text flex="0 0 218px">Amount</Text>
-                <Text flex="0 0 246px">Deposit Txn</Text>
-                <Text flex="0 0 188px">Direction</Text>
-                <Text flex="0 0 230px">Payout Txn</Text>
-                <Text flex="1">Status</Text>
-              </Flex>
-
-              {/* Table Rows */}
+            <Flex direction="column" w="100%">
+              {/* Mobile Card Layout */}
               {swaps.map((swap) => {
                 const userDepositStep = swap.flow.find(
                   (s) => s.status === "waiting_user_deposit_initiated"
@@ -892,20 +871,34 @@ export const UserSwapHistory: React.FC = () => {
                 return (
                   <Flex
                     key={swap.id}
-                    w="100%"
-                    px="32px"
-                    py="16px"
-                    borderBottom={`1px solid ${colors.borderGray}`}
-                    align="center"
-                    _hover={{ bg: "rgba(255, 255, 255, 0.02)" }}
+                    direction="column"
+                    // w="100%"
+                    p="16px"
+                    mx="12px"
+                    mb="12px"
+                    bg="rgba(18, 18, 18, 0.6)"
+                    borderRadius="16px"
+                    border={`1px solid ${colors.borderGray}`}
+                    _hover={{ bg: "rgba(28, 28, 28, 0.7)" }}
                     transition="background 0.15s ease"
+                    gap="12px"
                   >
                     {/* Time */}
-                    <Flex flex="0 0 122px">
+                    <Flex direction="column" gap="4px">
+                      <Text
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        color={colors.textGray}
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
+                      >
+                        Time
+                      </Text>
                       <Text
                         fontSize="12px"
                         fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.textGray}
+                        color={colors.offWhite}
                         letterSpacing="-0.5px"
                       >
                         {formatTimeAgo(swap.swapCreationTimestamp)}
@@ -913,7 +906,17 @@ export const UserSwapHistory: React.FC = () => {
                     </Flex>
 
                     {/* USD */}
-                    <Flex flex="0 0 135px">
+                    <Flex direction="column" gap="4px">
+                      <Text
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        color={colors.textGray}
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
+                      >
+                        USD
+                      </Text>
                       <Text
                         fontSize="13px"
                         fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -926,30 +929,52 @@ export const UserSwapHistory: React.FC = () => {
                     </Flex>
 
                     {/* Amount */}
-                    <Flex flex="0 0 218px" gap="4px" align="center">
+                    <Flex direction="column" gap="4px">
                       <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.offWhite}
-                        fontWeight="500"
-                        letterSpacing="-0.5px"
-                      >
-                        {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                      </Text>
-                      <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
                         color={colors.textGray}
-                        fontWeight="500"
-                        letterSpacing="-0.5px"
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
                       >
-                        {isBTCtoEVM ? "BTC" : "cbBTC"}
+                        Amount
                       </Text>
+                      <Flex gap="4px" align="center">
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          fontWeight="500"
+                          letterSpacing="-0.5px"
+                        >
+                          {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                        </Text>
+                        <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          fontWeight="500"
+                          letterSpacing="-0.5px"
+                        >
+                          {isBTCtoEVM ? "BTC" : "cbBTC"}
+                        </Text>
+                      </Flex>
                     </Flex>
 
-                    {/* User Deposit Transaction */}
-                    <Flex flex="0 0 246px">
+                    {/* Deposit Txn */}
+                    <Flex direction="column" gap="4px">
+                      <Text
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        color={colors.textGray}
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
+                      >
+                        Deposit Txn
+                      </Text>
                       {userTxHash ? (
                         <Flex
                           as="button"
@@ -996,37 +1021,59 @@ export const UserSwapHistory: React.FC = () => {
                     </Flex>
 
                     {/* Direction */}
-                    <Flex flex="0 0 188px" align="center" gap="6px">
-                      <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
+                    <Flex direction="column" gap="4px">
                       <Text
-                        fontSize="12px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
                         color={colors.textGray}
-                        letterSpacing="-0.5px"
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
                       >
-                        {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                        Direction
                       </Text>
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.textGray}
-                        letterSpacing="-0.5px"
-                      >
-                        →
-                      </Text>
-                      <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
-                      <Text
-                        fontSize="12px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.textGray}
-                        letterSpacing="-0.5px"
-                      >
-                        {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
-                      </Text>
+                      <Flex align="center" gap="6px">
+                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          letterSpacing="-0.5px"
+                        >
+                          {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          letterSpacing="-0.5px"
+                        >
+                          →
+                        </Text>
+                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          letterSpacing="-0.5px"
+                        >
+                          {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                        </Text>
+                      </Flex>
                     </Flex>
 
-                    {/* MM Payout Transaction */}
-                    <Flex flex="0 0 230px">
+                    {/* Payout Txn */}
+                    <Flex direction="column" gap="4px">
+                      <Text
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        color={colors.textGray}
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
+                      >
+                        Payout Txn
+                      </Text>
                       {isRefunded ? (
                         <Text
                           fontSize="11px"
@@ -1080,15 +1127,6 @@ export const UserSwapHistory: React.FC = () => {
                             <FiExternalLink size={11} />
                           </Box>
                         </Flex>
-                      ) : isCompleted ? (
-                        <Text
-                          fontSize="11px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          -
-                        </Text>
                       ) : (
                         <Text
                           fontSize="11px"
@@ -1102,7 +1140,17 @@ export const UserSwapHistory: React.FC = () => {
                     </Flex>
 
                     {/* Status */}
-                    <Flex flex="1">
+                    <Flex direction="column" gap="4px">
+                      <Text
+                        fontSize="10px"
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                        color={colors.textGray}
+                        textTransform="uppercase"
+                        fontWeight="600"
+                        letterSpacing="0.5px"
+                      >
+                        Status
+                      </Text>
                       <StatusBadge swap={swap} onClaimRefund={() => handleOpenRefundModal(swap)} />
                     </Flex>
                   </Flex>
@@ -1126,192 +1174,574 @@ export const UserSwapHistory: React.FC = () => {
                   ></Text>
                 </Flex>
               )}
-            </Box>
+            </Flex>
           )}
         </Flex>
-
-        {/* Refund Modal */}
-        {refundModalOpen && selectedFailedSwap && (
-          <Flex
-            position="fixed"
-            top={0}
-            left={0}
-            right={0}
-            bottom={0}
-            width="100vw"
-            height="100vh"
-            zIndex={999999}
-            bg="rgba(0, 0, 0, 0.85)"
-            align="center"
-            justify="center"
-            style={{
-              backdropFilter: "blur(4px)",
-            }}
-            onClick={handleCloseRefundModal}
-          >
-            <Box
-              bg="#1a1a1a"
-              borderWidth={2}
-              w="500px"
-              maxWidth="90%"
-              borderColor={colors.borderGray}
-              borderRadius="20px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.offWhite}
-              position="relative"
-              p="32px"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header with Close Button */}
-              <Flex
-                pb="24px"
-                fontSize="24px"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                fontWeight="bold"
-                justify="center"
-                align="center"
-                position="relative"
-              >
-                <Button
-                  position="absolute"
-                  left="0"
-                  top="0"
-                  bg="transparent"
-                  border="none"
-                  color={colors.textGray}
-                  _hover={{ color: colors.offWhite }}
-                  onClick={handleCloseRefundModal}
-                  p="5px"
-                  minW="auto"
-                  h="auto"
-                  disabled={isClaimingRefund}
-                  opacity={isClaimingRefund ? 0.5 : 1}
-                >
-                  <FiX size={24} />
-                </Button>
-                <Text>Claim Refund</Text>
+      ) : (
+        // Desktop: GridFlex with fixed height and scrolling
+        <GridFlex width="100%" borderRadius="40px" heightBlocks={13} contentPadding={0}>
+          <Flex direction="column" w="100%" h="100%">
+            {loading ? (
+              <Flex w="100%" justify="center" align="center" py="80px">
+                <Spinner size="lg" color={colors.offWhite} />
               </Flex>
-
-              {/* Body */}
-              <Flex direction="column" gap="24px" pb="8px">
+            ) : swaps.length === 0 ? (
+              <Flex w="100%" h="100%" direction="column" align="center" justify="center">
                 <Text
-                  fontSize="13px"
-                  textAlign="center"
-                  lineHeight="1.6"
-                  mb="5px"
-                  color={colors.textGray}
+                  fontSize="18px"
                   fontFamily={FONT_FAMILIES.AUX_MONO}
                   letterSpacing="-0.5px"
+                  color={colors.textGray}
+                  mb="20px"
                 >
-                  The market maker failed to fill your order. Please paste your refund address to
-                  claim your funds.
+                  No swaps history found
                 </Text>
+                <Button
+                  onClick={() => router.push("/")}
+                  cursor="pointer"
+                  color={colors.offWhite}
+                  _active={{ bg: colors.swapBgColor }}
+                  _hover={{ bg: colors.swapHoverColor }}
+                  borderRadius="12px"
+                  border={`2.5px solid ${colors.swapBorderColor}`}
+                  type="button"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  fontSize="17px"
+                  paddingX="32px"
+                  paddingY="12px"
+                  bg={colors.swapBgColor}
+                  boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
+                >
+                  Create Swap
+                </Button>
+              </Flex>
+            ) : (
+              <Box
+                w="100%"
+                overflowY="auto"
+                flex="1"
+                mr="8px"
+                onScroll={handleScroll}
+                css={{
+                  "&::-webkit-scrollbar": {
+                    width: "8px",
+                  },
+                  "&::-webkit-scrollbar-track": {
+                    background: "transparent",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "#333",
+                    borderRadius: "4px",
+                  },
+                  "&::-webkit-scrollbar-thumb:hover": {
+                    background: "#444",
+                  },
+                }}
+              >
+                {/* Desktop Table Layout */}
+                {/* Table Header */}
+                <Flex
+                  w="100%"
+                  px="32px"
+                  py="12px"
+                  bg="#090909"
+                  borderBottom={`1px solid ${colors.borderGray}`}
+                  fontSize="11px"
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  color={colors.textGray}
+                  fontWeight="600"
+                  textTransform="uppercase"
+                  letterSpacing="0.5px"
+                  position="sticky"
+                  top="0"
+                  zIndex={10}
+                  flexShrink={0}
+                >
+                  <Text flex="0 0 122px">Time</Text>
+                  <Text flex="0 0 135px">USD</Text>
+                  <Text flex="0 0 218px">Amount</Text>
+                  <Text flex="0 0 246px">Deposit Txn</Text>
+                  <Text flex="0 0 188px">Direction</Text>
+                  <Text flex="0 0 230px">Payout Txn</Text>
+                  <Text flex="1">Status</Text>
+                </Flex>
 
-                {/* Address Input */}
-                <Flex direction="column" gap="8px">
-                  <Flex align="center" gap="8px" mb="4px">
-                    <AssetIcon
-                      badge={selectedFailedSwap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
-                    />
+                {/* Table Rows */}
+                {swaps.map((swap) => {
+                  const userDepositStep = swap.flow.find(
+                    (s) => s.status === "waiting_user_deposit_initiated"
+                  );
+                  const mmDepositStep = swap.flow.find(
+                    (s) => s.status === "waiting_mm_deposit_initiated"
+                  );
+                  let userTxHash = userDepositStep?.txHash;
+                  const userTxChain = userDepositStep?.txChain;
+                  let mmTxHash = mmDepositStep?.txHash;
+                  const mmTxChain = mmDepositStep?.txChain;
+
+                  // Add 0x prefix to Ethereum transaction hashes if missing
+                  if (userTxHash && userTxChain !== "BTC" && !userTxHash.startsWith("0x")) {
+                    userTxHash = `0x${userTxHash}`;
+                  }
+                  if (mmTxHash && mmTxChain !== "BTC" && !mmTxHash.startsWith("0x")) {
+                    mmTxHash = `0x${mmTxHash}`;
+                  }
+
+                  // Determine colors based on direction
+                  // BTC_TO_EVM: User deposits BTC (orange), MM pays out cbBTC (blue)
+                  // EVM_TO_BTC: User deposits cbBTC (blue), MM pays out BTC (orange)
+                  const isBTCtoEVM = swap.direction === "BTC_TO_EVM";
+                  const userBg = isBTCtoEVM ? "rgba(255, 143, 40, 0.15)" : "rgba(57, 74, 255, 0.2)";
+                  const userBorder = isBTCtoEVM
+                    ? "rgba(255, 143, 40, 0.4)"
+                    : "rgba(57, 74, 255, 0.7)";
+                  const userColor = isBTCtoEVM ? "#FF8F28" : "#7A9EFF";
+                  const mmBg = isBTCtoEVM ? "rgba(57, 74, 255, 0.2)" : "rgba(255, 143, 40, 0.15)";
+                  const mmBorder = isBTCtoEVM
+                    ? "rgba(57, 74, 255, 0.7)"
+                    : "rgba(255, 143, 40, 0.4)";
+                  const mmColor = isBTCtoEVM ? "#7A9EFF" : "#FF8F28";
+
+                  // Amount color matches deposit transaction color
+                  const amountColor = userColor;
+
+                  const lastStep = swap.flow[swap.flow.length - 1];
+                  const isCompleted =
+                    lastStep?.state === "completed" && lastStep?.status === "settled";
+                  const isRefundAvailable = (swap as any).isRefundAvailable;
+
+                  // Check if swap is refunded
+                  const currentStep =
+                    swap.flow.find((s) => s.state === "inProgress") ||
+                    swap.flow[swap.flow.length - 1];
+                  const isRefunded =
+                    currentStep?.status === "refunding_user" ||
+                    currentStep?.status === "refunding_mm" ||
+                    (currentStep?.status as string) === "user_refunded_detected";
+
+                  return (
+                    <Flex
+                      key={swap.id}
+                      w="100%"
+                      px="32px"
+                      py="16px"
+                      borderBottom={`1px solid ${colors.borderGray}`}
+                      align="center"
+                      _hover={{ bg: "rgba(255, 255, 255, 0.02)" }}
+                      transition="background 0.15s ease"
+                    >
+                      {/* Time */}
+                      <Flex flex="0 0 122px">
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          letterSpacing="-0.5px"
+                        >
+                          {formatTimeAgo(swap.swapCreationTimestamp)}
+                        </Text>
+                      </Flex>
+
+                      {/* USD */}
+                      <Flex flex="0 0 135px">
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          fontWeight="500"
+                          letterSpacing="-0.5px"
+                        >
+                          {formatUSD(swap.swapInitialAmountUsd)}
+                        </Text>
+                      </Flex>
+
+                      {/* Amount */}
+                      <Flex flex="0 0 218px" gap="4px" align="center">
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          fontWeight="500"
+                          letterSpacing="-0.5px"
+                        >
+                          {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                        </Text>
+                        <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          fontWeight="500"
+                          letterSpacing="-0.5px"
+                        >
+                          {isBTCtoEVM ? "BTC" : "cbBTC"}
+                        </Text>
+                      </Flex>
+
+                      {/* User Deposit Transaction */}
+                      <Flex flex="0 0 246px">
+                        {userTxHash ? (
+                          <Flex
+                            as="button"
+                            onClick={() => {
+                              const url =
+                                userTxChain === "BTC"
+                                  ? `https://mempool.space/tx/${userTxHash}`
+                                  : userTxChain === "ETH"
+                                    ? `https://etherscan.io/tx/${userTxHash}`
+                                    : `https://basescan.org/tx/${userTxHash}`;
+                              window.open(url, "_blank");
+                            }}
+                            bg={userBg}
+                            border={`1.5px solid ${userBorder}`}
+                            borderRadius="16px"
+                            px="10px"
+                            h="35px"
+                            _hover={{ filter: "brightness(1.2)" }}
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            fontWeight="500"
+                            cursor="pointer"
+                            w="fit-content"
+                            align="center"
+                            gap="4px"
+                            letterSpacing="-0.5px"
+                          >
+                            {displayShortTxHash(userTxHash)}
+                            <Box ml="4px">
+                              <FiExternalLink size={11} />
+                            </Box>
+                          </Flex>
+                        ) : (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                          >
+                            -
+                          </Text>
+                        )}
+                      </Flex>
+
+                      {/* Direction */}
+                      <Flex flex="0 0 188px" align="center" gap="6px">
+                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          letterSpacing="-0.5px"
+                        >
+                          {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          letterSpacing="-0.5px"
+                        >
+                          →
+                        </Text>
+                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
+                        <Text
+                          fontSize="12px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.textGray}
+                          letterSpacing="-0.5px"
+                        >
+                          {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                        </Text>
+                      </Flex>
+
+                      {/* MM Payout Transaction */}
+                      <Flex flex="0 0 230px">
+                        {isRefunded ? (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                            fontWeight="500"
+                          >
+                            Swap refunded
+                          </Text>
+                        ) : isRefundAvailable ? (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color="#B23232"
+                            letterSpacing="-0.5px"
+                            fontWeight="500"
+                          >
+                            Market Maker failed to fill
+                          </Text>
+                        ) : mmTxHash ? (
+                          <Flex
+                            as="button"
+                            onClick={() => {
+                              const url =
+                                mmTxChain === "BTC"
+                                  ? `https://mempool.space/tx/${mmTxHash}`
+                                  : mmTxChain === "ETH"
+                                    ? `https://etherscan.io/tx/${mmTxHash}`
+                                    : `https://basescan.org/tx/${mmTxHash}`;
+                              window.open(url, "_blank");
+                            }}
+                            bg={mmBg}
+                            border={`1.5px solid ${mmBorder}`}
+                            borderRadius="16px"
+                            px="10px"
+                            h="35px"
+                            _hover={{ filter: "brightness(1.2)" }}
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            fontWeight="500"
+                            cursor="pointer"
+                            w="fit-content"
+                            align="center"
+                            gap="4px"
+                            letterSpacing="-0.5px"
+                          >
+                            {displayShortTxHash(mmTxHash)}
+                            <Box ml="4px">
+                              <FiExternalLink size={11} />
+                            </Box>
+                          </Flex>
+                        ) : isCompleted ? (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                          >
+                            -
+                          </Text>
+                        ) : (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                          >
+                            -
+                          </Text>
+                        )}
+                      </Flex>
+
+                      {/* Status */}
+                      <Flex flex="1">
+                        <StatusBadge
+                          swap={swap}
+                          onClaimRefund={() => handleOpenRefundModal(swap)}
+                        />
+                      </Flex>
+                    </Flex>
+                  );
+                })}
+
+                {/* Loading More Indicator */}
+                {loadingMore && (
+                  <Flex justify="center" py="20px">
+                    <Spinner size="sm" color={colors.offWhite} />
+                  </Flex>
+                )}
+
+                {/* End of List Message */}
+                {!hasMore && swaps.length > 0 && (
+                  <Flex justify="center" py="20px">
                     <Text
-                      fontSize="13px"
+                      fontSize="12px"
                       color={colors.textGray}
                       fontFamily={FONT_FAMILIES.AUX_MONO}
-                    >
-                      {selectedFailedSwap.direction === "BTC_TO_EVM" ? "Bitcoin" : "cbBTC"} Address
-                    </Text>
-                  </Flex>
-                  <input
-                    type="text"
-                    value={refundAddress}
-                    onChange={(e) => setRefundAddress(e.target.value)}
-                    placeholder={
-                      selectedFailedSwap.direction === "BTC_TO_EVM"
-                        ? "Enter Bitcoin address"
-                        : "Enter cbBTC address"
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "12px 16px",
-                      borderRadius: "12px",
-                      border: `2px solid ${colors.borderGray}`,
-                      backgroundColor: colors.offBlack,
-                      color: colors.offWhite,
-                      fontFamily: FONT_FAMILIES.AUX_MONO,
-                      fontSize: "14px",
-                      outline: "none",
-                    }}
-                  />
-                </Flex>
-
-                {/* Status message for success/error */}
-                {refundStatus === "success" && (
-                  <Flex
-                    align="center"
-                    justify="center"
-                    gap="8px"
-                    p="12px"
-                    borderRadius="12px"
-                    bg="rgba(34, 197, 94, 0.15)"
-                    border="1.5px solid rgba(34, 197, 94, 0.4)"
-                  >
-                    <FiCheck size={16} color="#22c55e" />
-                    <Text fontSize="13px" color="#22c55e" fontFamily={FONT_FAMILIES.AUX_MONO}>
-                      Refund successfully claimed!
-                    </Text>
+                    ></Text>
                   </Flex>
                 )}
-                {refundStatus === "error" && (
-                  <Flex
-                    align="center"
-                    justify="center"
-                    gap="8px"
-                    p="12px"
-                    borderRadius="12px"
-                    bg="rgba(239, 68, 68, 0.15)"
-                    border="1.5px solid rgba(239, 68, 68, 0.4)"
-                  >
-                    <FiX size={16} color="#ef4444" />
-                    <Text fontSize="13px" color="#ef4444" fontFamily={FONT_FAMILIES.AUX_MONO}>
-                      Failed to claim refund. Please try again.
-                    </Text>
-                  </Flex>
-                )}
-
-                {/* Claim Button */}
-                <Flex justify="center">
-                  <Button
-                    onClick={handleClaimRefund}
-                    cursor={isClaimingRefund ? "not-allowed" : "pointer"}
-                    color={colors.offWhite}
-                    _active={{ bg: colors.swapBgColor }}
-                    _hover={{ bg: isClaimingRefund ? colors.swapBgColor : colors.swapHoverColor }}
-                    borderRadius="12px"
-                    border={`2.5px solid ${colors.swapBorderColor}`}
-                    type="button"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    fontSize="15px"
-                    paddingX="32px"
-                    paddingY="10px"
-                    bg={colors.swapBgColor}
-                    disabled={isClaimingRefund}
-                    w="100%"
-                  >
-                    {isClaimingRefund ? (
-                      <Flex align="center" gap="8px">
-                        <Spinner size="sm" color={colors.offWhite} />
-                        <Text>Processing...</Text>
-                      </Flex>
-                    ) : (
-                      "CLAIM REFUND"
-                    )}
-                  </Button>
-                </Flex>
-              </Flex>
-            </Box>
+              </Box>
+            )}
           </Flex>
-        )}
-      </GridFlex>
+        </GridFlex>
+      )}
+
+      {/* Refund Modal */}
+      {refundModalOpen && selectedFailedSwap && (
+        <Flex
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          width="100vw"
+          height="100vh"
+          zIndex={999999}
+          bg="rgba(0, 0, 0, 0.85)"
+          align="center"
+          justify="center"
+          style={{
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={handleCloseRefundModal}
+        >
+          <Box
+            bg="#1a1a1a"
+            borderWidth={2}
+            w="500px"
+            maxWidth="90%"
+            borderColor={colors.borderGray}
+            borderRadius="20px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.offWhite}
+            position="relative"
+            p="32px"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header with Close Button */}
+            <Flex
+              pb="24px"
+              fontSize="24px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              fontWeight="bold"
+              justify="center"
+              align="center"
+              position="relative"
+            >
+              <Button
+                position="absolute"
+                left="0"
+                top="0"
+                bg="transparent"
+                border="none"
+                color={colors.textGray}
+                _hover={{ color: colors.offWhite }}
+                onClick={handleCloseRefundModal}
+                p="5px"
+                minW="auto"
+                h="auto"
+                disabled={isClaimingRefund}
+                opacity={isClaimingRefund ? 0.5 : 1}
+              >
+                <FiX size={24} />
+              </Button>
+              <Text>Claim Refund</Text>
+            </Flex>
+
+            {/* Body */}
+            <Flex direction="column" gap="24px" pb="8px">
+              <Text
+                fontSize="13px"
+                textAlign="center"
+                lineHeight="1.6"
+                mb="5px"
+                color={colors.textGray}
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                letterSpacing="-0.5px"
+              >
+                The market maker failed to fill your order. Please paste your refund address to
+                claim your funds.
+              </Text>
+
+              {/* Address Input */}
+              <Flex direction="column" gap="8px">
+                <Flex align="center" gap="8px" mb="4px">
+                  <AssetIcon
+                    badge={selectedFailedSwap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                  />
+                  <Text fontSize="13px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                    {selectedFailedSwap.direction === "BTC_TO_EVM" ? "Bitcoin" : "cbBTC"} Address
+                  </Text>
+                </Flex>
+                <input
+                  type="text"
+                  value={refundAddress}
+                  onChange={(e) => setRefundAddress(e.target.value)}
+                  placeholder={
+                    selectedFailedSwap.direction === "BTC_TO_EVM"
+                      ? "Enter Bitcoin address"
+                      : "Enter cbBTC address"
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: "12px",
+                    border: `2px solid ${colors.borderGray}`,
+                    backgroundColor: colors.offBlack,
+                    color: colors.offWhite,
+                    fontFamily: FONT_FAMILIES.AUX_MONO,
+                    fontSize: "14px",
+                    outline: "none",
+                  }}
+                />
+              </Flex>
+
+              {/* Status message for success/error */}
+              {refundStatus === "success" && (
+                <Flex
+                  align="center"
+                  justify="center"
+                  gap="8px"
+                  p="12px"
+                  borderRadius="12px"
+                  bg="rgba(34, 197, 94, 0.15)"
+                  border="1.5px solid rgba(34, 197, 94, 0.4)"
+                >
+                  <FiCheck size={16} color="#22c55e" />
+                  <Text fontSize="13px" color="#22c55e" fontFamily={FONT_FAMILIES.AUX_MONO}>
+                    Refund successfully claimed!
+                  </Text>
+                </Flex>
+              )}
+              {refundStatus === "error" && (
+                <Flex
+                  align="center"
+                  justify="center"
+                  gap="8px"
+                  p="12px"
+                  borderRadius="12px"
+                  bg="rgba(239, 68, 68, 0.15)"
+                  border="1.5px solid rgba(239, 68, 68, 0.4)"
+                >
+                  <FiX size={16} color="#ef4444" />
+                  <Text fontSize="13px" color="#ef4444" fontFamily={FONT_FAMILIES.AUX_MONO}>
+                    Failed to claim refund. Please try again.
+                  </Text>
+                </Flex>
+              )}
+
+              {/* Claim Button */}
+              <Flex justify="center">
+                <Button
+                  onClick={handleClaimRefund}
+                  cursor={isClaimingRefund ? "not-allowed" : "pointer"}
+                  color={colors.offWhite}
+                  _active={{ bg: colors.swapBgColor }}
+                  _hover={{ bg: isClaimingRefund ? colors.swapBgColor : colors.swapHoverColor }}
+                  borderRadius="12px"
+                  border={`2.5px solid ${colors.swapBorderColor}`}
+                  type="button"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  fontSize="15px"
+                  paddingX="32px"
+                  paddingY="10px"
+                  bg={colors.swapBgColor}
+                  disabled={isClaimingRefund}
+                  w="100%"
+                >
+                  {isClaimingRefund ? (
+                    <Flex align="center" gap="8px">
+                      <Spinner size="sm" color={colors.offWhite} />
+                      <Text>Processing...</Text>
+                    </Flex>
+                  ) : (
+                    "CLAIM REFUND"
+                  )}
+                </Button>
+              </Flex>
+            </Flex>
+          </Box>
+        </Flex>
+      )}
     </>
   );
 };
