@@ -62,24 +62,12 @@ export default function SwapPage() {
     }
   }, [swapStatusInfo?.status, depositFlowState, setDepositFlowState]);
 
-  // Set countdown based on current step
+  // Reset countdown only when starting deposit flow (0 -> 1)
   React.useEffect(() => {
-    // Only update countdown when step changes or on initial load
-    if (depositFlowState !== previousState) {
-      // Map step to countdown value
-      const countdownMap: Record<string, number> = {
-        "1-WaitingUserDepositInitiated": 120,
-        "2-WaitingUserDepositConfirmed": 100,
-        "3-WaitingMMDepositInitiated": 60,
-      };
-
-      const newCountdown = countdownMap[depositFlowState];
-      if (newCountdown !== undefined) {
-        setCountdownValue(newCountdown);
-      }
-
-      setPreviousState(depositFlowState);
+    if (depositFlowState === "1-WaitingUserDepositInitiated" && previousState === "0-not-started") {
+      setCountdownValue(60);
     }
+    setPreviousState(depositFlowState);
   }, [depositFlowState, setCountdownValue, previousState]);
 
   // Reset transaction confirmed state when going back to not-started
