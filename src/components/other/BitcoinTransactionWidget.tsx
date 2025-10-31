@@ -308,7 +308,7 @@ export function BitcoinTransactionWidget({
         {/* Top Half - QR Code and Details Section */}
         <Box
           w="100%"
-          h={isMobile ? "65%" : "59%"}
+          h={isMobile ? "70%" : "59%"}
           borderRadius="40px"
           position="absolute"
           top="0px"
@@ -576,7 +576,7 @@ export function BitcoinTransactionWidget({
             flex="1"
             display="flex"
             alignItems="flex-start"
-            pt="10px"
+            pt={isMobile ? "30px" : "10px"}
             overflow="hidden"
           >
             <StepCarousel
