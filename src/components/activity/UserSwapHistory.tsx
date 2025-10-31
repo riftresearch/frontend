@@ -12,7 +12,7 @@ import { reownModal } from "@/utils/wallet";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
-import { otcClient, rfqClient } from "@/utils/constants";
+import { GLOBAL_CONFIG, otcClient, rfqClient } from "@/utils/constants";
 import {
   createSignedRefundRequest,
   executeCompleteRefund,
@@ -264,7 +264,7 @@ async function fetchUserSwaps(
           if (userDepositChain === "bitcoin") {
             // look up if the deposit address has any balance from the electrs endpoint
             try {
-              const electrsUrl = `https://electrs.riftnodes.com/address/${userDepositAddress}`;
+              const electrsUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}`;
               const electrsResponse = await fetch(electrsUrl);
               if (!electrsResponse.ok) {
                 console.warn(`Failed to fetch Bitcoin balance for ${userDepositAddress}`);
