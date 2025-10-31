@@ -1,6 +1,29 @@
 version: "3.8"
 
 services:
+  # Caddy reverse proxy with CORS
+  caddy:
+    image: caddy:2-alpine
+    container_name: rift-caddy
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    depends_on:
+      - nextjs-app
+    networks:
+      - rift-network
+    command: |
+      caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Next.js application (internal only)
   nextjs-app:
     build:
       context: .
@@ -8,7 +31,7 @@ services:
     container_name: rift-frontend
     restart: unless-stopped
 
-    # Use host networking to access services running on the host
+    # Use host networking to access services on host (OTC server, etc.)
     network_mode: "host"
 
     environment:
@@ -50,3 +73,42 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+networks:
+  rift-network:
+    driver: bridge
+
+configs:
+  caddyfile:
+    content: |
+      {
+        auto_https off
+        admin off
+      }
+
+      :3000 {
+        header {
+          Access-Control-Allow-Origin "*"
+          Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+          Access-Control-Allow-Headers "*"
+          Access-Control-Allow-Credentials "true"
+          Access-Control-Max-Age "86400"
+        }
+        
+        @options {
+          method OPTIONS
+        }
+        respond @options 204
+        
+        reverse_proxy localhost:3005 {
+          health_uri /api/health
+          health_interval 10s
+          health_timeout 5s
+        }
+        
+        log {
+          output stdout
+          format console
+          level INFO
+        }
+      }
