@@ -104,7 +104,7 @@ export class UniswapRouterClient {
   private readonly apiBaseUrl: string;
 
   constructor() {
-    this.apiBaseUrl = "/api/uniswap-router";
+    this.apiBaseUrl = process.env.NEXT_PUBLIC_UNISWAP_ROUTER_URL || "/api/uniswap-router";
   }
 
   /**

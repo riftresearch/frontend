@@ -5,6 +5,19 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
 
+  async headers() {
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET,POST,PUT,DELETE,OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
+        ],
+      },
+    ];
+  },
+
   images: {
     remotePatterns: [
       {
