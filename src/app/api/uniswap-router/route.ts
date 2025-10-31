@@ -39,7 +39,7 @@ const WBTC_ADDRESS = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 
 const DEFAULT_SLIPPAGE_BPS = 10;
 const DEFAULT_VALID_FOR_SECONDS = 120;
-const RPC_URL = process.env.QUICKNODE_ETHEREUM_URL || "https://eth0.riftnodes.com";
+const RPC_URL = process.env.QUICKNODE_ETHEREUM_URL!;
 
 // Pool configurations (fee tier -> tick spacing)
 const POOL_CONFIGS = [
@@ -51,11 +51,11 @@ const POOL_CONFIGS = [
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// Initialize provider and router (reused across requests)
-const provider = new providers.StaticJsonRpcProvider(
-  { url: RPC_URL, skipFetchSetup: true },
-  ChainId.MAINNET
-);
+const provider = RPC_URL.startsWith("ws")
+  ? new providers.WebSocketProvider(RPC_URL, ChainId.MAINNET)
+  : new providers.StaticJsonRpcProvider({ url: RPC_URL, skipFetchSetup: true }, ChainId.MAINNET);
+
+console.log("Provider type", typeof provider);
 
 const alphaRouter = new AlphaRouter({
   chainId: ChainId.MAINNET,

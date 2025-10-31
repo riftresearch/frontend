@@ -4,6 +4,7 @@ import {
   ETH_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
   BTC_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
 } from "@/utils/constants";
+import {wagmiAdapter} from "@/utils/wallet";
 import { useQuery } from "@tanstack/react-query";
 import { createPublicClient, http, type Block } from "viem";
 import { mainnet } from "viem/chains";
@@ -45,7 +46,7 @@ interface ChainSyncResult {
 // Create a public client for Ethereum RPC calls
 const ethereumClient = createPublicClient({
   chain: mainnet,
-  transport: http(GLOBAL_CONFIG.mainnetRpcUrl),
+  transport: http("https://eth.llamarpc.com"),
 });
 
 /**
@@ -102,6 +103,7 @@ export function useTEEChainSyncVerification() {
         if (!bestTEEEthereumHash || typeof bestTEEEthereumHash !== "string") {
           throw new Error(`Invalid Ethereum hash from TEE: ${bestTEEEthereumHash}`);
         }
+
 
         // Fetch headers from actual chains
         const [ethereumHeader, bitcoinHeader, latestEthBlock, latestBtcHeight] = await Promise.all([
