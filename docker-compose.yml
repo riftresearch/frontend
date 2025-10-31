@@ -1,17 +1,12 @@
-version: "3.8"
-
 services:
   # Caddy reverse proxy with CORS
   caddy:
     image: caddy:2-alpine
     container_name: rift-caddy
     restart: unless-stopped
-    ports:
-      - "3005:3000"
+    network_mode: "host"
     depends_on:
       - nextjs-app
-    networks:
-      - rift-network
     command: |
       caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     configs:
@@ -73,10 +68,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-networks:
-  rift-network:
-    driver: bridge
 
 configs:
   caddyfile:
