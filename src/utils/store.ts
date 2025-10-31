@@ -111,7 +111,7 @@ export const useStore = create<{
     address: "0x0000000000000000000000000000000000000000",
     balance: "0",
     usdValue: "$0.00",
-    icon: "/images/eth_icon.svg",
+    icon: "https://assets.smold.app/api/chains/1/logo-128.png",
     decimals: 18,
   },
   setSelectedInputToken: (token: TokenData | null) => set({ selectedInputToken: token }),

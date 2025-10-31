@@ -85,7 +85,14 @@ export default function Home() {
         backgroundPosition="center"
       >
         <Navbar />
-        <Flex justify="center" align="center" direction="column" minH="calc(100vh - 80px)" p="4">
+        <Flex
+          justify="center"
+          align="center"
+          direction="column"
+          minH="calc(100vh - 80px)"
+          p="4"
+          pt={{ base: "100px", md: "4" }}
+        >
           <Flex mt="15px"></Flex>
 
           {/* Only show logo and subheader when NOT on Bitcoin deposit page */}
