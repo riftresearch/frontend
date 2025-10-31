@@ -883,6 +883,7 @@ export const UserSwapHistory: React.FC = () => {
                     transition="background 0.15s ease"
                     cursor="pointer"
                     onClick={() => router.push(`/swap/${swap.id}`)}
+                    gap="12px"
                   >
                     {/* Time */}
                     <Flex direction="column" gap="4px">
