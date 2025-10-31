@@ -45,7 +45,7 @@ stats:
 
 # Health check
 health:
-    @curl -s http://localhost:3000/api/health | jq
+    @curl -s http://localhost:3005/api/health | jq
 
 # Clean everything (containers, volumes, images)
 clean:
@@ -60,7 +60,7 @@ status:
     @docker compose --env-file .env ps
     @echo ""
     @echo "=== Health Check ==="
-    @curl -s http://localhost:3000/api/health | jq || echo "App not responding"
+    @curl -s http://localhost:3005/api/health | jq || echo "App not responding"
 
 # Tail logs with follow
 tail:

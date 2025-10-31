@@ -1,24 +1,5 @@
 services:
-  # Caddy reverse proxy with CORS
-  caddy:
-    image: caddy:2-alpine
-    container_name: rift-caddy
-    restart: unless-stopped
-    network_mode: "host"
-    depends_on:
-      - nextjs-app
-    command: |
-      caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
-    configs:
-      - source: caddyfile
-        target: /etc/caddy/Caddyfile
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # Next.js application (internal only)
+  # Next.js application (runs on port 3006, internal only)
   nextjs-app:
     build:
       context: .
@@ -32,7 +13,7 @@ services:
     environment:
       # Node environment
       - NODE_ENV=production
-      - PORT=3005
+      - PORT=3006
       - HOSTNAME=0.0.0.0
 
       # Add your environment variables here
@@ -55,7 +36,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://localhost:3005/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+          "require('http').get('http://localhost:3006/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
         ]
       interval: 30s
       timeout: 10s
@@ -63,6 +44,25 @@ services:
       start_period: 40s
 
     # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Caddy reverse proxy with CORS (public on port 3000)
+  caddy:
+    image: caddy:2-alpine
+    container_name: rift-caddy
+    restart: unless-stopped
+    network_mode: "host"
+    depends_on:
+      - nextjs-app
+    command: |
+      caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
     logging:
       driver: "json-file"
       options:
@@ -77,7 +77,7 @@ configs:
         admin off
       }
 
-      :3000 {
+      :3005 {
         header {
           Access-Control-Allow-Origin "*"
           Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
@@ -85,18 +85,18 @@ configs:
           Access-Control-Allow-Credentials "true"
           Access-Control-Max-Age "86400"
         }
-        
+
         @options {
           method OPTIONS
         }
         respond @options 204
-        
-        reverse_proxy localhost:3005 {
+
+        reverse_proxy localhost:3006 {
           health_uri /api/health
           health_interval 10s
           health_timeout 5s
         }
-        
+
         log {
           output stdout
           format console
