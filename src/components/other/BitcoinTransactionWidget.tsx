@@ -733,43 +733,87 @@ export function BitcoinTransactionWidget({
               />
             </motion.div>
           ) : (
-            // Show loading dots for steps 2 and 3
-            <motion.div
-              key="loading"
-              initial={{ y: -30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 30, opacity: 0 }}
-              transition={{ duration: 0.5, ease: "easeInOut" }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                zIndex: 1,
-              }}
+            // Show loading dots for steps 1-2
+            <Flex
+              direction="column"
+              alignItems="center"
+              justifyContent="center"
+              marginTop="60px"
+              gap="24px"
+              zIndex={1}
             >
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  animate={{
-                    y: [0, -10, 0],
-                    opacity: [0.4, 1, 0.4],
+              <motion.div
+                key="loading"
+                initial={{ y: -30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 30, opacity: 0 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{
+                      y: [0, -10, 0],
+                      opacity: [0.4, 1, 0.4],
+                    }}
+                    transition={{
+                      duration: 0.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: i * 0.2,
+                    }}
+                    style={{
+                      width: "12px",
+                      height: "12px",
+                      borderRadius: "50%",
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                    }}
+                  />
+                ))}
+              </motion.div>
+
+              {/* View User Deposit Transaction Button */}
+              {depositTx && (
+                <Flex
+                  as="button"
+                  onClick={handleViewTransaction}
+                  alignItems="center"
+                  justifyContent="center"
+                  gap="8px"
+                  px="18px"
+                  mt="20px"
+                  py="7px"
+                  borderRadius="12px"
+                  bg="rgba(255, 255, 255, 0.1)"
+                  border="1px solid rgba(255, 255, 255, 0.2)"
+                  cursor="pointer"
+                  transition="all 0.2s"
+                  _hover={{
+                    bg: "rgba(255, 255, 255, 0.15)",
+                    border: "1px solid rgba(255, 255, 255, 0.3)",
                   }}
-                  transition={{
-                    duration: 0.8,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: i * 0.2,
+                  _active={{
+                    transform: "scale(0.98)",
                   }}
-                  style={{
-                    width: "12px",
-                    height: "12px",
-                    borderRadius: "50%",
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  }}
-                />
-              ))}
-            </motion.div>
+                >
+                  <Text
+                    fontSize="11px"
+                    color="rgba(255, 255, 255, 0.9)"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    letterSpacing="0.5px"
+                  >
+                    VIEW DEPOSIT TXN IN MEMPOOL
+                  </Text>
+                  <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+                </Flex>
+              )}
+            </Flex>
           )}
         </Box>
 
@@ -927,6 +971,7 @@ export function BitcoinTransactionWidget({
       {/* Warning/Status Text - Outside the main container */}
       {validStepIndex === 0 && (
         <Text
+          marginTop="10px"
           fontSize={"12px"}
           color="rgba(255, 255, 255, 0.5)"
           fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -939,6 +984,7 @@ export function BitcoinTransactionWidget({
       {validStepIndex === 1 && (
         <Text
           fontSize={"12px"}
+          marginTop="10px"
           color="rgba(255, 255, 255, 0.5)"
           fontFamily={FONT_FAMILIES.AUX_MONO}
           textAlign="center"
@@ -949,6 +995,7 @@ export function BitcoinTransactionWidget({
       )}
       {validStepIndex === 2 && (
         <Text
+          marginTop="10px"
           fontSize={"12px"}
           color="rgba(255, 255, 255, 0.5)"
           fontFamily={FONT_FAMILIES.AUX_MONO}
