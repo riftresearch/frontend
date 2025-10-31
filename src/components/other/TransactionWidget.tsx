@@ -630,7 +630,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
               key="success"
               initial={{ y: -30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.5, ease: "easeInOut", delay: 0.3 }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
               style={{
                 display: "flex",
                 alignItems: "center",
