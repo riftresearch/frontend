@@ -91,13 +91,13 @@ export default function Home() {
           {/* Only show logo and subheader when NOT on Bitcoin deposit page */}
           {!bitcoinDepositInfo && (
             <>
-              <RiftLogo width={isTablet ? "70" : "390"} height={isTablet ? "30" : "70"} />
+              <RiftLogo width={isTablet ? "120" : "390"} height={isTablet ? "30" : "70"} />
 
               <Flex
                 flexDir={"column"}
                 textAlign={"center"}
                 userSelect={"none"}
-                fontSize={isTablet ? "12px" : "15px"}
+                fontSize={isTablet ? "14px" : "15px"}
                 mt={"18px"}
                 fontFamily={FONT_FAMILIES.AUX_MONO}
                 color={"#c3c3c3"}
