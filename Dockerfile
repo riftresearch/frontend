@@ -4,6 +4,9 @@
 # Note: This sets BUILD_STANDALONE=true during build to trigger
 # the ternary in next.config.ts: output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined
 # This allows normal Next.js builds (Vercel, local dev) to work without standalone mode
+#
+# The standalone build creates its own optimized server.js in .next/standalone/
+# which includes all necessary dependencies and API routes
 
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
@@ -50,16 +53,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy necessary files from builder
+# Copy public assets
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
 
-# Copy custom server
-COPY --from=builder /app/server.js ./server.js
+# Copy standalone output (includes node_modules and server)
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 
-# Set correct permissions
-RUN chown -R nextjs:nodejs /app
+# Copy static files
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
@@ -68,6 +69,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Start the custom server
+# Start the standalone server (it has its own server built-in)
 CMD ["node", "server.js"]
 
