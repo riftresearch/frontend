@@ -39,7 +39,6 @@ const WBTC_ADDRESS = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 
 const DEFAULT_SLIPPAGE_BPS = 10;
 const DEFAULT_VALID_FOR_SECONDS = 120;
-const RPC_URL = process.env.QUICKNODE_ETHEREUM_URL!;
 
 // Pool configurations (fee tier -> tick spacing)
 const POOL_CONFIGS = [
@@ -51,18 +50,44 @@ const POOL_CONFIGS = [
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-const provider = RPC_URL.startsWith("ws")
-  ? new providers.WebSocketProvider(RPC_URL, ChainId.MAINNET)
-  : new providers.StaticJsonRpcProvider({ url: RPC_URL, skipFetchSetup: true }, ChainId.MAINNET);
+// Lazy-loaded provider and router (initialized at runtime, not build time)
+let provider: providers.StaticJsonRpcProvider | providers.WebSocketProvider | null = null;
+let alphaRouter: AlphaRouter | null = null;
+let v4QuoterContract: Contract | null = null;
 
-console.log("Provider type", typeof provider);
+function getProvider() {
+  if (!provider) {
+    const RPC_URL = process.env.QUICKNODE_ETHEREUM_URL;
+    if (!RPC_URL) {
+      throw new Error("QUICKNODE_ETHEREUM_URL environment variable is not set");
+    }
 
-const alphaRouter = new AlphaRouter({
-  chainId: ChainId.MAINNET,
-  provider,
-});
+    provider = RPC_URL.startsWith("ws")
+      ? new providers.WebSocketProvider(RPC_URL, ChainId.MAINNET)
+      : new providers.StaticJsonRpcProvider(
+          { url: RPC_URL, skipFetchSetup: true },
+          ChainId.MAINNET
+        );
+  }
+  return provider;
+}
 
-const v4QuoterContract = new Contract(V4_QUOTER, V4_QUOTER_ABI, provider);
+function getAlphaRouter() {
+  if (!alphaRouter) {
+    alphaRouter = new AlphaRouter({
+      chainId: ChainId.MAINNET,
+      provider: getProvider(),
+    });
+  }
+  return alphaRouter;
+}
+
+function getV4QuoterContract() {
+  if (!v4QuoterContract) {
+    v4QuoterContract = new Contract(V4_QUOTER, V4_QUOTER_ABI, getProvider());
+  }
+  return v4QuoterContract;
+}
 
 // ============================================================================
 // Quote Cache - REMOVED (now using client-side management)
@@ -180,14 +205,15 @@ async function getV3Quote(params: QuoteParams): Promise<QuoteResult | null> {
       `[V3] Fetching AlphaRouter quote for ${sellToken} -> cbBTC (${isExactOutput ? "exact output" : "exact input"})`
     );
 
+    const router = getAlphaRouter();
     const route = isExactOutput
-      ? await alphaRouter.route(
+      ? await router.route(
           CurrencyAmount.fromRawAmount(tokenOut, amount),
           tokenIn,
           routeTradeType,
           options
         )
-      : await alphaRouter.route(
+      : await router.route(
           CurrencyAmount.fromRawAmount(tokenIn, amount),
           tokenOut,
           routeTradeType,
@@ -294,7 +320,8 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             hooks: ZERO_ADDRESS,
           };
 
-          const result = await v4QuoterContract.callStatic.quoteExactOutputSingle({
+          const quoter = getV4QuoterContract();
+          const result = await quoter.callStatic.quoteExactOutputSingle({
             poolKey: poolKey,
             zeroForOne: sortedPair.isFirstToken,
             exactAmount: amount, // This is the exact output amount (cbBTC)
@@ -350,7 +377,8 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             hooks: ZERO_ADDRESS,
           };
 
-          const result = await v4QuoterContract.callStatic.quoteExactInputSingle({
+          const quoter = getV4QuoterContract();
+          const result = await quoter.callStatic.quoteExactInputSingle({
             poolKey: poolKey,
             zeroForOne: sortedPair.isFirstToken,
             exactAmount: amount,
@@ -430,7 +458,8 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             },
           ];
 
-          const result = await v4QuoterContract.callStatic.quoteExactOutput({
+          const quoter = getV4QuoterContract();
+          const result = await quoter.callStatic.quoteExactOutput({
             exactCurrency: CBBTC_ADDRESS, // The token we want exact amount of
             path: path,
             exactAmount: amount, // The exact output amount we want
@@ -521,7 +550,8 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             },
           ];
 
-          const result = await v4QuoterContract.callStatic.quoteExactInput({
+          const quoter = getV4QuoterContract();
+          const result = await quoter.callStatic.quoteExactInput({
             exactCurrency: sellToken,
             path: path,
             exactAmount: amount,
@@ -657,14 +687,15 @@ async function buildV3Swap(params: V3SwapParams): Promise<ExecuteSwapParams | nu
     console.log("[V3] Building swap transaction for", sellToken, "->", "cbBTC", "to", receiver);
 
     // Call AlphaRouter based on trade type
+    const router = getAlphaRouter();
     const route = isExactOutput
-      ? await alphaRouter.route(
+      ? await router.route(
           CurrencyAmount.fromRawAmount(tokenOut, amountOut!),
           tokenIn,
           TradeType.EXACT_OUTPUT,
           options
         )
-      : await alphaRouter.route(
+      : await router.route(
           CurrencyAmount.fromRawAmount(tokenIn, amountIn!),
           tokenOut,
           TradeType.EXACT_INPUT,
