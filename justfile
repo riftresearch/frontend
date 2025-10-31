@@ -10,9 +10,9 @@
 default:
     @just --list
 
-# Backend docker-compose wrapper with .env file
+# Backend docker compose wrapper with .env file
 backend *ARGS:
-    docker-compose --env-file .env {{ARGS}}
+    docker compose --env-file .env {{ARGS}}
 
 # Quick shortcuts
 up: (backend "up" "-d")
@@ -33,7 +33,7 @@ logs-app: (backend "logs" "-f" "nextjs-app")
 
 # Execute command in container
 exec *CMD:
-    docker-compose --env-file .env exec nextjs-app {{CMD}}
+    docker compose --env-file .env exec nextjs-app {{CMD}}
 
 # Shell into container
 shell:
@@ -49,7 +49,7 @@ health:
 
 # Clean everything (containers, volumes, images)
 clean:
-    docker-compose --env-file .env down -v --rmi all
+    docker compose --env-file .env down -v --rmi all
 
 # Rebuild from scratch
 rebuild: clean (backend "build" "--no-cache") (backend "up" "-d")
@@ -57,7 +57,7 @@ rebuild: clean (backend "build" "--no-cache") (backend "up" "-d")
 # Show container status
 status:
     @echo "=== Container Status ==="
-    @docker-compose --env-file .env ps
+    @docker compose --env-file .env ps
     @echo ""
     @echo "=== Health Check ==="
     @curl -s http://localhost:3000/api/health | jq || echo "App not responding"
