@@ -75,6 +75,14 @@ configs:
       }
 
       :3005 {
+        # Log all requests
+        log {
+          output stdout
+          format console
+          level DEBUG
+        }
+
+        # CORS headers
         header {
           Access-Control-Allow-Origin "*"
           Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
@@ -83,20 +91,17 @@ configs:
           Access-Control-Max-Age "86400"
         }
 
+        # Handle OPTIONS preflight
         @options {
           method OPTIONS
         }
         respond @options 204
 
+        # Reverse proxy to Next.js (preserves path automatically)
         reverse_proxy localhost:3006 {
-          health_uri /api/health
-          health_interval 10s
-          health_timeout 5s
-        }
-
-        log {
-          output stdout
-          format console
-          level INFO
+          header_up Host {host}
+          header_up X-Real-IP {remote_host}
+          header_up X-Forwarded-For {remote_host}
+          header_up X-Forwarded-Proto {scheme}
         }
       }
