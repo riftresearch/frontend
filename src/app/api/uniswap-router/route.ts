@@ -922,6 +922,7 @@ export async function GET(request: NextRequest) {
         `Fetching quotes from V3 and V4 (${isExactOutput ? "exact output" : "exact input"})...`
       );
     }
+    let start = Date.now();
     console.log("========================================");
 
     const [v3Result, v4Result] = await Promise.all([
@@ -994,6 +995,8 @@ export async function GET(request: NextRequest) {
     }
 
     console.log("========================================\n");
+    let end = Date.now();
+    console.log(`Time taken: ${end - start}ms`);
 
     return NextResponse.json({
       routerType: winner,
@@ -1068,6 +1071,7 @@ export async function POST(request: NextRequest) {
     const finalSlippageBps = slippageBps || DEFAULT_SLIPPAGE_BPS;
     const finalValidFor = validFor || DEFAULT_VALID_FOR_SECONDS;
     const recipient = receiver || userAddress;
+    let start = Date.now();
 
     console.log("\n========================================");
     console.log(`Building ${routerType.toUpperCase()} swap transaction`);
@@ -1110,11 +1114,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    console.log("========================================\n");
+    let end = Date.now();
+    console.log(`Time taken: ${end - start}ms`);
+
     if (!swapResult) {
       return NextResponse.json({ error: "Failed to build swap transaction" }, { status: 500 });
     }
-
-    console.log("========================================\n");
 
     return NextResponse.json(swapResult);
   } catch (error) {
