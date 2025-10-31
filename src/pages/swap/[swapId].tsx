@@ -174,6 +174,7 @@ export default function SwapPage() {
               amount={bitcoinAmount}
               bitcoinUri={bitcoinUri}
               depositTx={swapStatusInfo?.user_deposit?.deposit_tx}
+              swapId={currentSwapId}
             />
           ) : (
             <TransactionWidget swapId={currentSwapId} />

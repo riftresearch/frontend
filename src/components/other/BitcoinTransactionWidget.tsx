@@ -1,21 +1,24 @@
+import React, { useState, useEffect } from "react";
 import { Box, Text, Flex } from "@chakra-ui/react";
 import { QRCodeSVG } from "qrcode.react";
 import { LuCopy } from "react-icons/lu";
 import { FiExternalLink } from "react-icons/fi";
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import useWindowSize from "@/hooks/useWindowSize";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { toastSuccess, toastError } from "@/utils/toast";
 import WebAssetTag from "./WebAssetTag";
 import { useStore } from "@/utils/store";
+import { useSwapStatus } from "@/hooks/useSwapStatus";
+import { useRouter } from "next/router";
 
 interface BitcoinTransactionWidgetProps {
   address: string;
   amount: number;
   bitcoinUri: string;
   depositTx?: string;
+  swapId?: string;
 }
 
 // Step configuration for Bitcoin deposit flow
@@ -92,7 +95,7 @@ function StepCarousel({
             <motion.div
               key={step.id}
               style={{
-                height: "86px",
+                height: currentStepIndex === 3 ? "79px" : "86px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -232,18 +235,37 @@ export function BitcoinTransactionWidget({
   amount,
   bitcoinUri,
   depositTx,
+  swapId,
 }: BitcoinTransactionWidgetProps) {
   const { isMobile } = useWindowSize();
+  const router = useRouter();
   const depositFlowState = useStore((state) => state.depositFlowState);
+  const swapResponse = useStore((state) => state.swapResponse);
+
+  // Use provided swapId prop, fallback to store value
+  const currentSwapId = swapId || swapResponse?.swap_id;
+  const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
 
   // Track completed steps
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+  const [showButtons, setShowButtons] = useState(false);
 
   // Map deposit flow state to step index
   // If status is "5-Settled", treat it as step 3 (the final step, index 3)
   const isSettled = depositFlowState === "5-Settled";
   const currentStepIndex = isSettled ? 3 : steps.findIndex((step) => step.id === depositFlowState);
   const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
+
+  // Check if swap has expired (created > 12 hours ago and still on step 1)
+  const isExpired = React.useMemo(() => {
+    if (validStepIndex !== 0 || !swapStatusInfo?.created_at) return false;
+
+    const createdAt = new Date(swapStatusInfo.created_at);
+    const now = new Date();
+    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+
+    return hoursSinceCreation > 12;
+  }, [validStepIndex, swapStatusInfo?.created_at]);
 
   // Update completed steps when moving forward
   useEffect(() => {
@@ -252,9 +274,14 @@ export function BitcoinTransactionWidget({
       for (let i = 0; i < validStepIndex; i++) {
         newCompletedSteps.add(steps[i].id);
       }
-      // If settled, also mark the final step as completed
+      // If settled, also mark the final step as completed and show buttons
+      console.log("[debug] isSettled", isSettled);
+      console.log("[debug] validStepIndex", validStepIndex);
       if (isSettled && validStepIndex === 3) {
         newCompletedSteps.add(steps[3].id);
+        setTimeout(() => {
+          setShowButtons(true);
+        }, 1000); // Delay to match the animation
       }
       setCompletedSteps(newCompletedSteps);
     }
@@ -282,6 +309,164 @@ export function BitcoinTransactionWidget({
     }
   };
 
+  const handleViewMmTransaction = () => {
+    const txnId = swapStatusInfo?.mm_deposit?.deposit_tx;
+    const chain = swapStatusInfo?.mm_deposit?.chain;
+
+    if (txnId) {
+      // MM deposit for BTC->cbBTC is on Ethereum (cbBTC is ERC-20)
+      if (chain === "ETH") {
+        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
+      } else if (chain === "BASE") {
+        window.open(`https://basescan.org/tx/${txnId}`, "_blank");
+      } else {
+        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
+      }
+    } else {
+      window.open("https://etherscan.io", "_blank");
+    }
+  };
+
+  const handleCopyTxn = async () => {
+    const txnId = swapStatusInfo?.mm_deposit?.deposit_tx;
+    if (txnId) {
+      try {
+        await navigator.clipboard.writeText(txnId);
+        toastSuccess({
+          title: "Copied to Clipboard",
+          description: "Transaction ID copied successfully",
+        });
+      } catch (err) {
+        console.error("Failed to copy transaction ID:", err);
+        toastError(err, {
+          title: "Copy Failed",
+          description: "Unable to copy transaction ID",
+        });
+      }
+    }
+  };
+
+  const getShortTxnId = () => {
+    const txnId = swapStatusInfo?.mm_deposit?.deposit_tx;
+    if (!txnId) return "";
+    return `${txnId.slice(0, 12)}...${txnId.slice(-12)}`;
+  };
+
+  const handleNewSwap = () => {
+    router.push("/");
+  };
+
+  // If expired, show simple expired view
+  if (isExpired) {
+    return (
+      <Flex direction="column" alignItems="center" gap="20px">
+        <Box
+          w={isMobile ? "100%" : "805px"}
+          h={isMobile ? "600px" : "510px"}
+          borderRadius="40px"
+          mt="70px"
+          boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+          backdropFilter="blur(9px)"
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          gap="24px"
+          position="relative"
+          _before={{
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: "40px",
+            padding: "3px",
+            background:
+              "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+          }}
+        >
+          {/* Expired Message */}
+          <Flex direction="column" alignItems="center" gap="16px" zIndex={1}>
+            <Text
+              fontSize="24px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              color={colors.offWhite}
+              letterSpacing="1px"
+            >
+              SWAP EXPIRED
+            </Text>
+
+            {/* Swap ID */}
+            {currentSwapId && (
+              <Flex
+                alignItems="center"
+                gap="8px"
+                bg="rgba(251, 191, 36, 0.15)"
+                borderRadius="12px"
+                padding="10px 16px"
+                border="1px solid rgba(251, 191, 36, 0.4)"
+                cursor="pointer"
+                onClick={() => copyToClipboard(currentSwapId, "Swap ID")}
+                _hover={{ bg: "rgba(251, 191, 36, 0.2)" }}
+                transition="all 0.2s"
+              >
+                <Text
+                  color="rgba(251, 191, 36, 0.9)"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  fontSize="13px"
+                  fontWeight="normal"
+                >
+                  SWAP ID - {currentSwapId.slice(0, 8)}...{currentSwapId.slice(-8)}
+                </Text>
+                <LuCopy
+                  color="rgba(251, 191, 36, 0.9)"
+                  size={14}
+                  style={{
+                    flexShrink: 0,
+                  }}
+                />
+              </Flex>
+            )}
+          </Flex>
+
+          {/* New Swap Button */}
+          <Box
+            as="button"
+            onClick={handleNewSwap}
+            borderRadius="16px"
+            width={isMobile ? "140px" : "160px"}
+            border="2px solid #6651B3"
+            background="rgba(86, 50, 168, 0.30)"
+            padding="12px 16px"
+            cursor="pointer"
+            transition="all 0.2s"
+            zIndex={1}
+            _hover={{
+              transform: "translateY(-2px)",
+              boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
+            }}
+          >
+            <Text
+              color="white"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              fontSize="14px"
+              fontWeight="normal"
+              letterSpacing="0.5px"
+            >
+              NEW SWAP
+            </Text>
+          </Box>
+        </Box>
+      </Flex>
+    );
+  }
+
+  // Normal swap view
   return (
     <Flex direction="column" alignItems="center" gap="20px">
       <Box
@@ -314,7 +499,7 @@ export function BitcoinTransactionWidget({
         {/* Top Half - QR Code and Details Section */}
         <Box
           w="100%"
-          h={isMobile ? "70%" : "59%"}
+          h="54%"
           borderRadius="40px"
           position="absolute"
           top="0px"
@@ -390,146 +575,210 @@ export function BitcoinTransactionWidget({
             }}
           />
 
-          {/* QR Code and Details - Horizontal Layout */}
-          <Flex
-            direction={isMobile ? "column" : "row"}
-            align="center"
-            justify="center"
-            gap={isMobile ? "20px" : "40px"}
-            zIndex={1}
-            px={isMobile ? "20px" : "100px"}
-          >
-            {/* QR Code on Left */}
+          {/* Show QR Code only on first step, otherwise show loader or checkmark */}
+          {validStepIndex === 0 ? (
             <Flex
-              py="10px"
-              px="10px"
-              borderRadius="12px"
-              bg="white"
-              boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-              justify="center"
+              direction={isMobile ? "column" : "row"}
               align="center"
-              flexShrink={0}
+              justify="center"
+              gap={isMobile ? "20px" : "40px"}
+              zIndex={1}
+              px={isMobile ? "20px" : "100px"}
             >
-              <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
-            </Flex>
-
-            {/* Address and Amount Details on Right - Stacked Vertically */}
-            <Flex
-              direction="column"
-              gap={isMobile ? "16px" : "24px"}
-              flex="1"
-              maxW={isMobile ? "100%" : "500px"}
-            >
-              {/* Bitcoin Address Section */}
-              <Flex direction="column" w="100%">
-                <Text
-                  fontSize={isMobile ? "10px" : "11px"}
-                  color="rgba(255,255,255,0.5)"
-                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                  letterSpacing="1px"
-                  mb="8px"
-                >
-                  BITCOIN ADDRESS
-                </Text>
-                <Flex
-                  alignItems="flex-end"
-                  gap="12px"
-                  position="relative"
-                  role="group"
-                  cursor="pointer"
-                  onClick={() => copyToClipboard(address, "Bitcoin Address")}
-                >
-                  <Text
-                    color={colors.offWhite}
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                    fontSize={isMobile ? "18px" : "26px"}
-                    letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                    fontWeight="500"
-                    flex="1"
-                    lineHeight="1.3"
-                    wordBreak="break-all"
-                  >
-                    {address}
-                  </Text>
-                  <Box
-                    opacity={0.6}
-                    _groupHover={{
-                      opacity: 1,
-                    }}
-                    transition="opacity 0.2s"
-                    mb="2px"
-                  >
-                    <LuCopy
-                      color="rgba(255, 255, 255, 0.8)"
-                      size={20}
-                      style={{
-                        flexShrink: 0,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </Box>
-                </Flex>
+              {/* QR Code on Left */}
+              <Flex
+                py="10px"
+                px="10px"
+                borderRadius="12px"
+                bg="white"
+                boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
+                justify="center"
+                align="center"
+                flexShrink={0}
+              >
+                <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
               </Flex>
 
-              {/* Amount Section */}
-              <Flex direction="column" w="100%">
-                <Text
-                  fontSize={isMobile ? "10px" : "11px"}
-                  color="rgba(255,255,255,0.5)"
-                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                  letterSpacing="1px"
-                  mb="8px"
-                >
-                  DEPOSIT AMOUNT
-                </Text>
-                <Flex
-                  alignItems="center"
-                  gap="12px"
-                  position="relative"
-                  role="group"
-                  cursor="pointer"
-                  onClick={() => copyToClipboard(amount.toFixed(8), "Bitcoin Amount")}
-                >
+              {/* Address and Amount Details on Right - Stacked Vertically */}
+              <Flex
+                direction="column"
+                gap={isMobile ? "16px" : "24px"}
+                flex="1"
+                maxW={isMobile ? "100%" : "500px"}
+              >
+                {/* Bitcoin Address Section */}
+                <Flex direction="column" w="100%">
                   <Text
-                    color={colors.offWhite}
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                    fontSize={isMobile ? "18px" : "26px"}
-                    letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                    fontWeight="500"
+                    fontSize={isMobile ? "10px" : "11px"}
+                    color="rgba(255,255,255,0.5)"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    letterSpacing="1px"
+                    mb="8px"
                   >
-                    {amount.toFixed(8)}
+                    BITCOIN ADDRESS
                   </Text>
-                  <Box
-                    opacity={0.6}
-                    _groupHover={{
-                      opacity: 1,
-                    }}
-                    transition="opacity 0.2s"
+                  <Flex
+                    alignItems="flex-end"
+                    gap="12px"
+                    position="relative"
+                    role="group"
+                    cursor="pointer"
+                    onClick={() => copyToClipboard(address, "Bitcoin Address")}
                   >
-                    <LuCopy
-                      color="rgba(255, 255, 255, 0.8)"
-                      size={20}
-                      style={{
-                        flexShrink: 0,
-                        cursor: "pointer",
+                    <Text
+                      color={colors.offWhite}
+                      fontFamily={FONT_FAMILIES.AUX_MONO}
+                      fontSize={isMobile ? "18px" : "26px"}
+                      letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
+                      fontWeight="500"
+                      flex="1"
+                      lineHeight="1.3"
+                      wordBreak="break-all"
+                    >
+                      {address}
+                    </Text>
+                    <Box
+                      opacity={0.6}
+                      _groupHover={{
+                        opacity: 1,
                       }}
-                    />
-                  </Box>
-                  <Box transform="scale(0.7)" transformOrigin="left center">
-                    <WebAssetTag asset="BTC" />
-                  </Box>
+                      transition="opacity 0.2s"
+                      mb="2px"
+                    >
+                      <LuCopy
+                        color="rgba(255, 255, 255, 0.8)"
+                        size={20}
+                        style={{
+                          flexShrink: 0,
+                          cursor: "pointer",
+                        }}
+                      />
+                    </Box>
+                  </Flex>
+                </Flex>
+
+                {/* Amount Section */}
+                <Flex direction="column" w="100%">
+                  <Text
+                    fontSize={isMobile ? "10px" : "11px"}
+                    color="rgba(255,255,255,0.5)"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    letterSpacing="1px"
+                    mb="8px"
+                  >
+                    DEPOSIT AMOUNT
+                  </Text>
+                  <Flex
+                    alignItems="center"
+                    gap="12px"
+                    position="relative"
+                    role="group"
+                    cursor="pointer"
+                    onClick={() => copyToClipboard(amount.toFixed(8), "Bitcoin Amount")}
+                  >
+                    <Text
+                      color={colors.offWhite}
+                      fontFamily={FONT_FAMILIES.AUX_MONO}
+                      fontSize={isMobile ? "18px" : "26px"}
+                      letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
+                      fontWeight="500"
+                    >
+                      {amount.toFixed(8)}
+                    </Text>
+                    <Box
+                      opacity={0.6}
+                      _groupHover={{
+                        opacity: 1,
+                      }}
+                      transition="opacity 0.2s"
+                    >
+                      <LuCopy
+                        color="rgba(255, 255, 255, 0.8)"
+                        size={20}
+                        style={{
+                          flexShrink: 0,
+                          cursor: "pointer",
+                        }}
+                      />
+                    </Box>
+                    <Box transform="scale(0.7)" transformOrigin="left center">
+                      <WebAssetTag asset="BTC" />
+                    </Box>
+                  </Flex>
                 </Flex>
               </Flex>
             </Flex>
-          </Flex>
+          ) : isSettled ? (
+            // Show checkmark when settled
+            <motion.div
+              key="success"
+              initial={{ y: -30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, ease: "easeInOut", delay: 0.3 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1,
+              }}
+            >
+              <img
+                src="/images/txns/check.svg"
+                alt="Success"
+                style={{
+                  width: "110px",
+                  height: "110px",
+                  filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
+                }}
+              />
+            </motion.div>
+          ) : (
+            // Show loading dots for steps 2 and 3
+            <motion.div
+              key="loading"
+              initial={{ y: -30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                zIndex: 1,
+              }}
+            >
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{
+                    y: [0, -10, 0],
+                    opacity: [0.4, 1, 0.4],
+                  }}
+                  transition={{
+                    duration: 0.8,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: i * 0.2,
+                  }}
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  }}
+                />
+              ))}
+            </motion.div>
+          )}
         </Box>
 
         {/* Bottom Half - Steps */}
         <Box
-          h="41%"
+          h="45%"
           bottom="0px"
           position="absolute"
-          padding="30px 20px 20px 20px"
+          padding="20px"
           w="100%"
           display="flex"
           flexDirection="column"
@@ -538,43 +787,6 @@ export function BitcoinTransactionWidget({
           overflow="hidden"
           borderRadius="0 0 40px 40px"
         >
-          {/* View Transaction Button - Only show if past step 1 and we have a deposit tx */}
-          {validStepIndex > 0 && depositTx && (
-            <Flex
-              as="button"
-              onClick={handleViewTransaction}
-              alignItems="center"
-              justifyContent="center"
-              gap="8px"
-              px="18px"
-              py="7px"
-              mt="-10px"
-              mb="-17px"
-              borderRadius="12px"
-              bg="rgba(255, 255, 255, 0.1)"
-              border="1px solid rgba(255, 255, 255, 0.2)"
-              cursor="pointer"
-              transition="all 0.2s"
-              _hover={{
-                bg: "rgba(255, 255, 255, 0.15)",
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-              }}
-              _active={{
-                transform: "scale(0.98)",
-              }}
-            >
-              <Text
-                fontSize="10px"
-                color="rgba(255, 255, 255, 0.9)"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                letterSpacing="0.5px"
-              >
-                VIEW TXN IN MEMPOOL
-              </Text>
-              <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
-            </Flex>
-          )}
-
           {/* Step Carousel */}
           <Box
             width="100%"
@@ -582,14 +794,132 @@ export function BitcoinTransactionWidget({
             flex="1"
             display="flex"
             alignItems="flex-start"
-            pt={isMobile ? "30px" : "10px"}
             overflow="hidden"
+            position="relative"
           >
             <StepCarousel
               isMobile={isMobile}
               currentStepIndex={validStepIndex}
               completedSteps={completedSteps}
             />
+
+            {/* Action buttons that appear after swap completion */}
+            <AnimatePresence>
+              {showButtons && (
+                <motion.div
+                  initial={{ y: 30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  style={{
+                    position: "absolute",
+                    bottom: "10px",
+                    width: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "12px",
+                    zIndex: 4,
+                  }}
+                >
+                  {/* Transaction ID Display */}
+                  {getShortTxnId() && (
+                    <Flex
+                      mt="-100px"
+                      mb="64px"
+                      alignItems="center"
+                      gap="8px"
+                      bg="rgba(255, 255, 255, 0.1)"
+                      borderRadius="12px"
+                      padding="6px 12px"
+                      border="1px solid rgba(255, 255, 255, 0.2)"
+                      cursor="pointer"
+                      onClick={handleCopyTxn}
+                      _hover={{ bg: "rgba(255, 255, 255, 0.15)" }}
+                      transition="all 0.2s"
+                    >
+                      <Text
+                        color="rgba(255, 255, 255, 0.8)"
+                        fontFamily="Aux"
+                        fontSize="12px"
+                        fontWeight="normal"
+                      >
+                        TXN HASH - {getShortTxnId()}
+                      </Text>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="rgba(255, 255, 255, 0.6)"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </Flex>
+                  )}
+
+                  {/* Button Row */}
+                  <Flex gap="16px" mt="-52px" justifyContent="center">
+                    {/* View Transaction Button */}
+                    <Box
+                      as="button"
+                      onClick={handleViewMmTransaction}
+                      border="2px solid #3F7244"
+                      borderRadius="16px"
+                      width={isMobile ? "140px" : "160px"}
+                      background="rgba(2, 123, 30, 0.25)"
+                      padding="8px 16px"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 4px 12px rgba(127, 58, 12, 0.3)",
+                      }}
+                    >
+                      <Text
+                        color="white"
+                        fontFamily="Nostromo"
+                        fontSize="14px"
+                        fontWeight="normal"
+                        letterSpacing="0.5px"
+                      >
+                        VIEW TXN
+                      </Text>
+                    </Box>
+
+                    {/* New Swap Button */}
+                    <Box
+                      as="button"
+                      onClick={handleNewSwap}
+                      borderRadius="16px"
+                      width={isMobile ? "140px" : "160px"}
+                      border="2px solid #6651B3"
+                      background="rgba(86, 50, 168, 0.30)"
+                      padding="8px 16px"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
+                      }}
+                    >
+                      <Text
+                        color="white"
+                        fontFamily="Nostromo"
+                        fontSize="14px"
+                        fontWeight="normal"
+                        letterSpacing="0.5px"
+                      >
+                        NEW SWAP
+                      </Text>
+                    </Box>
+                  </Flex>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </Box>
         </Box>
       </Box>
