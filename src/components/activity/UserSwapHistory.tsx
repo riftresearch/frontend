@@ -881,12 +881,8 @@ export const UserSwapHistory: React.FC = () => {
                     border={`1px solid ${colors.borderGray}`}
                     _hover={{ bg: "rgba(28, 28, 28, 0.7)" }}
                     transition="background 0.15s ease"
-<<<<<<< HEAD
                     cursor="pointer"
                     onClick={() => router.push(`/swap/${swap.id}`)}
-=======
-                    gap="12px"
->>>>>>> afdd89d (swap history)
                   >
                     {/* Time */}
                     <Flex direction="column" gap="4px">
