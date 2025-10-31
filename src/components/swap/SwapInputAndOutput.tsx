@@ -237,6 +237,7 @@ export const SwapInputAndOutput = () => {
           setRfqQuote(null);
           setOutputAmount("");
           setIsLoadingQuote(false);
+          setExceedsAvailableBTCLiquidity(true);
           return;
         }
       } else {
