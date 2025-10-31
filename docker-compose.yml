@@ -97,7 +97,12 @@ configs:
         }
         respond @options 204
 
-        # Reverse proxy to Next.js (preserves path automatically)
+        # Rewrite root requests to /api/uniswap-router
+        # This allows frontend to call https://uniswap-quote-backend.riftnodes.com/?params
+        # and have it route to /api/uniswap-router?params
+        rewrite * /api/uniswap-router{uri}
+
+        # Reverse proxy to Next.js
         reverse_proxy localhost:3006 {
           header_up Host {host}
           header_up X-Real-IP {remote_host}
