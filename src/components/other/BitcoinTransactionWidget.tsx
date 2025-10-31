@@ -240,7 +240,9 @@ export function BitcoinTransactionWidget({
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
 
   // Map deposit flow state to step index
-  const currentStepIndex = steps.findIndex((step) => step.id === depositFlowState);
+  // If status is "5-Settled", treat it as step 3 (the final step, index 3)
+  const isSettled = depositFlowState === "5-Settled";
+  const currentStepIndex = isSettled ? 3 : steps.findIndex((step) => step.id === depositFlowState);
   const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
 
   // Update completed steps when moving forward
@@ -250,9 +252,13 @@ export function BitcoinTransactionWidget({
       for (let i = 0; i < validStepIndex; i++) {
         newCompletedSteps.add(steps[i].id);
       }
+      // If settled, also mark the final step as completed
+      if (isSettled && validStepIndex === 3) {
+        newCompletedSteps.add(steps[3].id);
+      }
       setCompletedSteps(newCompletedSteps);
     }
-  }, [validStepIndex]);
+  }, [validStepIndex, isSettled]);
 
   const copyToClipboard = async (text: string, label: string) => {
     try {

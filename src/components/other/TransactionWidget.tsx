@@ -49,7 +49,11 @@ function StepCarousel({ swapId }: { swapId?: string }) {
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
 
   // Find current step index
-  const currentStepIndex = steps.findIndex((step) => step.id === depositFlowState);
+  // If status is "5-Settled", treat it as step 3 (the final step, index 3)
+  const isSettledStatus = depositFlowState === "5-Settled";
+  const currentStepIndex = isSettledStatus
+    ? 3
+    : steps.findIndex((step) => step.id === depositFlowState);
 
   // Initialize carousel state based on current step (for direct page loads)
   useEffect(() => {

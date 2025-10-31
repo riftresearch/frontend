@@ -118,7 +118,10 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     return (
       <Flex
         as="button"
-        onClick={onClaimRefund}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClaimRefund?.();
+        }}
         align="center"
         gap="6px"
         bg="rgba(178, 50, 50, 0.15)"
@@ -980,7 +983,8 @@ export const UserSwapHistory: React.FC = () => {
                       {userTxHash ? (
                         <Flex
                           as="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const url =
                               userTxChain === "BTC"
                                 ? `https://mempool.space/tx/${userTxHash}`
@@ -1099,7 +1103,8 @@ export const UserSwapHistory: React.FC = () => {
                       ) : mmTxHash ? (
                         <Flex
                           as="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const url =
                               mmTxChain === "BTC"
                                 ? `https://mempool.space/tx/${mmTxHash}`
