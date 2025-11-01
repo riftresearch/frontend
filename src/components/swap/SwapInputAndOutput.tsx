@@ -66,6 +66,9 @@ export const SwapInputAndOutput = () => {
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
   const [belowMinimumSwap, setBelowMinimumSwap] = useState(false);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [refetchERC20toBTCQuote, setRefetchERC20toBTCQuote] = useState(false);
+  const [refetchERC20toBTCQuoteExactOutput, setRefetchERC20toBTCQuoteExactOutput] = useState(false);
+  const [refetchBTCtoERC20Quote, setRefetchBTCtoERC20Quote] = useState(false);
 
   // Refs
   const quoteRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -196,6 +199,7 @@ export const SwapInputAndOutput = () => {
       const amountToQuote = inputAmount ?? rawInputAmount;
 
       if (!isSwappingForBTC || !amountToQuote || parseFloat(amountToQuote) <= 0) {
+        console.log("no amount to quote");
         return;
       }
 
@@ -216,7 +220,7 @@ export const SwapInputAndOutput = () => {
 
       if (price && btcPrice) {
         const usdValue = inputValue * price;
-
+        console.log("usdValue", usdValue);
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Input value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
@@ -241,7 +245,14 @@ export const SwapInputAndOutput = () => {
           return;
         }
       } else {
-        setIsLoadingQuote(false);
+        console.log("no price");
+        console.log("btcPrice", btcPrice);
+        console.log("price", price);
+        // setIsLoadingQuote(false);
+        // Set refetch flag if we have an amount to quote
+        if (amountToQuote && parseFloat(amountToQuote) > 0) {
+          setRefetchERC20toBTCQuote(true);
+        }
         return;
       }
 
@@ -254,6 +265,7 @@ export const SwapInputAndOutput = () => {
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
         const sellToken = selectedInputToken?.address || "ETH";
 
+        console.log("getting quote for", sellToken, sellAmount);
         // Get combined quote (handles cbBTC internally)
         const quoteResponse = await getERC20ToBTCQuote(
           sellToken,
@@ -264,6 +276,8 @@ export const SwapInputAndOutput = () => {
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
           slippageBips
         );
+
+        console.log("quoteResponse", quoteResponse);
 
         // Check if this is still the latest request
         if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
@@ -378,7 +392,11 @@ export const SwapInputAndOutput = () => {
           return;
         }
       } else {
-        setIsLoadingQuote(false);
+        // setIsLoadingQuote(false);
+        // Set refetch flag if we have an amount to quote
+        if (btcAmountToQuote && parseFloat(btcAmountToQuote) > 0) {
+          setRefetchERC20toBTCQuoteExactOutput(true);
+        }
         return;
       }
 
@@ -497,7 +515,11 @@ export const SwapInputAndOutput = () => {
         price = erc20Price;
       }
       if (!btcPrice || !price) {
-        setIsLoadingQuote(false);
+        // setIsLoadingQuote(false);
+        // Set refetch flag if we have an amount to quote
+        if (amountToQuote && parseFloat(amountToQuote) > 0) {
+          setRefetchBTCtoERC20Quote(true);
+        }
         return;
       }
 
@@ -1837,6 +1859,76 @@ export const SwapInputAndOutput = () => {
     fetchAndExecute();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refetchQuote, lastEditedField]);
+
+  // Auto-refetch quotes when prices become available
+  useEffect(() => {
+    let price: number | null = null;
+    if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+      price = ethPrice;
+    } else if (selectedInputToken.address) {
+      price = erc20Price;
+    }
+
+    // For ERC20 -> BTC exact input
+    if (refetchERC20toBTCQuote && isSwappingForBTC && btcPrice && rawInputAmount && price) {
+      // Determine which price we need based on selected token
+      console.log("Auto-refetching ERC20->BTC quote after prices loaded");
+      setRefetchERC20toBTCQuote(false);
+      fetchERC20ToBTCQuote();
+    }
+
+    // For ERC20 -> BTC exact output
+    if (
+      refetchERC20toBTCQuoteExactOutput &&
+      isSwappingForBTC &&
+      btcPrice &&
+      outputAmount &&
+      price
+    ) {
+      console.log("Auto-refetching ERC20->BTC exact output quote after prices loaded");
+      setRefetchERC20toBTCQuoteExactOutput(false);
+      fetchERC20ToBTCQuoteExactOutput();
+    }
+
+    // For BTC -> ERC20
+    if (refetchBTCtoERC20Quote && !isSwappingForBTC && btcPrice) {
+      if (selectedOutputToken?.ticker === "cbBTC") {
+        price = btcPrice;
+      } else if (erc20Price) {
+        price = erc20Price;
+      }
+
+      // If we have all required prices, refetch the quote
+      if (price) {
+        console.log("Auto-refetching BTC->ERC20 quote after prices loaded");
+        setRefetchBTCtoERC20Quote(false);
+
+        // Determine mode and amount based on which field was last edited
+        const mode = lastEditedField === "input" ? "ExactInput" : "ExactOutput";
+        const amount = mode === "ExactInput" ? rawInputAmount : outputAmount;
+
+        if (amount && parseFloat(amount) > 0) {
+          fetchBTCtoERC20Quote(amount, mode);
+        }
+      }
+    }
+  }, [
+    btcPrice,
+    ethPrice,
+    erc20Price,
+    refetchERC20toBTCQuote,
+    refetchERC20toBTCQuoteExactOutput,
+    refetchBTCtoERC20Quote,
+    isSwappingForBTC,
+    rawInputAmount,
+    outputAmount,
+    lastEditedField,
+    selectedInputToken,
+    selectedOutputToken,
+    fetchERC20ToBTCQuote,
+    fetchERC20ToBTCQuoteExactOutput,
+    fetchBTCtoERC20Quote,
+  ]);
 
   // Save swap state to cookies whenever direction or tokens change
   useEffect(() => {
