@@ -1,11 +1,13 @@
+import React, { useState, useEffect } from "react";
 import { Box, Text, Flex } from "@chakra-ui/react";
 import { CountdownTimer } from "./CountdownTimer";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useStore } from "@/utils/store";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
-import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toastSuccess, toastError } from "@/utils/toast";
+import { colors } from "@/utils/colors";
+import { FONT_FAMILIES } from "@/utils/font";
 import router from "next/router";
 
 // Step configuration
@@ -468,6 +470,210 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
   const showLoadingDots = countdownValue === 0 && !isSettled;
+
+  // Find current step index
+  const isSettledStatus = depositFlowState === "5-Settled";
+  const currentStepIndex = isSettledStatus
+    ? 3
+    : steps.findIndex((step) => step.id === depositFlowState);
+  const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
+
+  // Check if MM failed to fill (> 1 hour 20 mins on step 2 "Filling Order")
+  const isMMFailed = React.useMemo(() => {
+    if (validStepIndex !== 2 || !swapStatusInfo?.created_at) return false;
+
+    const createdAt = new Date(swapStatusInfo.created_at);
+    const now = new Date();
+    const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+
+    return minutesSinceCreation > 80; // 1 hour 20 minutes
+  }, [validStepIndex, swapStatusInfo?.created_at]);
+
+  const handleGoToHistory = () => {
+    router.push("/history");
+  };
+
+  const handleViewUserTransaction = () => {
+    const txnId = swapStatusInfo?.user_deposit?.deposit_tx;
+    const chain = swapStatusInfo?.user_deposit?.chain;
+
+    if (txnId) {
+      if (chain === "ETH") {
+        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
+      } else if (chain === "BASE") {
+        window.open(`https://basescan.org/tx/${txnId}`, "_blank");
+      } else {
+        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
+      }
+    }
+  };
+
+  // If MM failed to fill, show failed view
+  if (isMMFailed) {
+    return (
+      <Box
+        w={isMobile ? "100%" : "805px"}
+        h="510px"
+        borderRadius="40px"
+        mt="70px"
+        boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+        backdropFilter="blur(9px)"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        position="relative"
+        _before={{
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: "40px",
+          padding: "3px",
+          background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          maskComposite: "xor",
+          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          WebkitMaskComposite: "xor",
+        }}
+      >
+        {/* Top Half - Error Icon */}
+        <Box
+          w="100%"
+          h="50%"
+          borderRadius="40px"
+          position="absolute"
+          top="0px"
+          background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
+          display="flex"
+          backdropFilter="blur(20px)"
+          alignItems="center"
+          justifyContent="center"
+          _before={{
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: "40px",
+            padding: "3px",
+            background:
+              "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+          }}
+        >
+          {/* Error Icon */}
+          <Box
+            width="110px"
+            height="110px"
+            borderRadius="50%"
+            bg="rgba(231, 76, 60, 0.2)"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            border="3px solid rgba(231, 76, 60, 0.5)"
+            zIndex={1}
+          >
+            <Text fontSize="60px" color="#E74C3C">
+              !
+            </Text>
+          </Box>
+        </Box>
+
+        {/* Bottom Half - Failed Message */}
+        <Box
+          h="50%"
+          bottom="0px"
+          position="absolute"
+          padding="20px"
+          w="100%"
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          gap="20px"
+        >
+          <Text
+            fontSize="16px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.offWhite}
+            textAlign="center"
+            px="40px"
+            lineHeight="1.6"
+          >
+            The market maker failed to fill your order. You can initiate a refund in the swap
+            history page.
+          </Text>
+
+          {/* Buttons */}
+          <Flex gap="16px" justifyContent="center" flexWrap="wrap">
+            {/* View User Deposit Transaction Button - if we have user deposit tx */}
+            {swapStatusInfo?.user_deposit?.deposit_tx && (
+              <Box
+                as="button"
+                onClick={handleViewUserTransaction}
+                border="2px solid rgba(255, 255, 255, 0.3)"
+                borderRadius="16px"
+                width={isMobile ? "160px" : "180px"}
+                background="rgba(255, 255, 255, 0.1)"
+                padding="12px 16px"
+                cursor="pointer"
+                transition="all 0.2s"
+                zIndex={1}
+                _hover={{
+                  transform: "translateY(-2px)",
+                  bg: "rgba(255, 255, 255, 0.15)",
+                }}
+              >
+                <Text
+                  color="white"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  fontSize="13px"
+                  fontWeight="normal"
+                  letterSpacing="0.5px"
+                >
+                  VIEW DEPOSIT TXN
+                </Text>
+              </Box>
+            )}
+
+            {/* Swap History Button */}
+            <Box
+              as="button"
+              onClick={handleGoToHistory}
+              borderRadius="16px"
+              width={isMobile ? "160px" : "180px"}
+              border="2px solid #6651B3"
+              background="rgba(86, 50, 168, 0.30)"
+              padding="12px 16px"
+              cursor="pointer"
+              transition="all 0.2s"
+              zIndex={1}
+              _hover={{
+                transform: "translateY(-2px)",
+                boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
+              }}
+            >
+              <Text
+                color="white"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="14px"
+                fontWeight="normal"
+                letterSpacing="0.5px"
+              >
+                SWAP HISTORY
+              </Text>
+            </Box>
+          </Flex>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box

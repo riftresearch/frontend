@@ -63,31 +63,20 @@ export default function SwapPage() {
     }
   }, [swapStatusInfo?.status, depositFlowState, setDepositFlowState]);
 
-  // Set countdown based on current step
+  // Set countdown only on initial load for step 1, otherwise set to 0 to show loading dots
   React.useEffect(() => {
-    // Map step to countdown value
-    const getCountdownForStep = (step: string): number => {
-      switch (step) {
-        case "1-WaitingUserDepositInitiated":
-          return 120; // First step: 120 seconds
-        case "2-WaitingUserDepositConfirmed":
-          return 100; // Second step: 100 seconds
-        case "3-WaitingMMDepositInitiated":
-          return 60; // Third step: 60 seconds
-        default:
-          return 0; // Other steps: no countdown
+    // Only run on initial load (when previousState is still initial)
+    if (previousState === "0-not-started") {
+      if (depositFlowState === "1-WaitingUserDepositInitiated") {
+        // Start timer on step 1
+        setCountdownValue(120);
+      } else if (depositFlowState !== "0-not-started") {
+        // On any other step (2, 3, 4, 5), show loading dots (countdown = 0)
+        setCountdownValue(0);
       }
-    };
-
-    const newCountdown = getCountdownForStep(depositFlowState);
-
-    // Only update if moving to a new step or if it's a refresh with a different value
-    if (depositFlowState !== previousState || (newCountdown > 0 && countdownValue === 0)) {
-      setCountdownValue(newCountdown);
+      setPreviousState(depositFlowState);
     }
-
-    setPreviousState(depositFlowState);
-  }, [depositFlowState, previousState, setCountdownValue, countdownValue]);
+  }, [depositFlowState, previousState, setCountdownValue]);
 
   // Reset transaction confirmed state when going back to not-started
   React.useEffect(() => {
