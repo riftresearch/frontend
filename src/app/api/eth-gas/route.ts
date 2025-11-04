@@ -92,8 +92,8 @@ export async function GET(req: NextRequest) {
     const baseFee = BigInt(baseFeePerGas);
     const priorityFee = BigInt(maxPriorityFeePerGas);
 
-    // Calculate maxFeePerGas = (baseFee * 1.25) + priorityFee
-    const maxFeePerGas = (baseFee * BigInt(125)) / BigInt(100) + priorityFee;
+    // Calculate maxFeePerGas = (baseFee * 1.35) + priorityFee
+    const maxFeePerGas = (baseFee * BigInt(135)) / BigInt(100) + priorityFee;
 
     // Return as hex strings
     return NextResponse.json({
