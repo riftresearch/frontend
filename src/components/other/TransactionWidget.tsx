@@ -9,6 +9,13 @@ import { toastSuccess, toastError } from "@/utils/toast";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import router from "next/router";
+import { filterRefunds } from "@/utils/refundHelpers";
+import { mapDbRowToAdminSwap, ANALYTICS_API_URL } from "@/utils/analyticsClient";
+import { AdminSwapItem } from "@/utils/types";
+import { RefundModal } from "./RefundModal";
+import { useRefundModal } from "@/hooks/useRefundModal";
+import { esploraClient } from "@/utils/esploraClient";
+import { useEvmConfirmations } from "@/hooks/useEvmConfirmations";
 
 // Step configuration
 const steps = [
@@ -20,7 +27,7 @@ const steps = [
   {
     id: "2-WaitingUserDepositConfirmed",
     label: "CONFIRMING DEPOSIT",
-    description: "Waiting for 2 block confirmations...",
+    description: "Waiting for block confirmations...",
   },
   {
     id: "3-WaitingMMDepositInitiated",
@@ -30,11 +37,21 @@ const steps = [
   {
     id: "4-WaitingMMDepositConfirmed",
     label: "SWAP COMPLETE",
-    description: "Bitcoin has been sent to your wallet!",
+    description: "Bitcoin is headed your way!",
   },
 ];
 
-function StepCarousel({ swapId }: { swapId?: string }) {
+function StepCarousel({
+  swapId,
+  evmConfirmations,
+  btcConfirmations,
+  mmDepositChain,
+}: {
+  swapId?: string;
+  evmConfirmations: number;
+  btcConfirmations: number;
+  mmDepositChain?: string;
+}) {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const swapResponse = useStore((state) => state.swapResponse);
   // Use provided swapId prop, fallback to store value
@@ -46,6 +63,7 @@ function StepCarousel({ swapId }: { swapId?: string }) {
   const [showButtons, setShowButtons] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const { isMobile } = useWindowSize();
+  const [showFillingOrderWarning, setShowFillingOrderWarning] = useState(false);
   // Check if we're in the settled state (step 4 or 5)
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
@@ -56,6 +74,42 @@ function StepCarousel({ swapId }: { swapId?: string }) {
   const currentStepIndex = isSettledStatus
     ? 3
     : steps.findIndex((step) => step.id === depositFlowState);
+
+  // Check if stuck on "FILLING ORDER" step for more than 10 minutes
+  useEffect(() => {
+    console.log("[FILLING ORDER WARNING] Deposit flow state:", depositFlowState);
+    if (depositFlowState !== "3-WaitingMMDepositInitiated") {
+      setShowFillingOrderWarning(false);
+      return;
+    }
+
+    // Get the timestamp when swap was created
+    const swapCreatedAt = swapStatusInfo?.created_at;
+
+    console.log("[FILLING ORDER WARNING] Swap created at:", swapCreatedAt);
+    if (!swapCreatedAt) {
+      return;
+    }
+
+    const checkTimer = () => {
+      const createdTime = new Date(swapCreatedAt);
+      const now = new Date();
+      const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
+      console.log("[FILLING ORDER WARNING] Minutes since created:", minutesSinceCreated);
+
+      if (minutesSinceCreated >= 10) {
+        setShowFillingOrderWarning(true);
+      }
+    };
+
+    // Check immediately
+    checkTimer();
+
+    // Check every 30 seconds
+    const interval = setInterval(checkTimer, 30000);
+
+    return () => clearInterval(interval);
+  }, [depositFlowState, swapStatusInfo?.created_at]);
 
   // Initialize carousel state based on current step (for direct page loads)
   useEffect(() => {
@@ -203,6 +257,34 @@ function StepCarousel({ swapId }: { swapId?: string }) {
           const isCurrent = Math.abs(positionFromTop) < 0.1; // Current is at position 0
           const isNext = Math.abs(positionFromTop - 1) < 0.1; // Next is at position 1
 
+          // Dynamic description based on step and confirmations
+          let stepDescription = step.description;
+
+          // Step 2: User deposit confirmation (EVM deposits need 2 confirmations)
+          if (step.id === "2-WaitingUserDepositConfirmed" && evmConfirmations > 0) {
+            const requiredConfs = 2; // EVM deposits need 2 confirmations
+            const currentConfs = Math.min(evmConfirmations, requiredConfs);
+            stepDescription = `Confirming... ${currentConfs}/${requiredConfs} confirmations`;
+          }
+
+          // Step 3: Filling order - show warning if taking too long
+          if (step.id === "3-WaitingMMDepositInitiated" && showFillingOrderWarning) {
+            stepDescription =
+              "Market makers are taking longer than usual to fill your order... if not filled within 1 hour, your order will be refunded";
+          }
+
+          // Step 4: MM deposit confirmation (Bitcoin deposits need 4 confirmations for EVM->BTC swaps)
+          // Only show confirmations if MM is depositing Bitcoin
+          if (
+            step.id === "4-WaitingMMDepositConfirmed" &&
+            btcConfirmations > 0 &&
+            mmDepositChain === "BTC"
+          ) {
+            const requiredConfs = 4; // Bitcoin needs 4 confirmations for EVM->BTC swaps
+            const currentConfs = Math.min(btcConfirmations, requiredConfs);
+            stepDescription = `Confirming... ${currentConfs}/${requiredConfs} confirmations`;
+          }
+
           // Animate opacity based on position
           const opacity =
             positionFromTop < 0
@@ -327,10 +409,10 @@ function StepCarousel({ swapId }: { swapId?: string }) {
                     color="rgba(255,255,255,0.7)"
                     fontSize="13px" // Increased 1.1x from 12px
                     fontFamily="Aux"
-                    mt="4px"
+                    mt="9px"
                     textAlign="center"
                   >
-                    {step.description}
+                    {stepDescription}
                   </Text>
                 </motion.div>
               </Flex>
@@ -464,6 +546,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const countdownValue = useStore((state) => state.countdownValue);
   const swapResponse = useStore((state) => state.swapResponse);
+
   // Use provided swapId prop, fallback to store value
   const currentSwapId = swapId || swapResponse?.swap_id;
   const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
@@ -478,20 +561,187 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
     : steps.findIndex((step) => step.id === depositFlowState);
   const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
 
-  // Check if MM failed to fill (> 1 hour 20 mins on step 2 "Filling Order")
-  const isMMFailed = React.useMemo(() => {
-    if (validStepIndex !== 2 || !swapStatusInfo?.created_at) return false;
+  const [isRefundAvailable, setIsRefundAvailable] = React.useState(false);
+  const [failedSwapData, setFailedSwapData] = React.useState<AdminSwapItem | null>(null);
 
-    const createdAt = new Date(swapStatusInfo.created_at);
-    const now = new Date();
-    const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+  // Track EVM confirmations for user deposit (step 2)
+  const userDepositTxHash = swapStatusInfo?.user_deposit?.deposit_tx;
+  const userDepositChain = swapStatusInfo?.user_deposit?.chain;
+  const userChainId =
+    userDepositChain === "ETH" ? 1 : userDepositChain === "BASE" ? 8453 : undefined;
+  const evmConfirmations = useEvmConfirmations(
+    userDepositTxHash,
+    userChainId,
+    depositFlowState === "2-WaitingUserDepositConfirmed"
+  );
 
-    return minutesSinceCreation > 80; // 1 hour 20 minutes
-  }, [validStepIndex, swapStatusInfo?.created_at]);
+  // Track BTC confirmations for MM deposit (step 4)
+  const [btcConfirmations, setBtcConfirmations] = React.useState<number>(0);
 
-  const handleGoToHistory = () => {
-    router.push("/history");
-  };
+  // Poll for Bitcoin confirmations when MM deposit is being confirmed (step 4)
+  useEffect(() => {
+    // Only poll for BTC confirmations when MM has deposited Bitcoin (step 4)
+    if (depositFlowState !== "4-WaitingMMDepositConfirmed" && depositFlowState !== "5-Settled") {
+      setBtcConfirmations(0);
+      return;
+    }
+
+    const mmDepositTx = swapStatusInfo?.mm_deposit?.deposit_tx;
+    const mmDepositChain = swapStatusInfo?.mm_deposit?.chain;
+
+    console.log("[BTC CONF TRACKING] MM Deposit:", { mmDepositTx, mmDepositChain });
+
+    // Only track confirmations for Bitcoin transactions
+    if (!mmDepositTx || mmDepositChain !== "BTC") {
+      setBtcConfirmations(0);
+      return;
+    }
+
+    // Type guard: at this point mmDepositTx is definitely a string
+    const txHash: string = mmDepositTx;
+    let isCancelled = false;
+
+    async function fetchConfirmations() {
+      try {
+        const confirmations = await esploraClient.getConfirmations(txHash);
+        if (!isCancelled) {
+          setBtcConfirmations(confirmations);
+          console.log(`[BTC CONFIRMATIONS] ${mmDepositTx}: ${confirmations} confirmations`);
+        }
+      } catch (error) {
+        console.error("Error fetching BTC confirmations:", error);
+      }
+    }
+
+    // Fetch immediately
+    fetchConfirmations();
+
+    // Poll every 30 seconds
+    const interval = setInterval(fetchConfirmations, 30000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [depositFlowState, swapStatusInfo?.mm_deposit?.deposit_tx, swapStatusInfo?.mm_deposit?.chain]);
+
+  // Use refund modal hook
+  const {
+    refundModalOpen,
+    selectedFailedSwap,
+    refundAddress,
+    setRefundAddress,
+    isClaimingRefund,
+    refundStatus,
+    currentBitcoinFee,
+    fetchingFee,
+    openRefundModal,
+    closeRefundModal,
+    claimRefund,
+  } = useRefundModal({ redirectOnSuccess: true });
+
+  // Fetch swap data from analytics API and check refund eligibility
+  React.useEffect(() => {
+    async function checkRefundEligibility() {
+      if (!currentSwapId || validStepIndex !== 2) {
+        setIsRefundAvailable(false);
+        return;
+      }
+
+      try {
+        // Fetch swap data from analytics API
+        const url = `${ANALYTICS_API_URL}/api/swap/${currentSwapId}`;
+        console.log(`[REFUND CHECK] Fetching swap data from: ${url}`);
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          console.warn(
+            `Failed to fetch swap data for refund check: ${currentSwapId}`,
+            response.status
+          );
+          setIsRefundAvailable(false);
+          return;
+        }
+
+        const data = await response.json();
+        console.log(`[REFUND CHECK] Raw response:`, data);
+
+        // The single swap endpoint returns {swap: {...}}, but we need the format from /api/swaps
+        // The row should have the refund flag at the top level
+        let row = data.swap || data;
+
+        // Check if we need to add the refund flag by checking the response structure
+        // If isRefundAvailable is not present, we need to check the swap status manually
+        if (row.isRefundAvailable === undefined && row.is_refund_available === undefined) {
+          // Calculate refund availability based on the checkRefundEligibility logic
+          const status = row.status;
+          const userDepositConfirmedAt = row.user_deposit?.deposit_confirmed_at;
+          const mmDepositInitiatedAt = row.mm_deposit?.deposit_detected_at;
+
+          console.log(`[REFUND CHECK] Calculating refund eligibility from status:`, {
+            status,
+            userDepositConfirmedAt,
+            mmDepositInitiatedAt,
+          });
+
+          // Check Case 1: MM never initiated deposit (>1 hour after user deposit confirmed)
+          if (status === "WaitingMMDepositInitiated" && userDepositConfirmedAt) {
+            const userDepositTime = new Date(userDepositConfirmedAt);
+            const now = new Date();
+            const hoursSinceUserDeposit =
+              (now.getTime() - userDepositTime.getTime()) / (1000 * 60 * 60);
+
+            if (hoursSinceUserDeposit >= 1) {
+              row.isRefundAvailable = true;
+              console.log(
+                `[REFUND CHECK] MM never initiated deposit, ${hoursSinceUserDeposit.toFixed(2)} hours since user deposit`
+              );
+            }
+          }
+
+          // Check Case 2: MM deposit never confirmed (>24 hours after MM initiated)
+          if (status === "WaitingMMDepositConfirmed" && mmDepositInitiatedAt) {
+            const mmDepositTime = new Date(mmDepositInitiatedAt);
+            const now = new Date();
+            const hoursSinceMMDeposit =
+              (now.getTime() - mmDepositTime.getTime()) / (1000 * 60 * 60);
+
+            if (hoursSinceMMDeposit >= 24) {
+              row.isRefundAvailable = true;
+              console.log(
+                `[REFUND CHECK] MM deposit never confirmed, ${hoursSinceMMDeposit.toFixed(2)} hours since MM deposit`
+              );
+            }
+          }
+        }
+
+        console.log(`[REFUND CHECK] Swap data after refund flag check:`, row);
+        console.log(`[REFUND CHECK] Server refund flags:`, {
+          isRefundAvailable: row.isRefundAvailable,
+          is_refund_available: row.is_refund_available,
+        });
+
+        const mappedSwap = mapDbRowToAdminSwap(row);
+        console.log(`[REFUND CHECK] Mapped swap:`, mappedSwap);
+
+        // Use filterRefunds to check if refund is available
+        const { isRefundAvailable: refundAvailable } = await filterRefunds(row, mappedSwap);
+
+        console.log(`[REFUND CHECK] Swap ${currentSwapId}: isRefundAvailable = ${refundAvailable}`);
+        setIsRefundAvailable(refundAvailable);
+
+        // Store the mapped swap for refund modal (don't open it yet)
+        if (refundAvailable) {
+          setFailedSwapData(mappedSwap);
+        }
+      } catch (error) {
+        console.error(`Error checking refund eligibility for ${currentSwapId}:`, error);
+        setIsRefundAvailable(false);
+      }
+    }
+
+    checkRefundEligibility();
+  }, [currentSwapId, validStepIndex]);
 
   const handleViewUserTransaction = () => {
     const txnId = swapStatusInfo?.user_deposit?.deposit_tx;
@@ -508,8 +758,8 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
     }
   };
 
-  // If MM failed to fill, show failed view
-  if (isMMFailed) {
+  // If refund is available (MM failed to fill), show failed view
+  if (isRefundAvailable) {
     return (
       <Box
         w={isMobile ? "100%" : "805px"}
@@ -604,14 +854,22 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
             color={colors.offWhite}
             textAlign="center"
             px="40px"
+            mt="-15px"
+            mb="15px"
             lineHeight="1.6"
           >
             The market maker failed to fill your order. You can initiate a refund in the swap
-            history page.
+            history page or with the button below.
           </Text>
 
           {/* Buttons */}
-          <Flex gap="16px" justifyContent="center" flexWrap="wrap">
+          <Flex
+            gap="16px"
+            justifyContent="center"
+            flexWrap="wrap"
+            direction={isMobile ? "column" : "row"}
+            alignItems="center"
+          >
             {/* View User Deposit Transaction Button - if we have user deposit tx */}
             {swapStatusInfo?.user_deposit?.deposit_tx && (
               <Box
@@ -619,7 +877,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
                 onClick={handleViewUserTransaction}
                 border="2px solid rgba(255, 255, 255, 0.3)"
                 borderRadius="16px"
-                width={isMobile ? "160px" : "180px"}
+                width={isMobile ? "240px" : "210px"}
                 background="rgba(255, 255, 255, 0.1)"
                 padding="12px 16px"
                 cursor="pointer"
@@ -642,12 +900,12 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
               </Box>
             )}
 
-            {/* Swap History Button */}
+            {/* Initiate Refund Button */}
             <Box
               as="button"
-              onClick={handleGoToHistory}
+              onClick={() => failedSwapData && openRefundModal(failedSwapData)}
               borderRadius="16px"
-              width={isMobile ? "160px" : "180px"}
+              width={isMobile ? "240px" : "210px"}
               border="2px solid #6651B3"
               background="rgba(86, 50, 168, 0.30)"
               padding="12px 16px"
@@ -666,11 +924,25 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
                 fontWeight="normal"
                 letterSpacing="0.5px"
               >
-                SWAP HISTORY
+                INITIATE REFUND
               </Text>
             </Box>
           </Flex>
         </Box>
+
+        {/* Refund Modal */}
+        <RefundModal
+          isOpen={refundModalOpen}
+          selectedSwap={selectedFailedSwap}
+          refundAddress={refundAddress}
+          setRefundAddress={setRefundAddress}
+          isClaimingRefund={isClaimingRefund}
+          refundStatus={refundStatus}
+          currentBitcoinFee={currentBitcoinFee}
+          fetchingFee={fetchingFee}
+          onClose={closeRefundModal}
+          onClaimRefund={claimRefund}
+        />
       </Box>
     );
   }
@@ -866,8 +1138,27 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
         alignItems="center"
         justifyContent="center"
       >
-        <StepCarousel swapId={currentSwapId} />
+        <StepCarousel
+          swapId={currentSwapId}
+          evmConfirmations={evmConfirmations}
+          btcConfirmations={btcConfirmations}
+          mmDepositChain={swapStatusInfo?.mm_deposit?.chain}
+        />
       </Box>
+
+      {/* Refund Modal */}
+      <RefundModal
+        isOpen={refundModalOpen}
+        selectedSwap={selectedFailedSwap}
+        refundAddress={refundAddress}
+        setRefundAddress={setRefundAddress}
+        isClaimingRefund={isClaimingRefund}
+        refundStatus={refundStatus}
+        currentBitcoinFee={currentBitcoinFee}
+        fetchingFee={fetchingFee}
+        onClose={closeRefundModal}
+        onClaimRefund={claimRefund}
+      />
     </Box>
   );
 }

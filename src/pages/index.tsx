@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex, Text, Box } from "@chakra-ui/react";
+import { Flex, Text, Box, Spinner } from "@chakra-ui/react";
 import { SwapWidget } from "@/components/swap/SwapWidget";
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
@@ -16,7 +16,7 @@ import { MaintenanceBanner } from "@/components/other/MaintenanceBanner";
 import { IS_FRONTEND_PAUSED } from "@/utils/constants";
 
 export default function Home() {
-  const { isTablet, isMobile } = useWindowSize();
+  const { isTablet, isMobile, isWindowValid } = useWindowSize();
   const { isOtcServerDead } = useStore();
   const { swapResponse, transactionConfirmed, bitcoinDepositInfo } = useStore();
   const router = useRouter();
@@ -39,6 +39,26 @@ export default function Home() {
       router.push(`/swap/${swapResponse.swap_id}`);
     }
   }, [swapResponse?.swap_id, transactionConfirmed, router]);
+
+  // Show loading spinner while determining window size to prevent flash
+  if (!isWindowValid) {
+    return (
+      <>
+        <OpenGraph />
+        <Flex
+          h="100vh"
+          width="100%"
+          justify="center"
+          align="center"
+          backgroundImage="url('/images/rift_background_low.webp')"
+          backgroundSize="cover"
+          backgroundPosition="center"
+        >
+          <Spinner size="lg" color="white" />
+        </Flex>
+      </>
+    );
+  }
 
   // Coming soon page for non-localhost
   if (!isLocalhost && IS_FRONTEND_PAUSED) {

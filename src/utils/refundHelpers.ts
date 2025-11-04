@@ -63,13 +63,6 @@ export async function createSignedRefundRequest(
     refund_transaction_fee: BigInt(refundTransactionFee),
   };
 
-  console.log("[REFUND HELPER] Signing refund request:", {
-    swapId,
-    refundRecipient,
-    refundTransactionFee,
-    signerAddress: walletClient.account.address,
-  });
-
   // Sign using EIP-712 typed data
   const signature = await walletClient.signTypedData({
     account: walletClient.account,
@@ -331,6 +324,11 @@ export const executeCompleteRefund = async (
   transactionHash: string;
 }> => {
   // 1. Create signed refund request
+  console.log("[REFUND HELPER NEW] Creating signed refund request:", {
+    swapId,
+    refundRecipient,
+    refundTransactionFee,
+  });
   const signedRequest = await createSignedRefundRequest(
     walletClient,
     swapId,
@@ -338,13 +336,17 @@ export const executeCompleteRefund = async (
     refundTransactionFee
   );
 
+  console.log("[REFUND HELPER NEW] Signed request:", signedRequest);
+
   // 2. Submit to server
   const refundResponse = await client.refundSwap(signedRequest);
+
+  console.log("[REFUND HELPER ALPINE] Refund response:", refundResponse);
 
   // 3. Broadcast the transaction
   let transactionHash: string;
 
-  if (refundResponse.tx_chain === "Bitcoin") {
+  if (refundResponse.tx_chain === "bitcoin") {
     transactionHash = await broadcastBitcoinRefund(refundResponse.tx_data, bitcoinRpcUrl);
   } else {
     transactionHash = await broadcastEvmRefund(
@@ -358,3 +360,109 @@ export const executeCompleteRefund = async (
     transactionHash,
   };
 };
+
+/**
+ * Check if a swap is refundable by verifying server flag and checking deposit address balance
+ * @param row - The raw swap data from the server
+ * @param mappedSwap - The mapped AdminSwapItem (with flow steps)
+ * @returns Object with refund availability status and whether swap should be marked as refunded
+ */
+export async function filterRefunds(
+  row: any,
+  mappedSwap: { id: string; flow: Array<{ status: string; state: string }> }
+): Promise<{
+  isRefundAvailable: boolean;
+  shouldMarkAsRefunded: boolean;
+}> {
+  // Dynamic import to avoid circular dependencies
+  const { GLOBAL_CONFIG } = await import("./constants");
+
+  let isRefundAvailable = false;
+  let shouldMarkAsRefunded = false;
+
+  if (row.isRefundAvailable || row.is_refund_available) {
+    console.log(
+      `[BALANCE CHECK] Swap ${mappedSwap.id}: Server says refund available, checking balance...`
+    );
+    // Server says refund is available, now check if user has already withdrawn funds
+    // by looking up if the deposit address has any balance
+    const userDepositAddress = row.user_deposit_address;
+    const userDepositChain = row.quote.from_chain; // ethereum or bitcoin
+
+    if (userDepositChain === "bitcoin") {
+      // look up if the deposit address has any balance from the electrs endpoint
+      try {
+        const electrsUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}`;
+        const electrsResponse = await fetch(electrsUrl);
+        if (!electrsResponse.ok) {
+          console.warn(`Failed to fetch Bitcoin balance for ${userDepositAddress}`);
+          isRefundAvailable = false; // Default to not available if we can't check
+        } else {
+          const electrsData = await electrsResponse.json();
+          // Check if address has any confirmed or unconfirmed balance
+          const totalBalance =
+            (electrsData.chain_stats?.funded_txo_sum || 0) -
+            (electrsData.chain_stats?.spent_txo_sum || 0);
+          const mempoolBalance =
+            (electrsData.mempool_stats?.funded_txo_sum || 0) -
+            (electrsData.mempool_stats?.spent_txo_sum || 0);
+          const hasBalance = totalBalance + mempoolBalance > 0;
+          isRefundAvailable = hasBalance;
+          shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
+          console.log(
+            `[BALANCE CHECK] Bitcoin balance for ${userDepositAddress}: ${totalBalance + mempoolBalance} sats, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
+          );
+        }
+      } catch (error) {
+        console.warn(`Error checking Bitcoin balance for ${userDepositAddress}:`, error);
+        isRefundAvailable = false; // Default to not available if we can't check
+      }
+    } else {
+      // look up if the deposit address has any cbBTC balance using token-balance API
+      try {
+        const cbBTCAddress = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
+        // Use the existing token-balance API to check cbBTC balance
+        const chainId = 1;
+        const response = await fetch(
+          `/api/token-balance?wallet=${userDepositAddress}&chainId=${chainId}`
+        );
+        if (!response.ok) {
+          console.warn(`Failed to fetch EVM balance for ${userDepositAddress}`);
+          isRefundAvailable = false; // Default to not available if we can't check
+        } else {
+          const data = await response.json();
+
+          // Look for cbBTC token in the results
+          if (data.result?.result) {
+            const cbBTCToken = data.result.result.find(
+              (token: any) => token.address?.toLowerCase() === cbBTCAddress.toLowerCase()
+            );
+            if (cbBTCToken) {
+              const balance = BigInt(cbBTCToken.totalBalance || "0");
+              const hasBalance = balance > 0n;
+              isRefundAvailable = hasBalance;
+              shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
+              console.log(
+                `[BALANCE CHECK] cbBTC balance for ${userDepositAddress}: ${balance.toString()}, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
+              );
+            } else {
+              isRefundAvailable = false; // No cbBTC token found
+              shouldMarkAsRefunded = true; // No token found means withdrawn
+              console.log(
+                `[BALANCE CHECK] No cbBTC token found for ${userDepositAddress}, shouldMarkAsRefunded: true`
+              );
+            }
+          } else {
+            isRefundAvailable = false; // No tokens found
+            shouldMarkAsRefunded = true; // No tokens means withdrawn
+          }
+        }
+      } catch (error) {
+        console.warn(`Error checking cbBTC balance for ${userDepositAddress}:`, error);
+        isRefundAvailable = false; // Default to not available if we can't check
+      }
+    }
+  }
+
+  return { isRefundAvailable, shouldMarkAsRefunded };
+}

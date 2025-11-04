@@ -76,7 +76,7 @@ export interface RefundSwapResponse {
   swap_id: string; // UUID of the refunded swap
   reason: RefundSwapReason; // Why refund was allowed
   tx_data: string; // Hex-encoded signed transaction (ready to broadcast)
-  tx_chain: "Bitcoin" | "Ethereum"; // Which chain to broadcast on
+  tx_chain: "bitcoin" | "ethereum"; // Which chain to broadcast on
 }
 
 export interface OTCServerClientConfig {

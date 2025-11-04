@@ -12,6 +12,12 @@ import WebAssetTag from "./WebAssetTag";
 import { useStore } from "@/utils/store";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useRouter } from "next/router";
+import { filterRefunds } from "@/utils/refundHelpers";
+import { mapDbRowToAdminSwap, ANALYTICS_API_URL } from "@/utils/analyticsClient";
+import { AdminSwapItem } from "@/utils/types";
+import { RefundModal } from "./RefundModal";
+import { useRefundModal } from "@/hooks/useRefundModal";
+import { esploraClient } from "@/utils/esploraClient";
 
 interface BitcoinTransactionWidgetProps {
   address: string;
@@ -41,7 +47,7 @@ const steps = [
   {
     id: "4-WaitingMMDepositConfirmed",
     label: "SWAP COMPLETE",
-    description: "Bitcoin has been sent to your wallet!",
+    description: "Assets are headed your way!",
   },
 ];
 
@@ -49,10 +55,16 @@ function StepCarousel({
   isMobile,
   currentStepIndex,
   completedSteps,
+  btcConfirmations,
+  userDepositTx,
+  showFillingOrderWarning,
 }: {
   isMobile: boolean;
   currentStepIndex: number;
   completedSteps: Set<string>;
+  btcConfirmations: number;
+  userDepositTx?: string;
+  showFillingOrderWarning: boolean;
 }) {
   // Calculate slide offset based on current step
   const slideOffset = -currentStepIndex * 86; // 86px per step
@@ -78,6 +90,26 @@ function StepCarousel({
           // slideOffset is negative, so we need to add it to get correct position
           const positionFromTop = index + slideOffset / 86;
           const isCurrent = Math.abs(positionFromTop) < 0.1; // Current is at position 0
+
+          // Dynamic description based on step and confirmations
+          let stepDescription = step.description;
+
+          // Step 2: User Bitcoin deposit confirmation
+          if (
+            step.id === "2-WaitingUserDepositConfirmed" &&
+            btcConfirmations > 0 &&
+            userDepositTx
+          ) {
+            const requiredConfs = 2; // BTC->EVM swaps need 2 confirmations
+            const currentConfs = Math.min(btcConfirmations, requiredConfs);
+            stepDescription = `Confirming... ${currentConfs}/${requiredConfs} confirmations`;
+          }
+
+          // Step 3: Filling order - show warning if taking too long
+          if (step.id === "3-WaitingMMDepositInitiated" && showFillingOrderWarning) {
+            stepDescription =
+              "Market makers are taking longer than usual to fill your order... if not filled within 1 hour, your order will be refunded";
+          }
 
           // Animate opacity based on position (matching TransactionWidget logic)
           const opacity =
@@ -215,10 +247,10 @@ function StepCarousel({
                     color="rgba(255,255,255,0.7)"
                     fontSize={isMobile ? "12px" : "13px"}
                     fontFamily="Aux"
-                    mt="4px"
+                    mt="9px"
                     textAlign="center"
                   >
-                    {step.description}
+                    {stepDescription}
                   </Text>
                 </motion.div>
               </Flex>
@@ -249,6 +281,25 @@ export function BitcoinTransactionWidget({
   // Track completed steps
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showButtons, setShowButtons] = useState(false);
+  const [isRefundAvailable, setIsRefundAvailable] = useState(false);
+  const [failedSwapData, setFailedSwapData] = useState<AdminSwapItem | null>(null);
+  const [btcConfirmations, setBtcConfirmations] = useState<number>(0);
+  const [showFillingOrderWarning, setShowFillingOrderWarning] = useState(false);
+
+  // Use refund modal hook
+  const {
+    refundModalOpen,
+    selectedFailedSwap,
+    refundAddress,
+    setRefundAddress,
+    isClaimingRefund,
+    refundStatus,
+    currentBitcoinFee,
+    fetchingFee,
+    openRefundModal,
+    closeRefundModal,
+    claimRefund,
+  } = useRefundModal({ redirectOnSuccess: true });
 
   // Map deposit flow state to step index
   // If status is "5-Settled", treat it as step 3 (the final step, index 3)
@@ -267,16 +318,185 @@ export function BitcoinTransactionWidget({
     return hoursSinceCreation > 12;
   }, [validStepIndex, swapStatusInfo?.created_at]);
 
-  // Check if MM failed to fill (> 1 hour 20 mins on step 2 "Filling Order")
-  const isMMFailed = React.useMemo(() => {
-    if (validStepIndex !== 2 || !swapStatusInfo?.created_at) return false;
+  // Check if stuck on "FILLING ORDER" step for more than 10 minutes
+  useEffect(() => {
+    console.log("[FILLING ORDER WARNING] Deposit flow state:", depositFlowState);
+    if (depositFlowState !== "3-WaitingMMDepositInitiated") {
+      setShowFillingOrderWarning(false);
+      return;
+    }
 
-    const createdAt = new Date(swapStatusInfo.created_at);
-    const now = new Date();
-    const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+    // Get the timestamp when swap was created
+    const swapCreatedAt = swapStatusInfo?.created_at;
 
-    return minutesSinceCreation > 80; // 1 hour 20 minutes
-  }, [validStepIndex, swapStatusInfo?.created_at]);
+    console.log("[FILLING ORDER WARNING] Swap created at:", swapCreatedAt);
+    if (!swapCreatedAt) {
+      return;
+    }
+
+    const checkTimer = () => {
+      const createdTime = new Date(swapCreatedAt);
+      const now = new Date();
+      const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
+      console.log("[FILLING ORDER WARNING] Minutes since created:", minutesSinceCreated);
+
+      if (minutesSinceCreated >= 10) {
+        setShowFillingOrderWarning(true);
+      }
+    };
+
+    // Check immediately
+    checkTimer();
+
+    // Check every 30 seconds
+    const interval = setInterval(checkTimer, 30000);
+
+    return () => clearInterval(interval);
+  }, [depositFlowState, swapStatusInfo?.created_at]);
+
+  // Poll for Bitcoin confirmations when user deposit is being confirmed (step 2)
+  useEffect(() => {
+    // Only poll for BTC confirmations when user has deposited Bitcoin (step 2)
+    if (depositFlowState !== "2-WaitingUserDepositConfirmed") {
+      return;
+    }
+
+    const userDepositTx = swapStatusInfo?.user_deposit?.deposit_tx;
+
+    if (!userDepositTx || !depositTx) {
+      return;
+    }
+
+    // Type guard: at this point userDepositTx is definitely a string
+    const txHash: string = userDepositTx;
+    let isCancelled = false;
+
+    async function fetchConfirmations() {
+      try {
+        const confirmations = await esploraClient.getConfirmations(txHash);
+        if (!isCancelled) {
+          setBtcConfirmations(confirmations);
+          console.log(`[BTC CONFIRMATIONS] ${userDepositTx}: ${confirmations} confirmations`);
+        }
+      } catch (error) {
+        console.error("Error fetching BTC confirmations:", error);
+      }
+    }
+
+    // Fetch immediately
+    fetchConfirmations();
+
+    // Poll every 30 seconds
+    const interval = setInterval(fetchConfirmations, 30000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [depositFlowState, swapStatusInfo?.user_deposit?.deposit_tx, depositTx]);
+
+  // Fetch swap data from analytics API and check refund eligibility
+  useEffect(() => {
+    async function checkRefundEligibility() {
+      if (!currentSwapId || validStepIndex !== 2) {
+        setIsRefundAvailable(false);
+        return;
+      }
+
+      try {
+        // Fetch swap data from analytics API
+        const url = `${ANALYTICS_API_URL}/api/swap/${currentSwapId}`;
+        console.log(`[REFUND CHECK] Fetching swap data from: ${url}`);
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          console.warn(
+            `Failed to fetch swap data for refund check: ${currentSwapId}`,
+            response.status
+          );
+          setIsRefundAvailable(false);
+          return;
+        }
+
+        const data = await response.json();
+        console.log(`[REFUND CHECK] Raw response:`, data);
+
+        // The single swap endpoint returns {swap: {...}}, but we need the format from /api/swaps
+        // The row should have the refund flag at the top level
+        let row = data.swap || data;
+
+        // Check if we need to add the refund flag by checking the response structure
+        // If isRefundAvailable is not present, we need to check the swap status manually
+        if (row.isRefundAvailable === undefined && row.is_refund_available === undefined) {
+          // Calculate refund availability based on the checkRefundEligibility logic
+          const status = row.status;
+          const userDepositConfirmedAt = row.user_deposit?.deposit_confirmed_at;
+          const mmDepositInitiatedAt = row.mm_deposit?.deposit_detected_at;
+
+          console.log(`[REFUND CHECK] Calculating refund eligibility from status:`, {
+            status,
+            userDepositConfirmedAt,
+            mmDepositInitiatedAt,
+          });
+
+          // Check Case 1: MM never initiated deposit (>1 hour after user deposit confirmed)
+          if (status === "WaitingMMDepositInitiated" && userDepositConfirmedAt) {
+            const userDepositTime = new Date(userDepositConfirmedAt);
+            const now = new Date();
+            const hoursSinceUserDeposit =
+              (now.getTime() - userDepositTime.getTime()) / (1000 * 60 * 60);
+
+            if (hoursSinceUserDeposit >= 1) {
+              row.isRefundAvailable = true;
+              console.log(
+                `[REFUND CHECK] MM never initiated deposit, ${hoursSinceUserDeposit.toFixed(2)} hours since user deposit`
+              );
+            }
+          }
+
+          // Check Case 2: MM deposit never confirmed (>24 hours after MM initiated)
+          if (status === "WaitingMMDepositConfirmed" && mmDepositInitiatedAt) {
+            const mmDepositTime = new Date(mmDepositInitiatedAt);
+            const now = new Date();
+            const hoursSinceMMDeposit =
+              (now.getTime() - mmDepositTime.getTime()) / (1000 * 60 * 60);
+
+            if (hoursSinceMMDeposit >= 24) {
+              row.isRefundAvailable = true;
+              console.log(
+                `[REFUND CHECK] MM deposit never confirmed, ${hoursSinceMMDeposit.toFixed(2)} hours since MM deposit`
+              );
+            }
+          }
+        }
+
+        console.log(`[REFUND CHECK] Swap data after refund flag check:`, row);
+        console.log(`[REFUND CHECK] Server refund flags:`, {
+          isRefundAvailable: row.isRefundAvailable,
+          is_refund_available: row.is_refund_available,
+        });
+
+        const mappedSwap = mapDbRowToAdminSwap(row);
+        console.log(`[REFUND CHECK] Mapped swap:`, mappedSwap);
+
+        // Use filterRefunds to check if refund is available
+        const { isRefundAvailable: refundAvailable } = await filterRefunds(row, mappedSwap);
+
+        console.log(`[REFUND CHECK] Swap ${currentSwapId}: isRefundAvailable = ${refundAvailable}`);
+        setIsRefundAvailable(refundAvailable);
+
+        // Store the mapped swap for refund modal (don't open it yet)
+        if (refundAvailable) {
+          setFailedSwapData(mappedSwap);
+        }
+      } catch (error) {
+        console.error(`Error checking refund eligibility for ${currentSwapId}:`, error);
+        setIsRefundAvailable(false);
+      }
+    }
+
+    checkRefundEligibility();
+  }, [currentSwapId, validStepIndex]);
 
   // Update completed steps when moving forward
   useEffect(() => {
@@ -367,12 +587,8 @@ export function BitcoinTransactionWidget({
     router.push("/");
   };
 
-  const handleGoToHistory = () => {
-    router.push("/history");
-  };
-
-  // If MM failed to fill, show failed view
-  if (isMMFailed) {
+  // If refund is available (MM failed to fill), show failed view
+  if (isRefundAvailable) {
     return (
       <Flex direction="column" alignItems="center" gap="20px" w="100%">
         <Box
@@ -469,10 +685,12 @@ export function BitcoinTransactionWidget({
               color={colors.offWhite}
               textAlign="center"
               px="40px"
+              mt="-15px"
+              mb="15px"
               lineHeight="1.6"
             >
               The market maker failed to fill your order. You can initiate a refund in the swap
-              history page.
+              history page or with the button below.
             </Text>
 
             {/* Buttons */}
@@ -489,7 +707,7 @@ export function BitcoinTransactionWidget({
                   onClick={handleViewTransaction}
                   border="2px solid rgba(255, 255, 255, 0.3)"
                   borderRadius="16px"
-                  width={isMobile ? "100%" : "190px"}
+                  width={isMobile ? "240px" : "210px"}
                   background="rgba(255, 255, 255, 0.1)"
                   padding="12px 16px"
                   cursor="pointer"
@@ -512,12 +730,12 @@ export function BitcoinTransactionWidget({
                 </Box>
               )}
 
-              {/* Swap History Button */}
+              {/* Initiate Refund Button */}
               <Box
                 as="button"
-                onClick={handleGoToHistory}
+                onClick={() => failedSwapData && openRefundModal(failedSwapData)}
                 borderRadius="16px"
-                width={isMobile ? "100%" : "190px"}
+                width={isMobile ? "240px" : "210px"}
                 border="2px solid #6651B3"
                 background="rgba(86, 50, 168, 0.30)"
                 padding="12px 16px"
@@ -536,12 +754,26 @@ export function BitcoinTransactionWidget({
                   fontWeight="normal"
                   letterSpacing="0.5px"
                 >
-                  SWAP HISTORY
+                  INITIATE REFUND
                 </Text>
               </Box>
             </Flex>
           </Box>
         </Box>
+
+        {/* Refund Modal */}
+        <RefundModal
+          isOpen={refundModalOpen}
+          selectedSwap={selectedFailedSwap}
+          refundAddress={refundAddress}
+          setRefundAddress={setRefundAddress}
+          isClaimingRefund={isClaimingRefund}
+          refundStatus={refundStatus}
+          currentBitcoinFee={currentBitcoinFee}
+          fetchingFee={fetchingFee}
+          onClose={closeRefundModal}
+          onClaimRefund={claimRefund}
+        />
       </Flex>
     );
   }
@@ -1068,6 +1300,9 @@ export function BitcoinTransactionWidget({
               isMobile={isMobile}
               currentStepIndex={validStepIndex}
               completedSteps={completedSteps}
+              btcConfirmations={btcConfirmations}
+              userDepositTx={depositTx}
+              showFillingOrderWarning={showFillingOrderWarning}
             />
 
             {/* Action buttons that appear after swap completion */}
@@ -1228,6 +1463,20 @@ export function BitcoinTransactionWidget({
           Estimated time remaining: ~10 minutes
         </Text>
       )}
+
+      {/* Refund Modal */}
+      <RefundModal
+        isOpen={refundModalOpen}
+        selectedSwap={selectedFailedSwap}
+        refundAddress={refundAddress}
+        setRefundAddress={setRefundAddress}
+        isClaimingRefund={isClaimingRefund}
+        refundStatus={refundStatus}
+        currentBitcoinFee={currentBitcoinFee}
+        fetchingFee={fetchingFee}
+        onClose={closeRefundModal}
+        onClaimRefund={claimRefund}
+      />
     </Flex>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { Box, Flex, Text, Spinner, Button } from "@chakra-ui/react";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount } from "wagmi";
 import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
@@ -12,15 +12,11 @@ import { reownModal } from "@/utils/wallet";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
-import { GLOBAL_CONFIG, otcClient, rfqClient } from "@/utils/constants";
-import {
-  createSignedRefundRequest,
-  executeCompleteRefund,
-  formatRefundError,
-  validateRefundAddress,
-} from "@/utils/refundHelpers";
+import { filterRefunds } from "@/utils/refundHelpers";
 import { toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
+import { RefundModal } from "@/components/other/RefundModal";
+import { useRefundModal } from "@/hooks/useRefundModal";
 
 function displayShortTxHash(hash: string): string {
   if (!hash || hash.length < 12) return hash;
@@ -75,13 +71,13 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
   const currentStatus = currentStep?.status;
   const isRefundAvailable = (swap as any).isRefundAvailable;
 
-  // console.log(`[STATUS BADGE ${swap.id}]`, {
-  //   swapId: swap.id,
-  //   currentStep,
-  //   currentStatus,
-  //   isRefundAvailable,
-  //   allFlowSteps: swap.flow.map((s) => ({ state: s.state, status: s.status })),
-  // });
+  console.log(`[STATUS BADGE ${swap.id}]`, {
+    swapId: swap.id,
+    currentStep,
+    currentStatus,
+    isRefundAvailable,
+    allFlowSteps: swap.flow.map((s) => ({ state: s.state, status: s.status })),
+  });
 
   // Refunded: refunding_user, refunding_mm, or user_refunded_detected (regardless of isRefundAvailable)
   if (
@@ -118,7 +114,10 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     return (
       <Flex
         as="button"
-        onClick={onClaimRefund}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClaimRefund?.();
+        }}
         align="center"
         gap="6px"
         bg="rgba(178, 50, 50, 0.15)"
@@ -250,91 +249,7 @@ async function fetchUserSwaps(
         const mappedSwap = mapDbRowToAdminSwap(row);
 
         // Check if refund is available based on server flag and balance check
-        let isRefundAvailable = false;
-        let shouldMarkAsRefunded = false;
-        if (row.isRefundAvailable || row.is_refund_available) {
-          console.log(
-            `[BALANCE CHECK] Swap ${mappedSwap.id}: Server says refund available, checking balance...`
-          );
-          // Server says refund is available, now check if user has already withdrawn funds
-          // by looking up if the deposit address has any balance
-          const userDepositAddress = row.user_deposit_address;
-          const userDepositChain = row.quote.from_chain; // ethereum or bitcoin
-
-          if (userDepositChain === "bitcoin") {
-            // look up if the deposit address has any balance from the electrs endpoint
-            try {
-              const electrsUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}`;
-              const electrsResponse = await fetch(electrsUrl);
-              if (!electrsResponse.ok) {
-                console.warn(`Failed to fetch Bitcoin balance for ${userDepositAddress}`);
-                isRefundAvailable = false; // Default to not available if we can't check
-              } else {
-                const electrsData = await electrsResponse.json();
-                // Check if address has any confirmed or unconfirmed balance
-                const totalBalance =
-                  (electrsData.chain_stats?.funded_txo_sum || 0) -
-                  (electrsData.chain_stats?.spent_txo_sum || 0);
-                const mempoolBalance =
-                  (electrsData.mempool_stats?.funded_txo_sum || 0) -
-                  (electrsData.mempool_stats?.spent_txo_sum || 0);
-                const hasBalance = totalBalance + mempoolBalance > 0;
-                isRefundAvailable = hasBalance;
-                shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
-                console.log(
-                  `[BALANCE CHECK] Bitcoin balance for ${userDepositAddress}: ${totalBalance + mempoolBalance} sats, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
-                );
-              }
-            } catch (error) {
-              console.warn(`Error checking Bitcoin balance for ${userDepositAddress}:`, error);
-              isRefundAvailable = false; // Default to not available if we can't check
-            }
-          } else {
-            // look up if the deposit address has any cbBTC balance using token-balance API
-            try {
-              const cbBTCAddress = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
-              // Use the existing token-balance API to check cbBTC balance
-              const chainId = 1;
-              const response = await fetch(
-                `/api/token-balance?wallet=${userDepositAddress}&chainId=${chainId}`
-              );
-              if (!response.ok) {
-                console.warn(`Failed to fetch EVM balance for ${userDepositAddress}`);
-                isRefundAvailable = false; // Default to not available if we can't check
-              } else {
-                const data = await response.json();
-
-                // Look for cbBTC token in the results
-                if (data.result?.result) {
-                  const cbBTCToken = data.result.result.find(
-                    (token: any) => token.address?.toLowerCase() === cbBTCAddress.toLowerCase()
-                  );
-                  if (cbBTCToken) {
-                    const balance = BigInt(cbBTCToken.totalBalance || "0");
-                    const hasBalance = balance > 0n;
-                    isRefundAvailable = hasBalance;
-                    shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
-                    console.log(
-                      `[BALANCE CHECK] cbBTC balance for ${userDepositAddress}: ${balance.toString()}, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
-                    );
-                  } else {
-                    isRefundAvailable = false; // No cbBTC token found
-                    shouldMarkAsRefunded = true; // No token found means withdrawn
-                    console.log(
-                      `[BALANCE CHECK] No cbBTC token found for ${userDepositAddress}, shouldMarkAsRefunded: true`
-                    );
-                  }
-                } else {
-                  isRefundAvailable = false; // No tokens found
-                  shouldMarkAsRefunded = true; // No tokens means withdrawn
-                }
-              }
-            } catch (error) {
-              console.warn(`Error checking cbBTC balance for ${userDepositAddress}:`, error);
-              isRefundAvailable = false; // Default to not available if we can't check
-            }
-          }
-        }
+        const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(row, mappedSwap);
 
         // If server says refund available but balance is 0, mark as refunded
         if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
@@ -344,17 +259,28 @@ async function fetchUserSwaps(
             mappedSwap.flow.map((s) => ({ status: s.status, state: s.state }))
           );
 
-          // Mark all in-progress steps as completed
-          mappedSwap.flow.forEach((step) => {
-            if (step.state === "inProgress") {
-              step.state = "completed";
-            }
-          });
+          // Find the in-progress step (the failed step that never completed)
+          const inProgressIndex = mappedSwap.flow.findIndex((s) => s.state === "inProgress");
 
-          // Update the last step to show refunded status
-          const lastStep = mappedSwap.flow[mappedSwap.flow.length - 1];
-          lastStep.status = "user_refunded_detected";
-          lastStep.state = "completed";
+          if (inProgressIndex !== -1) {
+            // Keep all steps up to but NOT including the in-progress step
+            const stepsBeforeFailed = mappedSwap.flow.slice(0, inProgressIndex);
+            const failedStep = mappedSwap.flow[inProgressIndex];
+
+            // Mark the failed step as completed but keep its original status
+            failedStep.state = "completed";
+
+            // Add a new "Refunded" step after the failed step
+            mappedSwap.flow = [
+              ...stepsBeforeFailed,
+              failedStep,
+              {
+                status: "user_refunded_detected",
+                label: "Refunded",
+                state: "completed",
+              },
+            ];
+          }
 
           console.log(
             `[REFUND DETECTED] Updated flow:`,
@@ -393,7 +319,6 @@ async function fetchUserSwaps(
 
 export const UserSwapHistory: React.FC = () => {
   const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
   const router = useRouter();
   const { isMobile } = useWindowSize();
   const [swaps, setSwaps] = useState<AdminSwapItem[]>([]);
@@ -405,14 +330,33 @@ export const UserSwapHistory: React.FC = () => {
   const fetchingRef = useRef(false);
   const [isInitialMount, setIsInitialMount] = useState(true);
 
-  // Refund modal state
-  const [refundModalOpen, setRefundModalOpen] = useState(false);
-  const [selectedFailedSwap, setSelectedFailedSwap] = useState<AdminSwapItem | null>(null);
-  const [refundAddress, setRefundAddress] = useState("");
-  const [isClaimingRefund, setIsClaimingRefund] = useState(false);
-  const [refundStatus, setRefundStatus] = useState<"idle" | "loading" | "success" | "error">(
-    "idle"
-  );
+  // Use refund modal hook
+  const {
+    refundModalOpen,
+    selectedFailedSwap,
+    refundAddress,
+    setRefundAddress,
+    isClaimingRefund,
+    refundStatus,
+    currentBitcoinFee,
+    fetchingFee,
+    openRefundModal,
+    closeRefundModal,
+    claimRefund,
+  } = useRefundModal({
+    onSuccess: () => {
+      // Refresh the swaps list to update the status after successful refund
+      if (address) {
+        fetchUserSwaps(address, pageSize, 0).then(({ swaps: newSwaps }) => {
+          setSwaps(newSwaps);
+        });
+      }
+    },
+  });
+
+  // Swap details modal state
+  const [selectedSwap, setSelectedSwap] = useState<AdminSwapItem | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   // Handle initial mount - wait briefly for wallet to auto-reconnect
   useEffect(() => {
@@ -561,104 +505,6 @@ export const UserSwapHistory: React.FC = () => {
       </>
     );
   }
-
-  const handleOpenRefundModal = (swap: AdminSwapItem) => {
-    setSelectedFailedSwap(swap);
-    setRefundModalOpen(true);
-    setRefundAddress("");
-  };
-
-  const handleCloseRefundModal = () => {
-    setRefundModalOpen(false);
-    setSelectedFailedSwap(null);
-    setRefundAddress("");
-    setRefundStatus("idle");
-    setIsClaimingRefund(false);
-  };
-
-  const handleClaimRefund = async () => {
-    if (!selectedFailedSwap || !walletClient) {
-      if (!walletClient) {
-        toastError(null, {
-          title: "Wallet not connected",
-          description: "Please connect your wallet to claim a refund.",
-        });
-      }
-      return;
-    }
-
-    // Check if address is empty
-    if (!refundAddress || refundAddress.trim() === "") {
-      toastError(null, {
-        title: "Address required",
-        description: "Please enter your refund address.",
-      });
-      return;
-    }
-
-    // Validate the refund address format
-    const addressType = selectedFailedSwap.direction === "BTC_TO_EVM" ? "bitcoin" : "ethereum";
-    if (!validateRefundAddress(refundAddress, addressType)) {
-      toastError(null, {
-        title: "Invalid address",
-        description: `Please enter a valid ${addressType === "bitcoin" ? "Bitcoin" : "Ethereum"} address.`,
-      });
-      return;
-    }
-
-    setIsClaimingRefund(true);
-    setRefundStatus("loading");
-
-    try {
-      console.log("[CLAIM REFUND] Starting refund claim:", {
-        swapId: selectedFailedSwap.id,
-        refundAddress,
-        swap: selectedFailedSwap,
-        walletAddress: walletClient.account?.address,
-      });
-
-      // Create signed refund request
-      const { refundResponse, transactionHash } = await executeCompleteRefund(
-        otcClient,
-        walletClient,
-        selectedFailedSwap.id,
-        refundAddress,
-        "0" // Default fee of 0 - can be adjusted if needed
-      );
-
-      console.log("[CLAIM REFUND] refund processed, response:", refundResponse);
-
-      console.log("[CLAIM REFUND] Server response:", transactionHash);
-
-      setRefundStatus("success");
-      toastSuccess({
-        title: "Refund claimed!",
-        description: "Your refund has been successfully processed. It will arrive shortly.",
-      });
-
-      // Wait a moment before closing the modal so user can see success state
-      setTimeout(() => {
-        handleCloseRefundModal();
-        // Refresh the swaps list to update the status
-        if (address) {
-          fetchUserSwaps(address, pageSize, 0).then(({ swaps: newSwaps }) => {
-            setSwaps(newSwaps);
-          });
-        }
-      }, 2000);
-    } catch (error) {
-      console.error("[CLAIM REFUND] Error:", error);
-      setRefundStatus("error");
-
-      const errorMessage = formatRefundError(error);
-      toastError(error, {
-        title: "Refund failed",
-        description: errorMessage,
-      });
-    } finally {
-      setIsClaimingRefund(false);
-    }
-  };
 
   if (!isConnected) {
     return (
@@ -885,8 +731,18 @@ export const UserSwapHistory: React.FC = () => {
                     onClick={() => router.push(`/swap/${swap.id}`)}
                     gap="12px"
                   >
-                    {/* Time */}
-                    <Flex direction="column" gap="4px">
+                    {/* Time - Clickable to open details modal */}
+                    <Flex
+                      direction="column"
+                      gap="4px"
+                      cursor="pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSwap(swap);
+                        setIsDetailsModalOpen(true);
+                      }}
+                      _hover={{ opacity: 0.8 }}
+                    >
                       <Text
                         fontSize="10px"
                         fontFamily={FONT_FAMILIES.SF_PRO}
@@ -902,6 +758,7 @@ export const UserSwapHistory: React.FC = () => {
                         fontFamily={FONT_FAMILIES.AUX_MONO}
                         color={colors.offWhite}
                         letterSpacing="-0.5px"
+                        textDecoration="underline"
                       >
                         {formatTimeAgo(swap.swapCreationTimestamp)}
                       </Text>
@@ -1153,7 +1010,7 @@ export const UserSwapHistory: React.FC = () => {
                       >
                         Status
                       </Text>
-                      <StatusBadge swap={swap} onClaimRefund={() => handleOpenRefundModal(swap)} />
+                      <StatusBadge swap={swap} onClaimRefund={() => openRefundModal(swap)} />
                     </Flex>
                   </Flex>
                 );
@@ -1334,8 +1191,17 @@ export const UserSwapHistory: React.FC = () => {
                       cursor="pointer"
                       onClick={() => router.push(`/swap/${swap.id}`)}
                     >
-                      {/* Time */}
-                      <Flex flex="0 0 122px">
+                      {/* Time - Clickable to open details modal */}
+                      <Flex
+                        flex="0 0 122px"
+                        cursor="pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSwap(swap);
+                          setIsDetailsModalOpen(true);
+                        }}
+                        _hover={{ textDecoration: "underline" }}
+                      >
                         <Text
                           fontSize="12px"
                           fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1537,10 +1403,7 @@ export const UserSwapHistory: React.FC = () => {
 
                       {/* Status */}
                       <Flex flex="1">
-                        <StatusBadge
-                          swap={swap}
-                          onClaimRefund={() => handleOpenRefundModal(swap)}
-                        />
+                        <StatusBadge swap={swap} onClaimRefund={() => openRefundModal(swap)} />
                       </Flex>
                     </Flex>
                   );
@@ -1569,8 +1432,8 @@ export const UserSwapHistory: React.FC = () => {
         </GridFlex>
       )}
 
-      {/* Refund Modal */}
-      {refundModalOpen && selectedFailedSwap && (
+      {/* Swap Details Modal */}
+      {isDetailsModalOpen && selectedSwap && (
         <Flex
           position="fixed"
           top={0}
@@ -1579,20 +1442,22 @@ export const UserSwapHistory: React.FC = () => {
           bottom={0}
           width="100vw"
           height="100vh"
-          zIndex={999999}
+          zIndex={999998}
           bg="rgba(0, 0, 0, 0.85)"
           align="center"
           justify="center"
           style={{
             backdropFilter: "blur(4px)",
           }}
-          onClick={handleCloseRefundModal}
+          onClick={() => setIsDetailsModalOpen(false)}
         >
           <Box
             bg="#1a1a1a"
             borderWidth={2}
-            w="500px"
+            w="600px"
             maxWidth="90%"
+            maxH="80vh"
+            overflowY="auto"
             borderColor={colors.borderGray}
             borderRadius="20px"
             fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1601,151 +1466,256 @@ export const UserSwapHistory: React.FC = () => {
             p="32px"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header with Close Button */}
-            <Flex
-              pb="24px"
-              fontSize="24px"
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              fontWeight="bold"
-              justify="center"
-              align="center"
-              position="relative"
-            >
+            {/* Header */}
+            <Flex justify="space-between" align="center" mb="24px">
+              <Text fontSize="24px" fontFamily={FONT_FAMILIES.NOSTROMO} fontWeight="bold">
+                Swap Details
+              </Text>
               <Button
-                position="absolute"
-                left="0"
-                top="0"
                 bg="transparent"
                 border="none"
                 color={colors.textGray}
                 _hover={{ color: colors.offWhite }}
-                onClick={handleCloseRefundModal}
+                onClick={() => setIsDetailsModalOpen(false)}
                 p="5px"
                 minW="auto"
                 h="auto"
-                disabled={isClaimingRefund}
-                opacity={isClaimingRefund ? 0.5 : 1}
               >
                 <FiX size={24} />
               </Button>
-              <Text>Claim Refund</Text>
             </Flex>
 
-            {/* Body */}
-            <Flex direction="column" gap="24px" pb="8px">
-              <Text
-                fontSize="13px"
-                textAlign="center"
-                lineHeight="1.6"
-                mb="5px"
-                color={colors.textGray}
-                fontFamily={FONT_FAMILIES.AUX_MONO}
-                letterSpacing="-0.5px"
-              >
-                The market maker failed to fill your order. Please paste your refund address to
-                claim your funds.
-              </Text>
-
-              {/* Address Input */}
-              <Flex direction="column" gap="8px">
-                <Flex align="center" gap="8px" mb="4px">
-                  <AssetIcon
-                    badge={selectedFailedSwap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
-                  />
-                  <Text fontSize="13px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
-                    {selectedFailedSwap.direction === "BTC_TO_EVM" ? "Bitcoin" : "cbBTC"} Address
-                  </Text>
-                </Flex>
-                <input
-                  type="text"
-                  value={refundAddress}
-                  onChange={(e) => setRefundAddress(e.target.value)}
-                  placeholder={
-                    selectedFailedSwap.direction === "BTC_TO_EVM"
-                      ? "Enter Bitcoin address"
-                      : "Enter cbBTC address"
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: "12px",
-                    border: `2px solid ${colors.borderGray}`,
-                    backgroundColor: colors.offBlack,
-                    color: colors.offWhite,
-                    fontFamily: FONT_FAMILIES.AUX_MONO,
-                    fontSize: "14px",
-                    outline: "none",
-                  }}
-                />
+            {/* Content */}
+            <Flex direction="column" gap="16px">
+              {/* Swap ID */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Swap ID
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                  {selectedSwap.id}
+                </Text>
               </Flex>
 
-              {/* Status message for success/error */}
-              {refundStatus === "success" && (
-                <Flex
-                  align="center"
-                  justify="center"
-                  gap="8px"
-                  p="12px"
-                  borderRadius="12px"
-                  bg="rgba(34, 197, 94, 0.15)"
-                  border="1.5px solid rgba(34, 197, 94, 0.4)"
-                >
-                  <FiCheck size={16} color="#22c55e" />
-                  <Text fontSize="13px" color="#22c55e" fontFamily={FONT_FAMILIES.AUX_MONO}>
-                    Refund successfully claimed!
-                  </Text>
-                </Flex>
-              )}
-              {refundStatus === "error" && (
-                <Flex
-                  align="center"
-                  justify="center"
-                  gap="8px"
-                  p="12px"
-                  borderRadius="12px"
-                  bg="rgba(239, 68, 68, 0.15)"
-                  border="1.5px solid rgba(239, 68, 68, 0.4)"
-                >
-                  <FiX size={16} color="#ef4444" />
-                  <Text fontSize="13px" color="#ef4444" fontFamily={FONT_FAMILIES.AUX_MONO}>
-                    Failed to claim refund. Please try again.
-                  </Text>
-                </Flex>
-              )}
+              {/* Direction */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Direction
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {selectedSwap.direction === "BTC_TO_EVM" ? "BTC → cbBTC" : "cbBTC → BTC"}
+                </Text>
+              </Flex>
 
-              {/* Claim Button */}
-              <Flex justify="center">
-                <Button
-                  onClick={handleClaimRefund}
-                  cursor={isClaimingRefund ? "not-allowed" : "pointer"}
+              {/* Amount */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Amount
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {selectedSwap.swapInitialAmountBtc.toFixed(8)} BTC ($
+                  {selectedSwap.swapInitialAmountUsd.toFixed(2)})
+                </Text>
+              </Flex>
+
+              {/* EVM Address */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  EVM Address
+                </Text>
+                <Text
+                  fontSize="14px"
                   color={colors.offWhite}
-                  _active={{ bg: colors.swapBgColor }}
-                  _hover={{ bg: isClaimingRefund ? colors.swapBgColor : colors.swapHoverColor }}
-                  borderRadius="12px"
-                  border={`2.5px solid ${colors.swapBorderColor}`}
-                  type="button"
-                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                  fontSize="15px"
-                  paddingX="32px"
-                  paddingY="10px"
-                  bg={colors.swapBgColor}
-                  disabled={isClaimingRefund}
-                  w="100%"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  wordBreak="break-all"
                 >
-                  {isClaimingRefund ? (
-                    <Flex align="center" gap="8px">
-                      <Spinner size="sm" color={colors.offWhite} />
-                      <Text>Processing...</Text>
-                    </Flex>
-                  ) : (
-                    "CLAIM REFUND"
-                  )}
-                </Button>
+                  {selectedSwap.evmAccountAddress}
+                </Text>
               </Flex>
+
+              {/* Chain */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Chain
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {selectedSwap.chain}
+                </Text>
+              </Flex>
+
+              {/* Fees */}
+              <Flex direction="column" gap="8px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Fees
+                </Text>
+                <Flex direction="column" gap="4px" pl="12px">
+                  <Flex justify="space-between">
+                    <Text fontSize="13px" color={colors.textGray}>
+                      Rift Fee:
+                    </Text>
+                    <Text fontSize="13px" color={colors.offWhite}>
+                      {selectedSwap.riftFeeSats.toLocaleString()} sats
+                    </Text>
+                  </Flex>
+                  <Flex justify="space-between">
+                    <Text fontSize="13px" color={colors.textGray}>
+                      Network Fee:
+                    </Text>
+                    <Text fontSize="13px" color={colors.offWhite}>
+                      ${selectedSwap.networkFeeUsd.toFixed(2)}
+                    </Text>
+                  </Flex>
+                  <Flex justify="space-between">
+                    <Text fontSize="13px" color={colors.textGray}>
+                      MM Fee:
+                    </Text>
+                    <Text fontSize="13px" color={colors.offWhite}>
+                      ${selectedSwap.mmFeeUsd.toFixed(2)}
+                    </Text>
+                  </Flex>
+                </Flex>
+              </Flex>
+
+              {/* Created At */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Created At
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {new Date(selectedSwap.swapCreationTimestamp).toLocaleString()}
+                </Text>
+              </Flex>
+
+              {/* Status */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Status
+                </Text>
+                <Box>
+                  <StatusBadge
+                    swap={selectedSwap}
+                    onClaimRefund={() => {
+                      setIsDetailsModalOpen(false);
+                      openRefundModal(selectedSwap);
+                    }}
+                  />
+                </Box>
+              </Flex>
+
+              {/* Flow Steps */}
+              <Flex direction="column" gap="8px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Flow Steps
+                </Text>
+                <Flex direction="column" gap="4px" pl="12px">
+                  {selectedSwap.flow
+                    .filter((s) => s.status !== "settled")
+                    .map((step, idx) => (
+                      <Flex key={idx} justify="space-between" align="center">
+                        <Text fontSize="13px" color={colors.textGray}>
+                          {step.status}:
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          color={
+                            step.state === "completed"
+                              ? "#22c55e"
+                              : step.state === "inProgress"
+                                ? "#3b82f6"
+                                : colors.textGray
+                          }
+                        >
+                          {step.state} ({step.duration})
+                        </Text>
+                      </Flex>
+                    ))}
+                </Flex>
+              </Flex>
+
+              {/* Raw Data */}
+              {selectedSwap.rawData && (
+                <Flex direction="column" gap="8px">
+                  <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                    Raw Data (Full Swap Response)
+                  </Text>
+                  <Box
+                    bg="#0a0a0a"
+                    border={`1px solid ${colors.borderGray}`}
+                    borderRadius="8px"
+                    p="12px"
+                    maxH="300px"
+                    overflowY="auto"
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="11px"
+                  >
+                    <pre
+                      style={{
+                        margin: 0,
+                        color: colors.offWhite,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {JSON.stringify(selectedSwap.rawData, null, 2)}
+                    </pre>
+                  </Box>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(selectedSwap.rawData, null, 2));
+                      toastSuccess({
+                        title: "Copied to clipboard",
+                        description: "Complete swap data copied",
+                      });
+                    }}
+                    bg="rgba(34, 197, 94, 0.15)"
+                    border={`2px solid rgba(34, 197, 94, 0.4)`}
+                    color={colors.offWhite}
+                    _hover={{ bg: "rgba(34, 197, 94, 0.25)" }}
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="12px"
+                  >
+                    Copy Raw Data to Clipboard
+                  </Button>
+                </Flex>
+              )}
+
+              {/* View on Swap Page Button */}
+              <Button
+                onClick={() => {
+                  setIsDetailsModalOpen(false);
+                  router.push(`/swap/${selectedSwap.id}`);
+                }}
+                borderRadius="12px"
+                border={`2px solid ${colors.borderGray}`}
+                bg="rgba(86, 50, 168, 0.15)"
+                color={colors.offWhite}
+                _hover={{ bg: "rgba(86, 50, 168, 0.25)" }}
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="14px"
+                w="100%"
+                mt="8px"
+              >
+                VIEW FULL SWAP PAGE
+              </Button>
             </Flex>
           </Box>
         </Flex>
       )}
+
+      {/* Refund Modal */}
+      <RefundModal
+        isOpen={refundModalOpen}
+        selectedSwap={selectedFailedSwap}
+        refundAddress={refundAddress}
+        setRefundAddress={setRefundAddress}
+        isClaimingRefund={isClaimingRefund}
+        refundStatus={refundStatus}
+        currentBitcoinFee={currentBitcoinFee}
+        fetchingFee={fetchingFee}
+        onClose={closeRefundModal}
+        onClaimRefund={claimRefund}
+      />
     </>
   );
 };

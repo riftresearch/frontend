@@ -122,6 +122,7 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
 
   // [1] Determine swap direction from quote.from_chain (defaults to EVM_TO_BTC)
   let direction: SwapDirection = "EVM_TO_BTC";
+  console.log("row.quote?.from_chain", row.quote?.from_chain);
   if (row.quote?.from_chain) {
     direction =
       row.quote.from_chain === "bitcoin"

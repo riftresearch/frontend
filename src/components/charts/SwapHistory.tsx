@@ -11,6 +11,7 @@ import { getSwaps, mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { toastError, toastSuccess } from "@/utils/toast";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import { useSwapAverages } from "@/hooks/useSwapAverages";
+import { filterRefunds } from "@/utils/refundHelpers";
 
 function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
@@ -86,10 +87,13 @@ const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
   return <Image src={src} alt={badge} width={18} height={18} style={{ opacity: 0.9 }} />;
 };
 
-const Pill: React.FC<{ step: AdminSwapFlowStep; isRefundAvailable?: boolean }> = ({
-  step,
-  isRefundAvailable,
-}) => {
+const Pill: React.FC<{
+  step: AdminSwapFlowStep;
+  isRefundAvailable?: boolean;
+  isLastStep?: boolean;
+  isRefunded?: boolean;
+}> = ({ step, isRefundAvailable, isLastStep, isRefunded }) => {
+  // Use the step label directly (it will be "Refunded" if status is user_refunded_detected)
   const displayedLabel = step.label;
   const hasTx = step.txHash && step.txChain;
   const isClickable =
@@ -122,6 +126,14 @@ const Pill: React.FC<{ step: AdminSwapFlowStep; isRefundAvailable?: boolean }> =
   };
 
   const styleByState = () => {
+    // Yellow pill for refunded status
+    if (step.status === "user_refunded_detected") {
+      return {
+        bg: "rgba(251, 191, 36, 0.15)",
+        border: "rgba(251, 191, 36, 0.4)",
+        text: "#fbbf24",
+      };
+    }
     // Red pill for failed swaps on in-progress step
     if (isRefundAvailable && step.state === "inProgress") {
       return {
@@ -209,7 +221,9 @@ const StepWithTime: React.FC<{
   previousStepTimestamp?: number;
   currentTime: number;
   isRefundAvailable?: boolean;
-}> = ({ step, previousStepTimestamp, currentTime, isRefundAvailable }) => {
+  isLastStep?: boolean;
+  isRefunded?: boolean;
+}> = ({ step, previousStepTimestamp, currentTime, isRefundAvailable, isLastStep, isRefunded }) => {
   const timeRowHeight = 22; // reserve consistent space above every pill
   const LIVE_TIMER_OFFSET = 13; // Subtract 13 seconds to account for backend processing delay
 
@@ -254,7 +268,12 @@ const StepWithTime: React.FC<{
           {displayDuration || ""}
         </Text>
       </Flex>
-      <Pill step={step} isRefundAvailable={isRefundAvailable} />
+      <Pill
+        step={step}
+        isRefundAvailable={isRefundAvailable}
+        isLastStep={isLastStep}
+        isRefunded={isRefunded}
+      />
     </Flex>
   );
 };
@@ -328,6 +347,14 @@ const Row: React.FC<{
     // Check if refund is available
     const isRefundAvailable =
       (swap.rawData as any)?.isRefundAvailable || (swap.rawData as any)?.is_refund_available;
+
+    // Check if swap has been refunded (detect by status)
+    const currentStep =
+      swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
+    const isRefunded =
+      currentStep?.status === "refunding_user" ||
+      currentStep?.status === "refunding_mm" ||
+      (currentStep?.status as string) === "user_refunded_detected";
 
     // Get timestamp for previous step to calculate live duration
     const getPreviousStepTimestamp = (index: number): number | undefined => {
@@ -470,6 +497,8 @@ const Row: React.FC<{
               previousStepTimestamp={getPreviousStepTimestamp(idx)}
               currentTime={currentTime}
               isRefundAvailable={isRefundAvailable}
+              isLastStep={idx === filteredFlow.length - 1}
+              isRefunded={isRefunded}
             />
           ))}
           <FinalTime
@@ -772,7 +801,47 @@ export const SwapHistory: React.FC<{
       console.log("📦 Raw swaps response:", JSON.stringify(data, null, 2));
       console.log("📊 Pagination:", data.pagination);
 
-      const mapped = (data?.swaps || []).map((row: any) => mapDbRowToAdminSwap(row));
+      // Map swaps and check for refunds
+      const mapped = await Promise.all(
+        (data?.swaps || []).map(async (row: any) => {
+          const mappedSwap = mapDbRowToAdminSwap(row);
+
+          // Check if refund is available based on server flag and balance check
+          const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(row, mappedSwap);
+
+          // If server says refund available but balance is 0, mark as refunded
+          if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
+            console.log(
+              `[ADMIN REFUND DETECTED] Swap ${mappedSwap.id}: Balance is 0, marking as refunded`
+            );
+
+            // Find the in-progress step (the failed step that never completed)
+            const inProgressIndex = mappedSwap.flow.findIndex((s) => s.state === "inProgress");
+
+            if (inProgressIndex !== -1) {
+              // Keep all steps up to but NOT including the in-progress step
+              const stepsBeforeFailed = mappedSwap.flow.slice(0, inProgressIndex);
+              const failedStep = mappedSwap.flow[inProgressIndex];
+
+              // Mark the failed step as completed but keep its original status
+              failedStep.state = "completed";
+
+              // Add a new "Refunded" step after the failed step
+              mappedSwap.flow = [
+                ...stepsBeforeFailed,
+                failedStep,
+                {
+                  status: "user_refunded_detected" as any,
+                  label: "Refunded",
+                  state: "completed",
+                },
+              ];
+            }
+          }
+
+          return mappedSwap;
+        })
+      );
 
       console.log(`✅ Received ${mapped.length} swaps from page ${page}`);
       if (data?.swaps?.length > 0) {
@@ -823,56 +892,93 @@ export const SwapHistory: React.FC<{
     if (latestSwap === latestSwapRef.current) return;
     latestSwapRef.current = latestSwap;
 
-    const mapped = mapDbRowToAdminSwap(latestSwap);
+    async function processNewSwap() {
+      const mappedSwap = mapDbRowToAdminSwap(latestSwap);
 
-    // Check if we've already processed this swap ID
-    if (processedSwapIds.current.has(mapped.id)) {
-      return;
-    }
-
-    // Mark this swap as processed
-    processedSwapIds.current.add(mapped.id);
-    console.log("Adding new swap to list:", mapped.id);
-
-    // Add to the list if not already present
-    setAllSwaps((prev) => {
-      if (prev.some((s) => s.id === mapped.id)) {
-        return prev;
+      // Check if we've already processed this swap ID
+      if (processedSwapIds.current.has(mappedSwap.id)) {
+        return;
       }
 
-      let newSwaps = [mapped, ...prev];
+      // Check if refund is available and update status accordingly
+      const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(
+        latestSwap,
+        mappedSwap
+      );
 
-      // If we're at the top and have too many swaps, prune from the bottom
-      if (isAtTop && newSwaps.length > MAX_SWAPS_IN_MEMORY) {
-        const prunedCount = newSwaps.length - MAX_SWAPS_IN_MEMORY;
-        console.log(`Pruning ${prunedCount} old swaps from memory (staying at top)`);
-        newSwaps = newSwaps.slice(0, MAX_SWAPS_IN_MEMORY);
+      if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
+        console.log(`[ADMIN WS NEW] Swap ${mappedSwap.id}: Balance is 0, marking as refunded`);
 
-        // Track total pruned count
-        setPrunedSwapCount((prev) => prev + prunedCount);
+        // Find the in-progress step (the failed step that never completed)
+        const inProgressIndex = mappedSwap.flow.findIndex((s) => s.state === "inProgress");
 
-        // Adjust pagination to account for pruned items
-        setHasMore(true);
+        if (inProgressIndex !== -1) {
+          // Keep all steps up to but NOT including the in-progress step
+          const stepsBeforeFailed = mappedSwap.flow.slice(0, inProgressIndex);
+          const failedStep = mappedSwap.flow[inProgressIndex];
+
+          // Mark the failed step as completed but keep its original status
+          failedStep.state = "completed";
+
+          // Add a new "Refunded" step after the failed step
+          mappedSwap.flow = [
+            ...stepsBeforeFailed,
+            failedStep,
+            {
+              status: "user_refunded_detected" as any,
+              label: "Refunded",
+              state: "completed",
+            },
+          ];
+        }
       }
 
-      return newSwaps;
-    });
+      // Mark this swap as processed
+      processedSwapIds.current.add(mappedSwap.id);
+      console.log("Adding new swap to list:", mappedSwap.id);
 
-    // Add to animating set
-    setAnimatingSwapIds((prev) => {
-      const next = new Set(prev);
-      next.add(mapped.id);
-      return next;
-    });
+      // Add to the list if not already present
+      setAllSwaps((prev) => {
+        if (prev.some((s) => s.id === mappedSwap.id)) {
+          return prev;
+        }
 
-    // Remove from animating set after animation completes
-    setTimeout(() => {
+        let newSwaps = [mappedSwap, ...prev];
+
+        // If we're at the top and have too many swaps, prune from the bottom
+        if (isAtTop && newSwaps.length > MAX_SWAPS_IN_MEMORY) {
+          const prunedCount = newSwaps.length - MAX_SWAPS_IN_MEMORY;
+          console.log(`Pruning ${prunedCount} old swaps from memory (staying at top)`);
+          newSwaps = newSwaps.slice(0, MAX_SWAPS_IN_MEMORY);
+
+          // Track total pruned count
+          setPrunedSwapCount((prev) => prev + prunedCount);
+
+          // Adjust pagination to account for pruned items
+          setHasMore(true);
+        }
+
+        return newSwaps;
+      });
+
+      // Add to animating set
       setAnimatingSwapIds((prev) => {
         const next = new Set(prev);
-        next.delete(mapped.id);
+        next.add(mappedSwap.id);
         return next;
       });
-    }, 1000);
+
+      // Remove from animating set after animation completes
+      setTimeout(() => {
+        setAnimatingSwapIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mappedSwap.id);
+          return next;
+        });
+      }, 1000);
+    }
+
+    processNewSwap();
   }, [latestSwap, isAtTop]);
 
   // Handle updated swap from WebSocket stream
@@ -883,28 +989,65 @@ export const SwapHistory: React.FC<{
     if (updatedSwap === updatedSwapRef.current) return;
     updatedSwapRef.current = updatedSwap;
 
-    const mapped = mapDbRowToAdminSwap(updatedSwap);
+    async function processUpdatedSwap() {
+      const mappedSwap = mapDbRowToAdminSwap(updatedSwap);
 
-    // console.log("Updating existing swap:", mapped.id);
+      // Check if refund is available and update status accordingly
+      const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(
+        updatedSwap,
+        mappedSwap
+      );
 
-    // Update the existing swap in the list
-    setAllSwaps((prev) => prev.map((swap) => (swap.id === mapped.id ? mapped : swap)));
+      if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
+        console.log(`[ADMIN WS UPDATE] Swap ${mappedSwap.id}: Balance is 0, marking as refunded`);
 
-    // Add to updating animation set
-    setUpdatingSwapIds((prev) => {
-      const next = new Set(prev);
-      next.add(mapped.id);
-      return next;
-    });
+        // Find the in-progress step (the failed step that never completed)
+        const inProgressIndex = mappedSwap.flow.findIndex((s) => s.state === "inProgress");
 
-    // Remove from updating set after animation completes
-    setTimeout(() => {
+        if (inProgressIndex !== -1) {
+          // Keep all steps up to but NOT including the in-progress step
+          const stepsBeforeFailed = mappedSwap.flow.slice(0, inProgressIndex);
+          const failedStep = mappedSwap.flow[inProgressIndex];
+
+          // Mark the failed step as completed but keep its original status
+          failedStep.state = "completed";
+
+          // Add a new "Refunded" step after the failed step
+          mappedSwap.flow = [
+            ...stepsBeforeFailed,
+            failedStep,
+            {
+              status: "user_refunded_detected" as any,
+              label: "Refunded",
+              state: "completed",
+            },
+          ];
+        }
+      }
+
+      // console.log("Updating existing swap:", mappedSwap.id);
+
+      // Update the existing swap in the list
+      setAllSwaps((prev) => prev.map((swap) => (swap.id === mappedSwap.id ? mappedSwap : swap)));
+
+      // Add to updating animation set
       setUpdatingSwapIds((prev) => {
         const next = new Set(prev);
-        next.delete(mapped.id);
+        next.add(mappedSwap.id);
         return next;
       });
-    }, 600);
+
+      // Remove from updating set after animation completes
+      setTimeout(() => {
+        setUpdatingSwapIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mappedSwap.id);
+          return next;
+        });
+      }, 600);
+    }
+
+    processUpdatedSwap();
   }, [updatedSwap]);
 
   const handleScroll = React.useCallback(
