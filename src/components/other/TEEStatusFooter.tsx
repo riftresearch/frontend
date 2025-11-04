@@ -256,7 +256,7 @@ export function TEEStatusFooter() {
             fontWeight="bold"
             letterSpacing="0.5px"
           >
-            MAX LIQUIDITY:
+            MAX SWAP AMOUNT:
           </Text>
 
           <LiquidityIndicator
