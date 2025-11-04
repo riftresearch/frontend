@@ -18,12 +18,14 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { RefundModal } from "@/components/other/RefundModal";
 import { useRefundModal } from "@/hooks/useRefundModal";
 
-function displayShortTxHash(hash: string): string {
+function displayShortTxHash(hash: string, isMobile: boolean = false): string {
   if (!hash || hash.length < 12) return hash;
   const prefix = hash.startsWith("0x") ? "0x" : "";
   const hex = hash.replace(/^0x/, "");
-  // Show double the characters: 8 at start and 8 at end
-  return `${prefix}${hex.slice(0, 8)}...${hex.slice(-8)}`;
+  // Mobile: show 6 chars at start and 6 at end (20% shorter)
+  // Desktop: show 8 chars at start and 8 at end
+  const chars = isMobile ? 6 : 8;
+  return `${prefix}${hex.slice(0, chars)}...${hex.slice(-chars)}`;
 }
 
 function formatUSD(n: number) {
@@ -626,7 +628,7 @@ export const UserSwapHistory: React.FC = () => {
       </GridFlex>
       {isMobile ? (
         // Mobile: Simple scrollable container
-        <Flex direction="column" w="100%" pb="20px">
+        <Flex direction="column" w="100%" maxW="750px" pb="20px" mx="auto">
           {loading ? (
             <Flex w="100%" justify="center" align="center" py="80px">
               <Spinner size="lg" color={colors.offWhite} />
@@ -718,284 +720,292 @@ export const UserSwapHistory: React.FC = () => {
                   <Flex
                     key={swap.id}
                     direction="column"
-                    // w="100%"
+                    w="100%"
                     p="16px"
-                    mx="12px"
                     mb="12px"
-                    bg="rgba(18, 18, 18, 0.6)"
-                    borderRadius="16px"
+                    bg="rgba(18, 18, 18, 0.85)"
+                    borderRadius="20px"
                     border={`1px solid ${colors.borderGray}`}
-                    _hover={{ bg: "rgba(28, 28, 28, 0.7)" }}
+                    _hover={{ bg: "rgba(28, 28, 28, 0.9)" }}
                     transition="background 0.15s ease"
                     cursor="pointer"
                     onClick={() => router.push(`/swap/${swap.id}`)}
                     gap="12px"
                   >
-                    {/* Time - Clickable to open details modal */}
-                    <Flex
-                      direction="column"
-                      gap="4px"
-                      cursor="pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSwap(swap);
-                        setIsDetailsModalOpen(true);
-                      }}
-                      _hover={{ opacity: 0.8 }}
-                    >
-                      <Text
-                        fontSize="10px"
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        color={colors.textGray}
-                        textTransform="uppercase"
-                        fontWeight="600"
-                        letterSpacing="0.5px"
-                      >
-                        Time
-                      </Text>
-                      <Text
-                        fontSize="12px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.offWhite}
-                        letterSpacing="-0.5px"
-                        textDecoration="underline"
-                      >
-                        {formatTimeAgo(swap.swapCreationTimestamp)}
-                      </Text>
-                    </Flex>
-
-                    {/* USD */}
-                    <Flex direction="column" gap="4px">
-                      <Text
-                        fontSize="10px"
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        color={colors.textGray}
-                        textTransform="uppercase"
-                        fontWeight="600"
-                        letterSpacing="0.5px"
-                      >
-                        USD
-                      </Text>
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        color={colors.offWhite}
-                        fontWeight="500"
-                        letterSpacing="-0.5px"
-                      >
-                        {formatUSD(swap.swapInitialAmountUsd)}
-                      </Text>
-                    </Flex>
-
-                    {/* Amount */}
-                    <Flex direction="column" gap="4px">
-                      <Text
-                        fontSize="10px"
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        color={colors.textGray}
-                        textTransform="uppercase"
-                        fontWeight="600"
-                        letterSpacing="0.5px"
-                      >
-                        Amount
-                      </Text>
-                      <Flex gap="4px" align="center">
+                    {/* Direction and Time - Combined Row */}
+                    <Flex gap="20px" align="flex-start">
+                      {/* Direction */}
+                      <Flex direction="column" gap="4px">
                         <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.offWhite}
-                          fontWeight="500"
-                          letterSpacing="-0.5px"
-                        >
-                          {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                        </Text>
-                        <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          fontSize="10px"
+                          fontFamily={FONT_FAMILIES.SF_PRO}
                           color={colors.textGray}
-                          fontWeight="500"
-                          letterSpacing="-0.5px"
+                          textTransform="uppercase"
+                          fontWeight="600"
+                          letterSpacing="0.5px"
                         >
-                          {isBTCtoEVM ? "BTC" : "cbBTC"}
+                          Direction
                         </Text>
-                      </Flex>
-                    </Flex>
-
-                    {/* Deposit Txn */}
-                    <Flex direction="column" gap="4px">
-                      <Text
-                        fontSize="10px"
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        color={colors.textGray}
-                        textTransform="uppercase"
-                        fontWeight="600"
-                        letterSpacing="0.5px"
-                      >
-                        Deposit Txn
-                      </Text>
-                      {userTxHash ? (
-                        <Flex
-                          as="button"
-                          onClick={() => {
-                            const url =
-                              userTxChain === "BTC"
-                                ? `https://mempool.space/tx/${userTxHash}`
-                                : userTxChain === "ETH"
-                                  ? `https://etherscan.io/tx/${userTxHash}`
-                                  : `https://basescan.org/tx/${userTxHash}`;
-                            window.open(url, "_blank");
-                          }}
-                          bg={userBg}
-                          border={`1.5px solid ${userBorder}`}
-                          borderRadius="16px"
-                          px="10px"
-                          h="35px"
-                          _hover={{ filter: "brightness(1.2)" }}
-                          fontSize="11px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.offWhite}
-                          fontWeight="500"
-                          cursor="pointer"
-                          w="fit-content"
-                          align="center"
-                          gap="4px"
-                          letterSpacing="-0.5px"
-                        >
-                          {displayShortTxHash(userTxHash)}
-                          <Box ml="4px">
-                            <FiExternalLink size={11} />
-                          </Box>
+                        <Flex align="center" gap="6px">
+                          <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
+                          <Text
+                            fontSize="12px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            letterSpacing="-0.5px"
+                          >
+                            {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                          </Text>
+                          <Text
+                            fontSize="13px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                          >
+                            →
+                          </Text>
+                          <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
+                          <Text
+                            fontSize="12px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            letterSpacing="-0.5px"
+                          >
+                            {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                          </Text>
                         </Flex>
-                      ) : (
-                        <Text
-                          fontSize="11px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          -
-                        </Text>
-                      )}
-                    </Flex>
+                      </Flex>
 
-                    {/* Direction */}
-                    <Flex direction="column" gap="4px">
-                      <Text
-                        fontSize="10px"
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        color={colors.textGray}
-                        textTransform="uppercase"
-                        fontWeight="600"
-                        letterSpacing="0.5px"
+                      {/* Time - Clickable to open details modal */}
+                      <Flex
+                        direction="column"
+                        gap="4px"
+                        cursor="pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSwap(swap);
+                          setIsDetailsModalOpen(true);
+                        }}
+                        _hover={{ opacity: 0.8 }}
                       >
-                        Direction
-                      </Text>
-                      <Flex align="center" gap="6px">
-                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
+                        <Text
+                          fontSize="10px"
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          color={colors.textGray}
+                          textTransform="uppercase"
+                          fontWeight="600"
+                          letterSpacing="0.5px"
+                        >
+                          Time
+                        </Text>
                         <Text
                           fontSize="12px"
                           fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.offWhite}
                           letterSpacing="-0.5px"
+                          textDecoration="underline"
                         >
-                          {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
-                        </Text>
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          →
-                        </Text>
-                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
-                        <Text
-                          fontSize="12px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.offWhite}
-                          letterSpacing="-0.5px"
-                        >
-                          {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                          {formatTimeAgo(swap.swapCreationTimestamp)}
                         </Text>
                       </Flex>
                     </Flex>
 
-                    {/* Payout Txn */}
-                    <Flex direction="column" gap="4px">
-                      <Text
-                        fontSize="10px"
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                        color={colors.textGray}
-                        textTransform="uppercase"
-                        fontWeight="600"
-                        letterSpacing="0.5px"
-                      >
-                        Payout Txn
-                      </Text>
-                      {isRefunded ? (
+                    {/* USD and Amount - Combined Row */}
+                    <Flex gap="20px" align="flex-start">
+                      {/* USD */}
+                      <Flex direction="column" gap="4px">
                         <Text
-                          fontSize="11px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          fontSize="10px"
+                          fontFamily={FONT_FAMILIES.SF_PRO}
                           color={colors.textGray}
-                          letterSpacing="-0.5px"
-                          fontWeight="500"
+                          textTransform="uppercase"
+                          fontWeight="600"
+                          letterSpacing="0.5px"
                         >
-                          Swap refunded
+                          USD
                         </Text>
-                      ) : isRefundAvailable ? (
                         <Text
-                          fontSize="11px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color="#B23232"
-                          letterSpacing="-0.5px"
-                          fontWeight="500"
-                        >
-                          Market Maker failed to fill
-                        </Text>
-                      ) : mmTxHash ? (
-                        <Flex
-                          as="button"
-                          onClick={() => {
-                            const url =
-                              mmTxChain === "BTC"
-                                ? `https://mempool.space/tx/${mmTxHash}`
-                                : mmTxChain === "ETH"
-                                  ? `https://etherscan.io/tx/${mmTxHash}`
-                                  : `https://basescan.org/tx/${mmTxHash}`;
-                            window.open(url, "_blank");
-                          }}
-                          bg={mmBg}
-                          border={`1.5px solid ${mmBorder}`}
-                          borderRadius="16px"
-                          px="10px"
-                          h="35px"
-                          _hover={{ filter: "brightness(1.2)" }}
-                          fontSize="11px"
+                          fontSize="13px"
                           fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.offWhite}
                           fontWeight="500"
-                          cursor="pointer"
-                          w="fit-content"
-                          align="center"
-                          gap="4px"
                           letterSpacing="-0.5px"
                         >
-                          {displayShortTxHash(mmTxHash)}
-                          <Box ml="4px">
-                            <FiExternalLink size={11} />
-                          </Box>
-                        </Flex>
-                      ) : (
-                        <Text
-                          fontSize="11px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          -
+                          {formatUSD(swap.swapInitialAmountUsd)}
                         </Text>
-                      )}
+                      </Flex>
+
+                      {/* Amount */}
+                      <Flex direction="column" gap="4px">
+                        <Text
+                          fontSize="10px"
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          color={colors.textGray}
+                          textTransform="uppercase"
+                          fontWeight="600"
+                          letterSpacing="0.5px"
+                        >
+                          Amount
+                        </Text>
+                        <Flex gap="4px" align="center">
+                          <Text
+                            fontSize="13px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            fontWeight="500"
+                            letterSpacing="-0.5px"
+                          >
+                            {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                          </Text>
+                          <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                          <Text
+                            fontSize="13px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            fontWeight="500"
+                            letterSpacing="-0.5px"
+                          >
+                            {isBTCtoEVM ? "BTC" : "cbBTC"}
+                          </Text>
+                        </Flex>
+                      </Flex>
+                    </Flex>
+
+                    {/* Deposit and Payout Txn - Combined Row */}
+                    <Flex gap="20px" align="flex-start">
+                      {/* Deposit Txn */}
+                      <Flex direction="column" gap="4px" flex="1">
+                        <Text
+                          fontSize="10px"
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          color={colors.textGray}
+                          textTransform="uppercase"
+                          fontWeight="600"
+                          letterSpacing="0.5px"
+                        >
+                          Deposit Txn
+                        </Text>
+                        {userTxHash ? (
+                          <Flex
+                            as="button"
+                            onClick={() => {
+                              const url =
+                                userTxChain === "BTC"
+                                  ? `https://mempool.space/tx/${userTxHash}`
+                                  : userTxChain === "ETH"
+                                    ? `https://etherscan.io/tx/${userTxHash}`
+                                    : `https://basescan.org/tx/${userTxHash}`;
+                              window.open(url, "_blank");
+                            }}
+                            bg={userBg}
+                            border={`1.5px solid ${userBorder}`}
+                            borderRadius="16px"
+                            px="10px"
+                            h="35px"
+                            _hover={{ filter: "brightness(1.2)" }}
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            fontWeight="500"
+                            cursor="pointer"
+                            w="fit-content"
+                            align="center"
+                            gap="4px"
+                            letterSpacing="-0.5px"
+                          >
+                            {displayShortTxHash(userTxHash, true)}
+                            <Box ml="4px">
+                              <FiExternalLink size={11} />
+                            </Box>
+                          </Flex>
+                        ) : (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                          >
+                            -
+                          </Text>
+                        )}
+                      </Flex>
+
+                      {/* Payout Txn */}
+                      <Flex direction="column" gap="4px" flex="1">
+                        <Text
+                          fontSize="10px"
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                          color={colors.textGray}
+                          textTransform="uppercase"
+                          fontWeight="600"
+                          letterSpacing="0.5px"
+                        >
+                          Payout Txn
+                        </Text>
+                        {isRefunded ? (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                            fontWeight="500"
+                          >
+                            Refunded
+                          </Text>
+                        ) : isRefundAvailable ? (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color="#B23232"
+                            letterSpacing="-0.5px"
+                            fontWeight="500"
+                          >
+                            MM failed
+                          </Text>
+                        ) : mmTxHash ? (
+                          <Flex
+                            as="button"
+                            onClick={() => {
+                              const url =
+                                mmTxChain === "BTC"
+                                  ? `https://mempool.space/tx/${mmTxHash}`
+                                  : mmTxChain === "ETH"
+                                    ? `https://etherscan.io/tx/${mmTxHash}`
+                                    : `https://basescan.org/tx/${mmTxHash}`;
+                              window.open(url, "_blank");
+                            }}
+                            bg={mmBg}
+                            border={`1.5px solid ${mmBorder}`}
+                            borderRadius="16px"
+                            px="10px"
+                            h="35px"
+                            _hover={{ filter: "brightness(1.2)" }}
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.offWhite}
+                            fontWeight="500"
+                            cursor="pointer"
+                            w="fit-content"
+                            align="center"
+                            gap="4px"
+                            letterSpacing="-0.5px"
+                          >
+                            {displayShortTxHash(mmTxHash, true)}
+                            <Box ml="4px">
+                              <FiExternalLink size={11} />
+                            </Box>
+                          </Flex>
+                        ) : (
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={colors.textGray}
+                            letterSpacing="-0.5px"
+                          >
+                            -
+                          </Text>
+                        )}
+                      </Flex>
                     </Flex>
 
                     {/* Status */}
@@ -1023,14 +1033,35 @@ export const UserSwapHistory: React.FC = () => {
                 </Flex>
               )}
 
+              {/* Load More Button for mobile */}
+              {!loadingMore && hasMore && swaps.length > 0 && (
+                <Flex justify="center" py="20px">
+                  <Button
+                    onClick={fetchNextPage}
+                    cursor="pointer"
+                    color={colors.offWhite}
+                    _active={{ bg: colors.swapBgColor }}
+                    _hover={{ bg: colors.swapHoverColor }}
+                    borderRadius="12px"
+                    border={`2.5px solid ${colors.swapBorderColor}`}
+                    type="button"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    fontSize="15px"
+                    paddingX="32px"
+                    paddingY="12px"
+                    bg={colors.swapBgColor}
+                  >
+                    Load More
+                  </Button>
+                </Flex>
+              )}
+
               {/* End of List Message */}
               {!hasMore && swaps.length > 0 && (
                 <Flex justify="center" py="20px">
-                  <Text
-                    fontSize="12px"
-                    color={colors.textGray}
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                  ></Text>
+                  <Text fontSize="12px" color={colors.textGray} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                    No more swaps to load
+                  </Text>
                 </Flex>
               )}
             </Flex>

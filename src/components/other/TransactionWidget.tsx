@@ -563,6 +563,7 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
 
   const [isRefundAvailable, setIsRefundAvailable] = React.useState(false);
   const [failedSwapData, setFailedSwapData] = React.useState<AdminSwapItem | null>(null);
+  const [isSwapRefunded, setIsSwapRefunded] = React.useState(false);
 
   // Track EVM confirmations for user deposit (step 2)
   const userDepositTxHash = swapStatusInfo?.user_deposit?.deposit_tx;
@@ -721,18 +722,98 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
           is_refund_available: row.is_refund_available,
         });
 
-        const mappedSwap = mapDbRowToAdminSwap(row);
+        let mappedSwap = mapDbRowToAdminSwap(row);
         console.log(`[REFUND CHECK] Mapped swap:`, mappedSwap);
 
         // Use filterRefunds to check if refund is available
-        const { isRefundAvailable: refundAvailable } = await filterRefunds(row, mappedSwap);
+        const { isRefundAvailable: refundAvailable, shouldMarkAsRefunded } = await filterRefunds(
+          row,
+          mappedSwap
+        );
+
+        // If balance is 0 (shouldMarkAsRefunded), modify the flow to show refunded status
+        if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
+          console.log(`[DETECTOR] Modifying flow for refunded swap ${currentSwapId}`);
+
+          // Find the in-progress step (the failed step that never completed)
+          const inProgressIndex = mappedSwap.flow.findIndex((s) => s.state === "inProgress");
+
+          if (inProgressIndex !== -1) {
+            // Keep all steps up to but NOT including the in-progress step
+            const stepsBeforeFailed = mappedSwap.flow.slice(0, inProgressIndex);
+            const failedStep = mappedSwap.flow[inProgressIndex];
+
+            // Mark the failed step as completed but keep its original status
+            failedStep.state = "completed";
+
+            // Add a new "Refunded" step after the failed step
+            mappedSwap.flow = [
+              ...stepsBeforeFailed,
+              failedStep,
+              {
+                status: "user_refunded_detected" as any,
+                label: "Refunded",
+                state: "completed",
+              },
+            ];
+
+            console.log(
+              `[DETECTOR] Updated flow:`,
+              mappedSwap.flow.map((s) => ({
+                status: s.status,
+                state: s.state,
+                label: s.label,
+              }))
+            );
+          }
+        }
 
         console.log(`[REFUND CHECK] Swap ${currentSwapId}: isRefundAvailable = ${refundAvailable}`);
-        setIsRefundAvailable(refundAvailable);
+        console.log(`[REFUND CHECK] shouldMarkAsRefunded = ${shouldMarkAsRefunded}`);
 
-        // Store the mapped swap for refund modal (don't open it yet)
+        // DETECTOR logging
+        console.log("═══════════════════════════════════════════════");
+        console.log(`[DETECTOR] Swap ID: ${currentSwapId}`);
+        console.log(`[DETECTOR] Step: ${validStepIndex} (${depositFlowState})`);
+        console.log(`[DETECTOR] isRefundAvailable: ${refundAvailable}`);
+        console.log(`[DETECTOR] shouldMarkAsRefunded: ${shouldMarkAsRefunded}`);
+        console.log(
+          `[DETECTOR] Current flow:`,
+          mappedSwap.flow.map((s) => ({
+            status: s.status,
+            state: s.state,
+            label: s.label,
+          }))
+        );
+
+        // Check if swap is actually refunded by looking at flow
+        const currentStep =
+          mappedSwap.flow.find((s) => s.state === "inProgress") ||
+          mappedSwap.flow[mappedSwap.flow.length - 1];
+        const isSwapRefunded =
+          currentStep?.status === "refunding_user" ||
+          currentStep?.status === "refunding_mm" ||
+          currentStep?.status === "user_refunded_detected";
+
+        console.log(`[DETECTOR] Current step:`, currentStep);
+        console.log(`[DETECTOR] isSwapRefunded (by status): ${isSwapRefunded}`);
+        console.log("═══════════════════════════════════════════════");
+
+        // Set the refunded state
+        setIsSwapRefunded(isSwapRefunded);
+
+        // If refund available, store the swap data
         if (refundAvailable) {
+          setIsRefundAvailable(true);
           setFailedSwapData(mappedSwap);
+        }
+        // If swap was refunded (balance = 0), don't show refund available
+        else if (shouldMarkAsRefunded) {
+          setIsRefundAvailable(false);
+          setFailedSwapData(null);
+        } else {
+          setIsRefundAvailable(false);
+          setFailedSwapData(null);
         }
       } catch (error) {
         console.error(`Error checking refund eligibility for ${currentSwapId}:`, error);
@@ -757,6 +838,185 @@ export function TransactionWidget({ swapId }: { swapId?: string } = {}) {
       }
     }
   };
+
+  // If swap has been refunded, show refunded completion view
+  if (isSwapRefunded) {
+    return (
+      <Box
+        w={isMobile ? "100%" : "805px"}
+        h="510px"
+        borderRadius="40px"
+        mt="70px"
+        boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+        backdropFilter="blur(9px)"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        position="relative"
+        _before={{
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: "40px",
+          padding: "3px",
+          background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          maskComposite: "xor",
+          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          WebkitMaskComposite: "xor",
+        }}
+      >
+        {/* Top Half - Refund Icon */}
+        <Box
+          w="100%"
+          h="50%"
+          borderRadius="40px"
+          position="absolute"
+          top="0px"
+          background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
+          display="flex"
+          backdropFilter="blur(20px)"
+          alignItems="center"
+          justifyContent="center"
+          _before={{
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: "40px",
+            padding: "3px",
+            background:
+              "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+          }}
+        >
+          {/* Refund Icon */}
+          <Box
+            width="110px"
+            height="110px"
+            borderRadius="50%"
+            bg="rgba(251, 191, 36, 0.2)"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            border="3px solid rgba(251, 191, 36, 0.5)"
+            zIndex={1}
+          >
+            <svg
+              width="60"
+              height="60"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="2"
+            >
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </Box>
+        </Box>
+
+        {/* Bottom Half - Refunded Message */}
+        <Box
+          h="50%"
+          bottom="0px"
+          position="absolute"
+          padding="20px"
+          w="100%"
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          gap="20px"
+        >
+          <Text
+            fontSize="16px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.offWhite}
+            textAlign="center"
+            px="40px"
+            lineHeight="1.6"
+          >
+            This swap has been refunded. You can view details in the swap history page.
+          </Text>
+
+          {/* Buttons */}
+          <Flex
+            gap="16px"
+            justifyContent="center"
+            flexWrap="wrap"
+            direction={isMobile ? "column" : "row"}
+            alignItems="center"
+          >
+            {/* Swap History Button */}
+            <Box
+              as="button"
+              onClick={() => router.push("/history")}
+              border="2px solid rgba(255, 255, 255, 0.3)"
+              borderRadius="16px"
+              width={isMobile ? "240px" : "180px"}
+              background="rgba(255, 255, 255, 0.1)"
+              padding="12px 16px"
+              cursor="pointer"
+              transition="all 0.2s"
+              zIndex={1}
+              _hover={{
+                transform: "translateY(-2px)",
+                bg: "rgba(255, 255, 255, 0.15)",
+              }}
+            >
+              <Text
+                color="white"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="13px"
+                fontWeight="normal"
+                letterSpacing="0.5px"
+              >
+                SWAP HISTORY
+              </Text>
+            </Box>
+
+            {/* New Swap Button */}
+            <Box
+              as="button"
+              onClick={() => router.push("/")}
+              borderRadius="16px"
+              width={isMobile ? "240px" : "180px"}
+              border="2px solid #6651B3"
+              background="rgba(86, 50, 168, 0.30)"
+              padding="12px 16px"
+              cursor="pointer"
+              transition="all 0.2s"
+              zIndex={1}
+              _hover={{
+                transform: "translateY(-2px)",
+                boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
+              }}
+            >
+              <Text
+                color="white"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="14px"
+                fontWeight="normal"
+                letterSpacing="0.5px"
+              >
+                NEW SWAP
+              </Text>
+            </Box>
+          </Flex>
+        </Box>
+      </Box>
+    );
+  }
 
   // If refund is available (MM failed to fill), show failed view
   if (isRefundAvailable) {
