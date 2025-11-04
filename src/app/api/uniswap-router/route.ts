@@ -38,7 +38,7 @@ const USDT_ADDRESS = "0xdac17f958d2ee523a2206206994597c13d831ec7";
 const WBTC_ADDRESS = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 
 const DEFAULT_SLIPPAGE_BPS = 10;
-const DEFAULT_VALID_FOR_SECONDS = 120;
+const DEFAULT_VALID_FOR_SECONDS = 600; // 10 minutes
 
 // Pool configurations (fee tier -> tick spacing)
 const POOL_CONFIGS = [

@@ -218,7 +218,8 @@ export const SwapButton = () => {
       console.error("Permit signing failed:", error);
       toastInfo({
         title: "Permit Signing Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description:
+          "You must sign a message for Permit2 to spend your tokens to complete the swap",
         customStyle: {
           background: `${colors.assetTag.btc.background}`,
         },
@@ -443,7 +444,7 @@ export const SwapButton = () => {
         uniswapQuote.amountIn,
         depositAddress, // Set receiver to OTC deposit address
         slippageBips,
-        480, // validFor: 2 minutes
+        600, // validFor: 10 minutes
         permitDataForSwap?.permit || null,
         permitDataForSwap?.signature || "",
         // V4 fields from stored quote
@@ -494,6 +495,7 @@ export const SwapButton = () => {
     } catch (error) {
       console.error("ERC20->BTC swap failed:", error);
 
+      setSwapResponse(null);
       toastError(error, {
         title: "Swap Failed",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -706,6 +708,7 @@ export const SwapButton = () => {
 
   // Update store when transaction is confirmed
   useEffect(() => {
+    console.log("isConfirmed", isConfirmed);
     if (isConfirmed) {
       setTransactionConfirmed(true);
     }
@@ -757,6 +760,12 @@ export const SwapButton = () => {
       setUniswapQuote(null);
       setRfqQuote(null);
       setRefetchQuote(true);
+
+      if (permitAllowance?.permit2HasAllowance) {
+        setApprovalState(ApprovalState.APPROVED);
+      } else {
+        setApprovalState(ApprovalState.NEEDS_APPROVAL);
+      }
     }
   }, [writeError, sendTxError]);
 
@@ -794,10 +803,10 @@ export const SwapButton = () => {
     if (isApprovalConfirmed) {
       console.log("Permit2 approval confirmed");
       setApprovalState(ApprovalState.APPROVED);
-      toastSuccess({
-        title: "Approval Confirmed",
-        description: "Permit2 can now spend your tokens",
-      });
+      // toastSuccess({
+      //   title: "Approval Confirmed",
+      //   description: "Permit2 can now spend your tokens",
+      // });
     } else if (approvalTxError) {
       console.error("Approval transaction error:", approvalTxError);
       setApprovalState(ApprovalState.NEEDS_APPROVAL);

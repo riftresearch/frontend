@@ -68,6 +68,7 @@ export type PermitAllowance = {
   amount: string; // uint160
   expiration: string; // uint48
   nonce: string; // uint48
+  permit2HasAllowance: boolean;
 };
 
 export type PermitDataForSwap = {
