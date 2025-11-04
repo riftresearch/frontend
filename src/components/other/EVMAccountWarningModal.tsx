@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Button, Flex, Text } from "@chakra-ui/react";
+import { Box, Button, Flex, Text, Portal } from "@chakra-ui/react";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 
@@ -50,83 +50,81 @@ export const EVMAccountWarningModal: React.FC<EVMAccountWarningModalProps> = ({
   };
 
   return (
-    <Flex
-      position="fixed"
-      top={0}
-      left={0}
-      right={0}
-      bottom={0}
-      width="100vw"
-      height="100vh"
-      zIndex={999999}
-      bg="rgba(0, 0, 0, 0.85)"
-      align="center"
-      justify="center"
-      style={{
-        backdropFilter: "blur(4px)",
-      }}
-    >
+    <Portal>
       <Box
-        bg="#1a1a1a"
-        borderWidth={2}
-        w="550px"
-        maxWidth="90%"
-        borderColor={colors.borderGray}
-        borderRadius="30px"
-        fontFamily={FONT_FAMILIES.AUX_MONO}
-        color={colors.offWhite}
-        position="relative"
-        p="32px"
+        position="fixed"
+        top="0"
+        left="0"
+        right="0"
+        bottom="0"
+        bg="rgba(0, 0, 0, 0.8)"
+        zIndex="modal"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        onClick={() => {}}
       >
-        {/* Header */}
-        <Flex
-          pb="15px"
-          fontSize="20px"
-          fontFamily={FONT_FAMILIES.NOSTROMO}
-          fontWeight="bold"
-          justify="center"
-          align="center"
+        <Box
+          bg="#131313"
+          borderRadius="30px"
+          py="32px"
+          px="32px"
+          maxW="520px"
+          w="90%"
+          border="2px solid #232323"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          color={colors.offWhite}
+          onClick={(e) => e.stopPropagation()}
         >
-          <Text>Connect wallet</Text>
-        </Flex>
-
-        {/* Body */}
-        <Flex direction="column" align="center" gap="24px" pb="0px">
-          <Text
-            fontSize="16px"
-            textAlign="center"
-            lineHeight="1.6"
-            // fontFamily={FONT_FAMILIES.SF_PRO}
-            color={colors.textGray}
-            letterSpacing="-1.5px"
-            px="8px"
-            pb="5px"
-          >
-            Sign in with your wallet to see your swap history, even for native Bitcoin swaps.
-          </Text>
-
-          <Button
-            onClick={handleConfirm}
-            cursor="pointer"
-            color={colors.offWhite}
-            _active={{ bg: colors.swapBgColor }}
-            _hover={{ bg: colors.swapHoverColor }}
-            borderRadius="12px"
-            border={`2.5px solid ${colors.swapBorderColor}`}
-            type="button"
-            height="50px"
+          {/* Header */}
+          <Flex
+            pb="15px"
+            fontSize="20px"
             fontFamily={FONT_FAMILIES.NOSTROMO}
-            fontSize="17px"
-            paddingX="32px"
-            bg={colors.swapBgColor}
-            boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
-            w="full"
-            maxW="200px"
+            fontWeight="bold"
+            justify="center"
+            align="center"
           >
-            Got it
-          </Button>
-        </Flex>
+            <Text>Connect wallet</Text>
+          </Flex>
+
+          {/* Body */}
+          <Flex direction="column" align="center" gap="24px" pb="0px">
+            <Text
+              fontSize="16px"
+              textAlign="center"
+              lineHeight="1.6"
+              color={colors.textGray}
+              letterSpacing="-1.5px"
+              px="8px"
+              pb="5px"
+            >
+              Sign in with your wallet to see your swap history, even for native Bitcoin swaps.
+            </Text>
+
+            <Button
+              onClick={handleConfirm}
+              cursor="pointer"
+              color={colors.offWhite}
+              _active={{ bg: colors.swapBgColor }}
+              _hover={{ bg: colors.swapHoverColor }}
+              borderRadius="12px"
+              border={`2.5px solid ${colors.swapBorderColor}`}
+              type="button"
+              height="50px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              fontSize="17px"
+              paddingX="32px"
+              bg={colors.swapBgColor}
+              boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
+              w="full"
+              maxW="200px"
+            >
+              Got it
+            </Button>
+          </Flex>
+        </Box>
       </Box>
-    </Flex>
+    </Portal>
   );
 };

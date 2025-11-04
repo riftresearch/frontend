@@ -17,12 +17,18 @@ export async function GET(req: NextRequest) {
     // addresses can be provided as a single comma-separated value or multiple 'addresses' params
     let addresses: string[] = searchParams.getAll("addresses");
     if (addresses.length === 1 && addresses[0].includes(",")) {
-      addresses = addresses[0].split(",").map((s) => s.trim()).filter(Boolean);
+      addresses = addresses[0]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
 
     if (!Array.isArray(addresses) || addresses.length === 0) {
       return NextResponse.json(
-        { error: "invalid_addresses", details: "Provide addresses as comma-separated or repeated query params" },
+        {
+          error: "invalid_addresses",
+          details: "Provide addresses as comma-separated or repeated query params",
+        },
         { status: 400 }
       );
     }

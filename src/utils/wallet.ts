@@ -78,7 +78,7 @@ export const queryClient = new QueryClient();
 // Set up metadata for your app
 const metadata = {
   name: "Rift",
-  description: "Rift",
+  description: "P2P Bitcoin Trading",
   url: "https://app.rift.trade",
   icons: ["https://app.rift.trade/icon.png"],
 };
@@ -89,11 +89,19 @@ export const reownModal = createAppKit({
   projectId: projectId || "",
   networks,
   metadata,
+  enableWalletGuide: false,
+  featuredWalletIds: [
+    "a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393",
+    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0",
+    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
+  ],
   features: {
     analytics: true,
     email: true, // Enable email login
+    swaps: false,
     socials: ["google", "apple", "x"], // Enable social logins
     emailShowWallets: true, // Show wallets directly without email prompt
+    connectMethodsOrder: ["wallet", "social", "email"],
   },
   allWallets: "SHOW", // Display all available wallets
   enableEIP6963: true, // Enable modern wallet discovery to prevent conflicts

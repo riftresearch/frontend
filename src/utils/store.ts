@@ -23,8 +23,8 @@ export const useStore = create<{
   setEvmConnectWalletChainId: (chainId: number) => void;
   userTokensByChain: Record<number, TokenData[]>;
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
-  selectedInputToken: TokenData | null;
-  setSelectedInputToken: (token: TokenData | null) => void;
+  selectedInputToken: TokenData;
+  setSelectedInputToken: (token: TokenData) => void;
   selectedOutputToken: TokenData | null;
   setSelectedOutputToken: (token: TokenData | null) => void;
   isSwappingForBTC: boolean;
@@ -114,7 +114,7 @@ export const useStore = create<{
     icon: "https://assets.smold.app/api/chains/1/logo-128.png",
     decimals: 18,
   },
-  setSelectedInputToken: (token: TokenData | null) => set({ selectedInputToken: token }),
+  setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
   selectedOutputToken: null,
   setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
   isSwappingForBTC: true,

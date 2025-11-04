@@ -26,6 +26,10 @@ import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
+import {
+  EVMAccountWarningModal,
+  hasAcknowledgedEVMWarning,
+} from "@/components/other/EVMAccountWarningModal";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -41,6 +45,7 @@ export const SwapButton = () => {
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
   const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
+  const [showEVMWarningModal, setShowEVMWarningModal] = useState(false);
 
   // Global store
   const {
@@ -573,7 +578,13 @@ export const SwapButton = () => {
   const startSwap = useCallback(async () => {
     try {
       if (!isWalletConnected) {
-        // Open wallet connection modal instead of showing toast
+        // If swapping for something other than BTC and user hasn't acknowledged, show warning
+        if (!isSwappingForBTC && !hasAcknowledgedEVMWarning()) {
+          setShowEVMWarningModal(true);
+          return;
+        }
+
+        // Otherwise, open wallet connection modal directly
         await reownModal.open();
         return;
       }
@@ -994,6 +1005,16 @@ export const SwapButton = () => {
           {buttonConfig.text}
         </Text>
       </Flex>
+
+      {/* EVM Account Warning Modal */}
+      <EVMAccountWarningModal
+        isOpen={showEVMWarningModal}
+        onConfirm={() => {
+          setShowEVMWarningModal(false);
+          // Then open the wallet modal
+          reownModal.open();
+        }}
+      />
     </Flex>
   );
 };

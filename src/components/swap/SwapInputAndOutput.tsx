@@ -695,7 +695,7 @@ export const SwapInputAndOutput = () => {
     setOutputAmount("");
     setInputUsdValue(ZERO_USD_DISPLAY);
     setOutputUsdValue(ZERO_USD_DISPLAY);
-
+    setFeeOverview(null);
     setPayoutAddress("");
     setAddressValidation({ isValid: false });
     setHasStartedTyping(false);
@@ -1218,28 +1218,11 @@ export const SwapInputAndOutput = () => {
   useEffect(() => {
     const fetchETHandBTCPrice = async () => {
       try {
-        // Fetch BTC price
-        const btcResponse = await fetch("/api/token-price?chain=coingecko&addresses=bitcoin");
-        if (btcResponse.ok) {
-          const btcData = await btcResponse.json();
-          const btcKey = "coingecko:bitcoin";
-          const btcCoin = btcData?.coins?.[btcKey];
-          if (btcCoin && typeof btcCoin.price === "number") {
-            setBtcPrice(btcCoin.price);
-          }
-        }
-
-        // Fetch ETH price
-        const ethResponse = await fetch(
-          "/api/token-price?chain=ethereum&addresses=0x0000000000000000000000000000000000000000"
-        );
-        if (ethResponse.ok) {
-          const ethData = await ethResponse.json();
-          const ethKey = "ethereum:0x0000000000000000000000000000000000000000";
-          const ethCoin = ethData?.coins?.[ethKey];
-          if (ethCoin && typeof ethCoin.price === "number") {
-            setEthPrice(ethCoin.price);
-          }
+        const response = await fetch("/api/eth-and-btc-price");
+        if (response.ok) {
+          const data = await response.json();
+          setEthPrice(data.ethPrice);
+          setBtcPrice(data.btcPrice);
         }
       } catch (error) {
         console.error("Failed to fetch BTC/ETH prices:", error);

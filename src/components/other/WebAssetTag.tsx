@@ -5,7 +5,7 @@ import { FaChevronDown } from "react-icons/fa";
 import useWindowSize from "@/hooks/useWindowSize";
 import { ARBITRUM_LOGO, BASE_LOGO } from "./SVGs";
 import { useStore } from "@/utils/store";
-import { FALLBACK_TOKEN_ICON, BTC_ICON, ETH_ICON } from "@/utils/constants";
+import { FALLBACK_TOKEN_ICON, BTC_ICON } from "@/utils/constants";
 import { mainnet, base } from "@reown/appkit/networks";
 
 interface WebAssetTagProps {
@@ -46,7 +46,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
   const displayTicker = asset === "BTC" ? "BTC" : selectedToken?.ticker || "ETH";
 
   // Use selected token's icon if available and valid, otherwise fallback
-  const iconUrl = asset === "BTC" ? BTC_ICON : selectedToken?.icon || ETH_ICON;
+  const iconUrl = asset === "BTC" ? BTC_ICON : selectedToken?.icon || FALLBACK_TOKEN_ICON;
 
   const colorKey = asset === "BTC" ? "btc" : (displayTicker || asset).toLowerCase();
   const colorDef = colors.assetTag[colorKey as keyof typeof colors.assetTag] || colors.assetTag.eth;

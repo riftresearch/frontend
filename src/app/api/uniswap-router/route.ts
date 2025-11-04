@@ -190,8 +190,6 @@ async function getV3Quote(params: QuoteParams): Promise<QuoteResult | null> {
 
     // Configure swap options
     const options: SwapOptionsUniversalRouter = {
-      // recipient: userAddress,
-      // inputTokenPermit:
       slippageTolerance: new Percent(slippageBps, 10_000),
       type: SwapType.UNIVERSAL_ROUTER,
       version: UniversalRouterVersion.V2_0,

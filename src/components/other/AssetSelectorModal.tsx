@@ -11,7 +11,6 @@ import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
 import {
   FALLBACK_TOKEN_ICON,
-  ETH_ICON,
   BASE_POPULAR_TOKENS,
   ETHEREUM_POPULAR_TOKENS,
   ZERO_USD_DISPLAY,
