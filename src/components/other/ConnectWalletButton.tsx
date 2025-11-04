@@ -220,7 +220,8 @@ export const ConnectWalletButton: React.FC = () => {
       setSearchResults(sorted);
       if (
         selectedInputToken?.ticker === "ETH" &&
-        selectedInputToken.balance !== ethToken?.balance
+        selectedInputToken.balance !== ethToken?.balance &&
+        ethToken
       ) {
         setSelectedInputToken(ethToken);
       }
