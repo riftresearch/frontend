@@ -112,11 +112,23 @@ const SwapDetailsPill: React.FC<{
   outputAmount: string;
   outputAsset: string;
   isMobile: boolean;
-}> = ({ inputAmount, inputAsset, inputAssetIconUrl, outputAmount, outputAsset, isMobile }) => {
+  width?: string;
+  fontSize?: string;
+}> = ({
+  inputAmount,
+  inputAsset,
+  inputAssetIconUrl,
+  outputAmount,
+  outputAsset,
+  width,
+  fontSize,
+  isMobile,
+}) => {
   return (
     <Flex
       bg="rgba(0, 0, 0, 0.6)"
       borderRadius="16px"
+      width={width ? width : "null"}
       padding={isMobile ? "6px 12px" : "8px 14px"}
       alignItems="center"
       justifyContent="center"
@@ -127,7 +139,7 @@ const SwapDetailsPill: React.FC<{
       {/* Input Amount + Asset */}
       <Flex alignItems="center" gap="3px">
         <Text
-          fontSize="11px"
+          fontSize={fontSize ? fontSize : "11px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.offWhite}
           fontWeight="500"
@@ -137,7 +149,7 @@ const SwapDetailsPill: React.FC<{
         </Text>
         <AssetIcon asset={inputAsset} iconUrl={inputAssetIconUrl} size={14} />
         <Text
-          fontSize="11px"
+          fontSize={fontSize ? fontSize : "11px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.textGray}
           fontWeight="500"
@@ -155,7 +167,7 @@ const SwapDetailsPill: React.FC<{
       {/* Output Amount + Asset */}
       <Flex alignItems="center" gap="3px">
         <Text
-          fontSize="11px"
+          fontSize={fontSize ? fontSize : "11px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.offWhite}
           fontWeight="500"
@@ -165,7 +177,7 @@ const SwapDetailsPill: React.FC<{
         </Text>
         <AssetIcon asset={outputAsset} size={14} />
         <Text
-          fontSize="11px"
+          fontSize={fontSize ? fontSize : "11px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.textGray}
           fontWeight="500"
@@ -184,7 +196,7 @@ const getSteps = (swapType: SwapType) => {
     return [
       {
         id: "1-WaitingUserDepositInitiated",
-        label: "AWAITING BITCOIN DEPOSIT",
+        label: "AWAITING DEPOSIT",
         description: "Waiting for your Bitcoin deposit...",
       },
       {
@@ -379,7 +391,9 @@ function StepCarousel({
   const getShortTxnId = () => {
     const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
     if (!txnId) return "";
-    return `${txnId.slice(0, 12)}...${txnId.slice(-12)}`;
+    return isMobile
+      ? `${txnId.slice(0, 6)}...${txnId.slice(-6)}`
+      : `${txnId.slice(0, 12)}...${txnId.slice(-12)}`;
   };
 
   const handleNewSwap = () => {
@@ -1629,71 +1643,14 @@ export function UnifiedTransactionWidget({
 
   // NORMAL SWAP VIEW
   return (
-    <Box
-      w={isMobile ? "100%" : "805px"}
-      h={isMobile && swapType === "bitcoin-deposit" ? "600px" : "510px"}
-      borderRadius="40px"
-      mt="70px"
-      boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
-      backdropFilter="blur(9px)"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      position="relative"
-      _before={{
-        content: '""',
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderRadius: "40px",
-        padding: "3px",
-        background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
-        mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-        maskComposite: "xor",
-        WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-        WebkitMaskComposite: "xor",
-      }}
-    >
-      <Box
-        w="100%"
-        h={swapType === "bitcoin-deposit" ? "54%" : "50%"}
-        borderRadius="40px"
-        position="absolute"
-        top="0px"
-        background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
-        display="flex"
-        flexDirection="column"
-        backdropFilter="blur(20px)"
-        alignItems="center"
-        justifyContent="center"
-        _before={{
-          content: '""',
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          borderRadius: "40px",
-          padding: "3px",
-          background:
-            "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
-          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-          maskComposite: "xor",
-          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-          WebkitMaskComposite: "xor",
-        }}
-      >
-        {/* Swap Details Pill - hide when showing Bitcoin QR code */}
-        {!(
-          swapType === "bitcoin-deposit" &&
-          validStepIndex === 0 &&
-          bitcoinAddress &&
-          bitcoinUri
-        ) && (
-          <Box position="absolute" top="20px" zIndex={2}>
+    <Flex direction="column" alignItems="center" w="100%">
+      {/* Swap Details Pill - mobile: above widget, desktop: inside widget */}
+      {!(swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress && bitcoinUri) &&
+        isMobile && (
+          <Box mb="-50px" pt="16%" w="100%" display="flex" justifyContent="center" zIndex={2}>
             <SwapDetailsPill
+              width="100%"
+              fontSize="4vw"
               inputAmount={inputAmount}
               inputAsset={inputAsset}
               inputAssetIconUrl={inputAssetIconUrl}
@@ -1704,128 +1661,165 @@ export function UnifiedTransactionWidget({
           </Box>
         )}
 
-        {/* Corner decorations */}
-        <img
-          src="/images/txns/top_left.svg"
-          alt=""
-          style={{
+      <Box
+        w={isMobile ? "100%" : "805px"}
+        h={isMobile && swapType === "bitcoin-deposit" ? "600px" : "510px"}
+        borderRadius="40px"
+        mt="70px"
+        boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+        backdropFilter="blur(9px)"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        position="relative"
+        _before={{
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: "40px",
+          padding: "3px",
+          background: "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          maskComposite: "xor",
+          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          WebkitMaskComposite: "xor",
+        }}
+      >
+        <Box
+          w="100%"
+          h={swapType === "bitcoin-deposit" ? "54%" : "50%"}
+          borderRadius="40px"
+          position="absolute"
+          top="0px"
+          background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
+          display="flex"
+          flexDirection="column"
+          backdropFilter="blur(20px)"
+          alignItems="center"
+          justifyContent="center"
+          _before={{
+            content: '""',
             position: "absolute",
-            top: "25px",
-            left: "40px",
-            width: "28px",
-            height: "28px",
-            opacity: 0.5,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: "40px",
+            padding: "3px",
+            background:
+              "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
           }}
-        />
-        <img
-          src="/images/txns/top_right.svg"
-          alt=""
-          style={{
-            position: "absolute",
-            top: "25px",
-            right: "40px",
-            width: swapType === "bitcoin-deposit" ? "40px" : "60px",
-            height: swapType === "bitcoin-deposit" ? "40px" : "60px",
-            opacity: 0.5,
-          }}
-        />
-        <img
-          src="/images/txns/bottom_left.svg"
-          alt=""
-          style={{
-            position: "absolute",
-            bottom: "25px",
-            left: "40px",
-            width: swapType === "bitcoin-deposit" ? "40px" : "60px",
-            height: swapType === "bitcoin-deposit" ? "40px" : "60px",
-            opacity: 0.5,
-          }}
-        />
-        <img
-          src="/images/txns/bottom_right.svg"
-          alt=""
-          style={{
-            position: "absolute",
-            bottom: "25px",
-            right: "40px",
-            width: "28px",
-            height: "28px",
-            opacity: 0.5,
-          }}
-        />
+        >
+          {/* Swap Details Pill - hide when showing Bitcoin QR code, show only on desktop (mobile version is above widget) */}
+          {!(
+            swapType === "bitcoin-deposit" &&
+            validStepIndex === 0 &&
+            bitcoinAddress &&
+            bitcoinUri
+          ) &&
+            !isMobile && (
+              <Box position="absolute" top="20px" zIndex={2}>
+                <SwapDetailsPill
+                  inputAmount={inputAmount}
+                  inputAsset={inputAsset}
+                  inputAssetIconUrl={inputAssetIconUrl}
+                  outputAmount={outputAmount}
+                  outputAsset={outputAsset}
+                  isMobile={isMobile}
+                />
+              </Box>
+            )}
 
-        {/* Conditional Top Half Content */}
-        {swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress && bitcoinUri ? (
-          // Bitcoin QR Code View
-          <Flex
-            direction={isMobile ? "column" : "row"}
-            align="center"
-            justify="center"
-            gap={isMobile ? "20px" : "40px"}
-            zIndex={1}
-            px={isMobile ? "20px" : "100px"}
-          >
+          {/* Corner decorations */}
+          <img
+            src="/images/txns/top_left.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              top: "25px",
+              left: "40px",
+              width: "28px",
+              height: "28px",
+              opacity: 0.5,
+            }}
+          />
+          <img
+            src="/images/txns/top_right.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              top: "25px",
+              right: "40px",
+              width: swapType === "bitcoin-deposit" ? "40px" : "60px",
+              height: swapType === "bitcoin-deposit" ? "40px" : "60px",
+              opacity: 0.5,
+            }}
+          />
+          <img
+            src="/images/txns/bottom_left.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              bottom: "25px",
+              left: "40px",
+              width: swapType === "bitcoin-deposit" ? "40px" : "60px",
+              height: swapType === "bitcoin-deposit" ? "40px" : "60px",
+              opacity: 0.5,
+            }}
+          />
+          <img
+            src="/images/txns/bottom_right.svg"
+            alt=""
+            style={{
+              position: "absolute",
+              bottom: "25px",
+              right: "40px",
+              width: "28px",
+              height: "28px",
+              opacity: 0.5,
+            }}
+          />
+
+          {/* Conditional Top Half Content */}
+          {swapType === "bitcoin-deposit" &&
+          validStepIndex === 0 &&
+          bitcoinAddress &&
+          bitcoinUri ? (
+            // Bitcoin QR Code View
             <Flex
-              py="10px"
-              px="10px"
-              borderRadius="12px"
-              bg="white"
-              boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-              justify="center"
+              direction={isMobile ? "column" : "row"}
               align="center"
-              flexShrink={0}
+              justify="center"
+              gap={isMobile ? "20px" : "40px"}
+              zIndex={1}
+              px={isMobile ? "20px" : "100px"}
             >
-              <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
-            </Flex>
-
-            <Flex
-              direction="column"
-              gap={isMobile ? "16px" : "24px"}
-              flex="1"
-              maxW={isMobile ? "100%" : "500px"}
-            >
-              <Flex direction="column" w="100%">
-                <Text
-                  fontSize={isMobile ? "10px" : "11px"}
-                  color="rgba(255,255,255,0.5)"
-                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                  letterSpacing="1px"
-                  mb="8px"
-                >
-                  BITCOIN ADDRESS
-                </Text>
-                <Flex
-                  alignItems="flex-end"
-                  gap="12px"
-                  position="relative"
-                  role="group"
-                  cursor="pointer"
-                  onClick={() => copyToClipboard(bitcoinAddress, "Bitcoin Address")}
-                >
-                  <Text
-                    color={colors.offWhite}
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                    fontSize={isMobile ? "18px" : "26px"}
-                    letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                    fontWeight="500"
-                    flex="1"
-                    lineHeight="1.3"
-                    wordBreak="break-all"
-                  >
-                    {bitcoinAddress}
-                  </Text>
-                  <Box
-                    opacity={0.6}
-                    _groupHover={{ opacity: 1 }}
-                    transition="opacity 0.2s"
-                    mb="2px"
-                  >
-                    <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
-                  </Box>
-                </Flex>
+              <Flex
+                py="10px"
+                px="12px"
+                borderRadius="12px"
+                bg="white"
+                boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
+                justify="center"
+                align="center"
+                flexShrink={0}
+              >
+                <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
               </Flex>
 
-              {bitcoinAmount !== undefined && (
+              <Flex
+                direction="column"
+                gap={isMobile ? "16px" : "24px"}
+                flex="1"
+                maxW={isMobile ? "92%" : "500px"}
+              >
                 <Flex direction="column" w="100%">
                   <Text
                     fontSize={isMobile ? "10px" : "11px"}
@@ -1834,15 +1828,15 @@ export function UnifiedTransactionWidget({
                     letterSpacing="1px"
                     mb="8px"
                   >
-                    DEPOSIT AMOUNT
+                    BITCOIN ADDRESS
                   </Text>
                   <Flex
-                    alignItems="center"
+                    alignItems="flex-end"
                     gap="12px"
                     position="relative"
                     role="group"
                     cursor="pointer"
-                    onClick={() => copyToClipboard(bitcoinAmount.toFixed(8), "Bitcoin Amount")}
+                    onClick={() => copyToClipboard(bitcoinAddress, "Bitcoin Address")}
                   >
                     <Text
                       color={colors.offWhite}
@@ -1850,283 +1844,373 @@ export function UnifiedTransactionWidget({
                       fontSize={isMobile ? "18px" : "26px"}
                       letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
                       fontWeight="500"
+                      flex="1"
+                      lineHeight="1.3"
+                      wordBreak="break-all"
                     >
-                      {bitcoinAmount.toFixed(8)}
+                      {bitcoinAddress}
                     </Text>
-                    <Box opacity={0.6} _groupHover={{ opacity: 1 }} transition="opacity 0.2s">
+                    <Box
+                      opacity={0.6}
+                      _groupHover={{ opacity: 1 }}
+                      transition="opacity 0.2s"
+                      mb="2px"
+                    >
                       <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
-                    </Box>
-                    <Box transform="scale(0.7)" transformOrigin="left center">
-                      <WebAssetTag asset="BTC" />
                     </Box>
                   </Flex>
                 </Flex>
-              )}
-            </Flex>
-          </Flex>
-        ) : swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx ? (
-          // Bitcoin deposit in progress - show loading or checkmark
-          <Flex
-            direction="column"
-            alignItems="center"
-            justifyContent="center"
-            marginTop="100px"
-            gap="24px"
-            zIndex={1}
-          >
-            {isSettled ? (
-              <motion.div
-                key="success"
-                initial={{ y: -30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <img
-                  src="/images/txns/check.svg"
-                  alt="Success"
-                  style={{
-                    width: "110px",
-                    height: "110px",
-                    filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
-                  }}
-                />
-              </motion.div>
-            ) : (
-              <>
-                <motion.div
-                  key="loading"
-                  initial={{ y: -30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 30, opacity: 0 }}
-                  transition={{ duration: 0.5, ease: "easeInOut" }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                  }}
-                >
-                  {[0, 1, 2].map((i) => (
-                    <motion.div
-                      key={i}
-                      animate={{
-                        y: [0, -10, 0],
-                        opacity: [0.4, 1, 0.4],
-                      }}
-                      transition={{
-                        duration: 0.8,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: i * 0.2,
-                      }}
-                      style={{
-                        width: "12px",
-                        height: "12px",
-                        borderRadius: "50%",
-                        backgroundColor: "rgba(255, 255, 255, 0.8)",
-                      }}
-                    />
-                  ))}
-                </motion.div>
 
-                <Flex
-                  as="button"
-                  onClick={() =>
-                    window.open(`https://mempool.space/tx/${bitcoinDepositTx}`, "_blank")
-                  }
-                  alignItems="center"
-                  justifyContent="center"
-                  gap="8px"
-                  px="18px"
-                  mt="40px"
-                  py="7px"
-                  borderRadius="12px"
-                  bg="rgba(255, 255, 255, 0.1)"
-                  border="1px solid rgba(255, 255, 255, 0.2)"
-                  cursor="pointer"
-                  transition="all 0.2s"
-                  _hover={{
-                    bg: "rgba(255, 255, 255, 0.15)",
-                    border: "1px solid rgba(255, 255, 255, 0.3)",
-                  }}
-                  _active={{ transform: "scale(0.98)" }}
-                >
-                  <Text
-                    fontSize="11px"
-                    color="rgba(255, 255, 255, 0.9)"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    letterSpacing="0.5px"
-                  >
-                    VIEW DEPOSIT TXN IN MEMPOOL
-                  </Text>
-                  <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
-                </Flex>
-              </>
-            )}
-          </Flex>
-        ) : (
-          // EVM deposit view
-          <AnimatePresence mode="wait">
-            {countdownValue > 0 && !isSettled ? (
-              <motion.div
-                key="countdown"
-                initial={{ y: 0, opacity: 1 }}
-                exit={{ y: 30, opacity: 0 }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
-                style={{ marginTop: "30px" }}
-              >
-                <CountdownTimer
-                  onComplete={() => {
-                    console.log("Countdown completed");
-                  }}
-                />
-              </motion.div>
-            ) : showLoadingDots ? (
-              <Flex
-                direction="column"
-                alignItems="center"
-                justifyContent="center"
-                marginTop="100px"
-                gap="24px"
-                zIndex={1}
-              >
-                <motion.div
-                  key="loading"
-                  initial={{ y: -30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 30, opacity: 0 }}
-                  transition={{ duration: 0.5, ease: "easeInOut" }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                  }}
-                >
-                  {[0, 1, 2].map((i) => (
-                    <motion.div
-                      key={i}
-                      animate={{
-                        y: [0, -10, 0],
-                        opacity: [0.4, 1, 0.4],
-                      }}
-                      transition={{
-                        duration: 0.8,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: i * 0.2,
-                      }}
-                      style={{
-                        width: "12px",
-                        height: "12px",
-                        borderRadius: "50%",
-                        backgroundColor: "rgba(255, 255, 255, 0.8)",
-                      }}
-                    />
-                  ))}
-                </motion.div>
-
-                {userDepositTxHash && (
-                  <Flex
-                    as="button"
-                    onClick={handleViewUserTransaction}
-                    alignItems="center"
-                    justifyContent="center"
-                    gap="8px"
-                    px="18px"
-                    mt="40px"
-                    py="7px"
-                    borderRadius="12px"
-                    bg="rgba(255, 255, 255, 0.1)"
-                    border="1px solid rgba(255, 255, 255, 0.2)"
-                    cursor="pointer"
-                    transition="all 0.2s"
-                    _hover={{
-                      bg: "rgba(255, 255, 255, 0.15)",
-                      border: "1px solid rgba(255, 255, 255, 0.3)",
-                    }}
-                    _active={{ transform: "scale(0.98)" }}
-                  >
+                {bitcoinAmount !== undefined && (
+                  <Flex direction="column" w="100%">
                     <Text
-                      fontSize="11px"
-                      color="rgba(255, 255, 255, 0.9)"
+                      fontSize={isMobile ? "10px" : "11px"}
+                      color="rgba(255,255,255,0.5)"
                       fontFamily={FONT_FAMILIES.NOSTROMO}
-                      letterSpacing="0.5px"
+                      letterSpacing="1px"
+                      mb="8px"
                     >
-                      VIEW DEPOSIT TXN
+                      DEPOSIT AMOUNT
                     </Text>
-                    <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+                    <Flex
+                      alignItems="center"
+                      gap="12px"
+                      position="relative"
+                      role="group"
+                      cursor="pointer"
+                      onClick={() => copyToClipboard(bitcoinAmount.toFixed(8), "Bitcoin Amount")}
+                    >
+                      <Text
+                        color={colors.offWhite}
+                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        fontSize={isMobile ? "18px" : "26px"}
+                        letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
+                        fontWeight="500"
+                      >
+                        {bitcoinAmount.toFixed(8)}
+                      </Text>
+                      <Box opacity={0.6} _groupHover={{ opacity: 1 }} transition="opacity 0.2s">
+                        <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
+                      </Box>
+                      <Box transform="scale(0.7)" transformOrigin="left center">
+                        <WebAssetTag asset="BTC" />
+                      </Box>
+                    </Flex>
                   </Flex>
                 )}
               </Flex>
-            ) : (
-              <motion.div
-                key="success"
-                initial={{ y: -30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginTop: "30px",
-                }}
-              >
-                <img
-                  src="/images/txns/check.svg"
-                  alt="Success"
+            </Flex>
+          ) : swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx ? (
+            // Bitcoin deposit in progress - show loading or checkmark
+            <Flex
+              direction="column"
+              alignItems="center"
+              justifyContent="center"
+              marginTop={isMobile ? "20px" : "100px"}
+              gap="24px"
+              zIndex={1}
+            >
+              {isSettled ? (
+                <motion.div
+                  key="success"
+                  initial={{ y: -30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.5, ease: "easeInOut" }}
                   style={{
-                    width: "110px",
-                    height: "110px",
-                    filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginTop: isMobile ? "-10px" : "0",
                   }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        )}
-      </Box>
+                >
+                  <img
+                    src="/images/txns/check.svg"
+                    alt="Success"
+                    style={{
+                      width: "110px",
+                      height: "110px",
+                      filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
+                    }}
+                  />
+                </motion.div>
+              ) : (
+                <>
+                  <motion.div
+                    key="loading"
+                    initial={{ y: -30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 30, opacity: 0 }}
+                    transition={{ duration: 0.5, ease: "easeInOut" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        animate={{
+                          y: [0, -10, 0],
+                          opacity: [0.4, 1, 0.4],
+                        }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: i * 0.2,
+                        }}
+                        style={{
+                          width: isMobile ? "16.8px" : "12px",
+                          height: isMobile ? "16.8px" : "12px",
+                          borderRadius: "50%",
+                          backgroundColor: "rgba(255, 255, 255, 0.8)",
+                        }}
+                      />
+                    ))}
+                  </motion.div>
 
-      {/* Bottom Half - Steps */}
-      <Box
-        h={swapType === "bitcoin-deposit" ? "45%" : "50%"}
-        bottom="0px"
-        position="absolute"
-        padding="20px"
-        w="100%"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-      >
-        <StepCarousel
-          swapId={currentSwapId}
-          swapType={swapType}
-          evmConfirmations={evmConfirmations}
-          btcConfirmations={btcConfirmations}
-          mmDepositChain={swapStatusInfo?.quote?.to_chain}
-          userDepositTx={bitcoinDepositTx || userDepositTxHash}
-          showFillingOrderWarning={showFillingOrderWarning}
+                  {!isMobile && (
+                    <Flex
+                      as="button"
+                      onClick={() =>
+                        window.open(`https://mempool.space/tx/${bitcoinDepositTx}`, "_blank")
+                      }
+                      alignItems="center"
+                      justifyContent="center"
+                      gap="8px"
+                      px="18px"
+                      mt="40px"
+                      py="7px"
+                      borderRadius="19px"
+                      bg="rgba(255, 255, 255, 0.1)"
+                      border="1px solid rgba(255, 255, 255, 0.2)"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        bg: "rgba(255, 255, 255, 0.15)",
+                        border: "1px solid rgba(255, 255, 255, 0.3)",
+                      }}
+                      _active={{ transform: "scale(0.98)" }}
+                    >
+                      <Text
+                        fontSize="11px"
+                        color="rgba(255, 255, 255, 0.9)"
+                        fontFamily={FONT_FAMILIES.NOSTROMO}
+                        letterSpacing="0.5px"
+                      >
+                        VIEW DEPOSIT TXN IN MEMPOOL
+                      </Text>
+                      <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+                    </Flex>
+                  )}
+                </>
+              )}
+            </Flex>
+          ) : (
+            // EVM deposit view
+            <AnimatePresence mode="wait">
+              {countdownValue > 0 && !isSettled ? (
+                <motion.div
+                  key="countdown"
+                  initial={{ y: 0, opacity: 1 }}
+                  exit={{ y: 30, opacity: 0 }}
+                  transition={{ duration: 0.5, ease: "easeInOut" }}
+                  style={{ marginTop: "30px" }}
+                >
+                  <CountdownTimer
+                    onComplete={() => {
+                      console.log("Countdown completed");
+                    }}
+                  />
+                </motion.div>
+              ) : showLoadingDots ? (
+                <Flex
+                  direction="column"
+                  alignItems="center"
+                  justifyContent="center"
+                  marginTop={isMobile ? "20px" : "100px"}
+                  gap="24px"
+                  zIndex={1}
+                >
+                  <motion.div
+                    key="loading"
+                    initial={{ y: -30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 30, opacity: 0 }}
+                    transition={{ duration: 0.5, ease: "easeInOut" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        animate={{
+                          y: [0, -10, 0],
+                          opacity: [0.4, 1, 0.4],
+                        }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: i * 0.2,
+                        }}
+                        style={{
+                          width: isMobile ? "16.8px" : "12px",
+                          height: isMobile ? "16.8px" : "12px",
+                          borderRadius: "50%",
+                          backgroundColor: "rgba(255, 255, 255, 0.8)",
+                        }}
+                      />
+                    ))}
+                  </motion.div>
+
+                  {userDepositTxHash && !isMobile && (
+                    <Flex
+                      as="button"
+                      onClick={handleViewUserTransaction}
+                      alignItems="center"
+                      justifyContent="center"
+                      gap="8px"
+                      px="18px"
+                      mt="40px"
+                      py="7px"
+                      borderRadius="19px"
+                      bg="rgba(255, 255, 255, 0.1)"
+                      border="1px solid rgba(255, 255, 255, 0.2)"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        bg: "rgba(255, 255, 255, 0.15)",
+                        border: "1px solid rgba(255, 255, 255, 0.3)",
+                      }}
+                      _active={{ transform: "scale(0.98)" }}
+                    >
+                      <Text
+                        fontSize="11px"
+                        color="rgba(255, 255, 255, 0.9)"
+                        fontFamily={FONT_FAMILIES.NOSTROMO}
+                        letterSpacing="0.5px"
+                      >
+                        VIEW DEPOSIT TXN
+                      </Text>
+                      <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+                    </Flex>
+                  )}
+                </Flex>
+              ) : (
+                <motion.div
+                  key="success"
+                  initial={{ y: -30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.5, ease: "easeInOut" }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginTop: isMobile ? "0px" : "30px",
+                  }}
+                >
+                  <img
+                    src="/images/txns/check.svg"
+                    alt="Success"
+                    style={{
+                      width: "110px",
+                      height: "110px",
+                      filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
+                    }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+        </Box>
+
+        {/* Bottom Half - Steps */}
+        <Box
+          h={swapType === "bitcoin-deposit" ? "45%" : "50%"}
+          bottom="0px"
+          position="absolute"
+          padding="20px"
+          w="100%"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <StepCarousel
+            swapId={currentSwapId}
+            swapType={swapType}
+            evmConfirmations={evmConfirmations}
+            btcConfirmations={btcConfirmations}
+            mmDepositChain={swapStatusInfo?.quote?.to_chain}
+            userDepositTx={bitcoinDepositTx || userDepositTxHash}
+            showFillingOrderWarning={showFillingOrderWarning}
+          />
+        </Box>
+
+        {/* Refund Modal */}
+        <RefundModal
+          isOpen={refundModalOpen}
+          selectedSwap={selectedFailedSwap}
+          refundAddress={refundAddress}
+          setRefundAddress={setRefundAddress}
+          isClaimingRefund={isClaimingRefund}
+          refundStatus={refundStatus}
+          currentBitcoinFee={currentBitcoinFee}
+          fetchingFee={fetchingFee}
+          onClose={closeRefundModal}
+          onClaimRefund={claimRefund}
         />
       </Box>
 
-      {/* Refund Modal */}
-      <RefundModal
-        isOpen={refundModalOpen}
-        selectedSwap={selectedFailedSwap}
-        refundAddress={refundAddress}
-        setRefundAddress={setRefundAddress}
-        isClaimingRefund={isClaimingRefund}
-        refundStatus={refundStatus}
-        currentBitcoinFee={currentBitcoinFee}
-        fetchingFee={fetchingFee}
-        onClose={closeRefundModal}
-        onClaimRefund={claimRefund}
-      />
-    </Box>
+      {/* Mobile: View Deposit Transaction Button below widget */}
+      {isMobile &&
+        !isSettled &&
+        ((swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx) ||
+          (swapType === "evm-deposit" && userDepositTxHash && showLoadingDots)) && (
+          <Box mt="30px" mb="-90px" w="100%" display="flex" justifyContent="center">
+            <Flex
+              as="button"
+              onClick={
+                swapType === "bitcoin-deposit"
+                  ? () => window.open(`https://mempool.space/tx/${bitcoinDepositTx}`, "_blank")
+                  : handleViewUserTransaction
+              }
+              alignItems="center"
+              justifyContent="center"
+              gap="8px"
+              px="20px"
+              py="10px"
+              borderRadius="19px"
+              bg="rgba(255, 255, 255, 0.1)"
+              border="1px solid rgba(255, 255, 255, 0.2)"
+              cursor="pointer"
+              transition="all 0.2s"
+              _hover={{
+                bg: "rgba(255, 255, 255, 0.15)",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+              }}
+              _active={{ transform: "scale(0.98)" }}
+            >
+              <Text
+                fontSize="13px"
+                color="rgba(255, 255, 255, 0.9)"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                letterSpacing="0.5px"
+              >
+                {swapType === "bitcoin-deposit"
+                  ? "VIEW DEPOSIT TXN IN MEMPOOL"
+                  : "VIEW DEPOSIT TXN"}
+              </Text>
+              <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+            </Flex>
+          </Box>
+        )}
+    </Flex>
   );
 }

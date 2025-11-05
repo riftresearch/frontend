@@ -117,7 +117,6 @@ export async function getSwap(swapId: string): Promise<AnalyticsSwapData> {
     const apiKey = getApiKeyFromCookie();
 
     console.log("Fetching swap:", swapId);
-    console.log("API Key from cookie:", apiKey ? "***" + apiKey.slice(-4) : "NOT SET");
 
     const response = await fetch(url, {
       headers: {

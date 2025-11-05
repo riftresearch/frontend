@@ -769,8 +769,8 @@ export function calculateExchangeRate(
     exchangeRate = outputParsed / inputParsed;
   }
 
-  // Format to 6 decimal places
-  const formattedRate = exchangeRate.toFixed(5);
+  // Format to max 5 decimal places, removing trailing zeros
+  const formattedRate = parseFloat(exchangeRate.toFixed(5)).toString();
 
   // Calculate USD value of the exchange rate
   const usdValue = calculateUsdValue(

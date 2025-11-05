@@ -2000,7 +2000,7 @@ export const SwapInputAndOutput = () => {
                   boxShadow: "none",
                   outline: "none",
                 }}
-                fontSize={isMobile ? "28px" : "46px"}
+                fontSize={isMobile ? "32px" : "46px"}
                 placeholder="0.0"
                 _placeholder={{
                   color: inputStyle?.light_text_color || "#4A90E2",
@@ -2270,7 +2270,7 @@ export const SwapInputAndOutput = () => {
                   boxShadow: "none",
                   outline: "none",
                 }}
-                fontSize={isMobile ? "28px" : "46px"}
+                fontSize={isMobile ? "32px" : "46px"}
                 placeholder="0.0"
                 _placeholder={{
                   color: outputStyle?.light_text_color || "#805530",
