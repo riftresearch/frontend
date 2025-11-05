@@ -82,7 +82,8 @@ export const SwapButton = () => {
     setUniswapQuote,
     setRfqQuote,
   } = useStore();
-
+  // Ref to track previous refetchQuote value for retry detection
+  const prevRefetchQuoteRef = useRef(refetchQuote);
   // Wagmi hooks for contract interactions
   const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
   const {
@@ -279,11 +280,8 @@ export const SwapButton = () => {
 
   // Handle cbBTC->BTC swap using direct OTC transfer
   const executeCBBTCtoBTCSwap = useCallback(async () => {
-    if (!rfqQuote || !userEvmAccountAddress || !selectedInputToken) {
-      toastError(new Error("Missing quote data"), {
-        title: "Swap Failed",
-        description: "Please refresh the quote and try again",
-      });
+    if (!rfqQuote || !userEvmAccountAddress) {
+      setRefetchQuote(true);
       return;
     }
 
@@ -543,11 +541,8 @@ export const SwapButton = () => {
 
   // Handle BTC->cbBTC swap using OTC
   const executeBTCtoCBBTCSwap = useCallback(async () => {
-    if (!rfqQuote || !userEvmAccountAddress || !selectedInputToken) {
-      toastError(new Error("Missing quote data"), {
-        title: "Swap Failed",
-        description: "Please refresh the quote and try again",
-      });
+    if (!rfqQuote || !userEvmAccountAddress) {
+      setRefetchQuote(true);
       return;
     }
 
@@ -649,31 +644,32 @@ export const SwapButton = () => {
         return;
       }
 
-      setSwapButtonPressed(true);
-
       // For cbBTC->BTC swaps, use the direct OTC flow
-      if (isSwappingForBTC && selectedInputToken?.ticker === "cbBTC" && rfqQuote) {
+      if (isSwappingForBTC && selectedInputToken?.ticker === "cbBTC") {
+        setSwapButtonPressed(true);
         await executeCBBTCtoBTCSwap();
         return;
       }
 
       // For ERC20->BTC swaps, use the new Uniswap flow
-      if (isSwappingForBTC && uniswapQuote && rfqQuote) {
+      if (isSwappingForBTC) {
+        setSwapButtonPressed(true);
         await executeERC20ToBTCSwap();
         return;
       }
 
       // For BTC->cbBTC swaps
-      if (!isSwappingForBTC && rfqQuote) {
+      if (!isSwappingForBTC) {
+        setSwapButtonPressed(true);
         await executeBTCtoCBBTCSwap();
         return;
       }
 
       // Other swap types not yet implemented
-      toastInfo({
-        title: "Swap Not Supported",
-        description: "This swap type is not yet implemented",
-      });
+      // toastInfo({
+      //   title: "Swap Not Supported",
+      //   description: "This swap type is not yet implemented",
+      // });
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
@@ -866,6 +862,23 @@ export const SwapButton = () => {
       startSwap();
     }
   }, [permitDataForSwap, isNativeETH, isButtonLoading, startSwap]);
+
+  // Auto-retry swap after quote refetch completes
+  useEffect(() => {
+    const wasRefetching = prevRefetchQuoteRef.current === true;
+    const isDoneRefetching = refetchQuote === false;
+
+    // Detect transition from refetching → done refetching
+    if (wasRefetching && isDoneRefetching && rfqQuote !== null && swapButtonPressed) {
+      console.log("Auto-retrying swap after quote refetch completed");
+      startSwap();
+      // Update ref to prevent re-triggering on subsequent renders
+      prevRefetchQuoteRef.current = false;
+    } else {
+      // Update ref with current value
+      prevRefetchQuoteRef.current = refetchQuote;
+    }
+  }, [refetchQuote, rfqQuote, swapButtonPressed, startSwap]);
 
   // Handle keyboard events (Enter to submit)
   useEffect(() => {

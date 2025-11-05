@@ -9,6 +9,7 @@ import { mainnet, base } from "@reown/appkit/networks";
 import { TokenData } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
+import useWindowSize from "@/hooks/useWindowSize";
 import {
   FALLBACK_TOKEN_ICON,
   BASE_POPULAR_TOKENS,
@@ -30,6 +31,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   currentAsset,
 }) => {
   const { evmConnectWalletChainId } = useStore();
+  const { isMobile } = useWindowSize();
 
   const [selectedNetwork, setSelectedNetwork] = useState<Network>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -791,7 +793,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                         >
                           {token.ticker}
                         </Text>
-                        {token.address && (
+                        {!isMobile && token.address && (
                           <Text
                             fontSize="14px"
                             fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -819,7 +821,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.textGray}
                         >
-                          {token.balance}
+                          {token.balance.slice(0, 9)}
                         </Text>
                       </Flex>
                     )}

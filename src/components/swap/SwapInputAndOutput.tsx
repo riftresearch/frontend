@@ -583,6 +583,7 @@ export const SwapInputAndOutput = () => {
           setUniswapQuote(null);
           setRfqQuote(rfqQuoteResponse);
           setIsLoadingQuote(false);
+          setRefetchQuote(false);
 
           if (mode === "ExactInput") {
             // Set output amount (ERC20/ETH) - truncate to 8 decimals
@@ -1827,10 +1828,19 @@ export const SwapInputAndOutput = () => {
 
         // Fetch quote based on which field was last edited
         if (lastEditedField === "input") {
-          console.log("fetching ERC20 to BTC quote");
-          await fetchERC20ToBTCQuote(undefined, currentRequestId);
+          if (isSwappingForBTC) {
+            console.log("refetching ERC20 to BTC quote");
+            await fetchERC20ToBTCQuote(undefined, currentRequestId);
+          } else {
+            await fetchBTCtoERC20Quote(undefined, "ExactInput", currentRequestId);
+          }
         } else {
-          await fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
+          if (isSwappingForBTC) {
+            console.log("refetching ERC20 to BTC exact output quote");
+            await fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
+          } else {
+            await fetchBTCtoERC20Quote(undefined, "ExactOutput", currentRequestId);
+          }
         }
       } catch (error) {
         console.error("Failed to refetch quote:", error);
@@ -1846,7 +1856,7 @@ export const SwapInputAndOutput = () => {
   // Auto-refetch quotes when prices become available
   useEffect(() => {
     let price: number | null = null;
-    if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+    if (selectedInputToken.ticker === "ETH") {
       price = ethPrice;
     } else if (selectedInputToken.address) {
       price = erc20Price;
