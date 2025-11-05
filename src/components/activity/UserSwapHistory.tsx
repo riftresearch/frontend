@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import Image from "next/image";
-import { Box, Flex, Text, Spinner, Button } from "@chakra-ui/react";
+import { Box, Flex, Text, Spinner, Button, Image } from "@chakra-ui/react";
 import { useAccount } from "wagmi";
 import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -57,10 +56,75 @@ function formatTimeAgo(timestamp: number): string {
   return `${seconds}s ago`;
 }
 
-const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
+const AssetIcon: React.FC<{
+  badge?: "BTC" | "cbBTC" | string;
+  iconUrl?: string;
+  size?: number;
+}> = ({ badge, iconUrl, size = 18 }) => {
+  const [hasError, setHasError] = React.useState(false);
+
   if (!badge) return null;
-  const src = badge === "BTC" ? "/images/BTC_icon.svg" : "/images/cbBTC_icon.svg";
-  return <Image src={src} alt={badge} width={18} height={18} style={{ opacity: 0.9 }} />;
+
+  const getIconSrc = (assetSymbol: string): string | null => {
+    const normalizedAsset = assetSymbol.toUpperCase();
+    if (normalizedAsset === "BTC") return "/images/BTC_icon.svg";
+    if (normalizedAsset === "CBBTC") return "/images/cbBTC_icon.svg";
+    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_icon.svg";
+    if (normalizedAsset === "USDC") return "/images/usdc_icon.svg";
+    if (normalizedAsset === "USDT") return "/images/usdt_icon.svg";
+    return null;
+  };
+
+  // Reset error on URL change
+  React.useEffect(() => {
+    setHasError(false);
+  }, [iconUrl]);
+
+  const localIconSrc = getIconSrc(badge);
+  const shouldUseExternalIcon = iconUrl && !hasError;
+  const shouldUseLocalIcon = !shouldUseExternalIcon && localIconSrc;
+
+  // Default question mark icon
+  if (!shouldUseExternalIcon && !shouldUseLocalIcon) {
+    return (
+      <Box
+        width={`${size}px`}
+        height={`${size}px`}
+        borderRadius="50%"
+        bg="rgba(128, 128, 128, 0.3)"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        flexShrink={0}
+      >
+        <Text
+          fontSize={`${size * 0.6}px`}
+          color="rgba(200, 200, 200, 0.6)"
+          fontWeight="bold"
+          lineHeight="1"
+        >
+          ?
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Image
+      src={shouldUseExternalIcon ? iconUrl : localIconSrc!}
+      alt={badge}
+      width={size}
+      height={size}
+      style={{ opacity: 0.9 }}
+      onError={() => {
+        if (iconUrl) {
+          console.warn(`Failed to load icon from URL: ${iconUrl}`);
+        }
+        setHasError(true);
+      }}
+      crossOrigin="anonymous"
+    />
+  );
 };
 
 const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }> = ({
@@ -72,14 +136,6 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
   const currentStatus = currentStep?.status;
   const isRefundAvailable = (swap as any).isRefundAvailable;
-
-  console.log(`[STATUS BADGE ${swap.id}]`, {
-    swapId: swap.id,
-    currentStep,
-    currentStatus,
-    isRefundAvailable,
-    allFlowSteps: swap.flow.map((s) => ({ state: s.state, status: s.status })),
-  });
 
   // Refunded: refunding_user, refunding_mm, or user_refunded_detected (regardless of isRefundAvailable)
   if (
@@ -248,6 +304,10 @@ async function fetchUserSwaps(
 
     const allSwaps = await Promise.all(
       data.swaps.map(async (row: any) => {
+        console.log("[FETCH USER SWAPS] Raw row for swap:", row.id, {
+          metadata: row.metadata,
+          start_asset: row.metadata?.start_asset,
+        });
         const mappedSwap = mapDbRowToAdminSwap(row);
 
         // Check if refund is available based on server flag and balance check
@@ -328,7 +388,7 @@ export const UserSwapHistory: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
-  const pageSize = 12;
+  const pageSize = 15; // Load 15 swaps per page to enable scrolling without overwhelming
   const fetchingRef = useRef(false);
   const [isInitialMount, setIsInitialMount] = useState(true);
 
@@ -702,6 +762,13 @@ export const UserSwapHistory: React.FC = () => {
                 // Amount color matches deposit transaction color
                 const amountColor = userColor;
 
+                // Debug: Log metadata for this swap
+                console.log("[RENDER SWAP] ID:", swap.id, {
+                  direction: swap.direction,
+                  startAssetMetadata: swap.startAssetMetadata,
+                  hasMetadata: !!swap.startAssetMetadata,
+                });
+
                 const lastStep = swap.flow[swap.flow.length - 1];
                 const isCompleted =
                   lastStep?.state === "completed" && lastStep?.status === "settled";
@@ -747,15 +814,39 @@ export const UserSwapHistory: React.FC = () => {
                           Direction
                         </Text>
                         <Flex align="center" gap="6px">
-                          <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
-                          <Text
-                            fontSize="12px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.offWhite}
-                            letterSpacing="-0.5px"
-                          >
-                            {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
-                          </Text>
+                          {/* From Asset */}
+                          {(() => {
+                            const fromAsset =
+                              swap.direction === "BTC_TO_EVM"
+                                ? "BTC"
+                                : swap.startAssetMetadata?.ticker || "cbBTC";
+                            const fromIcon =
+                              swap.direction === "EVM_TO_BTC"
+                                ? swap.startAssetMetadata?.icon
+                                : undefined;
+
+                            console.log("[DIRECTION RENDER]", swap.id, {
+                              direction: swap.direction,
+                              fromAsset,
+                              fromIcon,
+                              hasMetadata: !!swap.startAssetMetadata,
+                              ticker: swap.startAssetMetadata?.ticker,
+                            });
+
+                            return (
+                              <>
+                                <AssetIcon badge={fromAsset} iconUrl={fromIcon} />
+                                <Text
+                                  fontSize="12px"
+                                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                                  color={colors.offWhite}
+                                  letterSpacing="-0.5px"
+                                >
+                                  {fromAsset}
+                                </Text>
+                              </>
+                            );
+                          })()}
                           <Text
                             fontSize="13px"
                             fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -764,6 +855,7 @@ export const UserSwapHistory: React.FC = () => {
                           >
                             →
                           </Text>
+                          {/* To Asset */}
                           <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
                           <Text
                             fontSize="12px"
@@ -848,25 +940,58 @@ export const UserSwapHistory: React.FC = () => {
                           Amount
                         </Text>
                         <Flex gap="4px" align="center">
-                          <Text
-                            fontSize="13px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.offWhite}
-                            fontWeight="500"
-                            letterSpacing="-0.5px"
-                          >
-                            {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                          </Text>
-                          <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
-                          <Text
-                            fontSize="13px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.textGray}
-                            fontWeight="500"
-                            letterSpacing="-0.5px"
-                          >
-                            {isBTCtoEVM ? "BTC" : "cbBTC"}
-                          </Text>
+                          {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+                            // Show ERC20 amount from metadata for EVM->BTC swaps
+                            <>
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.offWhite}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {parseFloat(swap.startAssetMetadata.amount)
+                                  .toFixed(Math.min(swap.startAssetMetadata.decimals, 6))
+                                  .replace(/\.?0+$/, "")}
+                              </Text>
+                              <AssetIcon
+                                badge={swap.startAssetMetadata.ticker}
+                                iconUrl={swap.startAssetMetadata.icon}
+                              />
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.textGray}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {swap.startAssetMetadata.ticker}
+                              </Text>
+                            </>
+                          ) : (
+                            // Show BTC amount for BTC->EVM swaps or legacy swaps
+                            <>
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.offWhite}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                              </Text>
+                              <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.textGray}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {isBTCtoEVM ? "BTC" : "cbBTC"}
+                              </Text>
+                            </>
+                          )}
                         </Flex>
                       </Flex>
                     </Flex>
@@ -1258,25 +1383,58 @@ export const UserSwapHistory: React.FC = () => {
 
                       {/* Amount */}
                       <Flex flex="0 0 218px" gap="4px" align="center">
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.offWhite}
-                          fontWeight="500"
-                          letterSpacing="-0.5px"
-                        >
-                          {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                        </Text>
-                        <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          fontWeight="500"
-                          letterSpacing="-0.5px"
-                        >
-                          {isBTCtoEVM ? "BTC" : "cbBTC"}
-                        </Text>
+                        {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+                          // Show ERC20 amount from metadata for EVM->BTC swaps
+                          <>
+                            <Text
+                              fontSize="13px"
+                              fontFamily={FONT_FAMILIES.AUX_MONO}
+                              color={colors.offWhite}
+                              fontWeight="500"
+                              letterSpacing="-0.5px"
+                            >
+                              {parseFloat(swap.startAssetMetadata.amount)
+                                .toFixed(Math.min(swap.startAssetMetadata.decimals, 6))
+                                .replace(/\.?0+$/, "")}
+                            </Text>
+                            <AssetIcon
+                              badge={swap.startAssetMetadata.ticker}
+                              iconUrl={swap.startAssetMetadata.icon}
+                            />
+                            <Text
+                              fontSize="13px"
+                              fontFamily={FONT_FAMILIES.AUX_MONO}
+                              color={colors.textGray}
+                              fontWeight="500"
+                              letterSpacing="-0.5px"
+                            >
+                              {swap.startAssetMetadata.ticker}
+                            </Text>
+                          </>
+                        ) : (
+                          // Show BTC amount for BTC->EVM swaps or legacy swaps
+                          <>
+                            <Text
+                              fontSize="13px"
+                              fontFamily={FONT_FAMILIES.AUX_MONO}
+                              color={colors.offWhite}
+                              fontWeight="500"
+                              letterSpacing="-0.5px"
+                            >
+                              {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                            </Text>
+                            <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                            <Text
+                              fontSize="13px"
+                              fontFamily={FONT_FAMILIES.AUX_MONO}
+                              color={colors.textGray}
+                              fontWeight="500"
+                              letterSpacing="-0.5px"
+                            >
+                              {isBTCtoEVM ? "BTC" : "cbBTC"}
+                            </Text>
+                          </>
+                        )}
                       </Flex>
 
                       {/* User Deposit Transaction */}
@@ -1328,14 +1486,28 @@ export const UserSwapHistory: React.FC = () => {
 
                       {/* Direction */}
                       <Flex flex="0 0 188px" align="center" gap="6px">
-                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"} />
+                        {/* From Asset */}
+                        <AssetIcon
+                          badge={
+                            swap.direction === "BTC_TO_EVM"
+                              ? "BTC"
+                              : swap.startAssetMetadata?.ticker || "cbBTC"
+                          }
+                          iconUrl={
+                            swap.direction === "EVM_TO_BTC"
+                              ? swap.startAssetMetadata?.icon
+                              : undefined
+                          }
+                        />
                         <Text
                           fontSize="12px"
                           fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.textGray}
                           letterSpacing="-0.5px"
                         >
-                          {swap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC"}
+                          {swap.direction === "BTC_TO_EVM"
+                            ? "BTC"
+                            : swap.startAssetMetadata?.ticker || "cbBTC"}
                         </Text>
                         <Text
                           fontSize="13px"
@@ -1345,6 +1517,7 @@ export const UserSwapHistory: React.FC = () => {
                         >
                           →
                         </Text>
+                        {/* To Asset */}
                         <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
                         <Text
                           fontSize="12px"

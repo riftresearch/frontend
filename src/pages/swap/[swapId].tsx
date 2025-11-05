@@ -3,8 +3,8 @@ import { Flex } from "@chakra-ui/react";
 import { useRouter } from "next/router";
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
-import { TransactionWidget } from "@/components/other/TransactionWidget";
-import { BitcoinTransactionWidget } from "@/components/other/BitcoinTransactionWidget";
+import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
+import { UnifiedTransactionWidget } from "@/components/other/UnifiedTransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useStore } from "@/utils/store";
@@ -14,6 +14,16 @@ import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 const mapStatusToDepositFlowState = (status: string) => {
   const statusMap: Record<string, string> = {
     "not-started": "0-not-started",
+    pending: "0-not-started",
+    waiting_user_deposit_initiated: "1-WaitingUserDepositInitiated",
+    waiting_user_deposit_confirmed: "2-WaitingUserDepositConfirmed",
+    waiting_mm_deposit_initiated: "3-WaitingMMDepositInitiated",
+    waiting_mm_deposit_confirmed: "4-WaitingMMDepositConfirmed",
+    settled: "5-Settled",
+    refunding_user: "6-RefundingUser",
+    refunding_mm: "7-RefundingMM",
+    failed: "8-Failed",
+    // Legacy support for old status format
     WaitingUserDepositInitiated: "1-WaitingUserDepositInitiated",
     WaitingUserDepositConfirmed: "2-WaitingUserDepositConfirmed",
     WaitingMMDepositInitiated: "3-WaitingMMDepositInitiated",
@@ -69,7 +79,7 @@ export default function SwapPage() {
     if (previousState === "0-not-started") {
       if (depositFlowState === "1-WaitingUserDepositInitiated") {
         // Start timer on step 1
-        setCountdownValue(120);
+        setCountdownValue(99);
       } else if (depositFlowState !== "0-not-started") {
         // On any other step (2, 3, 4, 5), show loading dots (countdown = 0)
         setCountdownValue(0);
@@ -90,26 +100,27 @@ export default function SwapPage() {
     if (swapStatusInfo) {
       console.log("New Swap status", {
         ...swapStatusInfo,
-        mm_deposit: swapStatusInfo.mm_deposit
+        mm_deposit_status: swapStatusInfo.mm_deposit_status
           ? {
-              ...swapStatusInfo.mm_deposit,
-              deposit_amount: swapStatusInfo.mm_deposit.deposit_amount
-                ? parseInt(swapStatusInfo.mm_deposit.deposit_amount, 16)
-                : null,
-              expected_amount: swapStatusInfo.mm_deposit.expected_amount
-                ? parseInt(swapStatusInfo.mm_deposit.expected_amount, 16)
+              ...swapStatusInfo.mm_deposit_status,
+              amount: swapStatusInfo.mm_deposit_status.amount
+                ? parseInt(swapStatusInfo.mm_deposit_status.amount, 16)
                 : null,
             }
           : null,
-        user_deposit: swapStatusInfo.user_deposit
+        user_deposit_status: swapStatusInfo.user_deposit_status
           ? {
-              ...swapStatusInfo.user_deposit,
-              deposit_amount: swapStatusInfo.user_deposit.deposit_amount
-                ? parseInt(swapStatusInfo.user_deposit.deposit_amount, 16)
+              ...swapStatusInfo.user_deposit_status,
+              amount: swapStatusInfo.user_deposit_status.amount
+                ? parseInt(swapStatusInfo.user_deposit_status.amount, 16)
                 : null,
-              expected_amount: swapStatusInfo.user_deposit.expected_amount
-                ? parseInt(swapStatusInfo.user_deposit.expected_amount, 16)
-                : null,
+            }
+          : null,
+        quote: swapStatusInfo.quote
+          ? {
+              ...swapStatusInfo.quote,
+              from_amount: parseInt(swapStatusInfo.quote.from_amount),
+              to_amount: parseInt(swapStatusInfo.quote.to_amount),
             }
           : null,
       });
@@ -129,10 +140,10 @@ export default function SwapPage() {
   }
 
   // Check if this is a Bitcoin deposit (BTC -> cbBTC swap)
-  const isBitcoinDeposit = swapStatusInfo?.user_deposit?.chain === "Bitcoin";
-  const bitcoinDepositAddress = swapStatusInfo?.user_deposit?.address;
-  const bitcoinExpectedAmount = swapStatusInfo?.user_deposit?.expected_amount;
-  const bitcoinDecimals = swapStatusInfo?.user_deposit?.decimals || 8;
+  const isBitcoinDeposit = swapStatusInfo?.quote?.from_chain === "bitcoin";
+  const bitcoinDepositAddress = swapStatusInfo?.user_deposit_address;
+  const bitcoinExpectedAmount = swapStatusInfo?.quote?.from_amount;
+  const bitcoinDecimals = swapStatusInfo?.quote?.from_decimals || 8;
 
   // Generate Bitcoin URI and amount for QR code
   let bitcoinUri = "";
@@ -157,18 +168,18 @@ export default function SwapPage() {
       >
         <Navbar />
         <Flex justify="center" align="center" direction="column" minH="calc(100vh - 80px)" p="4">
-          {isBitcoinDeposit && bitcoinDepositAddress ? (
-            <BitcoinTransactionWidget
-              address={bitcoinDepositAddress}
-              amount={bitcoinAmount}
-              bitcoinUri={bitcoinUri}
-              depositTx={swapStatusInfo?.user_deposit?.deposit_tx}
-              swapId={currentSwapId}
-            />
-          ) : (
-            <TransactionWidget swapId={currentSwapId} />
-          )}
+          <UnifiedTransactionWidget
+            swapId={currentSwapId}
+            bitcoinAddress={isBitcoinDeposit ? bitcoinDepositAddress : undefined}
+            bitcoinAmount={isBitcoinDeposit ? bitcoinAmount : undefined}
+            bitcoinUri={isBitcoinDeposit ? bitcoinUri : undefined}
+            bitcoinDepositTx={swapStatusInfo?.user_deposit_status?.tx_hash}
+          />
         </Flex>
+        {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
+        process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (
+          <TEEStatusFooter />
+        )}
       </Flex>
     </>
   );

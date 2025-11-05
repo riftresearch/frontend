@@ -155,6 +155,71 @@ export interface SwapHistoryItem {
  */
 export type SwapHistory = SwapHistoryItem[];
 
+// New analytics API swap data structure
+export interface AnalyticsDepositStatus {
+  amount: string; // hex string like '0x26d1'
+  tx_hash: string;
+  confirmed_at?: string; // ISO 8601 datetime
+  last_checked: string; // ISO 8601 datetime
+  confirmations: number;
+  deposit_detected_at?: string; // ISO 8601 datetime
+}
+
+export interface AnalyticsQuoteToken {
+  chain: string;
+  address: string;
+  decimals: number;
+}
+
+export interface AnalyticsQuote {
+  id: string;
+  from_chain: string;
+  from_token: AnalyticsQuoteToken;
+  from_amount: string;
+  from_decimals: number;
+  to_chain: string;
+  to_token: AnalyticsQuoteToken;
+  to_amount: string;
+  to_decimals: number;
+}
+
+export interface AnalyticsSwapData {
+  id: string;
+  quote_id: string;
+  market_maker_id: string;
+  status: string; // "settled", "waiting_user_deposit_initiated", etc.
+  created_at: string; // ISO 8601
+  updated_at: string; // ISO 8601
+  failure_at: string | null;
+  failure_reason: string | null;
+
+  // User deposit info
+  user_deposit_address: string;
+  user_deposit_status: AnalyticsDepositStatus | null;
+  user_evm_account_address: string;
+  user_destination_address: string;
+
+  // MM deposit info
+  mm_deposit_status: AnalyticsDepositStatus | null;
+  mm_notified_at: string | null;
+  mm_private_key_sent_at: string | null;
+
+  // Quote info
+  quote: AnalyticsQuote;
+
+  // Additional metadata
+  bitcoin_usd_at_swap_time: string | null;
+  swap_number: string;
+  metadata: Record<string, any>;
+
+  // Refund info
+  isRefundAvailable?: boolean;
+  latest_refund: any | null;
+
+  // Settlement
+  settlement_status: any | null;
+}
+
 // Admin dashboard swap history types - aligned to OTC DB statuses
 export type AdminSwapFlowStatus =
   | "pending" // swap created
@@ -220,6 +285,14 @@ export interface AdminSwapItem {
     userConfirmed?: number;
     mmDepositDetected?: number;
     mmPrivateKeySent?: number;
+  };
+  /** Start asset metadata from swap metadata (for EVM->BTC swaps) */
+  startAssetMetadata?: {
+    ticker: string;
+    address: string;
+    icon?: string;
+    amount: string;
+    decimals: number;
   };
   /** Raw swap data from backend */
   rawData?: any;

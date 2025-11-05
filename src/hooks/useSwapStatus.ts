@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { otcClient } from "@/utils/constants";
-import { SwapResponse } from "@/utils/otcClient";
+import { getSwap } from "@/utils/analyticsClient";
+import { AnalyticsSwapData } from "@/utils/types";
 
 export function useSwapStatus(swapId: string | undefined) {
-  const query = useQuery<SwapResponse>({
+  const query = useQuery<AnalyticsSwapData>({
     queryKey: ["swap", swapId],
     queryFn: async () => {
       if (!swapId) {
         throw new Error("No swap ID provided");
       }
-      return otcClient.getSwap(swapId);
+      return getSwap(swapId);
     },
     enabled: !!swapId,
     refetchInterval: 2500,

@@ -11,7 +11,7 @@ import { useStore } from "./store";
 
 export interface Metadata {
   affiliate?: string;
-  startAsset?: string;
+  start_asset?: string;
 }
 
 export interface CreateSwapRequest {

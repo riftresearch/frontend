@@ -289,6 +289,21 @@ export const SwapButton = () => {
 
     try {
       // Step 1: Create OTC swap to get deposit address
+      // Use full precision amount if available, otherwise use displayed amount
+      const amountToTransfer = fullPrecisionInputAmount || rawInputAmount;
+
+      const startAssetMetadata = {
+        ticker: selectedInputToken.ticker,
+        address: selectedInputToken.address || "native",
+        icon: selectedInputToken.icon,
+        amount: amountToTransfer,
+        decimals: selectedInputToken.decimals,
+      };
+
+      console.log("shrek - CREATING REAL OTC SWAP - metadata:", {
+        affiliate: "app.rift.trade",
+        start_asset: JSON.stringify(startAssetMetadata),
+      });
       console.log("Creating OTC swap for cbBTC...");
       const otcSwap = await otcClient.createSwap({
         quote: rfqQuote,
@@ -297,7 +312,7 @@ export const SwapButton = () => {
         metadata: selectedInputToken
           ? {
               affiliate: "app.rift.trade",
-              startAsset: `${selectedInputToken.ticker}:${selectedInputToken.address || "native"}:${selectedInputToken.icon}`,
+              start_asset: JSON.stringify(startAssetMetadata),
             }
           : undefined,
       });
@@ -310,8 +325,6 @@ export const SwapButton = () => {
 
       // Step 2: Initiate ERC20 transfer of cbBTC to deposit address
       const decimals = selectedInputToken.decimals;
-      // Use full precision amount if available, otherwise use displayed amount
-      const amountToTransfer = fullPrecisionInputAmount || rawInputAmount;
       const transferAmount = parseUnits(amountToTransfer, decimals);
 
       console.log("Initiating cbBTC transfer to deposit address...");
@@ -411,6 +424,17 @@ export const SwapButton = () => {
         depositAddress = userEvmAccountAddress;
       } else {
         // Step 1: Create OTC swap to get deposit address
+        // Use full precision amount if available, otherwise use displayed amount
+        const amountForMetadata = fullPrecisionInputAmount || rawInputAmount;
+
+        const startAssetMetadata = {
+          ticker: selectedInputToken.ticker,
+          address: selectedInputToken.address || "native",
+          icon: selectedInputToken.icon,
+          amount: amountForMetadata,
+          decimals: selectedInputToken.decimals,
+        };
+
         const otcSwap = await otcClient.createSwap({
           quote: rfqQuote!,
           user_destination_address: payoutAddress,
@@ -418,7 +442,7 @@ export const SwapButton = () => {
           metadata: selectedInputToken
             ? {
                 affiliate: "app.rift.trade",
-                startAsset: `${selectedInputToken.ticker}:${selectedInputToken.address || "native"}:${selectedInputToken.icon}`,
+                start_asset: JSON.stringify(startAssetMetadata),
               }
             : undefined,
         });
@@ -536,7 +560,7 @@ export const SwapButton = () => {
         user_evm_account_address: userEvmAccountAddress,
         metadata: {
           affiliate: "app.rift.trade",
-          startAsset: "native:BTC",
+          start_asset: "native:BTC",
         },
       });
 

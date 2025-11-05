@@ -1,5 +1,5 @@
 import { satsToBtc } from "./swapHelpers";
-import { AdminSwapFlowStep, AdminSwapItem, SwapDirection } from "./types";
+import { AdminSwapFlowStep, AdminSwapItem, SwapDirection, AnalyticsSwapData } from "./types";
 
 export type AnalyticsPagination = {
   total: number;
@@ -97,6 +97,68 @@ export async function getSwaps(
   } catch (error: any) {
     // Handle network errors
     if (error.message && !error.message.includes("Failed to fetch swaps")) {
+      const { toastError } = await import("./toast");
+      toastError(null, {
+        title: "Network Error",
+        description: "Could not connect to analytics server. Please check your connection.",
+      });
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Get a single swap by ID
+ */
+export async function getSwap(swapId: string): Promise<AnalyticsSwapData> {
+  try {
+    const url = `${ANALYTICS_API_URL}/api/swap/${swapId}`;
+    const apiKey = getApiKeyFromCookie();
+
+    console.log("Fetching swap:", swapId);
+    console.log("API Key from cookie:", apiKey ? "***" + apiKey.slice(-4) : "NOT SET");
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Error response body:", errorText);
+
+      // Dynamic import to avoid circular dependency
+      const { toastError } = await import("./toast");
+
+      if (response.status === 401) {
+        toastError(null, {
+          title: "Authentication Failed",
+          description: "Your session may have expired. Please log in again.",
+        });
+      } else if (response.status === 404) {
+        toastError(null, {
+          title: "Swap Not Found",
+          description: "The swap you're looking for does not exist.",
+        });
+      } else {
+        toastError(null, {
+          title: "Failed to Fetch Swap",
+          description: `Server returned ${response.status}. Please try again.`,
+        });
+      }
+
+      throw new Error(`Failed to fetch swap: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log("Swap data received:", data.swap);
+
+    return data.swap;
+  } catch (error: any) {
+    // Handle network errors
+    if (error.message && !error.message.includes("Failed to fetch swap")) {
       const { toastError } = await import("./toast");
       toastError(null, {
         title: "Network Error",
@@ -292,7 +354,43 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   // [13] Determine EVM chain (ETH or BASE) from quote.to_chain
   const evmChain: "ETH" | "BASE" = row.quote?.to_chain === "base" ? "BASE" : "ETH";
 
-  // [14] Return complete AdminSwapItem with all calculated data
+  // [14] Parse start_asset metadata if available (for EVM->BTC swaps)
+  let startAssetMetadata = undefined;
+
+  // Try to get start_asset from either metadata.start_asset or row.start_asset
+  const startAssetString = row.metadata?.start_asset || row.start_asset;
+
+  console.log("[mapDbRowToAdminSwap] Checking metadata for swap:", row.id, {
+    hasMetadata: !!row.metadata,
+    metadata: row.metadata,
+    start_asset_from_metadata: row.metadata?.start_asset,
+    start_asset_from_row: row.start_asset,
+    startAssetString,
+  });
+
+  if (startAssetString && typeof startAssetString === "string") {
+    try {
+      const parsed = JSON.parse(startAssetString);
+      console.log("[mapDbRowToAdminSwap] Parsed start_asset:", parsed);
+      if (parsed && typeof parsed === "object") {
+        startAssetMetadata = {
+          ticker: parsed.ticker || "",
+          address: parsed.address || "",
+          icon: parsed.icon,
+          amount: parsed.amount || "0",
+          decimals: parsed.decimals || 18,
+        };
+        console.log("[mapDbRowToAdminSwap] Created startAssetMetadata:", startAssetMetadata);
+      }
+    } catch (e) {
+      // Legacy format or invalid JSON - ignore
+      console.warn("Failed to parse start_asset metadata:", e);
+    }
+  } else {
+    console.log("[mapDbRowToAdminSwap] No start_asset found for swap:", row.id);
+  }
+
+  // [15] Return complete AdminSwapItem with all calculated data
   return {
     statusTesting: status,
     id: row.id,
@@ -318,6 +416,7 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
       mmDepositDetected: mmDepositDetectedAt || undefined,
       mmPrivateKeySent: mmPrivateKeySentAt || undefined,
     },
+    startAssetMetadata,
     rawData: row,
   };
 }

@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
+import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { Flex } from "@chakra-ui/react";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
@@ -33,6 +34,10 @@ export default function History() {
         >
           <UserSwapHistory />
         </Flex>
+        {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
+        process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (
+          <TEEStatusFooter />
+        )}
       </Flex>
     </>
   );

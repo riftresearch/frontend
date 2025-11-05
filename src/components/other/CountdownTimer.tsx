@@ -15,7 +15,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   const [previousState, setPreviousState] = useState("0-not-started");
   const [showTimer, setShowTimer] = useState(false);
   const [hideNumber, setHideNumber] = useState(false);
-  const [initialCountdownValue, setInitialCountdownValue] = useState(120); // Track the starting value
+  const [initialCountdownValue, setInitialCountdownValue] = useState(99); // Track the starting value
 
   useEffect(() => {
     // Reset progress only when starting fresh from state 0
@@ -146,17 +146,17 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
       {/* Countdown number */}
       <Text
         position="absolute"
-        fontSize="88px"
+        fontSize={countdownValue > 99 ? "68px" : "88px"}
         textAlign="center"
-        letterSpacing="-13px"
+        letterSpacing={countdownValue > 99 ? "-10px" : "-13px"}
         mt="-5px"
-        ml={countdownValue > 9 ? "-16px" : "-16px"}
+        ml={countdownValue > 99 ? "-12px" : countdownValue > 9 ? "-16px" : "-16px"}
         color="white"
         dropShadow="0 0 100px rgba(255, 255, 255, 0.5)"
         fontFamily="Proto Mono"
         opacity={hideNumber ? 0 : 1}
         transform={hideNumber ? "translateY(30px)" : "translateY(0px)"}
-        transition="all 0.8s cubic-bezier(0.16, 1, 0.3, 1)"
+        transition="all 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
       >
         {countdownValue}
       </Text>

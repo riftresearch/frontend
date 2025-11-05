@@ -129,7 +129,7 @@ export const useStore = create<{
   setSearchResults: (tokens: TokenData[]) => set({ searchResults: tokens }),
   depositFlowState: "0-not-started",
   setDepositFlowState: (s: DepositFlowState) => set({ depositFlowState: s }),
-  countdownValue: 120,
+  countdownValue: 99,
   setCountdownValue: (value: number) => set({ countdownValue: value }),
   swapResponse: null,
   setSwapResponse: (response: CreateSwapResponse | null) => set({ swapResponse: response }),

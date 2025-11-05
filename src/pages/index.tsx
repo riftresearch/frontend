@@ -5,7 +5,7 @@ import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { RiftLogo } from "@/components/other/RiftLogo";
 import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
-import { BitcoinTransactionWidget } from "@/components/other/BitcoinTransactionWidget";
+import { UnifiedTransactionWidget } from "@/components/other/UnifiedTransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import useWindowSize from "@/hooks/useWindowSize";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -151,11 +151,11 @@ export default function Home() {
             </>
           )}
 
-          {/* Show Bitcoin Transaction Widget when deposit info is available, otherwise show Swap Widget */}
+          {/* Show Unified Transaction Widget when deposit info is available, otherwise show Swap Widget */}
           {bitcoinDepositInfo ? (
-            <BitcoinTransactionWidget
-              address={bitcoinDepositInfo.address}
-              amount={bitcoinDepositInfo.amount}
+            <UnifiedTransactionWidget
+              bitcoinAddress={bitcoinDepositInfo.address}
+              bitcoinAmount={bitcoinDepositInfo.amount}
               bitcoinUri={bitcoinDepositInfo.uri}
             />
           ) : (
