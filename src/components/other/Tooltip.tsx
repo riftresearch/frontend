@@ -10,6 +10,7 @@ interface TooltipProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   iconWidth?: string;
+  width?: string;
 }
 
 export const Tooltip = ({
@@ -19,6 +20,7 @@ export const Tooltip = ({
   onMouseEnter,
   onMouseLeave,
   iconWidth = "14px",
+  width = "200px",
 }: TooltipProps) => {
   return (
     <Flex position="relative">
@@ -43,14 +45,15 @@ export const Tooltip = ({
           bg="#121212"
           color={colors.offWhite}
           fontSize="12px"
-          fontFamily="Aux"
+          fontFamily="Monospace"
           letterSpacing="-0.5px"
           padding="8px 12px"
-          borderRadius="6px"
+          borderRadius="8px"
+          border={`1px solid ${colors.borderGray}`}
           zIndex={1000}
           flexDirection="column"
           gap="4px"
-          width="200px"
+          width={width}
           whiteSpace="normal"
           boxShadow="0 4px 12px rgba(0, 0, 0, 0.4)"
         >

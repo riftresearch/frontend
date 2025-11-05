@@ -170,15 +170,15 @@ export function calculateFees(
   const feeOverview: FeeOverview = {
     networkFee: {
       fee: formatUsdValue(networkFeeUSD),
-      description: "Gas fee",
+      description: "Gas Fee",
     },
     erc20Fee: {
       fee: formatUsdValue(erc20FeeUSD),
-      description: "Swap fee",
+      description: "Swap Fee",
     },
     protocolFee: {
       fee: formatUsdValue(protocolFeeUSD),
-      description: "Protocol fee",
+      description: "Rift Fee",
     },
     totalFees: formatUsdValue(totalFeesUSD),
   };

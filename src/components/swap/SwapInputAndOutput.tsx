@@ -36,6 +36,7 @@ import {
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
 import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -49,6 +50,9 @@ export const SwapInputAndOutput = () => {
 
   // Liquidity hook
   const liquidity = useMaxLiquidity();
+
+  // Fetch BTC/ETH prices
+  useBtcEthPrices();
 
   // Mobile detection
   const { isMobile } = useWindowSize();
@@ -93,8 +97,6 @@ export const SwapInputAndOutput = () => {
     setOutputAmount,
     isSwappingForBTC,
     setIsSwappingForBTC,
-    setBtcPrice,
-    setEthPrice,
     btcPrice,
     ethPrice,
     erc20Price,
@@ -1214,24 +1216,6 @@ export const SwapInputAndOutput = () => {
     setPayoutAddress,
     setAddressValidation,
   ]);
-
-  // Fetch BTC and ETH prices on mount
-  useEffect(() => {
-    const fetchETHandBTCPrice = async () => {
-      try {
-        const response = await fetch("/api/eth-and-btc-price");
-        if (response.ok) {
-          const data = await response.json();
-          setEthPrice(data.ethPrice);
-          setBtcPrice(data.btcPrice);
-        }
-      } catch (error) {
-        console.error("Failed to fetch BTC/ETH prices:", error);
-      }
-    };
-
-    fetchETHandBTCPrice();
-  }, [setBtcPrice, setEthPrice]);
 
   // Load swap state from cookies on initial mount BEFORE setting defaults
   useEffect(() => {
@@ -2489,12 +2473,13 @@ export const SwapInputAndOutput = () => {
             mr="3px"
             letterSpacing="-1.5px"
             fontWeight="normal"
-            fontFamily="Aux"
+            fontFamily="Helvetica"
           >
             <Tooltip
               show={showFeeTooltip && !!feeOverview}
               onMouseEnter={() => setShowFeeTooltip(true)}
               onMouseLeave={() => setShowFeeTooltip(false)}
+              width="145px"
               hoverText={
                 feeOverview ? (
                   <>
@@ -2505,9 +2490,10 @@ export const SwapInputAndOutput = () => {
                     ]
                       .filter((fee) => fee.fee !== "$0.00")
                       .map((fee) => (
-                        <Text key={fee.key}>
-                          {fee.description}: {fee.fee}
-                        </Text>
+                        <Flex key={fee.key} justify="space-between" w="100%">
+                          <Text fontFamily="Monospace">{fee.description}:</Text>
+                          <Text fontFamily="Monospace">{fee.fee}</Text>
+                        </Flex>
                       ))}
                   </>
                 ) : null

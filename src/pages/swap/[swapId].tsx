@@ -7,6 +7,7 @@ import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
 import { UnifiedTransactionWidget } from "@/components/other/UnifiedTransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { useStore } from "@/utils/store";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 
@@ -52,6 +53,7 @@ export default function SwapPage() {
 
   const [previousState, setPreviousState] = React.useState<string>("0-not-started");
   useSyncChainIdToStore();
+  useBtcEthPrices(); // Fetch BTC/ETH prices on this page
 
   // Use the swapId from URL params, fallback to store if available
   const currentSwapId = (swapId as string) || swapResponse?.swap_id;

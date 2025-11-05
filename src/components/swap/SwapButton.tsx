@@ -298,6 +298,11 @@ export const SwapButton = () => {
         decimals: selectedInputToken.decimals,
       };
 
+      console.log("🔵 [METADATA] Creating cbBTC->BTC swap with metadata:");
+      console.log("  - Amount in metadata:", amountToTransfer);
+      console.log("  - Full metadata object:", startAssetMetadata);
+      console.log("  - Stringified metadata:", JSON.stringify(startAssetMetadata));
+
       console.log("shrek - CREATING REAL OTC SWAP - metadata:", {
         affiliate: "app.rift.trade",
         start_asset: JSON.stringify(startAssetMetadata),
@@ -432,6 +437,11 @@ export const SwapButton = () => {
           amount: amountForMetadata,
           decimals: selectedInputToken.decimals,
         };
+
+        console.log("🟠 [METADATA] Creating ERC20->BTC swap with metadata:");
+        console.log("  - Amount in metadata:", amountForMetadata);
+        console.log("  - Full metadata object:", startAssetMetadata);
+        console.log("  - Stringified metadata:", JSON.stringify(startAssetMetadata));
 
         const otcSwap = await otcClient.createSwap({
           quote: rfqQuote!,
