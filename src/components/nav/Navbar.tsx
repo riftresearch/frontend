@@ -139,25 +139,54 @@ export const Navbar = ({}) => {
 
   return (
     <Flex
-      width="100%"
+      width={"100%"}
       direction={"column"}
       position="fixed"
       top={0}
       left={0}
       right={0}
       zIndex={1010}
+      bg={isMobile ? "rgba(20, 20, 28, 0.50)" : "transparent"}
+      backdropFilter={isMobile ? "blur(10px)" : "none"}
+      boxShadow={isMobile ? "0 4px 12px rgba(0, 0, 0, 0.6)" : "none"}
     >
-      <Flex
-        bgGradient="linear(0deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.8))"
-        position="absolute"
-        w="100%"
-        h="130%"
-      ></Flex>
+      {!isMobile && (
+        <Flex
+          bgGradient="linear(0deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.8))"
+          position="absolute"
+          w="100%"
+          h="130%"
+        ></Flex>
+      )}
 
-      <Flex direction="row" w="100%" px={isMobile ? "15px" : "30px"} pt="25px" zIndex={400}>
+      <Flex
+        direction="row"
+        w="100%"
+        px={isMobile ? "10px" : "30px"}
+        pt={isMobile ? "15px" : "22px"}
+        pb={isMobile ? "15px" : "0"}
+        zIndex={400}
+      >
         {isMobile ? (
           <Flex>
-            {router.pathname === "/history" ? navItem("Swap", "/") : navItem("History", "/history")}
+            <Button
+              onClick={() => handleNavigation(router.pathname === "/history" ? "/" : "/history")}
+              type="button"
+              bg={colors.swapBgColor}
+              _hover={{ bg: colors.swapHoverColor }}
+              _active={{ bg: colors.swapBgColor }}
+              borderRadius="30px"
+              fontFamily="Nostromo"
+              fontSize="14px"
+              color={colors.offWhite}
+              px="20px"
+              pt="0px"
+              h="36px"
+              border={`2px solid ${colors.swapBorderColor}`}
+              letterSpacing="-1px"
+            >
+              {router.pathname === "/history" ? "Swap" : "History"}
+            </Button>
           </Flex>
         ) : (
           <>
@@ -212,10 +241,21 @@ export const Navbar = ({}) => {
           )}
         </Flex>
         <Spacer />
-        <Flex mb="-5px" pr="5px" alignItems="center" gap="10px">
+        <Flex mb={isMobile ? "0px" : "-5px"} pr="5px" alignItems="center" gap="10px">
           <ConnectWalletButton />
         </Flex>
       </Flex>
+
+      {isMobile && (
+        <Box
+          w="100%"
+          h="1px"
+          background="linear-gradient(90deg, #FF8F28 0%, #394AFF 100%)"
+          flexShrink={0}
+          zIndex={999}
+          position="relative"
+        />
+      )}
     </Flex>
   );
 };

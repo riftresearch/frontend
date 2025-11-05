@@ -788,10 +788,10 @@ export const UserSwapHistory: React.FC = () => {
                     key={swap.id}
                     direction="column"
                     w="100%"
-                    p="16px"
+                    p="20px"
                     mb="12px"
-                    bg="rgba(18, 18, 18, 0.85)"
-                    borderRadius="20px"
+                    bg="rgba(10, 10, 10, 0.85)"
+                    borderRadius="28px"
                     border={`1px solid ${colors.borderGray}`}
                     _hover={{ bg: "rgba(28, 28, 28, 0.9)" }}
                     transition="background 0.15s ease"
@@ -799,9 +799,9 @@ export const UserSwapHistory: React.FC = () => {
                     onClick={() => router.push(`/swap/${swap.id}`)}
                     gap="12px"
                   >
-                    {/* Direction and Time - Combined Row */}
+                    {/* USD and Time - Combined Row */}
                     <Flex gap="20px" align="flex-start">
-                      {/* Direction */}
+                      {/* USD */}
                       <Flex direction="column" gap="4px">
                         <Text
                           fontSize="10px"
@@ -811,61 +811,17 @@ export const UserSwapHistory: React.FC = () => {
                           fontWeight="600"
                           letterSpacing="0.5px"
                         >
-                          Direction
+                          USD
                         </Text>
-                        <Flex align="center" gap="6px">
-                          {/* From Asset */}
-                          {(() => {
-                            const fromAsset =
-                              swap.direction === "BTC_TO_EVM"
-                                ? "BTC"
-                                : swap.startAssetMetadata?.ticker || "cbBTC";
-                            const fromIcon =
-                              swap.direction === "EVM_TO_BTC"
-                                ? swap.startAssetMetadata?.icon
-                                : undefined;
-
-                            console.log("[DIRECTION RENDER]", swap.id, {
-                              direction: swap.direction,
-                              fromAsset,
-                              fromIcon,
-                              hasMetadata: !!swap.startAssetMetadata,
-                              ticker: swap.startAssetMetadata?.ticker,
-                            });
-
-                            return (
-                              <>
-                                <AssetIcon badge={fromAsset} iconUrl={fromIcon} />
-                                <Text
-                                  fontSize="12px"
-                                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                                  color={colors.offWhite}
-                                  letterSpacing="-0.5px"
-                                >
-                                  {fromAsset}
-                                </Text>
-                              </>
-                            );
-                          })()}
-                          <Text
-                            fontSize="13px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.textGray}
-                            letterSpacing="-0.5px"
-                          >
-                            →
-                          </Text>
-                          {/* To Asset */}
-                          <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
-                          <Text
-                            fontSize="12px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.offWhite}
-                            letterSpacing="-0.5px"
-                          >
-                            {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
-                          </Text>
-                        </Flex>
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.AUX_MONO}
+                          color={colors.offWhite}
+                          fontWeight="500"
+                          letterSpacing="-0.5px"
+                        >
+                          {formatUSD(swap.swapInitialAmountUsd)}
+                        </Text>
                       </Flex>
 
                       {/* Time - Clickable to open details modal */}
@@ -895,38 +851,14 @@ export const UserSwapHistory: React.FC = () => {
                           fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.offWhite}
                           letterSpacing="-0.5px"
-                          textDecoration="underline"
                         >
                           {formatTimeAgo(swap.swapCreationTimestamp)}
                         </Text>
                       </Flex>
                     </Flex>
 
-                    {/* USD and Amount - Combined Row */}
+                    {/* Amount Row */}
                     <Flex gap="20px" align="flex-start">
-                      {/* USD */}
-                      <Flex direction="column" gap="4px">
-                        <Text
-                          fontSize="10px"
-                          fontFamily={FONT_FAMILIES.SF_PRO}
-                          color={colors.textGray}
-                          textTransform="uppercase"
-                          fontWeight="600"
-                          letterSpacing="0.5px"
-                        >
-                          USD
-                        </Text>
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.offWhite}
-                          fontWeight="500"
-                          letterSpacing="-0.5px"
-                        >
-                          {formatUSD(swap.swapInitialAmountUsd)}
-                        </Text>
-                      </Flex>
-
                       {/* Amount */}
                       <Flex direction="column" gap="4px">
                         <Text
@@ -939,10 +871,11 @@ export const UserSwapHistory: React.FC = () => {
                         >
                           Amount
                         </Text>
-                        <Flex gap="4px" align="center">
+                        <Flex gap="4px" align="center" flexWrap="wrap">
                           {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
-                            // Show ERC20 amount from metadata for EVM->BTC swaps
+                            // Show ERC20 → BTC for EVM->BTC swaps
                             <>
+                              {/* Input Amount + Asset */}
                               <Text
                                 fontSize="13px"
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -967,10 +900,17 @@ export const UserSwapHistory: React.FC = () => {
                               >
                                 {swap.startAssetMetadata.ticker}
                               </Text>
-                            </>
-                          ) : (
-                            // Show BTC amount for BTC->EVM swaps or legacy swaps
-                            <>
+
+                              {/* Arrow */}
+                              <Text
+                                fontSize="12px"
+                                color="rgba(255, 255, 255, 0.4)"
+                                fontWeight="bold"
+                              >
+                                →
+                              </Text>
+
+                              {/* Output Amount + Asset (BTC) */}
                               <Text
                                 fontSize="13px"
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -980,7 +920,7 @@ export const UserSwapHistory: React.FC = () => {
                               >
                                 {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                               </Text>
-                              <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                              <AssetIcon badge="BTC" />
                               <Text
                                 fontSize="13px"
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -988,7 +928,61 @@ export const UserSwapHistory: React.FC = () => {
                                 fontWeight="500"
                                 letterSpacing="-0.5px"
                               >
-                                {isBTCtoEVM ? "BTC" : "cbBTC"}
+                                BTC
+                              </Text>
+                            </>
+                          ) : (
+                            // Show BTC → ERC20 for BTC->EVM swaps or legacy swaps
+                            <>
+                              {/* Input Amount + Asset (BTC) */}
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.offWhite}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                              </Text>
+                              <AssetIcon badge="BTC" />
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.textGray}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                BTC
+                              </Text>
+
+                              {/* Arrow */}
+                              <Text
+                                fontSize="12px"
+                                color="rgba(255, 255, 255, 0.4)"
+                                fontWeight="bold"
+                              >
+                                →
+                              </Text>
+
+                              {/* Output Amount + Asset (cbBTC or other ERC20) */}
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.offWhite}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                              </Text>
+                              <AssetIcon badge={isBTCtoEVM ? "cbBTC" : "BTC"} />
+                              <Text
+                                fontSize="13px"
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                color={colors.textGray}
+                                fontWeight="500"
+                                letterSpacing="-0.5px"
+                              >
+                                {isBTCtoEVM ? "cbBTC" : "BTC"}
                               </Text>
                             </>
                           )}
@@ -997,9 +991,9 @@ export const UserSwapHistory: React.FC = () => {
                     </Flex>
 
                     {/* Deposit and Payout Txn - Combined Row */}
-                    <Flex gap="20px" align="flex-start">
+                    <Flex gap="20px" align="flex-start" flexWrap="wrap">
                       {/* Deposit Txn */}
-                      <Flex direction="column" gap="4px" flex="1">
+                      <Flex direction="column" gap="4px" flex="1" minW="140px">
                         <Text
                           fontSize="10px"
                           fontFamily={FONT_FAMILIES.SF_PRO}
@@ -1056,7 +1050,7 @@ export const UserSwapHistory: React.FC = () => {
                       </Flex>
 
                       {/* Payout Txn */}
-                      <Flex direction="column" gap="4px" flex="1">
+                      <Flex direction="column" gap="4px" flex="1" minW="140px">
                         <Text
                           fontSize="10px"
                           fontFamily={FONT_FAMILIES.SF_PRO}

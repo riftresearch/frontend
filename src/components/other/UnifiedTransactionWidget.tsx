@@ -1088,11 +1088,14 @@ export function UnifiedTransactionWidget({
       if (chain === "bitcoin") {
         window.open(`https://mempool.space/tx/${txnId}`, "_blank");
       } else if (chain === "ethereum") {
-        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
+        const txHash = txnId.startsWith("0x") ? txnId : `0x${txnId}`;
+        window.open(`https://etherscan.io/tx/${txHash}`, "_blank");
       } else if (chain === "base") {
-        window.open(`https://basescan.org/tx/${txnId}`, "_blank");
+        const txHash = txnId.startsWith("0x") ? txnId : `0x${txnId}`;
+        window.open(`https://basescan.org/tx/${txHash}`, "_blank");
       } else {
-        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
+        const txHash = txnId.startsWith("0x") ? txnId : `0x${txnId}`;
+        window.open(`https://etherscan.io/tx/${txHash}`, "_blank");
       }
     }
   };

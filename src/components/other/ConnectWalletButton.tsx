@@ -284,6 +284,7 @@ export const ConnectWalletButton: React.FC = () => {
           fontSize={isMobile ? "14px" : "17px"}
           letterSpacing="-1px"
           paddingX={isMobile ? "20px" : "28px"}
+          h={isMobile ? "36px" : "42px"}
           paddingY={"10px"}
           bg={colors.swapBgColor}
           boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
