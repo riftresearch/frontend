@@ -938,7 +938,7 @@ export const SwapButton = () => {
     // If approving Permit2
     if (approvalState === ApprovalState.APPROVING || isApprovalConfirming) {
       return {
-        text: "Approving Permit2...",
+        text: "Approving Permit...",
         handler: undefined,
         showSpinner: true,
       };
@@ -947,7 +947,7 @@ export const SwapButton = () => {
     // If signing permit
     if (isSigningPermit) {
       return {
-        text: "Sign Permit2...",
+        text: "Sign Permit...",
         handler: undefined,
         showSpinner: true,
       };

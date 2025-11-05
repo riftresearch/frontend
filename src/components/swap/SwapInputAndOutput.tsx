@@ -1510,6 +1510,34 @@ export const SwapInputAndOutput = () => {
     const inputFloat = parseFloat(rawInputAmount);
     const balanceFloat = parseFloat(currentInputBalance);
 
+    // For ETH, check if input exceeds balance minus gas cost
+    const checkEthGasBalance = async () => {
+      if (
+        selectedInputToken?.ticker === "ETH" &&
+        inputFloat > balanceFloat * 0.9 &&
+        inputFloat <= balanceFloat
+      ) {
+        try {
+          const response = await fetch(`/api/eth-gas?chainId=${evmConnectWalletChainId || 1}`);
+          if (response.ok) {
+            const data = await response.json();
+            const maxFeePerGas = BigInt(data.maxFeePerGas);
+            const gasCostWei = maxFeePerGas * BigInt(400000);
+            const gasCostEth = parseFloat(formatUnits(gasCostWei, 18));
+            const availableBalance = balanceFloat - gasCostEth;
+
+            if (inputFloat > availableBalance) {
+              setExceedsUserBalance(true);
+              return true;
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch gas data for balance check:", error);
+        }
+      }
+      return false;
+    };
+
     // Show "exceeds user balance" if:
     // 1. Input exceeds balance, AND
     // 2. User's BALANCE (in USD) < MM liquidity (in USD)
@@ -1559,7 +1587,12 @@ export const SwapInputAndOutput = () => {
         setExceedsUserBalance(true);
       }
     } else {
-      setExceedsUserBalance(false);
+      // Even if input doesn't exceed balance, check if ETH exceeds available balance after gas
+      checkEthGasBalance().then((exceeded) => {
+        if (!exceeded) {
+          setExceedsUserBalance(false);
+        }
+      });
     }
   }, [
     rawInputAmount,
@@ -1571,6 +1604,7 @@ export const SwapInputAndOutput = () => {
     ethPrice,
     erc20Price,
     btcPrice,
+    evmConnectWalletChainId,
   ]);
 
   // Check if input/output amount exceeds market maker liquidity
@@ -2022,7 +2056,40 @@ export const SwapInputAndOutput = () => {
             )}
 
             <Flex>
-              {exceedsAvailableBTCLiquidity && isSwappingForBTC && lastEditedField === "input" ? (
+              {exceedsUserBalance &&
+              selectedInputToken?.ticker === "ETH" &&
+              currentInputBalance &&
+              parseFloat(rawInputAmount) <= parseFloat(currentInputBalance) ? (
+                <>
+                  <Text
+                    color={colors.redHover}
+                    fontSize="13px"
+                    mt="6px"
+                    ml="1px"
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    Need ETH for gas -
+                  </Text>
+                  <Text
+                    fontSize="13px"
+                    mt="7px"
+                    ml="8px"
+                    color={inputStyle?.border_color_light || colors.textGray}
+                    cursor="pointer"
+                    onClick={handleMaxClick}
+                    _hover={{ textDecoration: "underline" }}
+                    letterSpacing="-1.5px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    MAX
+                  </Text>
+                </>
+              ) : exceedsAvailableBTCLiquidity &&
+                isSwappingForBTC &&
+                lastEditedField === "input" ? (
                 <>
                   <Text
                     color={colors.redHover}
