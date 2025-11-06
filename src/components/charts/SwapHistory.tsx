@@ -1,6 +1,5 @@
 import React from "react";
-import Image from "next/image";
-import { Box, Flex, Text, Spinner, Tooltip, Button, Dialog, Portal } from "@chakra-ui/react";
+import { Box, Flex, Text, Spinner, Tooltip, Button, Dialog, Portal, Image } from "@chakra-ui/react";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
 import { AdminSwapItem, AdminSwapFlowStep, SwapDirection } from "@/utils/types";
@@ -17,8 +16,80 @@ function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
   const prefix = addr.startsWith("0x") ? "0x" : "";
   const hex = addr.replace(/^0x/, "");
-  return `${prefix}${hex.slice(0, 3)}...${hex.slice(-3)}`;
+  return `${prefix}${hex.slice(0, 3)}`;
 }
+
+// Helper component for asset icons
+const AssetIcon: React.FC<{
+  badge?: "BTC" | "cbBTC" | string;
+  iconUrl?: string;
+  size?: number;
+}> = ({ badge, iconUrl, size = 16 }) => {
+  const [hasError, setHasError] = React.useState(false);
+
+  if (!badge) return null;
+
+  const getIconSrc = (assetSymbol: string): string | null => {
+    const normalizedAsset = assetSymbol.toUpperCase();
+    if (normalizedAsset === "BTC") return "/images/BTC_icon.svg";
+    if (normalizedAsset === "CBBTC") return "/images/cbBTC_icon.svg";
+    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_icon.svg";
+    if (normalizedAsset === "USDC") return "/images/usdc_icon.svg";
+    if (normalizedAsset === "USDT") return "/images/usdt_icon.svg";
+    return null;
+  };
+
+  // Reset error on URL change
+  React.useEffect(() => {
+    setHasError(false);
+  }, [iconUrl]);
+
+  const localIconSrc = getIconSrc(badge);
+  const shouldUseExternalIcon = iconUrl && !hasError;
+  const shouldUseLocalIcon = !shouldUseExternalIcon && localIconSrc;
+
+  // Default question mark icon
+  if (!shouldUseExternalIcon && !shouldUseLocalIcon) {
+    return (
+      <Box
+        width={`${size}px`}
+        height={`${size}px`}
+        borderRadius="50%"
+        bg="rgba(128, 128, 128, 0.3)"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        flexShrink={0}
+      >
+        <Text
+          fontSize={`${size * 0.6}px`}
+          color="rgba(200, 200, 200, 0.6)"
+          fontWeight="bold"
+          lineHeight="1"
+        >
+          ?
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Image
+      src={shouldUseExternalIcon ? iconUrl : localIconSrc!}
+      alt={badge}
+      width={`${size}px`}
+      height={`${size}px`}
+      style={{ opacity: 0.9 }}
+      onError={() => {
+        if (iconUrl) {
+          console.warn(`Failed to load icon from URL: ${iconUrl}`);
+        }
+        setHasError(true);
+      }}
+      crossOrigin="anonymous"
+    />
+  );
+};
 
 function explorerUrl(chain: "ETH" | "BASE", address: string): string {
   const base = chain === "ETH" ? "https://etherscan.io" : "https://basescan.org";
@@ -80,12 +151,6 @@ function formatSecondsToMinSec(seconds: number): string {
   // Hours, minutes, and seconds
   return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
-
-const AssetIcon: React.FC<{ badge?: "BTC" | "cbBTC" }> = ({ badge }) => {
-  if (!badge) return null;
-  const src = badge === "BTC" ? "/images/BTC_icon.svg" : "/images/cbBTC_icon.svg";
-  return <Image src={src} alt={badge} width={18} height={18} style={{ opacity: 0.9 }} />;
-};
 
 const Pill: React.FC<{
   step: AdminSwapFlowStep;
@@ -186,7 +251,9 @@ const Pill: React.FC<{
         {displayedLabel}
       </Text>
       {(step.status === "waiting_user_deposit_initiated" ||
-        step.status === "waiting_mm_deposit_initiated") && <AssetIcon badge={step.badge} />}
+        step.status === "waiting_mm_deposit_initiated") && (
+        <AssetIcon badge={step.badge} iconUrl={step.badgeIconUrl} size={15} />
+      )}
     </Flex>
   );
 
@@ -400,7 +467,7 @@ const Row: React.FC<{
             {swap.rawData?.swap_number || swap.rawData?.swapNumber || "—"}
           </Text>
         </Box>
-        <Box w="107px">
+        <Box w="91px">
           <Flex
             as="button"
             onClick={(e) => {
@@ -408,7 +475,7 @@ const Row: React.FC<{
               navigator.clipboard.writeText(swap.id);
               toastSuccess({
                 title: "Copied to clipboard",
-                description: `Swap ID: ${swap.id.slice(0, 6)}...`,
+                description: `Swap ID: ${swap.id.slice(0, 7)}...`,
               });
             }}
             bg="#1D1D1D"
@@ -425,7 +492,8 @@ const Row: React.FC<{
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
-              {swap.id.slice(0, 6)}...
+              {swap.id.slice(0, 2)}
+              {swap.id.slice(2, 7)}...
             </Text>
           </Flex>
         </Box>
@@ -434,7 +502,7 @@ const Row: React.FC<{
             {timeAgoFrom(currentTime, swap.swapCreationTimestamp)}
           </Text>
         </Box>
-        <Box w="115px">
+        <Box w="90px">
           <Flex
             as="button"
             onClick={(e) => {
@@ -455,40 +523,121 @@ const Row: React.FC<{
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
-              {displayShortAddress(swap.evmAccountAddress)}
+              0x{swap.evmAccountAddress.slice(2, 10)}...
             </Text>
           </Flex>
         </Box>
-        <Box w="91px">
-          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {swap.direction === "BTC_TO_EVM" ? "BTC→ETH" : "ETH→BTC"}
-          </Text>
+        <Box w="158px">
+          <Flex align="center" gap="4px">
+            {/* From Asset */}
+            <AssetIcon
+              badge={
+                swap.direction === "BTC_TO_EVM" ? "BTC" : swap.startAssetMetadata?.ticker || "cbBTC"
+              }
+              iconUrl={swap.direction === "EVM_TO_BTC" ? swap.startAssetMetadata?.icon : undefined}
+              size={16}
+            />
+            <Text
+              fontSize="11px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              {swap.direction === "BTC_TO_EVM" ? "BTC" : swap.startAssetMetadata?.ticker || "cbBTC"}
+            </Text>
+            <Text fontSize="12px" color={colorsAnalytics.textGray}>
+              →
+            </Text>
+            {/* To Asset */}
+            <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} size={16} />
+            <Text
+              fontSize="11px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+            </Text>
+          </Flex>
         </Box>
 
-        <Box w="150px">
-          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
+        <Box w="207px">
+          {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+            // Show ERC20 amount from metadata for EVM->BTC swaps
+            <Flex align="center" gap="4px">
+              <Text
+                fontSize="13px"
+                color={colorsAnalytics.offWhite}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+              >
+                {parseFloat(swap.startAssetMetadata.amount)
+                  .toFixed(Math.min(swap.startAssetMetadata.decimals, 6))
+                  .replace(/\.?0+$/, "")}
+              </Text>
+              <AssetIcon
+                badge={swap.startAssetMetadata.ticker}
+                iconUrl={swap.startAssetMetadata.icon}
+                size={16}
+              />
+              <Text
+                fontSize="13px"
+                color={colorsAnalytics.offWhite}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+              >
+                {swap.startAssetMetadata.ticker}
+              </Text>
+            </Flex>
+          ) : (
+            // Show BTC amount for BTC->EVM swaps or legacy swaps
+            <Text
+              fontSize="13px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              {formatBTC(swap.swapInitialAmountBtc)}
+            </Text>
+          )}
+          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
             {formatUSD(swap.swapInitialAmountUsd)}
           </Text>
-          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {formatBTC(swap.swapInitialAmountBtc)}
-          </Text>
         </Box>
-        <Box w="95px">
-          <Text fontSize="13px" color={colorsAnalytics.offWhite} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {formatUSD(riftFeeUsd)}
-          </Text>
-          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {swap.riftFeeSats.toLocaleString()} sats
-          </Text>
-        </Box>
-        <Box w="103px">
-          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            MM - {formatUSD(swap.mmFeeUsd)}
-          </Text>
-          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            GAS - {formatUSD(swap.networkFeeUsd)}
-          </Text>
-        </Box>
+        <Tooltip.Root openDelay={200} closeDelay={300}>
+          <Tooltip.Trigger asChild>
+            <Box w="95px" cursor="help">
+              <Text
+                fontSize="13px"
+                color={colorsAnalytics.offWhite}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+              >
+                {formatUSD(riftFeeUsd)}
+              </Text>
+              <Text
+                fontSize="13px"
+                color={colorsAnalytics.textGray}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+              >
+                {swap.riftFeeSats.toLocaleString()} sats
+              </Text>
+            </Box>
+          </Tooltip.Trigger>
+          <Tooltip.Positioner>
+            <Tooltip.Content
+              bg={colorsAnalytics.offBlackLighter}
+              color={colorsAnalytics.offWhite}
+              borderRadius="8px"
+              px="12px"
+              py="8px"
+              fontSize="11px"
+              whiteSpace="pre-line"
+              border={`1px solid ${colorsAnalytics.borderGray}`}
+              boxShadow="0 4px 12px rgba(0, 0, 0, 0.3)"
+            >
+              <Tooltip.Arrow />
+              <Flex direction="column" gap="4px" fontFamily={FONT_FAMILIES.AUX_MONO}>
+                <Text>MM: {formatUSD(swap.mmFeeUsd)}</Text>
+                <Text>GAS: {formatUSD(swap.networkFeeUsd)}</Text>
+              </Flex>
+            </Tooltip.Content>
+          </Tooltip.Positioner>
+        </Tooltip.Root>
         <Flex flex="1" gap="6px" wrap="wrap" align="center" mr="-16px">
           {filteredFlow.map((step, idx) => (
             <StepWithTime
@@ -1096,26 +1245,23 @@ export const SwapHistory: React.FC<{
               <Box w="50px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>#</Text>
               </Box>
-              <Box w="107px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap ID</Text>
+              <Box w="91px">
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>ID</Text>
               </Box>
               <Box w="109px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Time</Text>
               </Box>
-              <Box w="115px">
+              <Box w="90px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
               </Box>
-              <Box w="91px">
+              <Box w="158px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Direction</Text>
               </Box>
-              <Box w="150px">
+              <Box w="207px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Amount</Text>
               </Box>
               <Box w="95px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
-              </Box>
-              <Box w="103px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Other Fees</Text>
               </Box>
               <Flex flex="1">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Flow</Text>

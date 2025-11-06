@@ -282,13 +282,38 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   const networkFeeBtc = parseFloat(satsToBtc(networkFeeSats));
   const networkFeeUsd = btcPriceUsd !== undefined ? networkFeeBtc * btcPriceUsd : 0;
 
-  // [10] Determine asset types and chains based on swap direction
-  const userAsset: "BTC" | "cbBTC" = direction === "BTC_TO_EVM" ? "BTC" : "cbBTC";
-  const mmAsset: "BTC" | "cbBTC" = direction === "BTC_TO_EVM" ? "cbBTC" : "BTC";
-  const userTxChain: "ETH" | "BTC" = userAsset === "BTC" ? "BTC" : "ETH";
-  const mmTxChain: "ETH" | "BTC" = mmAsset === "BTC" ? "BTC" : "ETH";
+  // [10] Parse start_asset metadata FIRST (for EVM->BTC swaps) so we can use it for asset badges
+  let startAssetMetadata = undefined;
+  const startAssetString = row.metadata?.start_asset || row.start_asset;
 
-  // [11] Format confirmation labels (cbBTC caps at 4+, BTC caps at 2+)
+  if (startAssetString && typeof startAssetString === "string") {
+    try {
+      const parsed = JSON.parse(startAssetString);
+      if (parsed && typeof parsed === "object") {
+        startAssetMetadata = {
+          ticker: parsed.ticker || "",
+          address: parsed.address || "",
+          icon: parsed.icon,
+          amount: parsed.amount || "0",
+          decimals: parsed.decimals || 18,
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to parse start_asset metadata:", e);
+    }
+  }
+
+  // [11] Determine asset types and chains based on swap direction
+  // Use metadata ticker for EVM->BTC swaps if available
+  let userAsset: string =
+    direction === "BTC_TO_EVM" ? "BTC" : startAssetMetadata?.ticker || "cbBTC";
+  let userAssetIconUrl: string | undefined =
+    direction === "EVM_TO_BTC" ? startAssetMetadata?.icon : undefined;
+  const mmAsset: string = direction === "BTC_TO_EVM" ? "cbBTC" : "BTC";
+  const userTxChain: "ETH" | "BTC" = direction === "BTC_TO_EVM" ? "BTC" : "ETH";
+  const mmTxChain: "ETH" | "BTC" = direction === "BTC_TO_EVM" ? "ETH" : "BTC";
+
+  // [12] Format confirmation labels (cbBTC caps at 4+, BTC caps at 2+)
   const userConfsLabel =
     userAsset === "cbBTC"
       ? userConfs >= 4
@@ -306,7 +331,7 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
         ? "2+ Confs"
         : `${mmConfs} Confs`;
 
-  // [12] Build flow steps array with state, duration, and transaction data
+  // [13] Build flow steps array with state, duration, and transaction data
   const steps: AdminSwapFlowStep[] = [
     {
       status: "pending",
@@ -318,6 +343,7 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
       label: "User Sent",
       state: currentIndex > 1 ? "completed" : currentIndex === 1 ? "inProgress" : "notStarted",
       badge: userAsset,
+      badgeIconUrl: userAssetIconUrl,
       duration: durationCreatedToUserSent,
       txHash: userTxHash,
       txChain: userTxChain,
@@ -350,44 +376,8 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
     },
   ];
 
-  // [13] Determine EVM chain (ETH or BASE) from quote.to_chain
+  // [14] Determine EVM chain (ETH or BASE) from quote.to_chain
   const evmChain: "ETH" | "BASE" = row.quote?.to_chain === "base" ? "BASE" : "ETH";
-
-  // [14] Parse start_asset metadata if available (for EVM->BTC swaps)
-  let startAssetMetadata = undefined;
-
-  // Try to get start_asset from either metadata.start_asset or row.start_asset
-  const startAssetString = row.metadata?.start_asset || row.start_asset;
-
-  console.log("[mapDbRowToAdminSwap] Checking metadata for swap:", row.id, {
-    hasMetadata: !!row.metadata,
-    metadata: row.metadata,
-    start_asset_from_metadata: row.metadata?.start_asset,
-    start_asset_from_row: row.start_asset,
-    startAssetString,
-  });
-
-  if (startAssetString && typeof startAssetString === "string") {
-    try {
-      const parsed = JSON.parse(startAssetString);
-      console.log("[mapDbRowToAdminSwap] Parsed start_asset:", parsed);
-      if (parsed && typeof parsed === "object") {
-        startAssetMetadata = {
-          ticker: parsed.ticker || "",
-          address: parsed.address || "",
-          icon: parsed.icon,
-          amount: parsed.amount || "0",
-          decimals: parsed.decimals || 18,
-        };
-        console.log("[mapDbRowToAdminSwap] Created startAssetMetadata:", startAssetMetadata);
-      }
-    } catch (e) {
-      // Legacy format or invalid JSON - ignore
-      console.warn("Failed to parse start_asset metadata:", e);
-    }
-  } else {
-    console.log("[mapDbRowToAdminSwap] No start_asset found for swap:", row.id);
-  }
 
   // [15] Return complete AdminSwapItem with all calculated data
   return {

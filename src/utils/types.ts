@@ -238,8 +238,10 @@ export interface AdminSwapFlowStep {
   label: string;
   /** Optional short duration display like "0:54" */
   duration?: string;
-  /** Optional badge to hint chain/asset shown in the UI */
-  badge?: "BTC" | "cbBTC";
+  /** Optional badge to hint chain/asset shown in the UI (can be any token ticker) */
+  badge?: string;
+  /** Optional icon URL for the badge asset */
+  badgeIconUrl?: string;
   /** Visual/logic state for the step */
   state: "notStarted" | "inProgress" | "completed";
   /** Transaction hash for this step */
