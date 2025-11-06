@@ -16,6 +16,7 @@ import { toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { RefundModal } from "@/components/other/RefundModal";
 import { useRefundModal } from "@/hooks/useRefundModal";
+import { AssetIcon } from "@/components/other/AssetIcon";
 
 function displayShortTxHash(hash: string, isMobile: boolean = false): string {
   if (!hash || hash.length < 12) return hash;
@@ -55,77 +56,6 @@ function formatTimeAgo(timestamp: number): string {
   if (minutes > 0) return `${minutes}m ago`;
   return `${seconds}s ago`;
 }
-
-const AssetIcon: React.FC<{
-  badge?: "BTC" | "cbBTC" | string;
-  iconUrl?: string;
-  size?: number;
-}> = ({ badge, iconUrl, size = 18 }) => {
-  const [hasError, setHasError] = React.useState(false);
-
-  if (!badge) return null;
-
-  const getIconSrc = (assetSymbol: string): string | null => {
-    const normalizedAsset = assetSymbol.toUpperCase();
-    if (normalizedAsset === "BTC") return "/images/BTC_icon.svg";
-    if (normalizedAsset === "CBBTC") return "/images/cbBTC_icon.svg";
-    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_icon.svg";
-    if (normalizedAsset === "USDC") return "/images/usdc_icon.svg";
-    if (normalizedAsset === "USDT") return "/images/usdt_icon.svg";
-    return null;
-  };
-
-  // Reset error on URL change
-  React.useEffect(() => {
-    setHasError(false);
-  }, [iconUrl]);
-
-  const localIconSrc = getIconSrc(badge);
-  const shouldUseExternalIcon = iconUrl && !hasError;
-  const shouldUseLocalIcon = !shouldUseExternalIcon && localIconSrc;
-
-  // Default question mark icon
-  if (!shouldUseExternalIcon && !shouldUseLocalIcon) {
-    return (
-      <Box
-        width={`${size}px`}
-        height={`${size}px`}
-        borderRadius="50%"
-        bg="rgba(128, 128, 128, 0.3)"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        flexShrink={0}
-      >
-        <Text
-          fontSize={`${size * 0.6}px`}
-          color="rgba(200, 200, 200, 0.6)"
-          fontWeight="bold"
-          lineHeight="1"
-        >
-          ?
-        </Text>
-      </Box>
-    );
-  }
-
-  return (
-    <Image
-      src={shouldUseExternalIcon ? iconUrl : localIconSrc!}
-      alt={badge}
-      width={size}
-      height={size}
-      style={{ opacity: 0.9 }}
-      onError={() => {
-        if (iconUrl) {
-          console.warn(`Failed to load icon from URL: ${iconUrl}`);
-        }
-        setHasError(true);
-      }}
-      crossOrigin="anonymous"
-    />
-  );
-};
 
 const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }> = ({
   swap,
@@ -888,7 +818,7 @@ export const UserSwapHistory: React.FC = () => {
                                   .replace(/\.?0+$/, "")}
                               </Text>
                               <AssetIcon
-                                badge={swap.startAssetMetadata.ticker}
+                                asset={swap.startAssetMetadata.ticker}
                                 iconUrl={swap.startAssetMetadata.icon}
                               />
                               <Text
@@ -920,7 +850,7 @@ export const UserSwapHistory: React.FC = () => {
                               >
                                 {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                               </Text>
-                              <AssetIcon badge="BTC" />
+                              <AssetIcon asset="BTC" />
                               <Text
                                 fontSize="13px"
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -944,7 +874,7 @@ export const UserSwapHistory: React.FC = () => {
                               >
                                 {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                               </Text>
-                              <AssetIcon badge="BTC" />
+                              <AssetIcon asset="BTC" />
                               <Text
                                 fontSize="13px"
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -974,7 +904,7 @@ export const UserSwapHistory: React.FC = () => {
                               >
                                 {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                               </Text>
-                              <AssetIcon badge={isBTCtoEVM ? "cbBTC" : "BTC"} />
+                              <AssetIcon asset={isBTCtoEVM ? "cbBTC" : "BTC"} />
                               <Text
                                 fontSize="13px"
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1392,7 +1322,7 @@ export const UserSwapHistory: React.FC = () => {
                                 .replace(/\.?0+$/, "")}
                             </Text>
                             <AssetIcon
-                              badge={swap.startAssetMetadata.ticker}
+                              asset={swap.startAssetMetadata.ticker}
                               iconUrl={swap.startAssetMetadata.icon}
                             />
                             <Text
@@ -1417,7 +1347,7 @@ export const UserSwapHistory: React.FC = () => {
                             >
                               {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                             </Text>
-                            <AssetIcon badge={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                            <AssetIcon asset={isBTCtoEVM ? "BTC" : "cbBTC"} />
                             <Text
                               fontSize="13px"
                               fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1482,7 +1412,7 @@ export const UserSwapHistory: React.FC = () => {
                       <Flex flex="0 0 188px" align="center" gap="6px">
                         {/* From Asset */}
                         <AssetIcon
-                          badge={
+                          asset={
                             swap.direction === "BTC_TO_EVM"
                               ? "BTC"
                               : swap.startAssetMetadata?.ticker || "cbBTC"
@@ -1512,7 +1442,7 @@ export const UserSwapHistory: React.FC = () => {
                           →
                         </Text>
                         {/* To Asset */}
-                        <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
+                        <AssetIcon asset={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
                         <Text
                           fontSize="12px"
                           fontFamily={FONT_FAMILIES.AUX_MONO}

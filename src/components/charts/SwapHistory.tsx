@@ -11,6 +11,7 @@ import { toastError, toastSuccess } from "@/utils/toast";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import { useSwapAverages } from "@/hooks/useSwapAverages";
 import { filterRefunds } from "@/utils/refundHelpers";
+import { AssetIcon } from "@/components/other/AssetIcon";
 
 function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
@@ -18,78 +19,6 @@ function displayShortAddress(addr: string): string {
   const hex = addr.replace(/^0x/, "");
   return `${prefix}${hex.slice(0, 3)}`;
 }
-
-// Helper component for asset icons
-const AssetIcon: React.FC<{
-  badge?: "BTC" | "cbBTC" | string;
-  iconUrl?: string;
-  size?: number;
-}> = ({ badge, iconUrl, size = 16 }) => {
-  const [hasError, setHasError] = React.useState(false);
-
-  if (!badge) return null;
-
-  const getIconSrc = (assetSymbol: string): string | null => {
-    const normalizedAsset = assetSymbol.toUpperCase();
-    if (normalizedAsset === "BTC") return "/images/BTC_icon.svg";
-    if (normalizedAsset === "CBBTC") return "/images/cbBTC_icon.svg";
-    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_icon.svg";
-    if (normalizedAsset === "USDC") return "/images/usdc_icon.svg";
-    if (normalizedAsset === "USDT") return "/images/usdt_icon.svg";
-    return null;
-  };
-
-  // Reset error on URL change
-  React.useEffect(() => {
-    setHasError(false);
-  }, [iconUrl]);
-
-  const localIconSrc = getIconSrc(badge);
-  const shouldUseExternalIcon = iconUrl && !hasError;
-  const shouldUseLocalIcon = !shouldUseExternalIcon && localIconSrc;
-
-  // Default question mark icon
-  if (!shouldUseExternalIcon && !shouldUseLocalIcon) {
-    return (
-      <Box
-        width={`${size}px`}
-        height={`${size}px`}
-        borderRadius="50%"
-        bg="rgba(128, 128, 128, 0.3)"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        flexShrink={0}
-      >
-        <Text
-          fontSize={`${size * 0.6}px`}
-          color="rgba(200, 200, 200, 0.6)"
-          fontWeight="bold"
-          lineHeight="1"
-        >
-          ?
-        </Text>
-      </Box>
-    );
-  }
-
-  return (
-    <Image
-      src={shouldUseExternalIcon ? iconUrl : localIconSrc!}
-      alt={badge}
-      width={`${size}px`}
-      height={`${size}px`}
-      style={{ opacity: 0.9 }}
-      onError={() => {
-        if (iconUrl) {
-          console.warn(`Failed to load icon from URL: ${iconUrl}`);
-        }
-        setHasError(true);
-      }}
-      crossOrigin="anonymous"
-    />
-  );
-};
 
 function explorerUrl(chain: "ETH" | "BASE", address: string): string {
   const base = chain === "ETH" ? "https://etherscan.io" : "https://basescan.org";
@@ -252,7 +181,7 @@ const Pill: React.FC<{
       </Text>
       {(step.status === "waiting_user_deposit_initiated" ||
         step.status === "waiting_mm_deposit_initiated") && (
-        <AssetIcon badge={step.badge} iconUrl={step.badgeIconUrl} size={15} />
+        <AssetIcon asset={step.badge} iconUrl={step.badgeIconUrl} size={15} />
       )}
     </Flex>
   );
@@ -531,7 +460,7 @@ const Row: React.FC<{
           <Flex align="center" gap="4px">
             {/* From Asset */}
             <AssetIcon
-              badge={
+              asset={
                 swap.direction === "BTC_TO_EVM" ? "BTC" : swap.startAssetMetadata?.ticker || "cbBTC"
               }
               iconUrl={swap.direction === "EVM_TO_BTC" ? swap.startAssetMetadata?.icon : undefined}
@@ -548,7 +477,7 @@ const Row: React.FC<{
               →
             </Text>
             {/* To Asset */}
-            <AssetIcon badge={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} size={16} />
+            <AssetIcon asset={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} size={16} />
             <Text
               fontSize="11px"
               color={colorsAnalytics.offWhite}
@@ -573,7 +502,7 @@ const Row: React.FC<{
                   .replace(/\.?0+$/, "")}
               </Text>
               <AssetIcon
-                badge={swap.startAssetMetadata.ticker}
+                asset={swap.startAssetMetadata.ticker}
                 iconUrl={swap.startAssetMetadata.icon}
                 size={16}
               />

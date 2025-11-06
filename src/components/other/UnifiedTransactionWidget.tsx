@@ -20,6 +20,7 @@ import { useRefundModal } from "@/hooks/useRefundModal";
 import { esploraClient } from "@/utils/esploraClient";
 import { useEvmConfirmations } from "@/hooks/useEvmConfirmations";
 import WebAssetTag from "./WebAssetTag";
+import { AssetIcon } from "./AssetIcon";
 
 // Type guard to check if swap is Bitcoin deposit
 type SwapType = "bitcoin-deposit" | "evm-deposit";
@@ -32,82 +33,6 @@ interface UnifiedTransactionWidgetProps {
   bitcoinUri?: string;
   bitcoinDepositTx?: string;
 }
-
-// Helper component for asset icons
-const AssetIcon: React.FC<{ asset: string; iconUrl?: string; size?: number }> = ({
-  asset,
-  iconUrl,
-  size = 18,
-}) => {
-  const [hasError, setHasError] = React.useState(false);
-
-  const getIconSrc = (assetSymbol: string): string | null => {
-    const normalizedAsset = assetSymbol.toUpperCase();
-    if (normalizedAsset === "BTC") return "/images/BTC_icon.svg";
-    if (normalizedAsset === "CBBTC") return "/images/cbBTC_icon.svg";
-    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_icon.svg";
-    if (normalizedAsset === "USDC") return "/images/usdc_icon.svg";
-    if (normalizedAsset === "USDT") return "/images/usdt_icon.svg";
-    return null; // No matching icon, will use default fallback
-  };
-
-  // Reset error state when iconUrl changes
-  React.useEffect(() => {
-    setHasError(false);
-  }, [iconUrl]);
-
-  // Determine which source to use
-  const localIconSrc = getIconSrc(asset);
-  const shouldUseExternalIcon = !!iconUrl;
-  const shouldUseLocalIcon = !iconUrl && !!localIconSrc;
-
-  console.log("shouldUseExternalIcon", shouldUseExternalIcon);
-  console.log("shouldUseLocalIcon", shouldUseLocalIcon);
-  // console.log("localIconSrc", localIconSrc);
-  console.log("iconUrl", iconUrl);
-  console.log("asset", asset);
-
-  // Render default question mark icon if no valid source
-  if (!shouldUseExternalIcon && !shouldUseLocalIcon) {
-    return (
-      <Box
-        width={`${size}px`}
-        height={`${size}px`}
-        borderRadius="50%"
-        bg="rgba(128, 128, 128, 0.3)"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        flexShrink={0}
-      >
-        <Text
-          fontSize={`${size * 0.6}px`}
-          color="rgba(200, 200, 200, 0.6)"
-          fontWeight="bold"
-          lineHeight="1"
-        >
-          ?
-        </Text>
-      </Box>
-    );
-  }
-
-  return (
-    <Image
-      src={shouldUseExternalIcon ? iconUrl : localIconSrc!}
-      alt={asset}
-      width={`${size}px`}
-      height={`${size}px`}
-      style={{ opacity: 0.9 }}
-      onError={() => {
-        if (iconUrl) {
-          console.warn(`Failed to load icon from URL: ${iconUrl}, falling back`);
-        }
-        setHasError(true);
-      }}
-    />
-  );
-};
 
 // Swap details pill component
 const SwapDetailsPill: React.FC<{
