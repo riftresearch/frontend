@@ -93,14 +93,6 @@ export const SwapButton = () => {
     error: sendTxError,
   } = useSendTransaction();
 
-  // Permit2 signature hook
-  const { signTypedDataAsync } = useSignTypedData();
-
-  // Check token allowance
-  const isNativeETH = selectedInputToken?.ticker === "ETH";
-
-  const isCbBTC = selectedInputToken?.ticker === "cbBTC";
-
   // Wait for approval transaction confirmation
   const {
     isLoading: isApprovalConfirming,
@@ -110,15 +102,22 @@ export const SwapButton = () => {
     hash: approvalTxHash,
   });
 
-  // Wait for transaction confirmation (use either hash from writeContract or sendTransaction)
-  const txHash = hash || sendTxHash;
+  // Wait for transaction confirmation
   const {
     isLoading: isConfirming,
     isSuccess: isConfirmed,
     error: txError,
   } = useWaitForTransactionReceipt({
-    hash: txHash,
+    hash: sendTxHash,
   });
+
+  // Permit2 signature hook
+  const { signTypedDataAsync } = useSignTypedData();
+
+  // Check token allowance
+  const isNativeETH = selectedInputToken.ticker === "ETH";
+
+  const isCbBTC = selectedInputToken.ticker === "cbBTC";
 
   // Button loading state combines pending transaction, permit signing, approval, and confirmation waiting
   const isButtonLoading =
@@ -600,54 +599,8 @@ export const SwapButton = () => {
   // Main swap handler - routes to appropriate swap function
   const startSwap = useCallback(async () => {
     try {
-      if (!isWalletConnected) {
-        // If swapping for something other than BTC and user hasn't acknowledged, show warning
-        if (!isSwappingForBTC && !hasAcknowledgedEVMWarning()) {
-          setShowEVMWarningModal(true);
-          return;
-        }
-
-        // Otherwise, open wallet connection modal directly
-        await reownModal.open();
-        return;
-      }
-
-      // Check input amount
-      if (
-        !rawInputAmount ||
-        !outputAmount ||
-        parseFloat(rawInputAmount) <= 0 ||
-        parseFloat(outputAmount) <= 0
-      ) {
-        toastInfo({
-          title: "Enter Amount",
-          description: "Please enter a valid amount to swap",
-        });
-        return;
-      }
-
-      if (!payoutAddress && isSwappingForBTC) {
-        toastInfo({
-          title: isSwappingForBTC ? "Enter Bitcoin Address" : "Enter Ethereum Address",
-          description: "Please enter your Bitcoin address to receive BTC",
-        });
-        return;
-      }
-
-      if (!addressValidation.isValid && isSwappingForBTC) {
-        let description = "Please enter a valid Bitcoin payout address";
-        if (isSwappingForBTC && addressValidation.networkMismatch) {
-          description = `Wrong network: expected ${GLOBAL_CONFIG.underlyingSwappingAssets[0].currency.chain} but detected ${addressValidation.detectedNetwork}`;
-        }
-        toastInfo({
-          title: isSwappingForBTC ? "Invalid Bitcoin Address" : "Invalid Ethereum Address",
-          description,
-        });
-        return;
-      }
-
       // For cbBTC->BTC swaps, use the direct OTC flow
-      if (isSwappingForBTC && selectedInputToken?.ticker === "cbBTC") {
+      if (isSwappingForBTC && selectedInputToken.ticker === "cbBTC") {
         setSwapButtonPressed(true);
         await executeCBBTCtoBTCSwap();
         return;
@@ -666,28 +619,14 @@ export const SwapButton = () => {
         await executeBTCtoCBBTCSwap();
         return;
       }
-
-      // Other swap types not yet implemented
-      // toastInfo({
-      //   title: "Swap Not Supported",
-      //   description: "This swap type is not yet implemented",
-      // });
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
       // Errors will be handled by the writeError useEffect
     }
   }, [
-    isWalletConnected,
-    isMobile,
-    rawInputAmount,
-    outputAmount,
-    payoutAddress,
-    addressValidation,
     isSwappingForBTC,
     selectedInputToken,
-    rfqQuote,
-    uniswapQuote,
     executeCBBTCtoBTCSwap,
     executeERC20ToBTCSwap,
     executeBTCtoCBBTCSwap,
@@ -695,13 +634,55 @@ export const SwapButton = () => {
 
   // Unified handler that checks permit and routes to appropriate action
   const handleSwapButtonClick = useCallback(async () => {
+    // Check input amount
+    if (
+      !rawInputAmount ||
+      !outputAmount ||
+      parseFloat(rawInputAmount) <= 0 ||
+      parseFloat(outputAmount) <= 0
+    ) {
+      toastInfo({
+        title: "Enter Amount",
+        description: "Please enter a valid amount to swap",
+      });
+      return;
+    }
+
+    if (!isWalletConnected) {
+      // If swapping for something other than BTC and user hasn't acknowledged, show warning
+      if (!isSwappingForBTC && !hasAcknowledgedEVMWarning()) {
+        setShowEVMWarningModal(true);
+        return;
+      }
+
+      // Otherwise, open wallet connection modal directly
+      await reownModal.open();
+      return;
+    }
+
+    if (isSwappingForBTC) {
+      if (!payoutAddress) {
+        toastInfo({
+          title: "Enter Bitcoin Address",
+          description: "Please enter your Bitcoin address to receive BTC",
+        });
+        return;
+      }
+      if (!addressValidation.isValid) {
+        toastInfo({
+          title: "Invalid Bitcoin Address",
+          description: "Please enter a valid Bitcoin address",
+        });
+        return;
+      }
+    }
+
     // First check if we need token approval to Permit2
     if (isNativeETH || isCbBTC || !isSwappingForBTC) {
       await startSwap();
       return;
     }
 
-    console.log("approvalStat in swap button click", approvalState);
     if (approvalState === ApprovalState.NEEDS_APPROVAL) {
       await approvePermit2();
       return;
@@ -715,7 +696,19 @@ export const SwapButton = () => {
         await startSwap();
       }
     }
-  }, [approvalState, approvePermit2, needsPermit, signPermit2, startSwap]);
+  }, [
+    approvalState,
+    approvePermit2,
+    needsPermit,
+    signPermit2,
+    startSwap,
+    payoutAddress,
+    addressValidation,
+    isSwappingForBTC,
+    isWalletConnected,
+    rawInputAmount,
+    outputAmount,
+  ]);
 
   // ============================================================================
   // USE EFFECTS
@@ -912,6 +905,15 @@ export const SwapButton = () => {
       };
     }
 
+    // If there's a "no routes found" error, disable button with message
+    if (hasNoRoutesError) {
+      return {
+        text: "No routes found",
+        handler: undefined,
+        showSpinner: false,
+      };
+    }
+
     if (exceedsUserBalance) {
       return {
         text: `Not enough ${selectedInputToken?.ticker || ""}`,
@@ -923,15 +925,6 @@ export const SwapButton = () => {
     if (inputBelowMinimum) {
       return {
         text: "Swap too small",
-        handler: undefined,
-        showSpinner: false,
-      };
-    }
-
-    // If there's a "no routes found" error, disable button with message
-    if (hasNoRoutesError) {
-      return {
-        text: "No routes found",
         handler: undefined,
         showSpinner: false,
       };

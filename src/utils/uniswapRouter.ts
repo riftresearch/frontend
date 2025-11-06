@@ -96,6 +96,7 @@ export class UniswapRouterError extends Error {
 }
 
 import { BigNumber } from "ethers";
+import { MIN_SWAP_SATS } from "./constants";
 
 /**
  * Uniswap Router Client (calls server-side API)
@@ -162,6 +163,11 @@ export class UniswapRouterClient {
       }
 
       const data = await response.json();
+
+      // Validate that amountOut meets minimum threshold
+      if (BigInt(data.amountOut) < BigInt(MIN_SWAP_SATS)) {
+        throw new UniswapRouterError("No routes found", "NO_ROUTES_FOUND");
+      }
 
       return {
         routerType: data.routerType,

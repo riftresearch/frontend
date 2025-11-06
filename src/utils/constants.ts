@@ -21,6 +21,8 @@ export const BITCOIN_DECIMALS = 8;
 
 export const ZERO_USD_DISPLAY = "$0.00";
 
+export const MIN_SWAP_SATS = 3000;
+
 export const bitcoinStyle: TokenStyle = {
   name: "Bitcoin",
   display_name: "BTC",

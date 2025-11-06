@@ -58,8 +58,14 @@ const AssetIcon: React.FC<{ asset: string; iconUrl?: string; size?: number }> = 
 
   // Determine which source to use
   const localIconSrc = getIconSrc(asset);
-  const shouldUseExternalIcon = iconUrl && !hasError;
-  const shouldUseLocalIcon = !shouldUseExternalIcon && localIconSrc;
+  const shouldUseExternalIcon = !!iconUrl;
+  const shouldUseLocalIcon = !iconUrl && !!localIconSrc;
+
+  console.log("shouldUseExternalIcon", shouldUseExternalIcon);
+  console.log("shouldUseLocalIcon", shouldUseLocalIcon);
+  // console.log("localIconSrc", localIconSrc);
+  console.log("iconUrl", iconUrl);
+  console.log("asset", asset);
 
   // Render default question mark icon if no valid source
   if (!shouldUseExternalIcon && !shouldUseLocalIcon) {
@@ -99,7 +105,6 @@ const AssetIcon: React.FC<{ asset: string; iconUrl?: string; size?: number }> = 
         }
         setHasError(true);
       }}
-      crossOrigin="anonymous"
     />
   );
 };
@@ -249,6 +254,7 @@ function StepCarousel({
   mmDepositChain,
   userDepositTx,
   showFillingOrderWarning,
+  onNewSwap,
 }: {
   swapId?: string;
   swapType: SwapType;
@@ -257,6 +263,7 @@ function StepCarousel({
   mmDepositChain?: string;
   userDepositTx?: string;
   showFillingOrderWarning: boolean;
+  onNewSwap: () => void;
 }) {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const swapResponse = useStore((state) => state.swapResponse);
@@ -397,7 +404,7 @@ function StepCarousel({
   };
 
   const handleNewSwap = () => {
-    router.push("/");
+    onNewSwap();
   };
 
   return (
@@ -703,13 +710,26 @@ export function UnifiedTransactionWidget({
   bitcoinDepositTx,
 }: UnifiedTransactionWidgetProps) {
   const { isMobile } = useWindowSize();
-  const depositFlowState = useStore((state) => state.depositFlowState);
-  const countdownValue = useStore((state) => state.countdownValue);
-  const swapResponse = useStore((state) => state.swapResponse);
+  const {
+    setTransactionConfirmed,
+    setSwapResponse,
+    setFeeOverview,
+    depositFlowState,
+    countdownValue,
+    swapResponse,
+  } = useStore();
 
   // Use provided swapId prop, fallback to store value
   const currentSwapId = swapId || swapResponse?.swap_id;
   const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
+
+  // Handle navigation to new swap with state reset
+  const handleNewSwap = () => {
+    setTransactionConfirmed(false);
+    setSwapResponse(null);
+    setFeeOverview(null);
+    router.push("/");
+  };
 
   // Determine swap type based on props and swap data
   const swapType: SwapType = React.useMemo(() => {
@@ -1024,6 +1044,7 @@ export function UnifiedTransactionWidget({
     // Try parsing as JSON first (new format)
     try {
       const parsed = JSON.parse(startAsset);
+      // console.log("parsed input asset", parsed);
       if (parsed && typeof parsed === "object") {
         return {
           ticker: parsed.ticker || "",
@@ -1272,7 +1293,7 @@ export function UnifiedTransactionWidget({
 
               <Box
                 as="button"
-                onClick={() => router.push("/")}
+                onClick={handleNewSwap}
                 borderRadius="16px"
                 width={isMobile ? "240px" : "180px"}
                 border="2px solid #6651B3"
@@ -1614,7 +1635,7 @@ export function UnifiedTransactionWidget({
 
             <Box
               as="button"
-              onClick={() => router.push("/")}
+              onClick={handleNewSwap}
               borderRadius="16px"
               width={isMobile ? "140px" : "160px"}
               border="2px solid #6651B3"
@@ -2153,6 +2174,7 @@ export function UnifiedTransactionWidget({
             mmDepositChain={swapStatusInfo?.quote?.to_chain}
             userDepositTx={bitcoinDepositTx || userDepositTxHash}
             showFillingOrderWarning={showFillingOrderWarning}
+            onNewSwap={handleNewSwap}
           />
         </Box>
 

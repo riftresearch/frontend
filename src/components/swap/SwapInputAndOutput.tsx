@@ -10,6 +10,7 @@ import {
   SWAP_ROUTER02_ADDRESS,
   ETHEREUM_POPULAR_TOKENS,
   BITCOIN_DECIMALS,
+  MIN_SWAP_SATS,
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
@@ -31,7 +32,6 @@ import {
   calculateFees,
   getMinSwapValueUsd,
   satsToBtc,
-  MIN_SWAP_SATS,
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";

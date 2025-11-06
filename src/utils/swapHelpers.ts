@@ -11,6 +11,7 @@ import {
   BITCOIN_DECIMALS,
   PERMIT2_ADDRESS,
   UNIVERSAL_ROUTER_ADDRESS,
+  MIN_SWAP_SATS,
 } from "./constants";
 import { Quote, formatLotAmount, RfqClientError, Currency } from "./rfqClient";
 import { createUniswapRouter, UniswapQuoteResponse, UniswapRouterError } from "./uniswapRouter";
@@ -23,11 +24,6 @@ import {
   type PermitSingle,
 } from "@uniswap/permit2-sdk";
 import { useStore } from "./store";
-
-/**
- * Minimum swap amount in satoshis
- */
-export const MIN_SWAP_SATS = 3000;
 
 /**
  * Fetch gas parameters from the API

@@ -35,6 +35,8 @@ export default function Home() {
 
   // Redirect to swap page when swap response is available AND transaction is confirmed
   React.useEffect(() => {
+    console.log("swapResponse", swapResponse);
+    console.log("transactionConfirmed", transactionConfirmed);
     if (swapResponse?.swap_id && transactionConfirmed) {
       router.push(`/swap/${swapResponse.swap_id}`);
     }
