@@ -184,6 +184,7 @@ function StepCarousel({
   userDepositTx,
   showFillingOrderWarning,
   onNewSwap,
+  onViewUserDeposit,
 }: {
   swapId?: string;
   swapType: SwapType;
@@ -193,6 +194,7 @@ function StepCarousel({
   userDepositTx?: string;
   showFillingOrderWarning: boolean;
   onNewSwap: () => void;
+  onViewUserDeposit: () => void;
 }) {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const swapResponse = useStore((state) => state.swapResponse);
@@ -534,39 +536,46 @@ function StepCarousel({
           >
             {getShortTxnId() && (
               <Flex
+                as="button"
                 mt="-106px"
                 mb="70px"
                 alignItems="center"
                 gap="8px"
-                bg="rgba(255, 255, 255, 0.1)"
-                borderRadius="12px"
-                padding="6px 12px"
-                border="1px solid rgba(255, 255, 255, 0.2)"
+                bg="rgba(2, 123, 30, 0.25)"
+                borderRadius="16px"
+                padding="8px 16px"
+                border="2px solid #3F7244"
                 cursor="pointer"
-                onClick={handleCopyTxn}
-                _hover={{ bg: "rgba(255, 255, 255, 0.15)" }}
+                onClick={handleViewTransaction}
+                _hover={{
+                  transform: "translateY(-2px)",
+                  bg: "rgba(2, 123, 30, 0.35)",
+                  boxShadow: "0 4px 12px rgba(127, 58, 12, 0.3)",
+                }}
                 transition="all 0.2s"
               >
                 <Text
-                  color="rgba(255, 255, 255, 0.8)"
-                  fontFamily="Aux"
-                  fontSize="12px"
+                  color="white"
+                  fontFamily="Nostromo"
+                  fontSize={isMobile ? "12px" : "13px"}
                   fontWeight="normal"
+                  letterSpacing="0.5px"
                 >
-                  TXN HASH - {getShortTxnId()}
+                  VIEW PAYOUT TXN
                 </Text>
                 <svg
                   width="14"
                   height="14"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="rgba(255, 255, 255, 0.6)"
+                  stroke="white"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
                 </svg>
               </Flex>
             )}
@@ -574,17 +583,19 @@ function StepCarousel({
             <Flex gap="16px" mt="-55px" justifyContent="center">
               <Box
                 as="button"
-                onClick={handleViewTransaction}
-                border="2px solid #3F7244"
+                onClick={onViewUserDeposit}
+                border="2px solid rgba(255, 255, 255, 0.22)"
                 borderRadius="16px"
                 width={isMobile ? "140px" : "160px"}
-                background="rgba(2, 123, 30, 0.25)"
+                background="rgba(255, 255, 255, 0.05)"
                 padding="8px 16px"
                 cursor="pointer"
                 transition="all 0.2s"
                 _hover={{
                   transform: "translateY(-2px)",
-                  boxShadow: "0 4px 12px rgba(127, 58, 12, 0.3)",
+                  bg: "rgba(255, 255, 255, 0.10)",
+                  border: "2px solid rgba(255, 255, 255, 0.3)",
+                  boxShadow: "0 4px 12px rgba(255, 255, 255, 0.1)",
                 }}
               >
                 <Text
@@ -594,7 +605,7 @@ function StepCarousel({
                   fontWeight="normal"
                   letterSpacing="0.5px"
                 >
-                  VIEW TXN
+                  VIEW DEPOSIT
                 </Text>
               </Box>
 
@@ -610,6 +621,7 @@ function StepCarousel({
                 transition="all 0.2s"
                 _hover={{
                   transform: "translateY(-2px)",
+                  bg: "rgba(86, 50, 168, 0.45)",
                   boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
                 }}
               >
@@ -682,6 +694,14 @@ export function UnifiedTransactionWidget({
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
   const showLoadingDots = countdownValue === 0 && !isSettled;
+
+  console.log("🔍 [WIDGET STATE]", {
+    depositFlowState,
+    countdownValue,
+    isSettled,
+    showLoadingDots,
+    swapType,
+  });
 
   const steps = getSteps(swapType);
   const isSettledStatus = depositFlowState === "5-Settled";
@@ -1628,7 +1648,7 @@ export function UnifiedTransactionWidget({
       {/* Swap Details Pill - mobile: above widget, desktop: inside widget */}
       {!(swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress && bitcoinUri) &&
         isMobile && (
-          <Box mb="-50px" pt="16%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
             <SwapDetailsPill
               width="100%"
               fontSize="4vw"
@@ -1644,7 +1664,11 @@ export function UnifiedTransactionWidget({
 
       <Box
         w={isMobile ? "100%" : "805px"}
-        h={isMobile && swapType === "bitcoin-deposit" ? "600px" : "510px"}
+        h={
+          isMobile && swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress
+            ? "600px"
+            : "510px"
+        }
         borderRadius="40px"
         mt="70px"
         boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
@@ -1671,7 +1695,9 @@ export function UnifiedTransactionWidget({
       >
         <Box
           w="100%"
-          h={swapType === "bitcoin-deposit" ? "54%" : "50%"}
+          h={
+            swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress ? "54%" : "50%"
+          }
           borderRadius="40px"
           position="absolute"
           top="0px"
@@ -1706,7 +1732,7 @@ export function UnifiedTransactionWidget({
             bitcoinUri
           ) &&
             !isMobile && (
-              <Box position="absolute" top="20px" zIndex={2}>
+              <Box position="absolute" top="15px" zIndex={2}>
                 <SwapDetailsPill
                   inputAmount={inputAmount}
                   inputAsset={inputAsset}
@@ -1883,38 +1909,38 @@ export function UnifiedTransactionWidget({
             </Flex>
           ) : swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx ? (
             // Bitcoin deposit in progress - show loading or checkmark
-            <Flex
-              direction="column"
-              alignItems="center"
-              justifyContent="center"
-              marginTop={isMobile ? "20px" : "100px"}
-              gap="24px"
-              zIndex={1}
-            >
-              {isSettled ? (
-                <motion.div
-                  key="success"
-                  initial={{ y: -30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.5, ease: "easeInOut" }}
+            isSettled ? (
+              <motion.div
+                key="success"
+                initial={{ y: -30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: isMobile ? "0px" : "30px",
+                }}
+              >
+                <img
+                  src="/images/txns/check.svg"
+                  alt="Success"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginTop: isMobile ? "-10px" : "0",
+                    width: "110px",
+                    height: "110px",
+                    filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
                   }}
-                >
-                  <img
-                    src="/images/txns/check.svg"
-                    alt="Success"
-                    style={{
-                      width: "110px",
-                      height: "110px",
-                      filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
-                    }}
-                  />
-                </motion.div>
-              ) : (
+                />
+              </motion.div>
+            ) : (
+              <Flex
+                direction="column"
+                alignItems="center"
+                justifyContent="center"
+                marginTop={isMobile ? "20px" : "100px"}
+                gap="24px"
+                zIndex={1}
+              >
                 <>
                   <motion.div
                     key="loading"
@@ -1981,18 +2007,28 @@ export function UnifiedTransactionWidget({
                         fontFamily={FONT_FAMILIES.NOSTROMO}
                         letterSpacing="0.5px"
                       >
-                        VIEW DEPOSIT TXN IN MEMPOOL
+                        VIEW DEPOSIT TXN
                       </Text>
                       <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
                     </Flex>
                   )}
                 </>
-              )}
-            </Flex>
+              </Flex>
+            )
           ) : (
             // EVM deposit view
             <AnimatePresence mode="wait">
-              {countdownValue > 0 && !isSettled ? (
+              {(() => {
+                console.log("🔍 [TIMER/LOADER DECISION]", {
+                  countdownValue,
+                  isSettled,
+                  showLoadingDots,
+                  depositFlowState,
+                  shouldShowTimer: countdownValue > 0 && !isSettled,
+                  shouldShowLoader: showLoadingDots,
+                });
+                return countdownValue > 0 && !isSettled;
+              })() ? (
                 <motion.div
                   key="countdown"
                   initial={{ y: 0, opacity: 1 }}
@@ -2114,7 +2150,9 @@ export function UnifiedTransactionWidget({
 
         {/* Bottom Half - Steps */}
         <Box
-          h={swapType === "bitcoin-deposit" ? "45%" : "50%"}
+          h={
+            swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress ? "45%" : "50%"
+          }
           bottom="0px"
           position="absolute"
           padding="20px"
@@ -2132,6 +2170,7 @@ export function UnifiedTransactionWidget({
             userDepositTx={bitcoinDepositTx || userDepositTxHash}
             showFillingOrderWarning={showFillingOrderWarning}
             onNewSwap={handleNewSwap}
+            onViewUserDeposit={handleViewUserTransaction}
           />
         </Box>
 
@@ -2152,9 +2191,8 @@ export function UnifiedTransactionWidget({
 
       {/* Mobile: View Deposit Transaction Button below widget */}
       {isMobile &&
-        !isSettled &&
         ((swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx) ||
-          (swapType === "evm-deposit" && userDepositTxHash && showLoadingDots)) && (
+          (swapType === "evm-deposit" && userDepositTxHash)) && (
           <Box mt="30px" mb="-90px" w="100%" display="flex" justifyContent="center">
             <Flex
               as="button"
@@ -2185,9 +2223,7 @@ export function UnifiedTransactionWidget({
                 fontFamily={FONT_FAMILIES.NOSTROMO}
                 letterSpacing="0.5px"
               >
-                {swapType === "bitcoin-deposit"
-                  ? "VIEW DEPOSIT TXN IN MEMPOOL"
-                  : "VIEW DEPOSIT TXN"}
+                {swapType === "bitcoin-deposit" ? "VIEW DEPOSIT TXN" : "VIEW DEPOSIT TXN"}
               </Text>
               <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
             </Flex>
@@ -2196,34 +2232,6 @@ export function UnifiedTransactionWidget({
 
       {/* Hidden audio element for swap completion sound */}
       <audio ref={audioRef} src="/assets/swap_sfx.wav" preload="auto" />
-
-      {/* Test button for sound effect - REMOVE IN PRODUCTION */}
-      <Box
-        as="button"
-        onClick={() => {
-          if (audioRef.current) {
-            audioRef.current.play().catch((error) => {
-              console.error("Failed to play test sound:", error);
-            });
-          } else {
-            console.log("Audio ref not found");
-          }
-        }}
-        position="fixed"
-        bottom="20px"
-        right="20px"
-        bg="purple.500"
-        color="white"
-        px="4"
-        py="2"
-        borderRadius="md"
-        fontSize="sm"
-        fontWeight="bold"
-        _hover={{ bg: "purple.600" }}
-        zIndex={9999}
-      >
-        Test Sound 🔊
-      </Box>
     </Flex>
   );
 }
