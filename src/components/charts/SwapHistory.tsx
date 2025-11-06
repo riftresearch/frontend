@@ -477,38 +477,7 @@ const Row: React.FC<{
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
-              0x{swap.evmAccountAddress.slice(2, 10)}...
-            </Text>
-          </Flex>
-        </Box>
-        <Box w="158px">
-          <Flex align="center" gap="4px">
-            {/* From Asset */}
-            <AssetIcon
-              asset={
-                swap.direction === "BTC_TO_EVM" ? "BTC" : swap.startAssetMetadata?.ticker || "cbBTC"
-              }
-              iconUrl={swap.direction === "EVM_TO_BTC" ? swap.startAssetMetadata?.icon : undefined}
-              size={16}
-            />
-            <Text
-              fontSize="11px"
-              color={colorsAnalytics.offWhite}
-              fontFamily={FONT_FAMILIES.SF_PRO}
-            >
-              {swap.direction === "BTC_TO_EVM" ? "BTC" : swap.startAssetMetadata?.ticker || "cbBTC"}
-            </Text>
-            <Text fontSize="12px" color={colorsAnalytics.textGray}>
-              →
-            </Text>
-            {/* To Asset */}
-            <AssetIcon asset={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} size={16} />
-            <Text
-              fontSize="11px"
-              color={colorsAnalytics.offWhite}
-              fontFamily={FONT_FAMILIES.SF_PRO}
-            >
-              {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+              0x{swap.evmAccountAddress.slice(2, 6)}...
             </Text>
           </Flex>
         </Box>
@@ -579,6 +548,11 @@ const Row: React.FC<{
                   {formatUSD(swap.swapInitialAmountUsd)}
                 </Text>
               </Flex>
+
+              {/* Arrow */}
+              <Text fontSize="12px" color={colorsAnalytics.textGray} mt="-10px">
+                →
+              </Text>
 
               {/* Output section */}
               <Flex direction="column" gap="1px">
