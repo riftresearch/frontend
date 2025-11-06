@@ -194,13 +194,13 @@ export function TEEStatusFooter() {
       left="0"
       right="0"
       bg="rgba(2, 2, 2, 0.95)"
-      borderTop={`1px solid ${colors.borderGray}`}
+      borderTop={`1px solid #202029`}
       backdropFilter="blur(10px)"
       zIndex={1000}
-      py="8px"
+      py="12px"
       px="16px"
     >
-      <Flex justify="space-between" align="center" maxW="1200px" mx="auto" gap="16px">
+      <Flex justify="space-between" align="center" w="100%" px="20px" gap="16px">
         {/* Overall Status */}
         <Tooltip.Root openDelay={200} closeDelay={300}>
           <Tooltip.Trigger asChild>

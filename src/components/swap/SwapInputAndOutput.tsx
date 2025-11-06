@@ -2260,13 +2260,14 @@ export const SwapInputAndOutput = () => {
           align="center"
           justify="center"
           cursor="pointer"
-          _hover={{ bg: "#333" }}
+          _hover={{ bg: "#242424" }}
           onClick={handleSwapReverse}
           bg="#161616"
           border="2px solid #323232"
           mt="-16px"
           mb="-20px"
           position="relative"
+          transition="background 0.2s ease-in-out"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="22px" height="22px" viewBox="0 0 20 20">
             <path
@@ -2484,9 +2485,9 @@ export const SwapInputAndOutput = () => {
                 feeOverview ? (
                   <>
                     {[
+                      { key: "protocol", ...feeOverview.protocolFee },
                       { key: "erc20", ...feeOverview.erc20Fee },
                       { key: "network", ...feeOverview.networkFee },
-                      { key: "protocol", ...feeOverview.protocolFee },
                     ]
                       .filter((fee) => fee.fee !== "$0.00")
                       .map((fee) => (

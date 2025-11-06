@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Box, Text, Flex, Image } from "@chakra-ui/react";
 import { QRCodeSVG } from "qrcode.react";
 import { LuCopy } from "react-icons/lu";
@@ -59,17 +59,17 @@ const SwapDetailsPill: React.FC<{
       bg="rgba(0, 0, 0, 0.6)"
       borderRadius="16px"
       width={width ? width : "null"}
-      padding={isMobile ? "6px 12px" : "8px 14px"}
+      padding={isMobile ? "8px 16px" : "10px 18px"}
       alignItems="center"
       justifyContent="center"
-      gap={isMobile ? "6px" : "8px"}
+      gap={isMobile ? "8px" : "10px"}
       backdropFilter="blur(12px)"
       border="1px solid rgba(255, 255, 255, 0.08)"
     >
       {/* Input Amount + Asset */}
-      <Flex alignItems="center" gap="3px">
+      <Flex alignItems="center" gap="4px">
         <Text
-          fontSize={fontSize ? fontSize : "11px"}
+          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.offWhite}
           fontWeight="500"
@@ -77,9 +77,9 @@ const SwapDetailsPill: React.FC<{
         >
           {inputAmount}
         </Text>
-        <AssetIcon asset={inputAsset} iconUrl={inputAssetIconUrl} size={14} />
+        <AssetIcon asset={inputAsset} iconUrl={inputAssetIconUrl} size={16} />
         <Text
-          fontSize={fontSize ? fontSize : "11px"}
+          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.textGray}
           fontWeight="500"
@@ -90,14 +90,18 @@ const SwapDetailsPill: React.FC<{
       </Flex>
 
       {/* Arrow */}
-      <Text fontSize="12px" color="rgba(255, 255, 255, 0.4)" fontWeight="bold">
+      <Text
+        fontSize={isMobile ? "14px" : "14px"}
+        color="rgba(255, 255, 255, 0.4)"
+        fontWeight="bold"
+      >
         →
       </Text>
 
       {/* Output Amount + Asset */}
-      <Flex alignItems="center" gap="3px">
+      <Flex alignItems="center" gap="4px">
         <Text
-          fontSize={fontSize ? fontSize : "11px"}
+          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.offWhite}
           fontWeight="500"
@@ -105,9 +109,9 @@ const SwapDetailsPill: React.FC<{
         >
           {outputAmount}
         </Text>
-        <AssetIcon asset={outputAsset} size={14} />
+        <AssetIcon asset={outputAsset} size={16} />
         <Text
-          fontSize={fontSize ? fontSize : "11px"}
+          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
           fontFamily={FONT_FAMILIES.AUX_MONO}
           color={colors.textGray}
           fontWeight="500"
@@ -644,6 +648,10 @@ export function UnifiedTransactionWidget({
     swapResponse,
   } = useStore();
 
+  // Sound effect for swap completion
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previousDepositFlowStateRef = useRef<string | null>(null);
+
   // Use provided swapId prop, fallback to store value
   const currentSwapId = swapId || swapResponse?.swap_id;
   const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
@@ -700,6 +708,30 @@ export function UnifiedTransactionWidget({
 
   // Track BTC confirmations
   const [btcConfirmations, setBtcConfirmations] = React.useState<number>(0);
+
+  // Play sound effect when swap completes
+  useEffect(() => {
+    console.log("Deposit Flow State Change:", {
+      previous: previousDepositFlowStateRef.current,
+      current: depositFlowState,
+      audioRefExists: !!audioRef.current,
+    });
+
+    // Transition from "FILLING ORDER" to "SWAP COMPLETE"
+    if (
+      previousDepositFlowStateRef.current === "3-WaitingMMDepositInitiated" &&
+      (depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled") &&
+      audioRef.current
+    ) {
+      console.log("🔊 Playing swap completion sound!");
+      audioRef.current.play().catch((error) => {
+        console.log("Failed to play swap completion sound:", error);
+      });
+    }
+
+    // Update the previous state for next comparison
+    previousDepositFlowStateRef.current = depositFlowState;
+  }, [depositFlowState]);
 
   // Check if swap expired (for Bitcoin deposits only)
   const isExpired = React.useMemo(() => {
@@ -2161,6 +2193,37 @@ export function UnifiedTransactionWidget({
             </Flex>
           </Box>
         )}
+
+      {/* Hidden audio element for swap completion sound */}
+      <audio ref={audioRef} src="/assets/swap_sfx.wav" preload="auto" />
+
+      {/* Test button for sound effect - REMOVE IN PRODUCTION */}
+      <Box
+        as="button"
+        onClick={() => {
+          if (audioRef.current) {
+            audioRef.current.play().catch((error) => {
+              console.error("Failed to play test sound:", error);
+            });
+          } else {
+            console.log("Audio ref not found");
+          }
+        }}
+        position="fixed"
+        bottom="20px"
+        right="20px"
+        bg="purple.500"
+        color="white"
+        px="4"
+        py="2"
+        borderRadius="md"
+        fontSize="sm"
+        fontWeight="bold"
+        _hover={{ bg: "purple.600" }}
+        zIndex={9999}
+      >
+        Test Sound 🔊
+      </Box>
     </Flex>
   );
 }

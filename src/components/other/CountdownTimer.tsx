@@ -18,8 +18,12 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   const [initialCountdownValue, setInitialCountdownValue] = useState(99); // Track the starting value
 
   useEffect(() => {
-    // Reset progress only when starting fresh from state 0
-    if (depositFlowState === "1-WaitingUserDepositInitiated" && previousState === "0-not-started") {
+    // Initialize timer when coming from step 0 to step 1 or step 2
+    if (
+      (depositFlowState === "1-WaitingUserDepositInitiated" ||
+        depositFlowState === "2-WaitingUserDepositConfirmed") &&
+      previousState === "0-not-started"
+    ) {
       // Capture the initial countdown value for progress calculations
       setInitialCountdownValue(countdownValue);
       // Trigger entrance animation
@@ -36,7 +40,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
     }
 
     setPreviousState(depositFlowState);
-  }, [depositFlowState, previousState]);
+  }, [depositFlowState, previousState, countdownValue]);
 
   useEffect(() => {
     // Only run countdown if we're in an active state and countdown > 0
@@ -100,12 +104,14 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
     requestAnimationFrame(animate);
   }, [countdownValue]);
 
-  // Calculate circle properties - arc from 12 o'clock (2.5x bigger, then 80% twice)
-  const radius = 45 * 2.5 * 0.8 * 0.8; // 72 (90 * 0.8)
+  // Calculate circle properties - arc from 12 o'clock (2.5x bigger, then 80% twice, then 92% to reduce by 8%)
+  const radius = 45 * 2.5 * 0.8 * 0.8 * 0.92; // 66.24
   const circumference = 2 * Math.PI * radius;
   const arcLength = (smoothProgress / 100) * circumference;
   const strokeDasharray = `${arcLength} ${circumference}`;
   const strokeDashoffset = -((100 - smoothProgress) / 100) * circumference; // Offset to make it shrink clockwise
+
+  const svgSize = 192 * 0.92; // 176.64
 
   return (
     <Box
@@ -118,13 +124,13 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
       transition="all 1.2s cubic-bezier(0.16, 1, 0.3, 1)"
       transitionDelay={showTimer ? "0.3s" : "0s"}
     >
-      {/* SVG Circle Progress - 80% of 80% of 2.5x size */}
-      <svg width="192" height="192" style={{ transform: "rotate(-90deg)" }}>
+      {/* SVG Circle Progress - 8% smaller overall */}
+      <svg width={svgSize} height={svgSize} style={{ transform: "rotate(-90deg)" }}>
         {/* Progress circle - show when there's progress or animating to 0 */}
         {(smoothProgress > 0 || isAnimatingToZero) && (
           <circle
-            cx="96"
-            cy="96"
+            cx={svgSize / 2}
+            cy={svgSize / 2}
             r={radius}
             fill="none"
             stroke="url(#gradient)"
@@ -146,11 +152,11 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
       {/* Countdown number */}
       <Text
         position="absolute"
-        fontSize={countdownValue > 99 ? "68px" : "88px"}
+        fontSize={countdownValue > 99 ? "62.56px" : "80.96px"}
         textAlign="center"
-        letterSpacing={countdownValue > 99 ? "-10px" : "-13px"}
+        letterSpacing={countdownValue > 99 ? "-9.2px" : "-11.96px"}
         mt="-5px"
-        ml={countdownValue > 99 ? "-12px" : countdownValue > 9 ? "-16px" : "-16px"}
+        ml={countdownValue > 99 ? "-11.04px" : countdownValue > 9 ? "-14.72px" : "-14.72px"}
         color="white"
         dropShadow="0 0 100px rgba(255, 255, 255, 0.5)"
         fontFamily="Proto Mono"

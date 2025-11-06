@@ -75,15 +75,18 @@ export default function SwapPage() {
     }
   }, [swapStatusInfo?.status, depositFlowState, setDepositFlowState]);
 
-  // Set countdown only on initial load for step 1, otherwise set to 0 to show loading dots
+  // Set countdown only on initial load for step 1 or step 2, otherwise set to 0 to show loading dots
   React.useEffect(() => {
     // Only run on initial load (when previousState is still initial)
     if (previousState === "0-not-started") {
-      if (depositFlowState === "1-WaitingUserDepositInitiated") {
-        // Start timer on step 1
+      if (
+        depositFlowState === "1-WaitingUserDepositInitiated" ||
+        depositFlowState === "2-WaitingUserDepositConfirmed"
+      ) {
+        // Start timer on step 1 or step 2
         setCountdownValue(99);
       } else if (depositFlowState !== "0-not-started") {
-        // On any other step (2, 3, 4, 5), show loading dots (countdown = 0)
+        // On any other step (3, 4, 5), show loading dots (countdown = 0)
         setCountdownValue(0);
       }
       setPreviousState(depositFlowState);

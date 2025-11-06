@@ -86,18 +86,29 @@ const Pill: React.FC<{
   isRefundAvailable?: boolean;
   isLastStep?: boolean;
   isRefunded?: boolean;
-}> = ({ step, isRefundAvailable, isLastStep, isRefunded }) => {
+  previousStep?: AdminSwapFlowStep;
+}> = ({ step, isRefundAvailable, isLastStep, isRefunded, previousStep }) => {
   // Use the step label directly (it will be "Refunded" if status is user_refunded_detected)
   const displayedLabel = step.label;
+  const isConfsPill = displayedLabel.includes("Conf");
+
+  // Check if this pill is clickable
   const hasTx = step.txHash && step.txChain;
+  const hasPreviousTx = previousStep?.txHash && previousStep?.txChain;
+
   const isClickable =
-    hasTx &&
-    (step.status === "waiting_user_deposit_initiated" ||
-      step.status === "waiting_mm_deposit_initiated");
+    (hasTx &&
+      (step.status === "waiting_user_deposit_initiated" ||
+        step.status === "waiting_mm_deposit_initiated")) ||
+    (isConfsPill && hasPreviousTx);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!step.txHash || !step.txChain) {
+
+    // For confirmation pills, use the previous step's transaction
+    const txToOpen = isConfsPill && previousStep ? previousStep : step;
+
+    if (!txToOpen.txHash || !txToOpen.txChain) {
       toastError(null, {
         title: "Transaction Not Available",
         description: "Transaction hash not available yet",
@@ -106,13 +117,13 @@ const Pill: React.FC<{
     }
 
     // Add 0x prefix to Ethereum transaction hashes if missing
-    let txHash = step.txHash;
-    if (step.txChain !== "BTC" && !txHash.startsWith("0x")) {
+    let txHash = txToOpen.txHash;
+    if (txToOpen.txChain !== "BTC" && !txHash.startsWith("0x")) {
       txHash = `0x${txHash}`;
     }
 
     const url =
-      step.txChain === "ETH"
+      txToOpen.txChain === "ETH"
         ? `https://etherscan.io/tx/${txHash}`
         : `https://mempool.space/tx/${txHash}`;
 
@@ -156,9 +167,6 @@ const Pill: React.FC<{
   };
   const s = styleByState();
 
-  // Check if this is a confirmation pill
-  const isConfsPill = displayedLabel.includes("Conf");
-
   const pillContent = (
     <Flex
       align="center"
@@ -186,11 +194,18 @@ const Pill: React.FC<{
     </Flex>
   );
 
-  if (!isClickable || !step.txHash) {
+  if (!isClickable) {
     return pillContent;
   }
 
-  const truncatedHash = `${step.txHash.slice(0, 6)}...${step.txHash.slice(-4)}`;
+  // For confirmation pills, show the previous step's transaction hash
+  const txToShow = isConfsPill && previousStep ? previousStep : step;
+
+  if (!txToShow.txHash) {
+    return pillContent;
+  }
+
+  const truncatedHash = `${txToShow.txHash.slice(0, 6)}...${txToShow.txHash.slice(-4)}`;
 
   return (
     <Tooltip.Root openDelay={200} closeDelay={0}>
@@ -219,7 +234,16 @@ const StepWithTime: React.FC<{
   isRefundAvailable?: boolean;
   isLastStep?: boolean;
   isRefunded?: boolean;
-}> = ({ step, previousStepTimestamp, currentTime, isRefundAvailable, isLastStep, isRefunded }) => {
+  previousStep?: AdminSwapFlowStep;
+}> = ({
+  step,
+  previousStepTimestamp,
+  currentTime,
+  isRefundAvailable,
+  isLastStep,
+  isRefunded,
+  previousStep,
+}) => {
   const timeRowHeight = 22; // reserve consistent space above every pill
   const LIVE_TIMER_OFFSET = 13; // Subtract 13 seconds to account for backend processing delay
 
@@ -269,6 +293,7 @@ const StepWithTime: React.FC<{
         isRefundAvailable={isRefundAvailable}
         isLastStep={isLastStep}
         isRefunded={isRefunded}
+        previousStep={previousStep}
       />
     </Flex>
   );
@@ -396,7 +421,7 @@ const Row: React.FC<{
             {swap.rawData?.swap_number || swap.rawData?.swapNumber || "—"}
           </Text>
         </Box>
-        <Box w="91px">
+        <Box w="104px">
           <Flex
             as="button"
             onClick={(e) => {
@@ -431,7 +456,7 @@ const Row: React.FC<{
             {timeAgoFrom(currentTime, swap.swapCreationTimestamp)}
           </Text>
         </Box>
-        <Box w="90px">
+        <Box w="99px">
           <Flex
             as="button"
             onClick={(e) => {
@@ -487,46 +512,157 @@ const Row: React.FC<{
             </Text>
           </Flex>
         </Box>
+        <Box w="365px">
+          <Flex direction="column" gap="2px">
+            {/* Top row: amounts and assets */}
+            <Flex align="center" gap="8px">
+              {/* Input section */}
+              <Flex direction="column" gap="1px">
+                <Flex align="center" gap="4px">
+                  {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+                    // ERC20 -> BTC: Show amount + token first
+                    <>
+                      <Text
+                        fontSize="13px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {parseFloat(swap.startAssetMetadata.amount).toLocaleString(undefined, {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: Math.min(swap.startAssetMetadata.decimals, 6),
+                        })}
+                      </Text>
+                      <AssetIcon
+                        asset={swap.startAssetMetadata.ticker}
+                        iconUrl={swap.startAssetMetadata.icon}
+                        size={16}
+                      />
+                      <Text
+                        fontSize="13px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {swap.startAssetMetadata.ticker}
+                      </Text>
+                    </>
+                  ) : (
+                    // BTC -> EVM: Show BTC amount
+                    <>
+                      <Text
+                        fontSize="13px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        {swap.swapInitialAmountBtc.toLocaleString(undefined, {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 8,
+                        })}
+                      </Text>
+                      <AssetIcon asset="BTC" size={16} />
+                      <Text
+                        fontSize="13px"
+                        color={colorsAnalytics.offWhite}
+                        fontFamily={FONT_FAMILIES.SF_PRO}
+                      >
+                        BTC
+                      </Text>
+                    </>
+                  )}
+                </Flex>
+                {/* Input USD value */}
+                <Text
+                  fontSize="13px"
+                  color={colorsAnalytics.textGray}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  pl="2px"
+                >
+                  {formatUSD(swap.swapInitialAmountUsd)}
+                </Text>
+              </Flex>
 
-        <Box w="207px">
-          {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
-            // Show ERC20 amount from metadata for EVM->BTC swaps
-            <Flex align="center" gap="4px">
-              <Text
-                fontSize="13px"
-                color={colorsAnalytics.offWhite}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-              >
-                {parseFloat(swap.startAssetMetadata.amount)
-                  .toFixed(Math.min(swap.startAssetMetadata.decimals, 6))
-                  .replace(/\.?0+$/, "")}
-              </Text>
-              <AssetIcon
-                asset={swap.startAssetMetadata.ticker}
-                iconUrl={swap.startAssetMetadata.icon}
-                size={16}
-              />
-              <Text
-                fontSize="13px"
-                color={colorsAnalytics.offWhite}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-              >
-                {swap.startAssetMetadata.ticker}
-              </Text>
+              {/* Output section */}
+              <Flex direction="column" gap="1px">
+                <Flex align="center" gap="4px">
+                  {(() => {
+                    const rawData = swap.rawData as any;
+                    const toAmount = rawData?.quote?.to_amount;
+                    const toDecimals =
+                      rawData?.quote?.to_decimals || (swap.direction === "BTC_TO_EVM" ? 18 : 8);
+
+                    if (toAmount) {
+                      const outputAmount = parseInt(toAmount) / Math.pow(10, toDecimals);
+                      const outputFormatted = outputAmount.toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: toDecimals === 8 ? 8 : 6,
+                      });
+
+                      return (
+                        <>
+                          <Text
+                            fontSize="13px"
+                            color={colorsAnalytics.offWhite}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {outputFormatted}
+                          </Text>
+                          <AssetIcon
+                            asset={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                            size={16}
+                          />
+                          <Text
+                            fontSize="13px"
+                            color={colorsAnalytics.offWhite}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                          </Text>
+                        </>
+                      );
+                    } else {
+                      // Fallback to just showing the asset without amount
+                      return (
+                        <>
+                          <AssetIcon
+                            asset={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                            size={16}
+                          />
+                          <Text
+                            fontSize="13px"
+                            color={colorsAnalytics.offWhite}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                          </Text>
+                        </>
+                      );
+                    }
+                  })()}
+                </Flex>
+                {/* Output USD value */}
+                <Text
+                  fontSize="13px"
+                  color={colorsAnalytics.textGray}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  pl="2px"
+                >
+                  {(() => {
+                    const rawData = swap.rawData as any;
+                    const toAmount = rawData?.quote?.to_amount;
+                    const toDecimals =
+                      rawData?.quote?.to_decimals || (swap.direction === "BTC_TO_EVM" ? 18 : 8);
+
+                    if (toAmount && impliedUsdPerBtc > 0) {
+                      const outputAmount = parseInt(toAmount) / Math.pow(10, toDecimals);
+                      // For BTC outputs, calculate USD directly. For cbBTC, it's same as BTC price
+                      const outputUsd = outputAmount * impliedUsdPerBtc;
+                      return formatUSD(outputUsd);
+                    }
+                    return "";
+                  })()}
+                </Text>
+              </Flex>
             </Flex>
-          ) : (
-            // Show BTC amount for BTC->EVM swaps or legacy swaps
-            <Text
-              fontSize="13px"
-              color={colorsAnalytics.offWhite}
-              fontFamily={FONT_FAMILIES.SF_PRO}
-            >
-              {formatBTC(swap.swapInitialAmountBtc)}
-            </Text>
-          )}
-          <Text fontSize="13px" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
-            {formatUSD(swap.swapInitialAmountUsd)}
-          </Text>
+          </Flex>
         </Box>
         <Tooltip.Root openDelay={200} closeDelay={300}>
           <Tooltip.Trigger asChild>
@@ -536,14 +672,14 @@ const Row: React.FC<{
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
               >
-                {formatUSD(riftFeeUsd)}
+                {swap.riftFeeSats.toLocaleString()} sats
               </Text>
               <Text
                 fontSize="13px"
                 color={colorsAnalytics.textGray}
                 fontFamily={FONT_FAMILIES.SF_PRO}
               >
-                {swap.riftFeeSats.toLocaleString()} sats
+                {formatUSD(riftFeeUsd)}
               </Text>
             </Box>
           </Tooltip.Trigger>
@@ -577,6 +713,7 @@ const Row: React.FC<{
               isRefundAvailable={isRefundAvailable}
               isLastStep={idx === filteredFlow.length - 1}
               isRefunded={isRefunded}
+              previousStep={idx > 0 ? filteredFlow[idx - 1] : undefined}
             />
           ))}
           <FinalTime
@@ -1174,20 +1311,17 @@ export const SwapHistory: React.FC<{
               <Box w="50px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>#</Text>
               </Box>
-              <Box w="91px">
+              <Box w="104px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>ID</Text>
               </Box>
               <Box w="109px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Time</Text>
               </Box>
-              <Box w="90px">
+              <Box w="99px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
               </Box>
-              <Box w="158px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Direction</Text>
-              </Box>
-              <Box w="207px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Amount</Text>
+              <Box w="365px">
+                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap</Text>
               </Box>
               <Box w="95px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
