@@ -346,7 +346,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           py="24px"
           maxW="520px"
           w="90%"
-          maxH="500px"
+          maxH="670px"
           overflowY="auto"
           border="2px solid #232323"
           onClick={(e) => e.stopPropagation()}
