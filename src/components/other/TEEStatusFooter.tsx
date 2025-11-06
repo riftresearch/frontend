@@ -45,7 +45,10 @@ function LiquidityIndicator({
     const sats = parseFloat(satsValue);
     const btc = sats / 100_000_000;
 
-    return `${btc.toFixed(8)} ${label}\n${sats.toLocaleString()} sats`;
+    // Determine swap time ETA based on asset type
+    const swapTimeEta = label === "BTC" ? "~12 mins" : "~28 mins";
+
+    return `Swap Time: ${swapTimeEta}\n\n${btc.toFixed(8)} ${label}\n${sats.toLocaleString()} sats`;
   };
 
   const tooltipText = getTooltipText();
@@ -100,7 +103,7 @@ function LiquidityIndicator({
           boxShadow="0 4px 12px rgba(0, 0, 0, 0.3)"
         >
           <Tooltip.Arrow />
-          <Text fontFamily={FONT_FAMILIES.AUX_MONO} lineHeight="1.6">
+          <Text fontFamily="monospace" lineHeight="1.6">
             {tooltipText}
           </Text>
         </Tooltip.Content>

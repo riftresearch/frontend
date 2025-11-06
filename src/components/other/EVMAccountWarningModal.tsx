@@ -99,7 +99,7 @@ export const EVMAccountWarningModal: React.FC<EVMAccountWarningModalProps> = ({
               px="8px"
               pb="5px"
             >
-              Sign in with your wallet to see your swap history, even for native Bitcoin swaps.
+              Connect your EVM wallet to see your swap history, even for native Bitcoin swaps.
             </Text>
 
             <Button
