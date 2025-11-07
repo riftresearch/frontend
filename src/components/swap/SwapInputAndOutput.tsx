@@ -2035,6 +2035,7 @@ export const SwapInputAndOutput = () => {
                   >
                     Exceeds available liquidity -
                   </Text>
+
                   <Text
                     fontSize="13px"
                     mt="7px"
@@ -2065,7 +2066,7 @@ export const SwapInputAndOutput = () => {
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Exceeds available liquidity -
+                    Exceeds {isMobile ? "max" : "available liquidity"} -
                   </Text>
                   <Text
                     fontSize="13px"
@@ -2119,15 +2120,17 @@ export const SwapInputAndOutput = () => {
                 </>
               ) : (
                 <Flex direction="row" align="center" gap="6px" mt="6px" ml="1px">
-                  <Text
-                    color={!rawInputAmount ? colors.offWhite : colors.textGray}
-                    fontSize="14px"
-                    letterSpacing="-1px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    {isLoadingQuote && !getQuoteForInputRef.current ? "..." : inputUsdValue}
-                  </Text>
+                  {isMobile && exceedsUserBalance ? undefined : (
+                    <Text
+                      color={!rawInputAmount ? colors.offWhite : colors.textGray}
+                      fontSize="14px"
+                      letterSpacing="-1px"
+                      fontWeight="normal"
+                      fontFamily="Aux"
+                    >
+                      {isLoadingQuote && !getQuoteForInputRef.current ? "..." : inputUsdValue}
+                    </Text>
+                  )}
                   {exceedsUserBalance && (
                     <>
                       <Text
@@ -2137,7 +2140,7 @@ export const SwapInputAndOutput = () => {
                         fontWeight="normal"
                         fontFamily="Aux"
                       >
-                        - Exceeds balance
+                        {isMobile ? "Exceeds balance" : "- Exceeds balance"}
                       </Text>
                       {parseFloat(currentInputBalance || "0") > 0 && (
                         <Text
