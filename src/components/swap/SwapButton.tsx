@@ -26,10 +26,6 @@ import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
-import {
-  EVMAccountWarningModal,
-  hasAcknowledgedEVMWarning,
-} from "@/components/other/EVMAccountWarningModal";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -45,7 +41,6 @@ export const SwapButton = () => {
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
   const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
-  const [showEVMWarningModal, setShowEVMWarningModal] = useState(false);
 
   // Global store
   const {
@@ -362,9 +357,11 @@ export const SwapButton = () => {
     } catch (error) {
       console.error("cbBTC->BTC swap failed:", error);
 
+      setSwapButtonPressed(false);
+      setSwapResponse(null);
       toastError(error, {
         title: "Swap Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: "Try refreshing the quote and try again.",
       });
     }
   }, [
@@ -521,9 +518,10 @@ export const SwapButton = () => {
       console.error("ERC20->BTC swap failed:", error);
 
       setSwapResponse(null);
+      setSwapButtonPressed(false);
       toastError(error, {
         title: "Swap Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: "Try refreshing the quote and try again.",
       });
     }
   }, [
@@ -585,9 +583,11 @@ export const SwapButton = () => {
     } catch (error) {
       console.error("BTC->cbBTC swap failed:", error);
 
+      setSwapButtonPressed(false);
+      setSwapResponse(null);
       toastError(error, {
         title: "Swap Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: "Try refreshing the quote and try again.",
       });
     }
   }, [
@@ -652,13 +652,6 @@ export const SwapButton = () => {
     }
 
     if (!isWalletConnected) {
-      // If swapping for something other than BTC and user hasn't acknowledged, show warning
-      if (!isSwappingForBTC && !hasAcknowledgedEVMWarning()) {
-        setShowEVMWarningModal(true);
-        return;
-      }
-
-      // Otherwise, open wallet connection modal directly
       await reownModal.open();
       return;
     }
@@ -1049,16 +1042,6 @@ export const SwapButton = () => {
           {buttonConfig.text}
         </Text>
       </Flex>
-
-      {/* EVM Account Warning Modal */}
-      <EVMAccountWarningModal
-        isOpen={showEVMWarningModal}
-        onConfirm={() => {
-          setShowEVMWarningModal(false);
-          // Then open the wallet modal
-          reownModal.open();
-        }}
-      />
     </Flex>
   );
 };

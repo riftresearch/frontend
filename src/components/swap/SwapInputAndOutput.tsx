@@ -20,6 +20,10 @@ import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
 import { TokenData, ApprovalState } from "@/utils/types";
+import {
+  EVMAccountWarningModal,
+  hasAcknowledgedEVMWarning,
+} from "@/components/other/EVMAccountWarningModal";
 import { Quote, formatLotAmount } from "@/utils/rfqClient";
 import {
   getERC20ToBTCQuote,
@@ -65,6 +69,7 @@ export const SwapInputAndOutput = () => {
   const [showFeeTooltip, setShowFeeTooltip] = useState(false);
   const [showAddressTooltip, setShowAddressTooltip] = useState(false);
   const [showMaxTooltip, setShowMaxTooltip] = useState(false);
+  const [showEVMWarningModal, setShowEVMWarningModal] = useState(false);
   const [isAtAdjustedMax, setIsAtAdjustedMax] = useState(false);
   const getQuoteForInputRef = useRef(true);
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
@@ -687,7 +692,18 @@ export const SwapInputAndOutput = () => {
   };
 
   const handleSwapReverse = () => {
-    const newIsSwappingForBTC = !isSwappingForBTC;
+    // Check if swapping TO BTC and user hasn't acknowledged the warning
+    if (isSwappingForBTC && !hasAcknowledgedEVMWarning()) {
+      setShowEVMWarningModal(true);
+      performSwapReverse(!isSwappingForBTC);
+      return;
+    }
+
+    // Proceed with the swap reversal
+    performSwapReverse(!isSwappingForBTC);
+  };
+
+  const performSwapReverse = (newIsSwappingForBTC: boolean) => {
     setIsSwappingForBTC(newIsSwappingForBTC);
 
     // Set selectedOutputToken based on new swap direction
@@ -2610,6 +2626,14 @@ export const SwapInputAndOutput = () => {
         isOpen={isAssetSelectorOpen}
         onClose={closeAssetSelector}
         currentAsset={inputAssetIdentifier}
+      />
+
+      {/* EVM Account Warning Modal */}
+      <EVMAccountWarningModal
+        isOpen={showEVMWarningModal}
+        onConfirm={() => {
+          setShowEVMWarningModal(false);
+        }}
       />
     </Flex>
   );

@@ -85,7 +85,7 @@ export const EVMAccountWarningModal: React.FC<EVMAccountWarningModalProps> = ({
             justify="center"
             align="center"
           >
-            <Text>Connect wallet</Text>
+            <Text>How to swap BTC</Text>
           </Flex>
 
           {/* Body */}
@@ -96,11 +96,40 @@ export const EVMAccountWarningModal: React.FC<EVMAccountWarningModalProps> = ({
               lineHeight="1.6"
               color={colors.textGray}
               letterSpacing="-1.5px"
-              px="8px"
+              // px="8px"
               pb="5px"
             >
-              Connect your EVM wallet to see your swap history, even for native Bitcoin swaps.
+              Rift uses your Ethereum address to track your swap history, even for Bitcoin swaps.
             </Text>
+
+            <Flex direction="column" align="flex-start" gap="12px" w="full" px="8px">
+              <Flex direction="column" gap="8px" w="full">
+                <Text
+                  fontSize="15px"
+                  color={colors.textGray}
+                  letterSpacing="-1.5px"
+                  lineHeight="1.5"
+                >
+                  1. Connect your Ethereum wallet
+                </Text>
+                <Text
+                  fontSize="15px"
+                  color={colors.textGray}
+                  letterSpacing="-1.5px"
+                  lineHeight="1.5"
+                >
+                  2. Send the exact BTC amount to the QR code address
+                </Text>
+                <Text
+                  fontSize="15px"
+                  color={colors.textGray}
+                  letterSpacing="-1.5px"
+                  lineHeight="1.5"
+                >
+                  3. Receive cbBTC in ~30 minutes
+                </Text>
+              </Flex>
+            </Flex>
 
             <Button
               onClick={handleConfirm}
