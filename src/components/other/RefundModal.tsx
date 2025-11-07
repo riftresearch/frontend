@@ -230,7 +230,7 @@ export const RefundModal: React.FC<RefundModalProps> = ({
                       color={colors.textGray}
                       fontFamily={FONT_FAMILIES.AUX_MONO}
                     >
-                      Network fee (3 blocks ~30 min):
+                      Network fee (1 blocks ~10 min):
                     </Text>
                     <Text
                       fontSize="13px"

@@ -133,7 +133,11 @@ const Pill: React.FC<{
 
   const styleByState = () => {
     // Yellow pill for refunded status
-    if (step.status === "user_refunded_detected") {
+    if (
+      step.status === "user_refunded_detected" ||
+      step.status === "refunding_user" ||
+      step.status === "refunding_mm"
+    ) {
       return {
         bg: "rgba(251, 191, 36, 0.15)",
         border: "rgba(251, 191, 36, 0.4)",
@@ -1057,7 +1061,13 @@ export const SwapHistory: React.FC<{
             }
           }
 
-          return mappedSwap;
+          return {
+            ...mappedSwap,
+            rawData: {
+              ...row,
+              isRefundAvailable,
+            },
+          };
         })
       );
 
@@ -1151,6 +1161,15 @@ export const SwapHistory: React.FC<{
         }
       }
 
+      // Attach refund availability to swap
+      const swapWithRefundInfo = {
+        ...mappedSwap,
+        rawData: {
+          ...latestSwap,
+          isRefundAvailable,
+        },
+      };
+
       // Mark this swap as processed
       processedSwapIds.current.add(mappedSwap.id);
       console.log("Adding new swap to list:", mappedSwap.id);
@@ -1161,7 +1180,7 @@ export const SwapHistory: React.FC<{
           return prev;
         }
 
-        let newSwaps = [mappedSwap, ...prev];
+        let newSwaps = [swapWithRefundInfo, ...prev];
 
         // If we're at the top and have too many swaps, prune from the bottom
         if (isAtTop && newSwaps.length > MAX_SWAPS_IN_MEMORY) {
@@ -1243,10 +1262,21 @@ export const SwapHistory: React.FC<{
         }
       }
 
+      // Attach refund availability to swap
+      const swapWithRefundInfo = {
+        ...mappedSwap,
+        rawData: {
+          ...updatedSwap,
+          isRefundAvailable,
+        },
+      };
+
       // console.log("Updating existing swap:", mappedSwap.id);
 
       // Update the existing swap in the list
-      setAllSwaps((prev) => prev.map((swap) => (swap.id === mappedSwap.id ? mappedSwap : swap)));
+      setAllSwaps((prev) =>
+        prev.map((swap) => (swap.id === mappedSwap.id ? swapWithRefundInfo : swap))
+      );
 
       // Add to updating animation set
       setUpdatingSwapIds((prev) => {

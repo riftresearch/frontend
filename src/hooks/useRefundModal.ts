@@ -43,7 +43,7 @@ export const useRefundModal = (options: UseRefundModalOptions = {}) => {
       setFetchingFee(true);
       try {
         // Get medium priority fee (3 blocks)
-        const feeRate = await esploraClient.getRecommendedFee(3);
+        const feeRate = await esploraClient.getRecommendedFee(1);
 
         // Estimate transaction size for a typical refund (1 input, 1 output, segwit)
         const txSize = estimateRefundTxSize("segwit");

@@ -92,61 +92,6 @@ export async function createSignedRefundRequest(
 }
 
 /**
- * Check if a swap is eligible for refund based on status and timing
- *
- * @param swap - The swap object with status and timing information
- * @returns Object with eligibility status and reason
- */
-export function checkRefundEligibility(swap: {
-  status: string;
-  user_deposit_confirmed_at?: string;
-  mm_deposit_initiated_at?: string;
-  mm_deposit_confirmed_at?: string;
-}): { eligible: boolean; reason?: string; timeRemaining?: number } {
-  const now = new Date();
-
-  // Case 1: Market Maker Never Initiated Their Deposit
-  if (swap.status === "WaitingMMDepositInitiated" && swap.user_deposit_confirmed_at) {
-    const userDepositTime = new Date(swap.user_deposit_confirmed_at);
-    const hoursSinceUserDeposit = (now.getTime() - userDepositTime.getTime()) / (1000 * 60 * 60);
-
-    if (hoursSinceUserDeposit >= 1) {
-      return { eligible: true, reason: "MarketMakerNeverInitiatedDeposit" };
-    } else {
-      const timeRemaining = 1 * 60 * 60 * 1000 - (now.getTime() - userDepositTime.getTime());
-      return {
-        eligible: false,
-        reason: "Must wait 1 hour after user deposit confirmation",
-        timeRemaining,
-      };
-    }
-  }
-
-  // Case 2: Market Maker Deposit Never Confirmed
-  if (swap.status === "WaitingMMDepositConfirmed" && swap.mm_deposit_initiated_at) {
-    const mmDepositTime = new Date(swap.mm_deposit_initiated_at);
-    const hoursSinceMMDeposit = (now.getTime() - mmDepositTime.getTime()) / (1000 * 60 * 60);
-
-    if (hoursSinceMMDeposit >= 24) {
-      return { eligible: true, reason: "MarketMakerDepositNeverConfirmed" };
-    } else {
-      const timeRemaining = 24 * 60 * 60 * 1000 - (now.getTime() - mmDepositTime.getTime());
-      return {
-        eligible: false,
-        reason: "Must wait 24 hours after MM deposit initiation",
-        timeRemaining,
-      };
-    }
-  }
-
-  // Not in a refundable state
-  return {
-    eligible: false,
-    reason: `Swap status '${swap.status}' is not refundable`,
-  };
-}
-
-/**
  * Validate a refund recipient address
  * Basic validation - checks if the address is non-empty and has reasonable length
  *
@@ -373,6 +318,7 @@ export async function filterRefunds(
 ): Promise<{
   isRefundAvailable: boolean;
   shouldMarkAsRefunded: boolean;
+  isPartialDeposit?: boolean;
 }> {
   // Dynamic import to avoid circular dependencies
   const { GLOBAL_CONFIG } = await import("./constants");
@@ -380,14 +326,96 @@ export async function filterRefunds(
   let isRefundAvailable = false;
   let shouldMarkAsRefunded = false;
 
+  const userDepositAddress = row.user_deposit_address;
+  const userDepositChain = row.quote.from_chain; // ethereum or bitcoin
+  const swapStatus = row.status;
+
+  // If status is already refunding_user or refunding_mm, mark as refunded immediately
+  if (swapStatus === "refunding_user" || swapStatus === "refunding_mm") {
+    console.log(
+      `[REFUND STATUS] Swap ${mappedSwap.id}: Status is ${swapStatus}, marking as refunded`
+    );
+    return { isRefundAvailable: false, shouldMarkAsRefunded: true, isPartialDeposit: false };
+  }
+
+  // Special case: Partial deposit detection
+  // If swap is still waiting for user deposit but user sent less than required amount
+  if (
+    swapStatus === "waiting_user_deposit_initiated" ||
+    swapStatus === "WaitingUserDepositInitiated"
+  ) {
+    console.log(`[PARTIAL DEPOSIT CHECK] Swap ${mappedSwap.id}: Checking for partial deposit...`);
+
+    const expectedAmount = row.quote?.from_amount; // Expected deposit amount in base units
+
+    if (userDepositChain === "bitcoin" && expectedAmount) {
+      try {
+        const electrsUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}`;
+        const electrsResponse = await fetch(electrsUrl);
+        if (electrsResponse.ok) {
+          const electrsData = await electrsResponse.json();
+          const totalBalance =
+            (electrsData.chain_stats?.funded_txo_sum || 0) -
+            (electrsData.chain_stats?.spent_txo_sum || 0);
+          const mempoolBalance =
+            (electrsData.mempool_stats?.funded_txo_sum || 0) -
+            (electrsData.mempool_stats?.spent_txo_sum || 0);
+          const actualBalance = totalBalance + mempoolBalance;
+
+          if (actualBalance > 0 && actualBalance < parseInt(expectedAmount)) {
+            console.log(
+              `[PARTIAL DEPOSIT] Bitcoin: Expected ${expectedAmount} sats, got ${actualBalance} sats - refund available`
+            );
+            isRefundAvailable = true;
+            return { isRefundAvailable, shouldMarkAsRefunded, isPartialDeposit: true };
+          }
+        }
+      } catch (error) {
+        console.warn(`Error checking Bitcoin balance for partial deposit:`, error);
+      }
+    } else if (expectedAmount) {
+      // EVM partial deposit check
+      try {
+        const tokenAddress = row.quote?.from_token?.data; // The ERC20 token address
+        const chainId =
+          userDepositChain === "ethereum" ? 1 : userDepositChain === "base" ? 8453 : 1;
+
+        const response = await fetch(
+          `/api/token-balance?wallet=${userDepositAddress}&chainId=${chainId}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.result?.result && tokenAddress) {
+            const token = data.result.result.find(
+              (t: any) => t.address?.toLowerCase() === tokenAddress.toLowerCase()
+            );
+            if (token) {
+              const actualBalance = BigInt(token.totalBalance || "0");
+              const expectedBalanceBigInt = BigInt(expectedAmount);
+
+              if (actualBalance > 0n && actualBalance < expectedBalanceBigInt) {
+                console.log(
+                  `[PARTIAL DEPOSIT] EVM: Expected ${expectedAmount}, got ${actualBalance.toString()} - refund available`
+                );
+                isRefundAvailable = true;
+                return { isRefundAvailable, shouldMarkAsRefunded, isPartialDeposit: true };
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`Error checking EVM balance for partial deposit:`, error);
+      }
+    }
+  }
+
   if (row.isRefundAvailable || row.is_refund_available) {
     console.log(
       `[BALANCE CHECK] Swap ${mappedSwap.id}: Server says refund available, checking balance...`
     );
     // Server says refund is available, now check if user has already withdrawn funds
     // by looking up if the deposit address has any balance
-    const userDepositAddress = row.user_deposit_address;
-    const userDepositChain = row.quote.from_chain; // ethereum or bitcoin
 
     if (userDepositChain === "bitcoin") {
       // look up if the deposit address has any balance from the electrs endpoint
@@ -464,5 +492,5 @@ export async function filterRefunds(
     }
   }
 
-  return { isRefundAvailable, shouldMarkAsRefunded };
+  return { isRefundAvailable, shouldMarkAsRefunded, isPartialDeposit: false };
 }

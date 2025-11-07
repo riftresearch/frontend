@@ -287,15 +287,25 @@ async function fetchUserSwaps(
       })
     );
 
-    // Filter out swaps that are pending or only at waiting_user_deposit_initiated
+    // Filter out swaps that are pending or at waiting_user_deposit_initiated WITHOUT a refund available
     // (these are created but user never deposited)
+    // But KEEP waiting_user_deposit_initiated swaps that have refund available (partial deposits)
     const swaps = allSwaps.filter((swap: AdminSwapItem) => {
       const currentStep =
         swap.flow.find((s: AdminSwapFlowStep) => s.state === "inProgress") ||
         swap.flow[swap.flow.length - 1];
       const currentStatus = currentStep?.status;
-      // Exclude if pending or only at waiting_user_deposit_initiated
-      return currentStatus !== "pending" && currentStatus !== "waiting_user_deposit_initiated";
+      const swapIsRefundAvailable = (swap as any).isRefundAvailable;
+
+      // Exclude pending swaps
+      if (currentStatus === "pending") return false;
+
+      // Exclude waiting_user_deposit_initiated UNLESS refund is available (partial deposit case)
+      if (currentStatus === "waiting_user_deposit_initiated") {
+        return swapIsRefundAvailable === true;
+      }
+
+      return true;
     });
 
     console.log("[FETCH USER SWAPS] Swaps after filtering:", swaps);
@@ -309,7 +319,11 @@ async function fetchUserSwaps(
   }
 }
 
-export const UserSwapHistory: React.FC = () => {
+interface UserSwapHistoryProps {
+  onInitialLoadComplete?: () => void;
+}
+
+export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({ onInitialLoadComplete }) => {
   const { address, isConnected } = useAccount();
   const router = useRouter();
   const { isMobile } = useWindowSize();
@@ -354,10 +368,11 @@ export const UserSwapHistory: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsInitialMount(false);
+      onInitialLoadComplete?.();
     }, 500); // Wait 500ms for wallet to auto-reconnect
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [onInitialLoadComplete]);
 
   // Fetch initial swaps with retry logic and set up polling
   useEffect(() => {

@@ -97,6 +97,7 @@ export function UnifiedTransactionWidget({
   const [isRefundAvailable, setIsRefundAvailable] = React.useState(false);
   const [failedSwapData, setFailedSwapData] = React.useState<AdminSwapItem | null>(null);
   const [isSwapRefunded, setIsSwapRefunded] = React.useState(false);
+  const [isPartialDeposit, setIsPartialDeposit] = React.useState(false);
   const [showFillingOrderWarning, setShowFillingOrderWarning] = React.useState(false);
 
   // Track EVM confirmations for user deposit (for EVM deposits)
@@ -253,113 +254,50 @@ export function UnifiedTransactionWidget({
     claimRefund,
   } = useRefundModal({ redirectOnSuccess: true });
 
-  // Check refund eligibility
+  // Check refund eligibility whenever swap data updates
   React.useEffect(() => {
     async function checkRefundEligibility() {
-      if (!currentSwapId || validStepIndex !== 2) {
+      if (!swapStatusInfo) {
         setIsRefundAvailable(false);
+        setIsSwapRefunded(false);
+        setFailedSwapData(null);
         return;
       }
 
       try {
-        const url = `${ANALYTICS_API_URL}/api/swap/${currentSwapId}`;
-        const response = await fetch(url);
+        // Map to admin swap format and check refund status
+        const mappedSwap = mapDbRowToAdminSwap(swapStatusInfo);
+        const {
+          isRefundAvailable: refundAvailable,
+          shouldMarkAsRefunded,
+          isPartialDeposit: partialDeposit,
+        } = await filterRefunds(swapStatusInfo, mappedSwap);
 
-        if (!response.ok) {
-          setIsRefundAvailable(false);
-          return;
-        }
-
-        const data = await response.json();
-        let row = data.swap || data;
-
-        // Calculate refund availability if not present
-        if (row.isRefundAvailable === undefined && row.is_refund_available === undefined) {
-          const status = row.status;
-          const userDepositConfirmedAt = row.user_deposit?.deposit_confirmed_at;
-          const mmDepositInitiatedAt = row.mm_deposit?.deposit_detected_at;
-
-          // Case 1: MM never initiated deposit (>1 hour)
-          if (status === "WaitingMMDepositInitiated" && userDepositConfirmedAt) {
-            const userDepositTime = new Date(userDepositConfirmedAt);
-            const now = new Date();
-            const hoursSinceUserDeposit =
-              (now.getTime() - userDepositTime.getTime()) / (1000 * 60 * 60);
-
-            if (hoursSinceUserDeposit >= 1) {
-              row.isRefundAvailable = true;
-            }
-          }
-
-          // Case 2: MM deposit never confirmed (>24 hours)
-          if (status === "WaitingMMDepositConfirmed" && mmDepositInitiatedAt) {
-            const mmDepositTime = new Date(mmDepositInitiatedAt);
-            const now = new Date();
-            const hoursSinceMMDeposit =
-              (now.getTime() - mmDepositTime.getTime()) / (1000 * 60 * 60);
-
-            if (hoursSinceMMDeposit >= 24) {
-              row.isRefundAvailable = true;
-            }
-          }
-        }
-
-        let mappedSwap = mapDbRowToAdminSwap(row);
-        const { isRefundAvailable: refundAvailable, shouldMarkAsRefunded } = await filterRefunds(
-          row,
-          mappedSwap
-        );
-
-        // Modify flow if refunded
-        if (shouldMarkAsRefunded && mappedSwap.flow.length > 0) {
-          const inProgressIndex = mappedSwap.flow.findIndex((s) => s.state === "inProgress");
-
-          if (inProgressIndex !== -1) {
-            const stepsBeforeFailed = mappedSwap.flow.slice(0, inProgressIndex);
-            const failedStep = mappedSwap.flow[inProgressIndex];
-            failedStep.state = "completed";
-
-            mappedSwap.flow = [
-              ...stepsBeforeFailed,
-              failedStep,
-              {
-                status: "user_refunded_detected" as any,
-                label: "Refunded",
-                state: "completed",
-              },
-            ];
-          }
-        }
-
-        // Check if refunded
-        const currentStep =
-          mappedSwap.flow.find((s) => s.state === "inProgress") ||
-          mappedSwap.flow[mappedSwap.flow.length - 1];
-        const isSwapRefunded =
-          currentStep?.status === "refunding_user" ||
-          currentStep?.status === "refunding_mm" ||
-          currentStep?.status === "user_refunded_detected";
-
-        setIsSwapRefunded(isSwapRefunded);
+        // Update refund availability
+        setIsRefundAvailable(refundAvailable);
+        setIsSwapRefunded(shouldMarkAsRefunded);
+        setIsPartialDeposit(partialDeposit || false);
+        setFailedSwapData(refundAvailable ? mappedSwap : null);
 
         if (refundAvailable) {
-          setIsRefundAvailable(true);
-          setFailedSwapData(mappedSwap);
-        } else if (shouldMarkAsRefunded) {
-          setIsRefundAvailable(false);
-          setFailedSwapData(null);
-        } else {
-          setIsRefundAvailable(false);
-          setFailedSwapData(null);
+          console.log(`[REFUND CHECK] Refund available for swap ${currentSwapId}`, {
+            partialDeposit,
+          });
+        }
+        if (shouldMarkAsRefunded) {
+          console.log(`[REFUND CHECK] Swap ${currentSwapId} has been refunded (balance = 0)`);
         }
       } catch (error) {
         console.error(`Error checking refund eligibility for ${currentSwapId}:`, error);
         setIsRefundAvailable(false);
+        setIsSwapRefunded(false);
+        setIsPartialDeposit(false);
+        setFailedSwapData(null);
       }
     }
 
     checkRefundEligibility();
-  }, [currentSwapId, validStepIndex]);
+  }, [swapStatusInfo, currentSwapId]);
 
   // Format amounts
   const formatAmount = (amount: string | number | undefined, decimals: number): string => {
@@ -834,8 +772,9 @@ export function UnifiedTransactionWidget({
               mb={isMobile ? "0px" : "15px"}
               lineHeight="1.6"
             >
-              The market maker failed to fill your order. You can initiate a refund in the swap
-              history page or with the button below.
+              {isPartialDeposit
+                ? `You sent too little ${inputAsset} to complete the swap. You can initiate a refund in the swap history page or with the button below.`
+                : "The market maker failed to fill your order. You can initiate a refund in the swap history page or with the button below."}
             </Text>
 
             <Flex

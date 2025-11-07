@@ -207,7 +207,27 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
     "waiting_mm_deposit_confirmed",
     "settled",
   ];
-  const currentIndex = Math.max(0, order.indexOf(status as any));
+
+  // Handle refund and failed statuses specially
+  let currentIndex = order.indexOf(status as any);
+
+  // If status is a refund/failed state, determine where it stopped in the normal flow
+  if (currentIndex === -1) {
+    if (status === "refunding_user" || status === "refunding_mm" || status === "failed") {
+      // Try to determine last completed step based on deposit statuses
+      if (row.mm_deposit_status?.deposit_detected_at) {
+        currentIndex = 3; // Made it to MM deposit
+      } else if (row.user_deposit_status?.confirmed_at) {
+        currentIndex = 2; // User deposit confirmed
+      } else if (row.user_deposit_status?.deposit_detected_at) {
+        currentIndex = 1; // User deposit detected
+      } else {
+        currentIndex = 0; // Only created
+      }
+    } else {
+      currentIndex = 0; // Default to created for unknown statuses
+    }
+  }
   const userConfs = Number(row?.user_deposit_status?.confirmations || 0);
   const mmConfs = Number(row?.mm_deposit_status?.confirmations || 0);
 
@@ -376,6 +396,24 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
       state: currentIndex >= 5 ? "completed" : "notStarted",
     },
   ];
+
+  // Add "Refunded" step if swap is in refunding state
+  if (status === "refunding_user" || status === "refunding_mm") {
+    console.log(`[REFUND STATUS] Swap ${row.id}: status=${status}, adding Refunded step to flow`);
+
+    // Mark the current in-progress step as completed
+    const inProgressStep = steps.find((s) => s.state === "inProgress");
+    if (inProgressStep) {
+      inProgressStep.state = "completed";
+    }
+
+    // Add Refunded step
+    steps.push({
+      status: status as any,
+      label: "Refunded",
+      state: "completed",
+    });
+  }
 
   // [14] Determine EVM chain (ETH or BASE) from quote.to_chain
   const evmChain: "ETH" | "BASE" = row.quote?.to_chain === "base" ? "BASE" : "ETH";
