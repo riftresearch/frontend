@@ -34,6 +34,7 @@ interface UnifiedTransactionWidgetProps {
   bitcoinAmount?: number;
   bitcoinUri?: string;
   bitcoinDepositTx?: string;
+  bitcoinDepositAddress?: string;
 }
 
 export function UnifiedTransactionWidget({
@@ -42,6 +43,7 @@ export function UnifiedTransactionWidget({
   bitcoinAmount,
   bitcoinUri,
   bitcoinDepositTx,
+  bitcoinDepositAddress,
 }: UnifiedTransactionWidgetProps) {
   const { isMobile } = useWindowSize();
   const {
@@ -125,6 +127,7 @@ export function UnifiedTransactionWidget({
 
   // Track BTC confirmations
   const [btcConfirmations, setBtcConfirmations] = React.useState<number>(0);
+  const [qrCodeMode, setQrCodeMode] = React.useState<"with-amount" | "address-only">("with-amount");
 
   // Set audio volume on mount
   useEffect(() => {
@@ -184,7 +187,7 @@ export function UnifiedTransactionWidget({
       const now = new Date();
       const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
 
-      if (minutesSinceCreated >= 10) {
+      if (minutesSinceCreated >= 30) {
         setShowFillingOrderWarning(true);
       }
     };
@@ -522,16 +525,19 @@ export function UnifiedTransactionWidget({
   if (isSwapRefunded) {
     return (
       <Flex direction="column" alignItems="center" gap="20px" w="100%">
-        <Box mt="20px">
-          <SwapDetailsPill
-            inputAmount={inputAmount}
-            inputAsset={inputAsset}
-            inputAssetIconUrl={inputAssetIconUrl}
-            outputAmount={outputAmount}
-            outputAsset={outputAsset}
-            isMobile={isMobile}
-          />
-        </Box>
+        {isMobile && (
+          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+            <SwapDetailsPill
+              width="100%"
+              inputAmount={inputAmount}
+              inputAsset={inputAsset}
+              inputAssetIconUrl={inputAssetIconUrl}
+              outputAmount={outputAmount}
+              outputAsset={outputAsset}
+              isMobile={isMobile}
+            />
+          </Box>
+        )}
 
         <Box
           w={isMobile ? "100%" : "805px"}
@@ -589,6 +595,19 @@ export function UnifiedTransactionWidget({
               WebkitMaskComposite: "xor",
             }}
           >
+            {!isMobile && (
+              <Box position="absolute" top="15px" zIndex={2}>
+                <SwapDetailsPill
+                  inputAmount={inputAmount}
+                  inputAsset={inputAsset}
+                  inputAssetIconUrl={inputAssetIconUrl}
+                  outputAmount={outputAmount}
+                  outputAsset={outputAsset}
+                  isMobile={isMobile}
+                />
+              </Box>
+            )}
+
             <Box
               width="110px"
               height="110px"
@@ -1250,17 +1269,84 @@ export function UnifiedTransactionWidget({
               px={isMobile ? "50px" : "100px"}
             >
               {!isMobile && (
-                <Flex
-                  py="10px"
-                  px="12px"
-                  borderRadius="12px"
-                  bg="white"
-                  boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-                  justify="center"
-                  align="center"
-                  flexShrink={0}
-                >
-                  <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
+                <Flex direction="column" align="center" gap="12px">
+                  <Flex
+                    py="10px"
+                    px="12px"
+                    borderRadius="12px"
+                    bg="white"
+                    boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
+                    justify="center"
+                    align="center"
+                    flexShrink={0}
+                  >
+                    <QRCodeSVG
+                      value={qrCodeMode === "with-amount" ? bitcoinUri : bitcoinAddress}
+                      size={160}
+                    />
+                  </Flex>
+
+                  {/* QR Code Mode Toggle */}
+                  <Flex
+                    bg="rgba(255, 255, 255, 0.05)"
+                    borderRadius="11px"
+                    padding="3px"
+                    gap="3px"
+                    border="1px solid rgba(255, 255, 255, 0.1)"
+                  >
+                    <Box
+                      as="button"
+                      onClick={() => setQrCodeMode("with-amount")}
+                      px="10px"
+                      py="4px"
+                      borderRadius="8px"
+                      bg={
+                        qrCodeMode === "with-amount" ? "rgba(255, 255, 255, 0.15)" : "transparent"
+                      }
+                      color={
+                        qrCodeMode === "with-amount" ? colors.offWhite : "rgba(255, 255, 255, 0.5)"
+                      }
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      fontSize="9px"
+                      letterSpacing="0.3px"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        bg:
+                          qrCodeMode === "with-amount"
+                            ? "rgba(255, 255, 255, 0.15)"
+                            : "rgba(255, 255, 255, 0.08)",
+                      }}
+                    >
+                      WITH AMOUNT
+                    </Box>
+                    <Box
+                      as="button"
+                      onClick={() => setQrCodeMode("address-only")}
+                      px="11px"
+                      py="4px"
+                      borderRadius="8px"
+                      bg={
+                        qrCodeMode === "address-only" ? "rgba(255, 255, 255, 0.15)" : "transparent"
+                      }
+                      color={
+                        qrCodeMode === "address-only" ? colors.offWhite : "rgba(255, 255, 255, 0.5)"
+                      }
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      fontSize="9px"
+                      letterSpacing="0.3px"
+                      cursor="pointer"
+                      transition="all 0.2s"
+                      _hover={{
+                        bg:
+                          qrCodeMode === "address-only"
+                            ? "rgba(255, 255, 255, 0.15)"
+                            : "rgba(255, 255, 255, 0.08)",
+                      }}
+                    >
+                      ADDRESS
+                    </Box>
+                  </Flex>
                 </Flex>
               )}
 
@@ -1304,7 +1390,7 @@ export function UnifiedTransactionWidget({
                       opacity={0.6}
                       _groupHover={{ opacity: 1 }}
                       transition="opacity 0.2s"
-                      mb="2px"
+                      mb="6px"
                     >
                       <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
                     </Box>
@@ -1521,8 +1607,8 @@ export function UnifiedTransactionWidget({
                           delay: i * 0.2,
                         }}
                         style={{
-                          width: isMobile ? "16.8px" : "12px",
-                          height: isMobile ? "16.8px" : "12px",
+                          width: isMobile ? "16.8px" : "18px",
+                          height: isMobile ? "16.8px" : "18px",
                           borderRadius: "50%",
                           backgroundColor: "rgba(255, 255, 255, 0.8)",
                         }}
@@ -1538,7 +1624,7 @@ export function UnifiedTransactionWidget({
                       justifyContent="center"
                       gap="8px"
                       px="18px"
-                      mt="40px"
+                      mt="50px"
                       py="7px"
                       borderRadius="19px"
                       bg="rgba(255, 255, 255, 0.1)"
@@ -1580,8 +1666,8 @@ export function UnifiedTransactionWidget({
                     src="/images/txns/check.svg"
                     alt="Success"
                     style={{
-                      width: isMobile ? "110px" : "130px",
-                      height: isMobile ? "110px" : "130px",
+                      width: isMobile ? "110px" : "140px",
+                      height: isMobile ? "110px" : "140px",
                       filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
                     }}
                   />
@@ -1607,8 +1693,8 @@ export function UnifiedTransactionWidget({
             swapId={currentSwapId}
             swapType={swapType}
             marginTopCustom={isMobile ? "-10px" : ""}
-            paddingBottomCustom={isMobile ? "20px" : "45px"}
-            paddingTopCustom={isMobile ? "10px" : "12px"}
+            paddingBottomCustom={isMobile ? "20px" : "80px"}
+            paddingTopCustom={isMobile ? "4px" : "6px"}
             evmConfirmations={evmConfirmations}
             btcConfirmations={btcConfirmations}
             mmDepositChain={swapStatusInfo?.quote?.to_chain}

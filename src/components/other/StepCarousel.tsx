@@ -117,19 +117,30 @@ export function StepCarousel({
   // Initialize carousel state based on current step (for direct page loads)
   useEffect(() => {
     if (currentStepIndex !== -1 && !isInitialized) {
+      console.log("[StepCarousel] 🔵 INITIALIZING - Before setting completed steps:", {
+        currentStepIndex,
+        depositFlowState,
+        isSettled,
+        stepsLength: steps.length,
+      });
+
       // Set completed steps for all steps before the current one
       const completedStepIds = new Set<string>();
       for (let i = 0; i < currentStepIndex; i++) {
+        console.log(`[StepCarousel] 🔵 Marking step ${i} (${steps[i].id}) as completed`);
         completedStepIds.add(steps[i].id);
       }
 
       // If we're on the settled step, mark it as completed too
       if (isSettled) {
+        console.log(
+          `[StepCarousel] 🔵 Marking current step ${currentStepIndex} (${steps[currentStepIndex].id}) as completed (settled)`
+        );
         completedStepIds.add(steps[currentStepIndex].id);
         setShowButtons(true);
       }
 
-      console.log("[StepCarousel] Initializing carousel:", {
+      console.log("[StepCarousel] 🔵 INITIALIZED carousel:", {
         currentStepIndex,
         isSettled,
         completedStepIds: Array.from(completedStepIds),
@@ -154,19 +165,25 @@ export function StepCarousel({
     ) {
       const stepDifference = currentStepIndex - previousStepIndex;
 
-      console.log("[StepCarousel] Transition detected:", {
+      console.log("[StepCarousel] 🟢 TRANSITION detected:", {
         previousStepIndex,
         currentStepIndex,
         stepDifference,
+        depositFlowState,
         completedSteps: Array.from(completedSteps),
       });
 
       // Handle forward progression
       if (stepDifference > 0) {
+        console.log("[StepCarousel] 🟢 Forward progression detected");
         const newCompletedSteps = new Set(completedSteps);
         for (let i = previousStepIndex; i < currentStepIndex; i++) {
+          console.log(
+            `[StepCarousel] 🟢 Marking step ${i} (${steps[i].id}) as completed (transition)`
+          );
           newCompletedSteps.add(steps[i].id);
         }
+        console.log("[StepCarousel] 🟢 New completed steps:", Array.from(newCompletedSteps));
         setCompletedSteps(newCompletedSteps);
 
         setTimeout(() => {
@@ -300,7 +317,7 @@ export function StepCarousel({
           // Step 3: Filling order warning
           if (step.id === "3-WaitingMMDepositInitiated" && showFillingOrderWarning) {
             stepDescription =
-              "Market makers are taking longer than usual to fill your order... if not filled within 1 hour, your order will be refunded";
+              "Market makers are taking longer than usual to fill your order... you order will be refunded if not filled.";
           }
 
           // Step 4: MM deposit confirmation (for BTC deposits from MM)
@@ -435,6 +452,19 @@ export function StepCarousel({
                   >
                     {stepDescription}
                   </Text>
+                  {step.id === "4-WaitingMMDepositConfirmed" && isSettled && (
+                    <Text
+                      color="rgba(255,255,255,0.5)"
+                      fontSize="12px"
+                      fontFamily="Aux"
+                      mt="10px"
+                      mb="-10px"
+                      textAlign="center"
+                      fontStyle="italic"
+                    >
+                      Your wallet may wait for two block confirmations before funds show up.
+                    </Text>
+                  )}
                 </motion.div>
               </Flex>
             </motion.div>

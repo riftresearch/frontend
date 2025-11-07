@@ -2044,18 +2044,17 @@ export const SwapInputAndOutput = () => {
                     color={colors.redHover}
                     fontSize="13px"
                     mt="6px"
-                    ml="1px"
                     letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Exceeds available liquidity -
+                    {isMobile ? "" : "Exceeds available liquidity - "}
                   </Text>
 
                   <Text
                     fontSize="13px"
                     mt="7px"
-                    ml="8px"
+                    ml={isMobile ? "0px" : "8px"}
                     color={inputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
                     onClick={handleOutputMaxClick}
@@ -2082,12 +2081,12 @@ export const SwapInputAndOutput = () => {
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Exceeds {isMobile ? "max" : "available liquidity"} -
+                    {isMobile ? "" : "Exceeds available liquidity - "}
                   </Text>
                   <Text
                     fontSize="13px"
                     mt="7px"
-                    ml="8px"
+                    ml={isMobile ? "0px" : "8px"}
                     color={inputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
                     onClick={handleOutputMaxClick}
@@ -2105,21 +2104,22 @@ export const SwapInputAndOutput = () => {
                 </>
               ) : inputBelowMinimum ? (
                 <>
-                  <Text
-                    color={colors.redHover}
-                    fontSize="13px"
-                    mt="6px"
-                    ml="1px"
-                    letterSpacing="-1.5px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    Below minimum swap -
-                  </Text>
+                  {isMobile ? undefined : (
+                    <Text
+                      color={colors.redHover}
+                      fontSize="13px"
+                      mt="6px"
+                      letterSpacing="-1.5px"
+                      fontWeight="normal"
+                      fontFamily="Aux"
+                    >
+                      Below minimum swap -
+                    </Text>
+                  )}
                   <Text
                     fontSize="13px"
                     mt="7px"
-                    ml="8px"
+                    ml={isMobile ? "0px" : "8px"}
                     color={inputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
                     onClick={handleMinimumClick}
@@ -2130,17 +2130,19 @@ export const SwapInputAndOutput = () => {
                   >
                     {(() => {
                       const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
-                      return `MIN: ${MIN_BTC.toFixed(5)} ${ticker}`;
+                      return `${MIN_BTC.toFixed(5)} ${ticker} Min`;
                     })()}
                   </Text>
                 </>
               ) : (
-                <Flex direction="row" align="center" gap="6px" mt="6px" ml="1px">
+                <Flex direction="row" align="center" gap="6px" mt="6px">
                   {isMobile && exceedsUserBalance ? undefined : (
                     <Text
                       color={!rawInputAmount ? colors.offWhite : colors.textGray}
                       fontSize="14px"
-                      letterSpacing="-1px"
+                      letterSpacing={
+                        isLoadingQuote && !getQuoteForInputRef.current ? "-4px" : "-1px"
+                      }
                       fontWeight="normal"
                       fontFamily="Aux"
                     >
@@ -2357,17 +2359,16 @@ export const SwapInputAndOutput = () => {
                     color={colors.redHover}
                     fontSize="13px"
                     mt="6px"
-                    ml="1px"
                     letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Exceeds available liquidity -
+                    {isMobile ? "" : "Exceeds available liquidity - "}
                   </Text>
                   <Text
                     fontSize="13px"
                     mt="7px"
-                    ml="8px"
+                    ml={isMobile ? "0px" : "8px"}
                     color={outputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
                     onClick={handleOutputMaxClick}
@@ -2392,17 +2393,16 @@ export const SwapInputAndOutput = () => {
                     color={colors.redHover}
                     fontSize="13px"
                     mt="6px"
-                    ml="1px"
                     letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Below minimum output -
+                    {isMobile ? "" : "Below minimum output -"}
                   </Text>
                   <Text
                     fontSize="13px"
                     mt="7px"
-                    ml="8px"
+                    ml={isMobile ? "0px" : "8px"}
                     color={outputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
                     onClick={handleMinimumClick}
@@ -2422,8 +2422,7 @@ export const SwapInputAndOutput = () => {
                   color={!outputAmount ? colors.offWhite : colors.textGray}
                   fontSize="14px"
                   mt="6px"
-                  ml="1px"
-                  letterSpacing="-1px"
+                  letterSpacing={isLoadingQuote && getQuoteForInputRef.current ? "-4px" : "-1px"}
                   fontWeight="normal"
                   fontFamily="Aux"
                 >

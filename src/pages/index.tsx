@@ -159,6 +159,7 @@ export default function Home() {
               bitcoinAddress={bitcoinDepositInfo.address}
               bitcoinAmount={bitcoinDepositInfo.amount}
               bitcoinUri={bitcoinDepositInfo.uri}
+              bitcoinDepositAddress={bitcoinDepositInfo.address}
             />
           ) : (
             <SwapWidget />

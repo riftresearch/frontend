@@ -710,9 +710,10 @@ export const UserSwapHistory: React.FC = () => {
                           Time
                         </Text>
                         <Text
-                          fontSize="12px"
+                          fontSize="13px"
                           fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.offWhite}
+                          fontWeight="500"
                           letterSpacing="-0.5px"
                         >
                           {formatTimeAgo(swap.swapCreationTimestamp)}

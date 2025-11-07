@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex } from "@chakra-ui/react";
+import { Flex, Spinner, Text } from "@chakra-ui/react";
 import { useRouter } from "next/router";
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
@@ -10,6 +10,8 @@ import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { useStore } from "@/utils/store";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
+import { FONT_FAMILIES } from "@/utils/font";
+import { colors } from "@/utils/colors";
 
 // Map API status to deposit flow state
 const mapStatusToDepositFlowState = (status: string) => {
@@ -52,11 +54,21 @@ export default function SwapPage() {
   } = useStore();
 
   const [previousState, setPreviousState] = React.useState<string>("0-not-started");
+  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   useSyncChainIdToStore();
   useBtcEthPrices(); // Fetch BTC/ETH prices on this page
 
   // Use the swapId from URL params, fallback to store if available
   const currentSwapId = (swapId as string) || swapResponse?.swap_id;
+
+  // Give backend 3 seconds to sync the swap before showing error
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Use swap status hook
   const {
@@ -68,12 +80,25 @@ export default function SwapPage() {
   // Update deposit flow state based on swap status
   React.useEffect(() => {
     if (swapStatusInfo?.status) {
+      // If we successfully loaded swap data, end initial loading
+      setIsInitialLoading(false);
+
       const newDepositFlowState = mapStatusToDepositFlowState(swapStatusInfo.status);
+
       if (newDepositFlowState !== depositFlowState) {
+        console.log(
+          `[SwapPage] 🟣 UPDATING depositFlowState: ${depositFlowState} -> ${newDepositFlowState} (API status: ${swapStatusInfo.status})`
+        );
         setDepositFlowState(newDepositFlowState as any);
       }
     }
-  }, [swapStatusInfo?.status, depositFlowState, setDepositFlowState]);
+  }, [
+    swapStatusInfo?.status,
+    depositFlowState,
+    setDepositFlowState,
+    isLoadingSwapStatus,
+    isErrorSwapStatus,
+  ]);
 
   // Set countdown only on initial load for step 1 or step 2, otherwise set to 0 to show loading dots
   React.useEffect(() => {
@@ -142,6 +167,87 @@ export default function SwapPage() {
   // Show loading or redirect if no swap ID
   if (!currentSwapId) {
     return null;
+  }
+
+  // Show loading spinner during initial grace period or while loading
+  if (isInitialLoading || (isLoadingSwapStatus && !swapStatusInfo)) {
+    return (
+      <>
+        <OpenGraph />
+        <Flex
+          h="100vh"
+          width="100%"
+          direction="column"
+          backgroundImage="url('/images/rift_background_low.webp')"
+          backgroundSize="cover"
+          backgroundPosition="center"
+        >
+          <Navbar />
+          <Flex
+            justify="center"
+            align="center"
+            direction="column"
+            minH="calc(100vh - 80px)"
+            gap="20px"
+          >
+            <Spinner color="white" size="xl" />
+            <Text
+              color="rgba(255, 255, 255, 0.7)"
+              fontSize="16px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              letterSpacing="-0.5px"
+            >
+              Loading swap details...
+            </Text>
+          </Flex>
+        </Flex>
+      </>
+    );
+  }
+
+  // Show error if swap not found after grace period
+  if (!swapStatusInfo && !isLoadingSwapStatus) {
+    return (
+      <>
+        <OpenGraph />
+        <Flex
+          h="100vh"
+          width="100%"
+          direction="column"
+          backgroundImage="url('/images/rift_background_low.webp')"
+          backgroundSize="cover"
+          backgroundPosition="center"
+        >
+          <Navbar />
+          <Flex
+            justify="center"
+            align="center"
+            direction="column"
+            minH="calc(100vh - 80px)"
+            gap="20px"
+          >
+            <Text
+              color={colors.redHover}
+              fontSize="20px"
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              letterSpacing="0.5px"
+            >
+              SWAP NOT FOUND
+            </Text>
+            <Text
+              color="rgba(255, 255, 255, 0.6)"
+              fontSize="14px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              letterSpacing="-0.5px"
+              textAlign="center"
+              maxW="400px"
+            >
+              Unable to load swap details. The swap may not exist or may have expired.
+            </Text>
+          </Flex>
+        </Flex>
+      </>
+    );
   }
 
   // Check if this is a Bitcoin deposit (BTC -> cbBTC swap)

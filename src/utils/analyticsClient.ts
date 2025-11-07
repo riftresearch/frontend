@@ -137,6 +137,7 @@ export async function getSwap(swapId: string): Promise<AnalyticsSwapData> {
           description: "Your session may have expired. Please log in again.",
         });
       } else if (response.status === 404) {
+        console.error("Swap not found:", errorText);
         toastError(null, {
           title: "Swap Not Found",
           description: "The swap you're looking for does not exist.",

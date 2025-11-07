@@ -104,14 +104,14 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
     requestAnimationFrame(animate);
   }, [countdownValue]);
 
-  // Calculate circle properties - arc from 12 o'clock (2.5x bigger, then 80% twice, then 92% to reduce by 8%)
-  const radius = 45 * 2.5 * 0.8 * 0.8 * 0.92; // 66.24
+  // Calculate circle properties - arc from 12 o'clock (2.5x bigger, then 80% twice, then 92% to reduce by 8%, then 10% bigger)
+  const radius = 45 * 2.5 * 0.8 * 0.8 * 0.92 * 1.1; // 72.864
   const circumference = 2 * Math.PI * radius;
   const arcLength = (smoothProgress / 100) * circumference;
   const strokeDasharray = `${arcLength} ${circumference}`;
   const strokeDashoffset = -((100 - smoothProgress) / 100) * circumference; // Offset to make it shrink clockwise
 
-  const svgSize = 192 * 0.92; // 176.64
+  const svgSize = 192 * 0.92 * 1.1; // 194.304
 
   return (
     <Box
@@ -152,11 +152,11 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
       {/* Countdown number */}
       <Text
         position="absolute"
-        fontSize={countdownValue > 99 ? "62.56px" : "80.96px"}
+        fontSize={countdownValue > 99 ? "68.82px" : "89.06px"}
         textAlign="center"
-        letterSpacing={countdownValue > 99 ? "-9.2px" : "-11.96px"}
-        mt="-5px"
-        ml={countdownValue > 99 ? "-11.04px" : countdownValue > 9 ? "-14.72px" : "-14.72px"}
+        letterSpacing={countdownValue > 99 ? "-10.12px" : "-13.16px"}
+        mt="-5.5px"
+        ml={countdownValue > 99 ? "-12.14px" : countdownValue > 9 ? "-16.19px" : "-16.19px"}
         color="white"
         dropShadow="0 0 100px rgba(255, 255, 255, 0.5)"
         fontFamily="Proto Mono"
