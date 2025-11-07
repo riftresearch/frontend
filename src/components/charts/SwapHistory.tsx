@@ -12,6 +12,7 @@ import { useSwapStream } from "@/hooks/useSwapStream";
 import { useSwapAverages } from "@/hooks/useSwapAverages";
 import { filterRefunds } from "@/utils/refundHelpers";
 import { AssetIcon } from "@/components/other/AssetIcon";
+import useWindowSize from "@/hooks/useWindowSize";
 
 function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
@@ -339,8 +340,9 @@ const Row: React.FC<{
   swap: AdminSwapItem;
   currentTime: number;
   onClick?: () => void;
+  isMobile?: boolean;
 }> = React.memo(
-  ({ swap, currentTime, onClick }) => {
+  ({ swap, currentTime, onClick, isMobile }) => {
     const [isDragging, setIsDragging] = React.useState(false);
     const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
     const totalSeconds = React.useMemo(
@@ -677,7 +679,33 @@ const Row: React.FC<{
             </Tooltip.Content>
           </Tooltip.Positioner>
         </Tooltip.Root>
-        <Flex flex="1" gap="6px" wrap="wrap" align="center" mr="-16px">
+        <Flex
+          flex="1"
+          gap="6px"
+          wrap={isMobile ? "nowrap" : "wrap"}
+          align="center"
+          mr="-16px"
+          overflowX={isMobile ? "auto" : "visible"}
+          css={
+            isMobile
+              ? {
+                  "&::-webkit-scrollbar": {
+                    height: "6px",
+                  },
+                  "&::-webkit-scrollbar-track": {
+                    background: "transparent",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "#333",
+                    borderRadius: "4px",
+                  },
+                  "&::-webkit-scrollbar-thumb:hover": {
+                    background: "#444",
+                  },
+                }
+              : undefined
+          }
+        >
           {filteredFlow.map((step, idx) => (
             <StepWithTime
               key={`${step.status}-${idx}`}
@@ -794,6 +822,7 @@ export const SwapHistory: React.FC<{
     uniqueUsers: number;
   }) => void;
 }> = ({ heightBlocks = 13, onStatsUpdate }) => {
+  const { isMobile } = useWindowSize();
   const storeSwaps = useAnalyticsStore((s) => s.adminSwaps);
   const [allSwaps, setAllSwaps] = React.useState<AdminSwapItem[]>([]);
   const [page, setPage] = React.useState(0);
@@ -1280,8 +1309,19 @@ export const SwapHistory: React.FC<{
             color={colorsAnalytics.textGray}
             flexShrink={0}
             justify="space-between"
+            overflowX={isMobile ? "auto" : "visible"}
+            css={
+              isMobile
+                ? {
+                    "&::-webkit-scrollbar": {
+                      display: "none",
+                    },
+                    scrollbarWidth: "none",
+                  }
+                : undefined
+            }
           >
-            <Flex align="center" flex="1">
+            <Flex align="center" flex="1" minW={isMobile ? "900px" : "auto"}>
               <Box w="50px">
                 <Text fontFamily={FONT_FAMILIES.SF_PRO}>#</Text>
               </Box>
@@ -1444,12 +1484,13 @@ export const SwapHistory: React.FC<{
           <Box
             flex="1"
             overflowY="auto"
-            overflowX="hidden"
+            overflowX={isMobile ? "auto" : "hidden"}
             onScroll={handleScroll}
             mr="8px"
             css={{
               "&::-webkit-scrollbar": {
                 width: "8px",
+                height: "8px",
               },
               "&::-webkit-scrollbar-track": {
                 background: "transparent",
@@ -1464,7 +1505,7 @@ export const SwapHistory: React.FC<{
             }}
             minHeight="0"
           >
-            <Flex direction="column" w="100%">
+            <Flex direction="column" w="100%" minW={isMobile ? "900px" : "100%"}>
               {isInitialLoad && swaps.length === 0 ? (
                 <Flex justify="center" align="center" py="40px">
                   <Spinner size="md" color={colorsAnalytics.offWhite} />
@@ -1496,6 +1537,7 @@ export const SwapHistory: React.FC<{
                             setSelectedSwap(s);
                             setIsModalOpen(true);
                           }}
+                          isMobile={isMobile}
                         />
                       </Flex>
                     );

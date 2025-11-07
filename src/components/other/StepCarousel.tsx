@@ -117,36 +117,17 @@ export function StepCarousel({
   // Initialize carousel state based on current step (for direct page loads)
   useEffect(() => {
     if (currentStepIndex !== -1 && !isInitialized) {
-      console.log("[StepCarousel] 🔵 INITIALIZING - Before setting completed steps:", {
-        currentStepIndex,
-        depositFlowState,
-        isSettled,
-        stepsLength: steps.length,
-      });
-
       // Set completed steps for all steps before the current one
       const completedStepIds = new Set<string>();
       for (let i = 0; i < currentStepIndex; i++) {
-        console.log(`[StepCarousel] 🔵 Marking step ${i} (${steps[i].id}) as completed`);
         completedStepIds.add(steps[i].id);
       }
 
       // If we're on the settled step, mark it as completed too
       if (isSettled) {
-        console.log(
-          `[StepCarousel] 🔵 Marking current step ${currentStepIndex} (${steps[currentStepIndex].id}) as completed (settled)`
-        );
         completedStepIds.add(steps[currentStepIndex].id);
         setShowButtons(true);
       }
-
-      console.log("[StepCarousel] 🔵 INITIALIZED carousel:", {
-        currentStepIndex,
-        isSettled,
-        completedStepIds: Array.from(completedStepIds),
-        currentStepId: steps[currentStepIndex]?.id,
-        depositFlowState,
-      });
 
       setCompletedSteps(completedStepIds);
       setSlideOffset(-currentStepIndex * 86);
@@ -175,15 +156,10 @@ export function StepCarousel({
 
       // Handle forward progression
       if (stepDifference > 0) {
-        console.log("[StepCarousel] 🟢 Forward progression detected");
         const newCompletedSteps = new Set(completedSteps);
         for (let i = previousStepIndex; i < currentStepIndex; i++) {
-          console.log(
-            `[StepCarousel] 🟢 Marking step ${i} (${steps[i].id}) as completed (transition)`
-          );
           newCompletedSteps.add(steps[i].id);
         }
-        console.log("[StepCarousel] 🟢 New completed steps:", Array.from(newCompletedSteps));
         setCompletedSteps(newCompletedSteps);
 
         setTimeout(() => {

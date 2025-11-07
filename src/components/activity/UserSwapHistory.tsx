@@ -466,14 +466,14 @@ export const UserSwapHistory: React.FC = () => {
   if (!isConnected) {
     return (
       <GridFlex
-        width={isMobile ? "100%" : "595px"}
+        width={isMobile ? "100%" : "100%"}
         contentPadding={isMobile ? "40px 20px" : "60px"}
         borderRadius="60px"
         mt={isMobile ? "80px" : "0"}
       >
         <Flex direction="column" w="100%" align="center">
           <Text
-            fontSize={isMobile ? "24px" : "32px"}
+            fontSize={isMobile ? "24px" : "30px"}
             fontFamily={FONT_FAMILIES.NOSTROMO}
             color={colors.offWhite}
             mb="16px"
@@ -482,7 +482,7 @@ export const UserSwapHistory: React.FC = () => {
             Swap History
           </Text>
           <Text
-            fontSize={isMobile ? "14px" : "16px"}
+            fontSize={isMobile ? "14px" : "14px"}
             fontFamily={FONT_FAMILIES.AUX_MONO}
             color={colors.textGray}
             letterSpacing="-0.5px"
@@ -519,16 +519,16 @@ export const UserSwapHistory: React.FC = () => {
   return (
     <>
       <GridFlex
-        maxW="750px"
+        // maxW="750px"
         w="100%"
         contentPadding={isMobile ? "20px" : "32px"}
         borderRadius="40px"
-        mb="20px"
+        mb="15px"
         mt={isMobile ? "80px" : "0"}
       >
         <Flex direction="column" w="100%" align="center">
           <Text
-            fontSize={isMobile ? "24px" : "36px"}
+            fontSize={isMobile ? "24px" : "30px"}
             mt={isMobile ? "-8px" : "-15px"}
             fontFamily={FONT_FAMILIES.NOSTROMO}
             color={colorsAnalytics.offWhite}
@@ -537,11 +537,11 @@ export const UserSwapHistory: React.FC = () => {
             Swap History
           </Text>
           <Text
-            fontSize={isMobile ? "13px" : "15px"}
+            fontSize={isMobile ? "13px" : "13px"}
             fontFamily={FONT_FAMILIES.AUX_MONO}
             color={colorsAnalytics.textGray}
             mt="-2px"
-            mb="-4px"
+            mb="-9px"
             letterSpacing="-0.5px"
             textAlign="center"
           >
@@ -1052,7 +1052,7 @@ export const UserSwapHistory: React.FC = () => {
         </Flex>
       ) : (
         // Desktop: GridFlex with fixed height and scrolling
-        <GridFlex width="100%" borderRadius="40px" heightBlocks={13} contentPadding={0}>
+        <GridFlex width="100%" borderRadius="40px" heightBlocks={9} contentPadding={0}>
           <Flex direction="column" w="100%" h="100%">
             {loading ? (
               <Flex w="100%" justify="center" align="center" py="80px">

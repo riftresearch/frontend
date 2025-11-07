@@ -79,24 +79,9 @@ export function UnifiedTransactionWidget({
     return "evm-deposit";
   }, [bitcoinAddress, swapStatusInfo?.quote?.from_chain]);
 
-  // Log raw swap data
-  React.useEffect(() => {
-    if (swapStatusInfo) {
-      console.log(`[UnifiedTransactionWidget] Swap type: ${swapType}`, swapStatusInfo);
-    }
-  }, [swapStatusInfo, swapType]);
-
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
   const showLoadingDots = countdownValue === 0 && !isSettled;
-
-  console.log("🔍 [WIDGET STATE]", {
-    depositFlowState,
-    countdownValue,
-    isSettled,
-    showLoadingDots,
-    swapType,
-  });
 
   // Determine current step index for widget logic
   const stepIds = [
@@ -1548,14 +1533,6 @@ export function UnifiedTransactionWidget({
             // EVM deposit view
             <AnimatePresence mode="wait">
               {(() => {
-                console.log("🔍 [TIMER/LOADER DECISION]", {
-                  countdownValue,
-                  isSettled,
-                  showLoadingDots,
-                  depositFlowState,
-                  shouldShowTimer: countdownValue > 0 && !isSettled,
-                  shouldShowLoader: showLoadingDots,
-                });
                 return countdownValue > 0 && !isSettled;
               })() ? (
                 <motion.div

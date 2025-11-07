@@ -14,12 +14,14 @@ import NumberFlow from "@number-flow/react";
 import { FiRefreshCw } from "react-icons/fi";
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
 import { toastSuccess } from "@/utils/toast";
+import useWindowSize from "@/hooks/useWindowSize";
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
+  const { isMobile } = useWindowSize();
   // Get WebSocket data with new fields - use these directly for real-time updates
   const {
     totalSwaps,
@@ -147,7 +149,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   return (
     <Flex minHeight="100vh" bg={"#000000"} justifyContent="center">
-      <Flex width="1400px" py="30px" mt="15px" direction="column">
+      <Flex
+        width={isMobile ? "100%" : "1400px"}
+        maxW="1400px"
+        px={isMobile ? "20px" : "0"}
+        py="30px"
+        mt="15px"
+        direction="column"
+      >
         {/* HEADER */}
         <Flex justify="space-between" align="center">
           <Box cursor="pointer" onClick={() => window.location.reload()}>
@@ -165,9 +174,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </Flex>
         </Flex>
         {/* OVERVIEW */}
-        <Flex justify="space-between" align="center" mt="40px" gap="20px">
+        <Flex
+          justify="space-between"
+          align="center"
+          mt="40px"
+          gap={isMobile ? "12px" : "20px"}
+          direction={isMobile ? "column" : "row"}
+        >
           {/* TOTAL VOLUME */}
-          <GridFlex widthBlocks={10} heightBlocks={3}>
+          <GridFlex
+            widthBlocks={isMobile ? undefined : 10}
+            width={isMobile ? "100%" : undefined}
+            heightBlocks={3}
+          >
             <Box position="relative" w="100%" h="100%">
               <Button
                 size="sm"
@@ -290,7 +309,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </GridFlex>
 
           {/* TOTAL FEES COLLECTED */}
-          <GridFlex widthBlocks={9} heightBlocks={3}>
+          <GridFlex
+            widthBlocks={isMobile ? undefined : 9}
+            width={isMobile ? "100%" : undefined}
+            heightBlocks={3}
+          >
             <Box position="relative" w="100%" h="100%">
               <Flex position="absolute" top="18px" right="20px" zIndex={1} gap="8px">
                 <Button
@@ -465,7 +488,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </GridFlex>
 
           {/* Completed SWAPS */}
-          <GridFlex widthBlocks={5.6} heightBlocks={3}>
+          <GridFlex
+            widthBlocks={isMobile ? undefined : 5.6}
+            width={isMobile ? "100%" : undefined}
+            heightBlocks={3}
+          >
             <Flex direction="column" pl="25px" pt="18px">
               <Text
                 color={colorsAnalytics.textGray}
@@ -517,7 +544,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </GridFlex>
 
           {/* UNIQUE USERS */}
-          <GridFlex widthBlocks={5.6} heightBlocks={3}>
+          <GridFlex
+            widthBlocks={isMobile ? undefined : 5.6}
+            width={isMobile ? "100%" : undefined}
+            heightBlocks={3}
+          >
             <Flex direction="column" pl="25px" pt="18px">
               <Text
                 color={colorsAnalytics.textGray}
@@ -615,17 +646,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           >
             Top Users
           </Text>
-          <Text
-            color={colorsAnalytics.textGray}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="14px"
-            mt="4px"
-            ml="5px"
-            mb="-30px"
-          >
-            {new Intl.NumberFormat("en-US").format(uniqueUsers)} Unique Users | Ranked by volume,
-            swaps, or recent activity
-          </Text>
+          {!isMobile && (
+            <Text
+              color={colorsAnalytics.textGray}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontSize="14px"
+              mt="4px"
+              ml="5px"
+              mb="-30px"
+            >
+              {new Intl.NumberFormat("en-US").format(uniqueUsers)} Unique Users | Ranked by volume,
+              swaps, or recent activity
+            </Text>
+          )}
           <TopUsers />
         </Flex>
 

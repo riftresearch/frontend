@@ -5,9 +5,12 @@ import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { Flex } from "@chakra-ui/react";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
+import { StatsOverview } from "@/components/other/StatsOverview";
+import useWindowSize from "@/hooks/useWindowSize";
 
 export default function History() {
   useSyncChainIdToStore();
+  const { isMobile } = useWindowSize();
   useBtcEthPrices(); // Fetch BTC/ETH prices for liquidity display
 
   return (
@@ -35,6 +38,11 @@ export default function History() {
           flex="1"
         >
           <UserSwapHistory />
+
+          {/* Stats Overview at bottom */}
+          <Flex w="100%" maxW="1400px" mt={isMobile ? "10px" : "15px"} mb="40px">
+            <StatsOverview />
+          </Flex>
         </Flex>
         {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
         process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (
