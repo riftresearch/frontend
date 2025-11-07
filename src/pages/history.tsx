@@ -2,11 +2,13 @@ import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { Flex } from "@chakra-ui/react";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 
 export default function History() {
   useSyncChainIdToStore();
+  useBtcEthPrices(); // Fetch BTC/ETH prices for liquidity display
 
   return (
     <>

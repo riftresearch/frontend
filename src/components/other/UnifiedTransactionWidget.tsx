@@ -21,6 +21,8 @@ import { esploraClient } from "@/utils/esploraClient";
 import { useEvmConfirmations } from "@/hooks/useEvmConfirmations";
 import WebAssetTag from "./WebAssetTag";
 import { AssetIcon } from "./AssetIcon";
+import { StepCarousel } from "./StepCarousel";
+import { SwapDetailsPill } from "./SwapDetailsPill";
 
 // Type guard to check if swap is Bitcoin deposit
 type SwapType = "bitcoin-deposit" | "evm-deposit";
@@ -32,615 +34,6 @@ interface UnifiedTransactionWidgetProps {
   bitcoinAmount?: number;
   bitcoinUri?: string;
   bitcoinDepositTx?: string;
-}
-
-// Swap details pill component
-const SwapDetailsPill: React.FC<{
-  inputAmount: string;
-  inputAsset: string;
-  inputAssetIconUrl?: string;
-  outputAmount: string;
-  outputAsset: string;
-  isMobile: boolean;
-  width?: string;
-  fontSize?: string;
-}> = ({
-  inputAmount,
-  inputAsset,
-  inputAssetIconUrl,
-  outputAmount,
-  outputAsset,
-  width,
-  fontSize,
-  isMobile,
-}) => {
-  return (
-    <Flex
-      bg="rgba(0, 0, 0, 0.6)"
-      borderRadius="16px"
-      width={width ? width : "null"}
-      padding={isMobile ? "8px 16px" : "10px 18px"}
-      alignItems="center"
-      justifyContent="center"
-      gap={isMobile ? "8px" : "10px"}
-      backdropFilter="blur(12px)"
-      border="1px solid rgba(255, 255, 255, 0.08)"
-    >
-      {/* Input Amount + Asset */}
-      <Flex alignItems="center" gap="4px">
-        <Text
-          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          color={colors.offWhite}
-          fontWeight="500"
-          letterSpacing="-0.5px"
-        >
-          {inputAmount}
-        </Text>
-        <AssetIcon asset={inputAsset} iconUrl={inputAssetIconUrl} size={16} />
-        <Text
-          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          color={colors.textGray}
-          fontWeight="500"
-          letterSpacing="-0.5px"
-        >
-          {inputAsset}
-        </Text>
-      </Flex>
-
-      {/* Arrow */}
-      <Text
-        fontSize={isMobile ? "14px" : "14px"}
-        color="rgba(255, 255, 255, 0.4)"
-        fontWeight="bold"
-      >
-        →
-      </Text>
-
-      {/* Output Amount + Asset */}
-      <Flex alignItems="center" gap="4px">
-        <Text
-          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          color={colors.offWhite}
-          fontWeight="500"
-          letterSpacing="-0.5px"
-        >
-          {outputAmount}
-        </Text>
-        <AssetIcon asset={outputAsset} size={16} />
-        <Text
-          fontSize={fontSize ? fontSize : isMobile ? "13px" : "13px"}
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          color={colors.textGray}
-          fontWeight="500"
-          letterSpacing="-0.5px"
-        >
-          {outputAsset}
-        </Text>
-      </Flex>
-    </Flex>
-  );
-};
-
-// Step configuration - dynamically determined based on swap type
-const getSteps = (swapType: SwapType) => {
-  if (swapType === "bitcoin-deposit") {
-    return [
-      {
-        id: "1-WaitingUserDepositInitiated",
-        label: "AWAITING DEPOSIT",
-        description: "Waiting for your Bitcoin deposit...",
-      },
-      {
-        id: "2-WaitingUserDepositConfirmed",
-        label: "CONFIRMING DEPOSIT",
-        description: "Waiting for 2 block confirmations...",
-      },
-      {
-        id: "3-WaitingMMDepositInitiated",
-        label: "FILLING ORDER",
-        description: "Market makers are filling your order...",
-      },
-      {
-        id: "4-WaitingMMDepositConfirmed",
-        label: "SWAP COMPLETE",
-        description: "Assets are headed your way!",
-      },
-    ];
-  } else {
-    return [
-      {
-        id: "1-WaitingUserDepositInitiated",
-        label: "AWAITING DEPOSIT",
-        description: "Waiting for your ERC-20 deposit...",
-      },
-      {
-        id: "2-WaitingUserDepositConfirmed",
-        label: "CONFIRMING DEPOSIT",
-        description: "Waiting for block confirmations...",
-      },
-      {
-        id: "3-WaitingMMDepositInitiated",
-        label: "FILLING ORDER",
-        description: "Market makers are filling your order...",
-      },
-      {
-        id: "4-WaitingMMDepositConfirmed",
-        label: "SWAP COMPLETE",
-        description: "Bitcoin is headed your way!",
-      },
-    ];
-  }
-};
-
-function StepCarousel({
-  swapId,
-  swapType,
-  evmConfirmations,
-  btcConfirmations,
-  mmDepositChain,
-  userDepositTx,
-  showFillingOrderWarning,
-  onNewSwap,
-  onViewUserDeposit,
-}: {
-  swapId?: string;
-  swapType: SwapType;
-  evmConfirmations: number;
-  btcConfirmations: number;
-  mmDepositChain?: string;
-  userDepositTx?: string;
-  showFillingOrderWarning: boolean;
-  onNewSwap: () => void;
-  onViewUserDeposit: () => void;
-}) {
-  const depositFlowState = useStore((state) => state.depositFlowState);
-  const swapResponse = useStore((state) => state.swapResponse);
-  const { isMobile } = useWindowSize();
-
-  // Use provided swapId prop, fallback to store value
-  const currentSwapId = swapId || swapResponse?.swap_id;
-  const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
-  const [slideOffset, setSlideOffset] = useState(0);
-  const [previousStepIndex, setPreviousStepIndex] = useState(-1);
-  const [showButtons, setShowButtons] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  const steps = getSteps(swapType);
-
-  // Check if we're in the settled state (step 4 or 5)
-  const isSettled =
-    depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
-
-  // Find current step index
-  const isSettledStatus = depositFlowState === "5-Settled";
-  const currentStepIndex = isSettledStatus
-    ? 3
-    : steps.findIndex((step) => step.id === depositFlowState);
-
-  // Initialize carousel state based on current step (for direct page loads)
-  useEffect(() => {
-    if (currentStepIndex !== -1 && !isInitialized) {
-      // Set completed steps for all steps before the current one
-      const completedStepIds = new Set<string>();
-      for (let i = 0; i < currentStepIndex; i++) {
-        completedStepIds.add(steps[i].id);
-      }
-
-      // If we're on the settled step, mark it as completed too
-      if (isSettled) {
-        completedStepIds.add(steps[currentStepIndex].id);
-        setShowButtons(true);
-      }
-
-      setCompletedSteps(completedStepIds);
-      setSlideOffset(-currentStepIndex * 86);
-      setIsInitialized(true);
-      setPreviousStepIndex(currentStepIndex);
-    }
-  }, [currentStepIndex, isInitialized, isSettled, steps]);
-
-  // Handle step transitions
-  useEffect(() => {
-    if (
-      isInitialized &&
-      currentStepIndex !== previousStepIndex &&
-      previousStepIndex >= 0 &&
-      currentStepIndex !== -1
-    ) {
-      const stepDifference = currentStepIndex - previousStepIndex;
-
-      // Handle forward progression
-      if (stepDifference > 0) {
-        const newCompletedSteps = new Set(completedSteps);
-        for (let i = previousStepIndex; i < currentStepIndex; i++) {
-          newCompletedSteps.add(steps[i].id);
-        }
-        setCompletedSteps(newCompletedSteps);
-
-        setTimeout(() => {
-          setSlideOffset(-currentStepIndex * 86);
-
-          if (isSettled) {
-            setTimeout(() => {
-              setCompletedSteps((prev) => new Set([...prev, steps[currentStepIndex].id]));
-              setTimeout(() => {
-                setShowButtons(true);
-              }, 500);
-            }, 800);
-          }
-        }, 500);
-      }
-      // Handle backward progression
-      else if (stepDifference < 0) {
-        const newCompletedSteps = new Set(completedSteps);
-        for (let i = currentStepIndex + 1; i < steps.length; i++) {
-          newCompletedSteps.delete(steps[i].id);
-        }
-        setCompletedSteps(newCompletedSteps);
-        setShowButtons(false);
-        setSlideOffset(-currentStepIndex * 86);
-      }
-    }
-    setPreviousStepIndex(currentStepIndex);
-  }, [currentStepIndex, previousStepIndex, isInitialized, completedSteps, isSettled, steps]);
-
-  if (currentStepIndex === -1) return null;
-
-  const handleViewTransaction = () => {
-    const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
-    const chain = swapStatusInfo?.quote?.to_chain;
-
-    if (txnId) {
-      if (chain === "bitcoin") {
-        window.open(`https://mempool.space/tx/${txnId}`, "_blank");
-      } else if (chain === "ethereum") {
-        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
-      } else if (chain === "base") {
-        window.open(`https://basescan.org/tx/${txnId}`, "_blank");
-      } else {
-        window.open(`https://etherscan.io/tx/${txnId}`, "_blank");
-      }
-    }
-  };
-
-  const handleCopyTxn = async () => {
-    const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
-    if (txnId) {
-      try {
-        await navigator.clipboard.writeText(txnId);
-        toastSuccess({
-          title: "Copied to Clipboard",
-          description: "Transaction ID copied successfully",
-        });
-      } catch (err) {
-        console.error("Failed to copy transaction ID:", err);
-        toastError(err, {
-          title: "Copy Failed",
-          description: "Unable to copy transaction ID",
-        });
-      }
-    }
-  };
-
-  const getShortTxnId = () => {
-    const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
-    if (!txnId) return "";
-    return isMobile
-      ? `${txnId.slice(0, 6)}...${txnId.slice(-6)}`
-      : `${txnId.slice(0, 12)}...${txnId.slice(-12)}`;
-  };
-
-  const handleNewSwap = () => {
-    onNewSwap();
-  };
-
-  return (
-    <Box position="relative" width="100%" height="100%" overflow="hidden">
-      <motion.div
-        animate={{
-          y: slideOffset,
-          paddingTop: isSettled ? "0px" : "10px",
-        }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        style={{
-          position: "relative",
-          width: "100%",
-        }}
-      >
-        {steps.map((step, index) => {
-          const isCompleted = completedSteps.has(step.id);
-          const positionFromTop = index + slideOffset / 86;
-          const isCurrent = Math.abs(positionFromTop) < 0.1;
-
-          // Dynamic description based on step and confirmations
-          let stepDescription = step.description;
-
-          // Step 2: Confirmation tracking based on swap type
-          if (step.id === "2-WaitingUserDepositConfirmed" && isCurrent) {
-            if (swapType === "bitcoin-deposit") {
-              const requiredConfs = 2; // BTC->EVM needs 2 confirmations
-              const currentConfs = Math.min(btcConfirmations, requiredConfs);
-              stepDescription = `Confirming... ${currentConfs}/${requiredConfs} confirmations`;
-            } else {
-              const requiredConfs = 4; // EVM->BTC needs 4 confirmations
-              const currentConfs = Math.min(evmConfirmations, requiredConfs);
-              stepDescription = `Confirming... ${currentConfs}/${requiredConfs} confirmations`;
-            }
-          }
-
-          // Step 3: Filling order warning
-          if (step.id === "3-WaitingMMDepositInitiated" && showFillingOrderWarning) {
-            stepDescription =
-              "Market makers are taking longer than usual to fill your order... if not filled within 1 hour, your order will be refunded";
-          }
-
-          // Step 4: MM deposit confirmation (for BTC deposits from MM)
-          // Only show confirmation count if NOT settled yet
-          if (
-            step.id === "4-WaitingMMDepositConfirmed" &&
-            isCurrent &&
-            mmDepositChain === "bitcoin" &&
-            !isSettled
-          ) {
-            const requiredConfs = 4; // Bitcoin needs 4 confirmations for EVM->BTC swaps
-            const currentConfs = Math.min(btcConfirmations, requiredConfs);
-            stepDescription = `Confirming... ${currentConfs}/${requiredConfs} confirmations`;
-          }
-
-          const opacity =
-            positionFromTop < 0
-              ? 0
-              : positionFromTop < 0.1
-                ? 1
-                : positionFromTop < 1.1
-                  ? 0.4
-                  : positionFromTop < 3
-                    ? Math.max(0.1, 0.3 - (positionFromTop - 1) * 0.1)
-                    : 0;
-
-          return (
-            <motion.div
-              key={step.id}
-              style={{
-                height: "86px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                position: "relative",
-              }}
-              animate={{ opacity }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-            >
-              <Flex direction="column" alignItems="center" justifyContent="center">
-                <Flex alignItems="center" justifyContent="center" gap="12px">
-                  <Box
-                    width="24px"
-                    height="24px"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    {index === currentStepIndex && !isCompleted ? (
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 1,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                      >
-                        <Box
-                          width="20px"
-                          height="20px"
-                          border="2px solid rgba(255,255,255,0.3)"
-                          borderTop="2px solid white"
-                          borderRadius="50%"
-                        />
-                      </motion.div>
-                    ) : isCompleted ? (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{
-                          duration: 0.4,
-                          type: "spring",
-                          damping: 15,
-                          stiffness: 300,
-                          delay: 0.1,
-                        }}
-                      >
-                        <Box
-                          width="24px"
-                          height="24px"
-                          borderRadius="50%"
-                          bg="#4CAF50"
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                          </svg>
-                        </Box>
-                      </motion.div>
-                    ) : (
-                      <Box
-                        width="24px"
-                        height="24px"
-                        borderRadius="50%"
-                        border="2px solid rgba(255,255,255,0.3)"
-                      />
-                    )}
-                  </Box>
-
-                  <motion.div
-                    initial={{
-                      color: isCurrent ? "white" : "rgba(255,255,255,0.6)",
-                      fontSize: isCurrent ? "20px" : "18px",
-                    }}
-                    animate={{
-                      color: isCurrent ? "white" : "rgba(255,255,255,0.6)",
-                      fontSize: isCurrent ? "20px" : "18px",
-                    }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                  >
-                    <Text fontFamily="Nostromo" fontWeight="bold" letterSpacing="1px">
-                      {step.label}
-                    </Text>
-                  </motion.div>
-                </Flex>
-
-                <motion.div
-                  initial={{ opacity: isCurrent ? 1 : 0 }}
-                  animate={{ opacity: isCurrent ? 1 : 0 }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  style={{ textAlign: "center" }}
-                >
-                  <Text
-                    color="rgba(255,255,255,0.7)"
-                    fontSize="13px"
-                    fontFamily="Aux"
-                    mt="9px"
-                    textAlign="center"
-                  >
-                    {stepDescription}
-                  </Text>
-                </motion.div>
-              </Flex>
-            </motion.div>
-          );
-        })}
-      </motion.div>
-
-      {/* Action buttons after completion */}
-      <AnimatePresence>
-        {showButtons && (
-          <motion.div
-            initial={{ y: 30, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            style={{
-              position: "absolute",
-              bottom: "10px",
-              width: "100%",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "12px",
-              zIndex: 4,
-            }}
-          >
-            {getShortTxnId() && (
-              <Flex
-                as="button"
-                mt="-106px"
-                mb="70px"
-                alignItems="center"
-                gap="8px"
-                bg="rgba(2, 123, 30, 0.25)"
-                borderRadius="16px"
-                padding="8px 16px"
-                border="2px solid #3F7244"
-                cursor="pointer"
-                onClick={handleViewTransaction}
-                _hover={{
-                  transform: "translateY(-2px)",
-                  bg: "rgba(2, 123, 30, 0.35)",
-                  boxShadow: "0 4px 12px rgba(127, 58, 12, 0.3)",
-                }}
-                transition="all 0.2s"
-              >
-                <Text
-                  color="white"
-                  fontFamily="Nostromo"
-                  fontSize={isMobile ? "12px" : "13px"}
-                  fontWeight="normal"
-                  letterSpacing="0.5px"
-                >
-                  VIEW PAYOUT TXN
-                </Text>
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-              </Flex>
-            )}
-
-            <Flex gap="16px" mt="-55px" justifyContent="center">
-              <Box
-                as="button"
-                onClick={onViewUserDeposit}
-                border="2px solid rgba(255, 255, 255, 0.22)"
-                borderRadius="16px"
-                width={isMobile ? "140px" : "160px"}
-                background="rgba(255, 255, 255, 0.05)"
-                padding="8px 16px"
-                cursor="pointer"
-                transition="all 0.2s"
-                _hover={{
-                  transform: "translateY(-2px)",
-                  bg: "rgba(255, 255, 255, 0.10)",
-                  border: "2px solid rgba(255, 255, 255, 0.3)",
-                  boxShadow: "0 4px 12px rgba(255, 255, 255, 0.1)",
-                }}
-              >
-                <Text
-                  color="white"
-                  fontFamily="Nostromo"
-                  fontSize="14px"
-                  fontWeight="normal"
-                  letterSpacing="0.5px"
-                >
-                  VIEW DEPOSIT
-                </Text>
-              </Box>
-
-              <Box
-                as="button"
-                onClick={handleNewSwap}
-                borderRadius="16px"
-                width={isMobile ? "140px" : "160px"}
-                border="2px solid #6651B3"
-                background="rgba(86, 50, 168, 0.30)"
-                padding="8px 16px"
-                cursor="pointer"
-                transition="all 0.2s"
-                _hover={{
-                  transform: "translateY(-2px)",
-                  bg: "rgba(86, 50, 168, 0.45)",
-                  boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
-                }}
-              >
-                <Text
-                  color="white"
-                  fontFamily="Nostromo"
-                  fontSize="14px"
-                  fontWeight="normal"
-                  letterSpacing="0.5px"
-                >
-                  NEW SWAP
-                </Text>
-              </Box>
-            </Flex>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </Box>
-  );
 }
 
 export function UnifiedTransactionWidget({
@@ -703,11 +96,15 @@ export function UnifiedTransactionWidget({
     swapType,
   });
 
-  const steps = getSteps(swapType);
+  // Determine current step index for widget logic
+  const stepIds = [
+    "1-WaitingUserDepositInitiated",
+    "2-WaitingUserDepositConfirmed",
+    "3-WaitingMMDepositInitiated",
+    "4-WaitingMMDepositConfirmed",
+  ];
   const isSettledStatus = depositFlowState === "5-Settled";
-  const currentStepIndex = isSettledStatus
-    ? 3
-    : steps.findIndex((step) => step.id === depositFlowState);
+  const currentStepIndex = isSettledStatus ? 3 : stepIds.findIndex((id) => id === depositFlowState);
   const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
 
   const [isRefundAvailable, setIsRefundAvailable] = React.useState(false);
@@ -728,6 +125,13 @@ export function UnifiedTransactionWidget({
 
   // Track BTC confirmations
   const [btcConfirmations, setBtcConfirmations] = React.useState<number>(0);
+
+  // Set audio volume on mount
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = 0.45; // Set volume to 45%
+    }
+  }, []);
 
   // Play sound effect when swap completes
   useEffect(() => {
@@ -1305,16 +709,19 @@ export function UnifiedTransactionWidget({
   if (isRefundAvailable) {
     return (
       <Flex direction="column" alignItems="center" gap="20px" w="100%">
-        <Box mt="20px">
-          <SwapDetailsPill
-            inputAmount={inputAmount}
-            inputAsset={inputAsset}
-            inputAssetIconUrl={inputAssetIconUrl}
-            outputAmount={outputAmount}
-            outputAsset={outputAsset}
-            isMobile={isMobile}
-          />
-        </Box>
+        {isMobile && (
+          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+            <SwapDetailsPill
+              width="100%"
+              inputAmount={inputAmount}
+              inputAsset={inputAsset}
+              inputAssetIconUrl={inputAssetIconUrl}
+              outputAmount={outputAmount}
+              outputAsset={outputAsset}
+              isMobile={isMobile}
+            />
+          </Box>
+        )}
 
         <Box
           w={isMobile ? "100%" : "805px"}
@@ -1372,6 +779,19 @@ export function UnifiedTransactionWidget({
               WebkitMaskComposite: "xor",
             }}
           >
+            {!isMobile && (
+              <Box position="absolute" top="15px" zIndex={2}>
+                <SwapDetailsPill
+                  inputAmount={inputAmount}
+                  inputAsset={inputAsset}
+                  inputAssetIconUrl={inputAssetIconUrl}
+                  outputAmount={outputAmount}
+                  outputAsset={outputAsset}
+                  isMobile={isMobile}
+                />
+              </Box>
+            )}
+
             <Box
               width="110px"
               height="110px"
@@ -1407,8 +827,7 @@ export function UnifiedTransactionWidget({
               color={colors.offWhite}
               textAlign="center"
               px="40px"
-              mt="-15px"
-              mb="15px"
+              mb={isMobile ? "0px" : "15px"}
               lineHeight="1.6"
             >
               The market maker failed to fill your order. You can initiate a refund in the swap
@@ -1500,17 +919,20 @@ export function UnifiedTransactionWidget({
   // EXPIRED VIEW (Bitcoin deposits only)
   if (isExpired && swapType === "bitcoin-deposit" && bitcoinAddress) {
     return (
-      <Flex direction="column" alignItems="center" gap="20px">
-        <Box mt="20px">
-          <SwapDetailsPill
-            inputAmount={inputAmount}
-            inputAsset={inputAsset}
-            inputAssetIconUrl={inputAssetIconUrl}
-            outputAmount={outputAmount}
-            outputAsset={outputAsset}
-            isMobile={isMobile}
-          />
-        </Box>
+      <Flex direction="column" alignItems="center" gap="20px" w="100%">
+        {isMobile && (
+          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+            <SwapDetailsPill
+              width="100%"
+              inputAmount={inputAmount}
+              inputAsset={inputAsset}
+              inputAssetIconUrl={inputAssetIconUrl}
+              outputAmount={outputAmount}
+              outputAsset={outputAsset}
+              isMobile={isMobile}
+            />
+          </Box>
+        )}
 
         <Box
           w={isMobile ? "100%" : "805px"}
@@ -1542,6 +964,19 @@ export function UnifiedTransactionWidget({
             WebkitMaskComposite: "xor",
           }}
         >
+          {!isMobile && (
+            <Box position="absolute" top="15px" zIndex={2}>
+              <SwapDetailsPill
+                inputAmount={inputAmount}
+                inputAsset={inputAsset}
+                inputAssetIconUrl={inputAssetIconUrl}
+                outputAmount={outputAmount}
+                outputAsset={outputAsset}
+                isMobile={isMobile}
+              />
+            </Box>
+          )}
+
           <Flex direction="column" alignItems="center" gap="16px" zIndex={1}>
             <Text
               fontSize="24px"
@@ -1550,6 +985,18 @@ export function UnifiedTransactionWidget({
               letterSpacing="1px"
             >
               SWAP EXPIRED
+            </Text>
+            <Text
+              fontSize="16px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              color={colors.offWhite}
+              textAlign="center"
+              px="40px"
+              mb={isMobile ? "0px" : "15px"}
+              lineHeight="1.6"
+            >
+              Your time to initiate a swap has expired. You can start a new swap with the button
+              below.
             </Text>
 
             {currentSwapId && (
@@ -1651,7 +1098,6 @@ export function UnifiedTransactionWidget({
           <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
             <SwapDetailsPill
               width="100%"
-              fontSize="4vw"
               inputAmount={inputAmount}
               inputAsset={inputAsset}
               inputAssetIconUrl={inputAssetIconUrl}
@@ -1663,12 +1109,8 @@ export function UnifiedTransactionWidget({
         )}
 
       <Box
-        w={isMobile ? "100%" : "805px"}
-        h={
-          isMobile && swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress
-            ? "600px"
-            : "510px"
-        }
+        w={isMobile ? "100%" : "810px"}
+        h={isMobile ? "590px" : "580px"}
         borderRadius="40px"
         mt="70px"
         boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
@@ -1695,9 +1137,7 @@ export function UnifiedTransactionWidget({
       >
         <Box
           w="100%"
-          h={
-            swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress ? "54%" : "50%"
-          }
+          h={isMobile ? "45%" : "53%"}
           borderRadius="40px"
           position="absolute"
           top="0px"
@@ -1705,6 +1145,7 @@ export function UnifiedTransactionWidget({
           display="flex"
           flexDirection="column"
           backdropFilter="blur(20px)"
+          zIndex={10}
           alignItems="center"
           justifyContent="center"
           _before={{
@@ -1806,20 +1247,22 @@ export function UnifiedTransactionWidget({
               justify="center"
               gap={isMobile ? "20px" : "40px"}
               zIndex={1}
-              px={isMobile ? "20px" : "100px"}
+              px={isMobile ? "50px" : "100px"}
             >
-              <Flex
-                py="10px"
-                px="12px"
-                borderRadius="12px"
-                bg="white"
-                boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-                justify="center"
-                align="center"
-                flexShrink={0}
-              >
-                <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
-              </Flex>
+              {!isMobile && (
+                <Flex
+                  py="10px"
+                  px="12px"
+                  borderRadius="12px"
+                  bg="white"
+                  boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
+                  justify="center"
+                  align="center"
+                  flexShrink={0}
+                >
+                  <QRCodeSVG value={bitcoinUri} size={isMobile ? 100 : 160} />
+                </Flex>
+              )}
 
               <Flex
                 direction="column"
@@ -1937,7 +1380,7 @@ export function UnifiedTransactionWidget({
                 direction="column"
                 alignItems="center"
                 justifyContent="center"
-                marginTop={isMobile ? "20px" : "100px"}
+                marginTop={isMobile ? "20px" : "120px"}
                 gap="24px"
                 zIndex={1}
               >
@@ -1969,8 +1412,8 @@ export function UnifiedTransactionWidget({
                           delay: i * 0.2,
                         }}
                         style={{
-                          width: isMobile ? "16.8px" : "12px",
-                          height: isMobile ? "16.8px" : "12px",
+                          width: isMobile ? "16.8px" : "18px",
+                          height: isMobile ? "16.8px" : "18px",
                           borderRadius: "50%",
                           backgroundColor: "rgba(255, 255, 255, 0.8)",
                         }}
@@ -1988,7 +1431,7 @@ export function UnifiedTransactionWidget({
                       justifyContent="center"
                       gap="8px"
                       px="18px"
-                      mt="40px"
+                      mt="60px"
                       py="7px"
                       borderRadius="19px"
                       bg="rgba(255, 255, 255, 0.1)"
@@ -2137,8 +1580,8 @@ export function UnifiedTransactionWidget({
                     src="/images/txns/check.svg"
                     alt="Success"
                     style={{
-                      width: "110px",
-                      height: "110px",
+                      width: isMobile ? "110px" : "130px",
+                      height: isMobile ? "110px" : "130px",
                       filter: "drop-shadow(0 0 8px rgba(171, 125, 255, 0.1))",
                     }}
                   />
@@ -2150,12 +1593,11 @@ export function UnifiedTransactionWidget({
 
         {/* Bottom Half - Steps */}
         <Box
-          h={
-            swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress ? "45%" : "50%"
-          }
+          h={isMobile ? "52%" : "45%"}
           bottom="0px"
           position="absolute"
-          padding="20px"
+          paddingX="20px"
+          paddingY="10px"
           w="100%"
           display="flex"
           alignItems="center"
@@ -2164,6 +1606,9 @@ export function UnifiedTransactionWidget({
           <StepCarousel
             swapId={currentSwapId}
             swapType={swapType}
+            marginTopCustom={isMobile ? "-10px" : ""}
+            paddingBottomCustom={isMobile ? "20px" : "45px"}
+            paddingTopCustom={isMobile ? "10px" : "12px"}
             evmConfirmations={evmConfirmations}
             btcConfirmations={btcConfirmations}
             mmDepositChain={swapStatusInfo?.quote?.to_chain}
@@ -2191,42 +1636,39 @@ export function UnifiedTransactionWidget({
 
       {/* Mobile: View Deposit Transaction Button below widget */}
       {isMobile &&
-        ((swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx) ||
-          (swapType === "evm-deposit" && userDepositTxHash)) && (
-          <Box mt="30px" mb="-90px" w="100%" display="flex" justifyContent="center">
-            <Flex
+        !isSettled &&
+        ((swapType === "bitcoin-deposit" && bitcoinDepositTx) || userDepositTxHash) && (
+          <Box mt="12px" w="100%" display="flex" justifyContent="center">
+            <Box
               as="button"
-              onClick={
-                swapType === "bitcoin-deposit"
-                  ? () => window.open(`https://mempool.space/tx/${bitcoinDepositTx}`, "_blank")
-                  : handleViewUserTransaction
-              }
-              alignItems="center"
-              justifyContent="center"
-              gap="8px"
-              px="20px"
-              py="10px"
-              borderRadius="19px"
-              bg="rgba(255, 255, 255, 0.1)"
-              border="1px solid rgba(255, 255, 255, 0.2)"
+              onClick={handleViewUserTransaction}
+              border="2px solid rgba(255, 255, 255, 0.22)"
+              borderRadius="26px"
+              width="100%"
+              background="rgba(255, 255, 255, 0.05)"
+              padding="12px 16px"
               cursor="pointer"
               transition="all 0.2s"
               _hover={{
-                bg: "rgba(255, 255, 255, 0.15)",
-                border: "1px solid rgba(255, 255, 255, 0.3)",
+                transform: "translateY(-2px)",
+                bg: "rgba(255, 255, 255, 0.10)",
+                border: "2px solid rgba(255, 255, 255, 0.3)",
+                boxShadow: "0 4px 12px rgba(255, 255, 255, 0.1)",
               }}
-              _active={{ transform: "scale(0.98)" }}
             >
-              <Text
-                fontSize="13px"
-                color="rgba(255, 255, 255, 0.9)"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                letterSpacing="0.5px"
-              >
-                {swapType === "bitcoin-deposit" ? "VIEW DEPOSIT TXN" : "VIEW DEPOSIT TXN"}
-              </Text>
-              <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
-            </Flex>
+              <Flex alignItems="center" justifyContent="center" gap="8px">
+                <Text
+                  color="white"
+                  fontFamily="Nostromo"
+                  fontSize="14px"
+                  fontWeight="normal"
+                  letterSpacing="0.5px"
+                >
+                  VIEW DEPOSIT
+                </Text>
+                <FiExternalLink size={14} color="rgba(255, 255, 255, 0.9)" />
+              </Flex>
+            </Box>
           </Box>
         )}
 

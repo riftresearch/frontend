@@ -13,6 +13,8 @@ export function useSwapStatus(swapId: string | undefined) {
     },
     enabled: !!swapId,
     refetchInterval: 2500,
+    // Ensure polling continues even when tab is in background
+    refetchIntervalInBackground: true,
   });
 
   return {

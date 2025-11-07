@@ -146,7 +146,7 @@ export const Navbar = ({}) => {
       left={0}
       right={0}
       zIndex={1010}
-      bg={isMobile ? "rgba(20, 20, 28, 0.50)" : "transparent"}
+      bg={isMobile ? "linear(90deg, rgba(57,74,255,0.1), rgba(255,143,40,0.1))" : "transparent"}
       backdropFilter={isMobile ? "blur(10px)" : "none"}
       boxShadow={isMobile ? "0 4px 12px rgba(0, 0, 0, 0.6)" : "none"}
     >
@@ -162,7 +162,7 @@ export const Navbar = ({}) => {
       <Flex
         direction="row"
         w="100%"
-        px={isMobile ? "10px" : "30px"}
+        px={isMobile ? "14px" : "30px"}
         pt={isMobile ? "15px" : "22px"}
         pb={isMobile ? "15px" : "0"}
         zIndex={400}
@@ -247,13 +247,11 @@ export const Navbar = ({}) => {
       </Flex>
 
       {isMobile && (
-        <Box
+        <Flex
           w="100%"
           h="1px"
-          background="linear-gradient(90deg, #FF8F28 0%, #394AFF 100%)"
-          flexShrink={0}
-          zIndex={999}
-          position="relative"
+          bgGradient={`linear-gradient(90deg, ${colors.RiftBlue} 0%, ${colors.RiftOrange} 100%)`}
+          opacity={0.6}
         />
       )}
     </Flex>

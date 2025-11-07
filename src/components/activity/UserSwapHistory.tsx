@@ -457,129 +457,62 @@ export const UserSwapHistory: React.FC = () => {
   // Show loading spinner during initial mount
   if (isInitialMount) {
     return (
-      <>
-        <GridFlex
-          maxW="750px"
-          w="100%"
-          contentPadding={isMobile ? "20px" : "32px"}
-          borderRadius="40px"
-          mb="20px"
-          mt={isMobile ? "80px" : "0"}
-        >
-          <Flex direction="column" w="100%" align="center">
-            <Text
-              fontSize={isMobile ? "24px" : "36px"}
-              mt={isMobile ? "-8px" : "-15px"}
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              color={colorsAnalytics.offWhite}
-              textAlign="center"
-            >
-              Swap History
-            </Text>
-            <Text
-              fontSize={isMobile ? "13px" : "15px"}
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colorsAnalytics.textGray}
-              mt="-2px"
-              mb="-4px"
-              letterSpacing="-0.5px"
-              textAlign="center"
-            >
-              Manage the status of your current and previous Rift swaps.
-            </Text>
-          </Flex>
-        </GridFlex>
-        <GridFlex width="100%" borderRadius="40px" heightBlocks={13} contentPadding={0}>
-          <Flex direction="column" w="100%" h="100%" align="center" justify="center">
-            <Spinner size="lg" color={colors.offWhite} />
-          </Flex>
-        </GridFlex>
-      </>
+      <Flex w="100%" h="60vh" align="center" justify="center" mt={isMobile ? "80px" : "0"}>
+        <Spinner size="xl" color={colors.offWhite} />
+      </Flex>
     );
   }
 
   if (!isConnected) {
     return (
-      <>
-        <GridFlex
-          maxW="750px"
-          w="100%"
-          contentPadding={isMobile ? "20px" : "32px"}
-          borderRadius="40px"
-          mb="20px"
-          mt={isMobile ? "80px" : "0"}
-        >
-          <Flex direction="column" w="100%" align="center">
-            <Text
-              fontSize={isMobile ? "24px" : "36px"}
-              mt={isMobile ? "-8px" : "-15px"}
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              color={colorsAnalytics.offWhite}
-              textAlign="center"
-            >
-              Swap History
-            </Text>
-            <Text
-              fontSize={isMobile ? "13px" : "15px"}
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colorsAnalytics.textGray}
-              mt="-2px"
-              mb="-4px"
-              letterSpacing="-0.5px"
-              textAlign="center"
-            >
-              Manage the status of your current and previous Rift swaps.
-            </Text>
-          </Flex>
-        </GridFlex>
-        <GridFlex
-          width={isMobile ? "100%" : "595px"}
-          contentPadding={isMobile ? "40px 20px" : "60px"}
-          borderRadius="60px"
-        >
-          <Flex direction="column" w="100%" align="center">
-            <Text
-              fontSize={isMobile ? "24px" : "32px"}
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              color={colors.offWhite}
-              mb="16px"
-              textAlign="center"
-            >
-              Swap History
-            </Text>
-            <Text
-              fontSize={isMobile ? "14px" : "16px"}
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.textGray}
-              letterSpacing="-0.5px"
-              mb="32px"
-              textAlign="center"
-            >
-              Connect your wallet to view your swap history and track the status of your current and
-              previous Rift swaps.
-            </Text>
-            <Button
-              letterSpacing="-0.5px"
-              onClick={handleConnectWallet}
-              cursor="pointer"
-              color={colors.offWhite}
-              _active={{ bg: colors.swapBgColor }}
-              _hover={{ bg: colors.swapHoverColor }}
-              borderRadius="12px"
-              border={`2.5px solid ${colors.swapBorderColor}`}
-              type="button"
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              fontSize={isMobile ? "15px" : "17px"}
-              paddingX={isMobile ? "24px" : "32px"}
-              paddingY="12px"
-              bg={colors.swapBgColor}
-              boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
-            >
-              Connect Wallet
-            </Button>
-          </Flex>
-        </GridFlex>
-      </>
+      <GridFlex
+        width={isMobile ? "100%" : "595px"}
+        contentPadding={isMobile ? "40px 20px" : "60px"}
+        borderRadius="60px"
+        mt={isMobile ? "80px" : "0"}
+      >
+        <Flex direction="column" w="100%" align="center">
+          <Text
+            fontSize={isMobile ? "24px" : "32px"}
+            fontFamily={FONT_FAMILIES.NOSTROMO}
+            color={colors.offWhite}
+            mb="16px"
+            textAlign="center"
+          >
+            Swap History
+          </Text>
+          <Text
+            fontSize={isMobile ? "14px" : "16px"}
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.textGray}
+            letterSpacing="-0.5px"
+            mb="32px"
+            textAlign="center"
+          >
+            Connect your wallet to view your swap history and track the status of your current and
+            previous Rift swaps.
+          </Text>
+          <Button
+            letterSpacing="-0.5px"
+            onClick={handleConnectWallet}
+            cursor="pointer"
+            color={colors.offWhite}
+            _active={{ bg: colors.swapBgColor }}
+            _hover={{ bg: colors.swapHoverColor }}
+            borderRadius="26px"
+            border={`2.5px solid ${colors.swapBorderColor}`}
+            type="button"
+            fontFamily={FONT_FAMILIES.NOSTROMO}
+            fontSize={isMobile ? "15px" : "17px"}
+            paddingX={isMobile ? "24px" : "32px"}
+            paddingY="12px"
+            bg={colors.swapBgColor}
+            boxShadow="0px 0px 5px 3px rgba(18,18,18,1)"
+          >
+            Connect Wallet
+          </Button>
+        </Flex>
+      </GridFlex>
     );
   }
 
