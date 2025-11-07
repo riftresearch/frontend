@@ -382,6 +382,11 @@ export async function getERC20ToBTCQuote(
         throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
       }
 
+      if (rfqQuote.toString() === "Insufficient balance to fulfill quote") {
+        console.log("rfqQuote", rfqQuote);
+        throw new Error("Insufficient balance to fulfill quote");
+      }
+
       // Format BTC output amount
       const btcOutputAmount = formatLotAmount(rfqQuote.to);
       const expiresAt = new Date(rfqQuote.expires_at);
@@ -426,6 +431,11 @@ export async function getERC20ToBTCQuote(
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
     }
 
+    if (rfqQuote.toString() === "Insufficient balance to fulfill quote") {
+      console.log("rfqQuote", rfqQuote);
+      throw new Error("Insufficient balance to fulfill quote");
+    }
+
     // Step 3: Format BTC output amount
     // Convert hex string to decimal string
     const btcOutputAmount = formatLotAmount(rfqQuote.to);
@@ -434,14 +444,6 @@ export async function getERC20ToBTCQuote(
     const uniswapExpiration = uniswapQuote.expiresAt;
     const rfqExpiration = new Date(rfqQuote.expires_at);
     const expiresAt = uniswapExpiration < rfqExpiration ? uniswapExpiration : rfqExpiration;
-
-    // console.log("Combined quote complete:", {
-    //   sellToken,
-    //   amountIn,
-    //   cbBTCAmount: cbBTCAmount,
-    //   btcOutputAmount,
-    //   expiresAt,
-    // });
 
     // Clear "no routes" error on successful quote
     const { setHasNoRoutesError } = useStore.getState();
@@ -468,6 +470,8 @@ export async function getERC20ToBTCQuote(
         title: "RFQ Quote Failed",
         description: error.message,
       });
+    } else if ((error as Error).message === "Insufficient balance to fulfill quote") {
+      throw new Error("Insufficient balance to fulfill quote");
     } else {
       const description = error instanceof Error ? error.message : "Unknown error occurred";
       toastError(error, {
@@ -478,6 +482,19 @@ export async function getERC20ToBTCQuote(
 
     return null;
   }
+}
+
+/**
+ * Truncates a numeric string to a maximum of 8 decimal places
+ * @param amount - The amount string to truncate
+ * @returns The truncated amount or the original if it has 8 or fewer decimal places
+ */
+export function truncateAmount(amount: string): string {
+  const parts = amount.split(".");
+  if (parts.length === 2 && parts[1].length > 8) {
+    return `${parts[0]}.${parts[1].substring(0, 8)}`;
+  }
+  return amount;
 }
 
 /**

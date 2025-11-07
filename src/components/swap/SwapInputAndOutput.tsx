@@ -32,6 +32,7 @@ import {
   calculateFees,
   getMinSwapValueUsd,
   satsToBtc,
+  truncateAmount,
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
@@ -214,15 +215,21 @@ export const SwapInputAndOutput = () => {
       const inputValue = parseFloat(amountToQuote);
       let price: number | null = null;
 
-      if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+      if (selectedInputToken.ticker === "ETH") {
         price = ethPrice;
-      } else if (selectedInputToken.address) {
+      } else if (selectedInputToken.ticker === "cbBTC") {
+        price = btcPrice;
+      } else {
         price = erc20Price;
       }
 
       if (price && btcPrice) {
         const usdValue = inputValue * price;
+        console.log("inputValue", inputValue);
+        console.log("price", price);
         console.log("usdValue", usdValue);
+        console.log("btcPrice", btcPrice);
+        console.log("max btc liquidity in usd", liquidity.maxBTCLiquidityInUsd);
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Input value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
@@ -234,18 +241,18 @@ export const SwapInputAndOutput = () => {
         }
 
         // Check if input value exceeds maximum BTC liquidity
-        if (
-          parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
-          usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
-        ) {
-          console.log("Input value exceeds maximum BTC liquidity");
-          setUniswapQuote(null);
-          setRfqQuote(null);
-          setOutputAmount("");
-          setIsLoadingQuote(false);
-          setExceedsAvailableBTCLiquidity(true);
-          return;
-        }
+        // if (
+        //   parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
+        //   usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
+        // ) {
+        //   console.log("Input value exceeds maximum BTC liquidity");
+        //   setUniswapQuote(null);
+        //   setRfqQuote(null);
+        //   setOutputAmount("");
+        //   setIsLoadingQuote(false);
+        //   setExceedsAvailableBTCLiquidity(true);
+        //   return;
+        // }
       } else {
         console.log("no price");
         console.log("btcPrice", btcPrice);
@@ -293,6 +300,7 @@ export const SwapInputAndOutput = () => {
           setOutputAmount(quoteResponse.btcOutputAmount || "");
           setIsLoadingQuote(false);
           setRefetchQuote(false);
+          setExceedsAvailableBTCLiquidity(false);
 
           // Calculate and set fee overview
           if (btcPrice && price) {
@@ -318,6 +326,9 @@ export const SwapInputAndOutput = () => {
         }
       } catch (error) {
         console.error("Failed to fetch quote:", error);
+        if ((error as Error).message === "Insufficient balance to fulfill quote") {
+          setExceedsAvailableBTCLiquidity(true);
+        }
         setUniswapQuote(null);
         setRfqQuote(null);
         setOutputAmount("");
@@ -427,13 +438,7 @@ export const SwapInputAndOutput = () => {
 
           // Truncate input amount to 8 decimals for display
           const inputAmount = quoteResponse.erc20InputAmount || "";
-          const truncatedInput = (() => {
-            const parts = inputAmount.split(".");
-            if (parts.length === 2 && parts[1].length > 8) {
-              return `${parts[0]}.${parts[1].substring(0, 8)}`;
-            }
-            return inputAmount;
-          })();
+          const truncatedInput = truncateAmount(inputAmount);
 
           setRawInputAmount(truncatedInput);
           setIsLoadingQuote(false);
@@ -758,18 +763,15 @@ export const SwapInputAndOutput = () => {
         quoteRequestIdRef.current += 1;
         const currentRequestId = quoteRequestIdRef.current;
 
-        // Use full precision if available, otherwise use displayed value
-        const amountToQuote = fullPrecisionInputAmount || value;
-
         if (isSwappingForBTC) {
           // Fetch exact input quote for ERC20/ETH -> BTC
           quoteDebounceTimerRef.current = setTimeout(() => {
-            fetchERC20ToBTCQuote(amountToQuote, currentRequestId);
+            fetchERC20ToBTCQuote(value, currentRequestId);
           }, 125);
         } else {
           // Fetch exact input quote for BTC -> ERC20/ETH
           quoteDebounceTimerRef.current = setTimeout(() => {
-            fetchBTCtoERC20Quote(amountToQuote, "ExactInput", currentRequestId);
+            fetchBTCtoERC20Quote(value, "ExactInput", currentRequestId);
           }, 125);
         }
       }
@@ -896,13 +898,6 @@ export const SwapInputAndOutput = () => {
 
     let adjustedInputAmount = currentInputBalance;
     // Limit to 8 decimal places for display
-    const truncatedAmount = (() => {
-      const parts = adjustedInputAmount.split(".");
-      if (parts.length === 2 && parts[1].length > 8) {
-        return `${parts[0]}.${parts[1].substring(0, 8)}`;
-      }
-      return adjustedInputAmount;
-    })();
 
     // Only clear min swap errors if balance > min swap
     if (btcPrice && isAboveMinSwap(balanceUsdFloat, btcPrice)) {
@@ -910,7 +905,7 @@ export const SwapInputAndOutput = () => {
     } else {
       setInputBelowMinimum(true);
       setOutputAmount("");
-      setRawInputAmount(truncatedAmount);
+      setRawInputAmount(truncateAmount(adjustedInputAmount));
       setFullPrecisionInputAmount(adjustedInputAmount);
       setUniswapQuote(null);
       setRfqQuote(null);
@@ -963,11 +958,12 @@ export const SwapInputAndOutput = () => {
       setIsAtAdjustedMax(false);
     }
 
+    console.log("[yee] adjustedInputAmount", adjustedInputAmount);
     // Store full precision for quoting and swap execution
     setFullPrecisionInputAmount(adjustedInputAmount);
 
     // Set the truncated balance as the displayed input amount
-    setRawInputAmount(truncatedAmount);
+    setRawInputAmount(truncateAmount(adjustedInputAmount));
     setLastEditedField("input");
     setHasStartedTyping(true);
 
@@ -1021,6 +1017,7 @@ export const SwapInputAndOutput = () => {
     setOutputBelowMinimum(false);
     setExceedsUserBalance(false);
     setInputBelowMinimum(false);
+    setFullPrecisionInputAmount(null);
 
     // Determine the max liquidity based on swap direction
     let maxLiquidityBtc: number;
@@ -1037,13 +1034,7 @@ export const SwapInputAndOutput = () => {
     const maxOutputAmount = maxLiquidityBtc.toString();
 
     // Limit to 8 decimal places for display
-    const truncatedOutputAmount = (() => {
-      const parts = maxOutputAmount.split(".");
-      if (parts.length === 2 && parts[1].length > 8) {
-        return `${parts[0]}.${parts[1].substring(0, 8)}`;
-      }
-      return maxOutputAmount;
-    })();
+    const truncatedOutputAmount = truncateAmount(maxOutputAmount);
 
     // Set the truncated max liquidity as the output amount
     setOutputAmount(truncatedOutputAmount);
@@ -1086,71 +1077,6 @@ export const SwapInputAndOutput = () => {
         // Fetch exact output quote for BTC -> ERC20/ETH
         fetchBTCtoERC20Quote(truncatedOutputAmount, "ExactOutput", currentRequestId);
       }
-    }
-  };
-
-  const handleInputLiquidityMaxClick = () => {
-    // Set flag to indicate we should quote for input field
-    getQuoteForInputRef.current = true;
-
-    // Clear ALL error flags
-    setExceedsUserBalance(false);
-    setExceedsAvailableBTCLiquidity(false);
-    setExceedsAvailableCBBTCLiquidity(false);
-    setInputBelowMinimum(false);
-    setOutputBelowMinimum(false);
-
-    // Get max cbBTC liquidity for BTC -> cbBTC swap
-    const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-    const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
-
-    // Truncate to 8 decimals for display
-    const maxInputAmount = maxCbBtcLiquidityBtc.toString();
-    const truncatedAmount = (() => {
-      const parts = maxInputAmount.split(".");
-      if (parts.length === 2 && parts[1].length > 8) {
-        return `${parts[0]}.${parts[1].substring(0, 8)}`;
-      }
-      return maxInputAmount;
-    })();
-
-    // Set the max liquidity as the input amount (no full precision needed here)
-    setRawInputAmount(truncatedAmount);
-    setFullPrecisionInputAmount(null);
-    setLastEditedField("input");
-    setHasStartedTyping(true);
-
-    // Update USD value
-    const inputTicker = "BTC";
-    const usdValue = calculateUsdValue(
-      truncatedAmount,
-      inputTicker,
-      ethPrice,
-      btcPrice,
-      erc20Price
-    );
-    setInputUsdValue(usdValue);
-
-    // Clear existing quotes
-    setUniswapQuote(null);
-    setRfqQuote(null);
-
-    // Set loading state
-    setIsLoadingQuote(true);
-
-    // Clear any existing debounce timer
-    if (quoteDebounceTimerRef.current) {
-      clearTimeout(quoteDebounceTimerRef.current);
-    }
-
-    // Fetch quote immediately (no debounce for MAX button)
-    if (parseFloat(truncatedAmount) > 0) {
-      // Increment request ID and capture it
-      quoteRequestIdRef.current += 1;
-      const currentRequestId = quoteRequestIdRef.current;
-
-      // Fetch exact input quote for BTC -> cbBTC
-      fetchBTCtoERC20Quote(truncatedAmount, "ExactInput", currentRequestId);
     }
   };
 
@@ -1625,16 +1551,14 @@ export const SwapInputAndOutput = () => {
     if (lastEditedField === "input") {
       // For ERC20 -> BTC: Check if input exceeds MM liquidity
       if (isSwappingForBTC) {
-        const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
-        if (!maxBtcLiquiditySats || maxBtcLiquiditySats === "0") {
-          setExceedsAvailableBTCLiquidity(false);
-          return;
-        }
-
-        // Check input (ERC20 sent) - convert to USD and compare with MM liquidity in USD
+        //   const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
+        //   if (!maxBtcLiquiditySats || maxBtcLiquiditySats === "0") {
+        //     setExceedsAvailableBTCLiquidity(false);
+        //     return;
+        //   }
+        //   // Check input (ERC20 sent) - convert to USD and compare with MM liquidity in USD
         if (rawInputAmount && parseFloat(rawInputAmount) > 0 && currentInputBalance) {
           const inputFloat = parseFloat(rawInputAmount);
-
           // If user has more than MM liquidity (in terms of what they can swap)
           // and they're trying to swap more than MM liquidity, show the error
           let price: number | null = null;
@@ -1643,22 +1567,19 @@ export const SwapInputAndOutput = () => {
           } else if (selectedInputToken?.address) {
             price = erc20Price;
           }
-
           if (price && btcPrice) {
             const inputUsdValue = inputFloat * price;
             const mmLiquidityUsd = parseFloat(liquidity.maxBTCLiquidityInUsd);
-
-            if (mmLiquidityUsd > 0 && inputUsdValue > mmLiquidityUsd) {
-              setExceedsAvailableBTCLiquidity(true);
+            if (mmLiquidityUsd > 0 && inputUsdValue < mmLiquidityUsd) {
+              setExceedsAvailableBTCLiquidity(false);
               return;
             }
           }
         }
-
-        setExceedsAvailableBTCLiquidity(false);
-      } else {
-        // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
-        setExceedsAvailableBTCLiquidity(false);
+        //   setExceedsAvailableBTCLiquidity(false);
+        // } else {
+        //   // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
+        //   setExceedsAvailableBTCLiquidity(false);
       }
     } else if (lastEditedField === "output") {
       // Check output (BTC or cbBTC received)
@@ -2152,7 +2073,7 @@ export const SwapInputAndOutput = () => {
                     ml="8px"
                     color={inputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
-                    onClick={handleInputLiquidityMaxClick}
+                    onClick={handleOutputMaxClick}
                     _hover={{ textDecoration: "underline" }}
                     letterSpacing="-1.5px"
                     fontWeight="normal"

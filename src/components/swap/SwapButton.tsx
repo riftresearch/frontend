@@ -288,6 +288,7 @@ export const SwapButton = () => {
       // Step 1: Create OTC swap to get deposit address
       // Use full precision amount if available, otherwise use displayed amount
       const amountToTransfer = fullPrecisionInputAmount || rawInputAmount;
+      console.log("amountToTransfer", amountToTransfer);
 
       const startAssetMetadata = {
         ticker: selectedInputToken.ticker,
@@ -371,6 +372,7 @@ export const SwapButton = () => {
     userEvmAccountAddress,
     selectedInputToken,
     payoutAddress,
+    fullPrecisionInputAmount,
     setSwapResponse,
     rawInputAmount,
     evmConnectWalletChainId,
@@ -538,6 +540,7 @@ export const SwapButton = () => {
     permitDataForSwap,
     isNativeETH,
     setPermitDataForSwap,
+    fullPrecisionInputAmount,
   ]);
 
   // Handle BTC->cbBTC swap using OTC
