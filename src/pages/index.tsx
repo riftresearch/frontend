@@ -138,8 +138,10 @@ export default function Home() {
                   The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
                   <Box
                     as="span"
-                    // TODO: go to tech architecture thread
-                    onClick={() => (window.location.href = "https://rift.trade")}
+                    onClick={() =>
+                      (window.location.href =
+                        "https://x.com/riftdex/status/1986909188778565772?s=20")
+                    }
                     style={{
                       textDecoration: "underline",
                       cursor: "pointer !important",
