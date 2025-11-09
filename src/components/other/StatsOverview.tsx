@@ -13,7 +13,7 @@ export const StatsOverview: React.FC = () => {
   const { isMobile, windowSize } = useWindowSize();
 
   // Get WebSocket data
-  const { totalSwaps, uniqueUsers, totalVolumeSats, totalVolumeUsd } = useSwapStream();
+  const { completedSwaps, uniqueUsers, totalVolumeSats, totalVolumeUsd } = useSwapStream();
 
   // Currency toggle state
   const [volumeCurrency, setVolumeCurrency] = React.useState<"usd" | "btc">("usd");
@@ -22,7 +22,7 @@ export const StatsOverview: React.FC = () => {
   const totalVolumeUsdNum = parseFloat(totalVolumeUsd) || 0;
 
   // Check if data has loaded
-  const hasDataLoaded = totalSwaps > 0 || totalVolumeUsdNum > 0;
+  const hasDataLoaded = completedSwaps > 0 || totalVolumeUsdNum > 0;
 
   if (isMobile) {
     if (windowSize.width < 400) {
@@ -101,7 +101,7 @@ export const StatsOverview: React.FC = () => {
               <Box mt="-8px">
                 {hasDataLoaded ? (
                   <NumberFlow
-                    value={totalSwaps}
+                    value={completedSwaps}
                     format={{ notation: "compact" }}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
@@ -293,7 +293,7 @@ export const StatsOverview: React.FC = () => {
           >
             {hasDataLoaded ? (
               <NumberFlow
-                value={totalSwaps}
+                value={completedSwaps}
                 format={{ notation: "compact" }}
                 style={{
                   fontFamily: FONT_FAMILIES.SF_PRO,

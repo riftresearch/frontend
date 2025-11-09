@@ -199,7 +199,7 @@ export const Navbar = ({}) => {
               <a href="https://x.com/riftdex" target="_blank" rel="noopener noreferrer">
                 <Image src="/images/social/x.svg" w="17px" aspectRatio={1} />
               </a>
-              <Flex mt="1px">
+              {/* <Flex mt="1px">
                 <a href="https://discord.gg/tpr6jMdvFq" target="_blank" rel="noopener noreferrer">
                   <Image
                     src="/images/social/discord2.svg"
@@ -208,7 +208,7 @@ export const Navbar = ({}) => {
                     aspectRatio={1}
                   />
                 </a>
-              </Flex>
+              </Flex> */}
             </Flex>
           </>
         )}

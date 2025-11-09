@@ -511,16 +511,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 fontSize="49px"
                 cursor="pointer"
                 onClick={() => {
-                  navigator.clipboard.writeText(totalSwaps.toString());
+                  navigator.clipboard.writeText(completedSwaps.toString());
                   toastSuccess({
                     title: "Copied to clipboard",
-                    description: `${totalSwaps.toLocaleString()} swaps`,
+                    description: `${completedSwaps.toLocaleString()} swaps`,
                   });
                 }}
               >
                 {hasDataLoaded ? (
                   <NumberFlow
-                    value={totalSwaps}
+                    value={completedSwaps}
                     format={{ notation: "compact" }}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
