@@ -355,6 +355,7 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             poolKey,
             isFirstToken: sortedPair.isFirstToken,
             isExactOutput: isExactOutput,
+            currencyIn: WBTC_ADDRESS,
           };
         } catch (error) {
           console.log(
@@ -408,6 +409,7 @@ async function getV4Quote(params: QuoteParams): Promise<QuoteResult | null> {
             poolKey,
             isFirstToken: sortedPair.isFirstToken,
             isExactOutput: isExactOutput,
+            currencyIn: WBTC_ADDRESS,
           };
         } catch (error) {
           console.log(
@@ -767,6 +769,8 @@ async function buildV4Swap(params: V4SwapParams): Promise<ExecuteSwapParams | nu
     const inputCurrency = currencyIn!;
     const outputCurrency = CBBTC_ADDRESS;
 
+    console.log("poolKey", poolKey);
+    console.log("inputCurrency", inputCurrency);
     if (poolKey) {
       // Single-hop swap
       if (isExactOutput) {
