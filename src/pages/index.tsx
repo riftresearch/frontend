@@ -14,6 +14,7 @@ import { useStore } from "@/utils/store";
 import { useRouter } from "next/router";
 import { MaintenanceBanner } from "@/components/other/MaintenanceBanner";
 import { IS_FRONTEND_PAUSED } from "@/utils/constants";
+import { FeedbackChat } from "@/components/other/FeedbackChat";
 
 export default function Home() {
   const { isTablet, isMobile, isWindowValid } = useWindowSize();
@@ -172,6 +173,9 @@ export default function Home() {
           <TEEStatusFooter />
         )}
         {isOtcServerDead && <MaintenanceBanner />}
+
+        {/* Feedback Chat - Desktop Only */}
+        {!isMobile && <FeedbackChat />}
       </Flex>
     </>
   );

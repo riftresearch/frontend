@@ -15,6 +15,7 @@ import { FiRefreshCw } from "react-icons/fi";
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
 import { toastSuccess } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
+import { AdminChats } from "./AdminChats";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -660,6 +661,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </Text>
           )}
           <TopUsers />
+        </Flex>
+
+        {/* FEEDBACK CHATS */}
+        <Flex mt="20px" mb="20px" direction="column">
+          <Text
+            ml="5px"
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="bold"
+            mt="18px"
+            fontSize="35px"
+            style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+            mb="28px"
+          >
+            Feedback Chats
+          </Text>
+          <AdminChats />
         </Flex>
 
         {/* RIFT LOGO */}
