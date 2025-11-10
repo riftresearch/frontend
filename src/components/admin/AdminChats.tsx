@@ -69,7 +69,19 @@ export const AdminChats: React.FC = () => {
 
       const allChats = await listAllChats(adminPassword);
       console.log("[ADMIN CHATS] Loaded all chats:", allChats);
-      setChats(allChats);
+
+      // Filter out chats with no messages
+      const chatsWithMessages = allChats.filter(
+        (chat) => chat.messages && chat.messages.length > 0
+      );
+      console.log(
+        "[ADMIN CHATS] Chats with messages:",
+        chatsWithMessages.length,
+        "of",
+        allChats.length
+      );
+
+      setChats(chatsWithMessages);
     } catch (error) {
       console.error("Error loading admin chats:", error);
       toastError(error, {
