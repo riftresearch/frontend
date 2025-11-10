@@ -242,17 +242,17 @@ export const FeedbackChat: React.FC = () => {
   // Collapsed button
   if (!isOpen) {
     return (
-      <Box position="fixed" bottom="100px" right="30px" zIndex={1000}>
+      <Box position="fixed" bottom="80px" right="30px" zIndex={1000}>
         <Button
           onClick={handleOpen}
           bg={colors.swapBgColor}
           border={`2px solid ${colors.swapBorderColor}`}
-          borderRadius="24px"
+          borderRadius="20px"
           color={colors.offWhite}
           fontFamily={FONT_FAMILIES.NOSTROMO}
-          fontSize="12px"
-          px="20px"
-          py="10px"
+          fontSize="10px"
+          px="17px"
+          py="8.5px"
           h="auto"
           letterSpacing="0.5px"
           _hover={{
@@ -266,10 +266,10 @@ export const FeedbackChat: React.FC = () => {
           transition="all 0.2s"
           display="flex"
           alignItems="center"
-          gap="8px"
+          gap="7px"
           position="relative"
         >
-          <IoChatbubbleEllipsesOutline size={16} />
+          <IoChatbubbleEllipsesOutline size={14} />
           GIVE FEEDBACK
           {/* Notification Badge */}
           {unreadCount > 0 && (
