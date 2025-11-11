@@ -45,7 +45,8 @@ export const MaintenanceBanner = () => {
           fontFamily={FONT_FAMILIES.NOSTROMO}
           letterSpacing="0.5px"
         >
-          Rift is down for maintenance
+          Rift is down for maintenance due to high volume - Your funds are safe and will show up in
+          your history shortly - Please try again later.
         </Text>
       </Flex>
     </Flex>

@@ -15,6 +15,7 @@ import {
   UNIVERSAL_ROUTER_ADDRESS,
   SWAP_ROUTER02_ADDRESS,
   PERMIT2_ADDRESS,
+  IS_FRONTEND_PAUSED,
 } from "@/utils/constants";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { useStore } from "@/utils/store";
@@ -1000,10 +1001,11 @@ export const SwapButton = () => {
       return;
     }
 
-    if (isOtcServerDead) {
+    if (isOtcServerDead || IS_FRONTEND_PAUSED) {
       toastInfo({
         title: "Service Unavailable",
-        description: "Rift is currently down for maintenance. Please try again later.",
+        description:
+          "Rift is currently down for maintenance. Your funds are safe.Please try again later.",
       });
       return;
     }
