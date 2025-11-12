@@ -88,9 +88,16 @@ const Pill: React.FC<{
   isLastStep?: boolean;
   isRefunded?: boolean;
   previousStep?: AdminSwapFlowStep;
-}> = ({ step, isRefundAvailable, isLastStep, isRefunded, previousStep }) => {
+  isMobile?: boolean;
+}> = ({ step, isRefundAvailable, isLastStep, isRefunded, previousStep, isMobile }) => {
   // Use the step label directly (it will be "Refunded" if status is user_refunded_detected)
-  const displayedLabel = step.label;
+  let displayedLabel = step.label;
+
+  // Shorten labels on mobile
+  if (isMobile) {
+    displayedLabel = displayedLabel.replace(" Sent", "");
+  }
+
   const isConfsPill = displayedLabel.includes("Conf");
 
   // Check if this pill is clickable
@@ -189,7 +196,7 @@ const Pill: React.FC<{
       minW={isConfsPill ? "80px" : undefined}
       justifyContent={isConfsPill ? "center" : undefined}
     >
-      <Text fontSize="11px" fontFamily={FONT_FAMILIES.SF_PRO}>
+      <Text fontSize="11px" fontFamily={FONT_FAMILIES.SF_PRO} whiteSpace="nowrap">
         {displayedLabel}
       </Text>
       {(step.status === "waiting_user_deposit_initiated" ||
@@ -240,6 +247,7 @@ const StepWithTime: React.FC<{
   isLastStep?: boolean;
   isRefunded?: boolean;
   previousStep?: AdminSwapFlowStep;
+  isMobile?: boolean;
 }> = ({
   step,
   previousStepTimestamp,
@@ -248,6 +256,7 @@ const StepWithTime: React.FC<{
   isLastStep,
   isRefunded,
   previousStep,
+  isMobile,
 }) => {
   const timeRowHeight = 22; // reserve consistent space above every pill
   const LIVE_TIMER_OFFSET = 13; // Subtract 13 seconds to account for backend processing delay
@@ -299,6 +308,7 @@ const StepWithTime: React.FC<{
         isLastStep={isLastStep}
         isRefunded={isRefunded}
         previousStep={previousStep}
+        isMobile={isMobile}
       />
     </Flex>
   );
@@ -339,6 +349,383 @@ const FinalTime: React.FC<{
     </Flex>
   );
 };
+
+const Card: React.FC<{
+  swap: AdminSwapItem;
+  currentTime: number;
+  onClick?: () => void;
+  isMobile?: boolean;
+}> = React.memo(({ swap, currentTime, onClick, isMobile }) => {
+  const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
+  const totalSeconds = React.useMemo(
+    () => swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
+    [swap.flow]
+  );
+  const isCompleted = React.useMemo(() => {
+    return filteredFlow.every((s) => s.state === "completed");
+  }, [filteredFlow]);
+
+  const impliedUsdPerBtc =
+    swap.swapInitialAmountBtc > 0 ? swap.swapInitialAmountUsd / swap.swapInitialAmountBtc : 0;
+  const riftFeeBtc = swap.riftFeeSats / 100000000;
+  const riftFeeUsd = riftFeeBtc * impliedUsdPerBtc;
+
+  const isRefundAvailable =
+    (swap.rawData as any)?.isRefundAvailable || (swap.rawData as any)?.is_refund_available;
+
+  const currentStep =
+    swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
+  const isRefunded =
+    currentStep?.status === "refunding_user" ||
+    currentStep?.status === "refunding_mm" ||
+    (currentStep?.status as string) === "user_refunded_detected";
+
+  const getPreviousStepTimestamp = (index: number): number | undefined => {
+    const timestamps = swap.stepTimestamps;
+    if (!timestamps) return undefined;
+
+    switch (index) {
+      case 0:
+        return undefined;
+      case 1:
+        return timestamps.created;
+      case 2:
+        return timestamps.userDepositDetected;
+      case 3:
+        return timestamps.userConfirmed;
+      case 4:
+        return timestamps.mmDepositDetected;
+      default:
+        return undefined;
+    }
+  };
+
+  return (
+    <Flex
+      direction="column"
+      w="100%"
+      p={isMobile ? "16px" : "24px"}
+      bg="rgba(255, 255, 255, 0.01)"
+      borderBottom={`1px solid ${colorsAnalytics.borderGray}`}
+      cursor="pointer"
+      _hover={{ bg: "rgba(255, 255, 255, 0.03)" }}
+      transition="background 150ms ease"
+      onClick={onClick}
+      gap={isMobile ? "12px" : "16px"}
+    >
+      {/* Top Row: Time, ID, User (no # on mobile) */}
+      <Flex justify="space-between" align="flex-start" wrap="wrap" gap={isMobile ? "12px" : "16px"}>
+        <Flex direction="column" gap="4px">
+          <Text
+            fontSize={isMobile ? "10px" : "11px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            TIME
+          </Text>
+          <Text
+            fontSize={isMobile ? "11px" : "13px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            {timeAgoFrom(currentTime, swap.swapCreationTimestamp)}
+          </Text>
+        </Flex>
+
+        <Flex direction="column" gap="4px">
+          <Text
+            fontSize={isMobile ? "10px" : "11px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            SWAP ID
+          </Text>
+          <Flex
+            as="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(swap.id);
+              toastSuccess({
+                title: "Copied to clipboard",
+                description: `Swap ID: ${swap.id.slice(0, 7)}...`,
+              });
+            }}
+            bg="#1D1D1D"
+            px={isMobile ? "7px" : "10px"}
+            py={isMobile ? "5px" : "8px"}
+            borderRadius="10px"
+            _hover={{ filter: "brightness(1.1)" }}
+            cursor="pointer"
+            justifyContent="center"
+            alignItems="center"
+          >
+            <Text
+              fontSize={isMobile ? "9px" : "13px"}
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              {swap.id.slice(0, 2)}
+              {swap.id.slice(2, 7)}...
+            </Text>
+          </Flex>
+        </Flex>
+
+        <Flex direction="column" gap="4px">
+          <Text
+            fontSize={isMobile ? "10px" : "11px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            USER
+          </Text>
+          <Flex
+            as="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(explorerUrl(swap.chain, swap.evmAccountAddress), "_blank");
+            }}
+            bg="#1D1D1D"
+            px={isMobile ? "7px" : "10px"}
+            py={isMobile ? "5px" : "8px"}
+            borderRadius="10px"
+            _hover={{ filter: "brightness(1.1)" }}
+            cursor="pointer"
+            justifyContent="center"
+            alignItems="center"
+          >
+            <Text
+              fontSize={isMobile ? "9px" : "13px"}
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              0x{swap.evmAccountAddress.slice(2, 6)}...
+            </Text>
+          </Flex>
+        </Flex>
+
+        {!isMobile && (
+          <Flex direction="column" gap="4px">
+            <Text
+              fontSize="11px"
+              color={colorsAnalytics.textGray}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              #
+            </Text>
+            <Text
+              fontSize="13px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+            >
+              {swap.rawData?.swap_number || swap.rawData?.swapNumber || "—"}
+            </Text>
+          </Flex>
+        )}
+      </Flex>
+
+      {/* Swap and Rift Fee Row - side by side on mobile */}
+      <Flex gap={isMobile ? "0" : "0"} justify="space-between" wrap={isMobile ? "nowrap" : "wrap"}>
+        {/* Swap Details */}
+        <Flex direction="column" gap={isMobile ? "6px" : "8px"} flex={isMobile ? "1" : "auto"}>
+          <Text
+            fontSize={isMobile ? "10px" : "11px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            SWAP
+          </Text>
+          <Flex align="center" gap={isMobile ? "4px" : "8px"} flexWrap="wrap">
+            {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+              <>
+                <Text
+                  fontSize={isMobile ? "11px" : "13px"}
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                >
+                  {parseFloat(swap.startAssetMetadata.amount)
+                    .toFixed(Math.min(swap.startAssetMetadata.decimals, 4))
+                    .replace(/\.?0+$/, "")}
+                </Text>
+                <AssetIcon
+                  asset={swap.startAssetMetadata.ticker}
+                  iconUrl={swap.startAssetMetadata.icon}
+                  size={isMobile ? 14 : 18}
+                />
+                <Text
+                  fontSize={isMobile ? "11px" : "13px"}
+                  color={colorsAnalytics.textGray}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                >
+                  →
+                </Text>
+                <Text
+                  fontSize={isMobile ? "11px" : "13px"}
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                >
+                  {isMobile
+                    ? swap.swapInitialAmountBtc.toFixed(6)
+                    : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                </Text>
+                <AssetIcon asset="BTC" size={isMobile ? 14 : 18} />
+              </>
+            ) : (
+              <>
+                <Text
+                  fontSize={isMobile ? "11px" : "13px"}
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                >
+                  {isMobile
+                    ? swap.swapInitialAmountBtc.toFixed(6)
+                    : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                </Text>
+                <AssetIcon asset="BTC" size={isMobile ? 14 : 18} />
+                <Text
+                  fontSize={isMobile ? "11px" : "13px"}
+                  color={colorsAnalytics.textGray}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                >
+                  →
+                </Text>
+                {swap.startAssetMetadata ? (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {parseFloat(swap.startAssetMetadata.amount)
+                        .toFixed(Math.min(swap.startAssetMetadata.decimals, 4))
+                        .replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon
+                      asset={swap.startAssetMetadata.ticker}
+                      iconUrl={swap.startAssetMetadata.icon}
+                      size={isMobile ? 14 : 18}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      cbBTC
+                    </Text>
+                    <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
+                  </>
+                )}
+              </>
+            )}
+          </Flex>
+          <Text
+            fontSize={isMobile ? "11px" : "13px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            {formatUSD(swap.swapInitialAmountUsd)}
+          </Text>
+        </Flex>
+
+        {/* Rift Fee */}
+        <Flex
+          direction="column"
+          gap={isMobile ? "6px" : "4px"}
+          flex={isMobile ? "0 0 auto" : "auto"}
+        >
+          <Text
+            fontSize={isMobile ? "10px" : "11px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            RIFT FEE
+          </Text>
+          <Text
+            fontSize={isMobile ? "11px" : "13px"}
+            color={colorsAnalytics.offWhite}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            {swap.riftFeeSats.toLocaleString()} sats
+          </Text>
+          <Text
+            fontSize={isMobile ? "11px" : "13px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            {formatUSD(riftFeeUsd)}
+          </Text>
+        </Flex>
+      </Flex>
+
+      {/* Flow Pills - single line on mobile */}
+      <Flex direction="column" gap={isMobile ? "0px" : "8px"}>
+        <Text
+          fontSize={isMobile ? "10px" : "11px"}
+          color={colorsAnalytics.textGray}
+          fontFamily={FONT_FAMILIES.SF_PRO}
+        >
+          FLOW
+        </Text>
+        <Flex
+          gap={isMobile ? "0" : "6px"}
+          wrap={isMobile ? "nowrap" : "wrap"}
+          align="center"
+          overflowX={isMobile ? "auto" : "visible"}
+          css={
+            isMobile
+              ? {
+                  "&::-webkit-scrollbar": {
+                    height: "4px",
+                  },
+                  "&::-webkit-scrollbar-track": {
+                    background: "transparent",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "#333",
+                    borderRadius: "4px",
+                  },
+                }
+              : undefined
+          }
+        >
+          {filteredFlow.map((step, idx) => (
+            <Box
+              key={`${step.status}-${idx}`}
+              transform={isMobile ? "scale(0.65)" : "scale(1)"}
+              transformOrigin="left center"
+              mr={isMobile ? "-20px" : "0"}
+            >
+              <StepWithTime
+                step={step}
+                previousStepTimestamp={getPreviousStepTimestamp(idx)}
+                currentTime={currentTime}
+                isRefundAvailable={isRefundAvailable}
+                isLastStep={idx === filteredFlow.length - 1}
+                isRefunded={isRefunded}
+                previousStep={idx > 0 ? filteredFlow[idx - 1] : undefined}
+                isMobile={isMobile}
+              />
+            </Box>
+          ))}
+          <Box
+            transform={isMobile ? "scale(0.65)" : "scale(1)"}
+            transformOrigin="left center"
+            mr={isMobile ? "-20px" : "0"}
+          >
+            <FinalTime
+              totalSeconds={totalSeconds}
+              completed={isCompleted}
+              swapCreatedTimestamp={swap.swapCreationTimestamp}
+              currentTime={currentTime}
+            />
+          </Box>
+        </Flex>
+      </Flex>
+    </Flex>
+  );
+});
 
 const Row: React.FC<{
   swap: AdminSwapItem;
@@ -720,6 +1107,7 @@ const Row: React.FC<{
               isLastStep={idx === filteredFlow.length - 1}
               isRefunded={isRefunded}
               previousStep={idx > 0 ? filteredFlow[idx - 1] : undefined}
+              isMobile={isMobile}
             />
           ))}
           <FinalTime
@@ -827,6 +1215,7 @@ export const SwapHistory: React.FC<{
   }) => void;
 }> = ({ heightBlocks = 13, onStatsUpdate }) => {
   const { isMobile } = useWindowSize();
+  const viewMode = isMobile ? "cards" : "table";
   const storeSwaps = useAnalyticsStore((s) => s.adminSwaps);
   const [allSwaps, setAllSwaps] = React.useState<AdminSwapItem[]>([]);
   const [page, setPage] = React.useState(0);
@@ -1328,68 +1717,208 @@ export const SwapHistory: React.FC<{
     <Box position="relative" w="100%">
       <GridFlex width="100%" heightBlocks={heightBlocks} contentPadding={0}>
         <Flex direction="column" w="100%" h="100%">
-          {/* Header Row with Filter Buttons */}
-          <Flex
-            px="16px"
-            pt="16px"
-            pb="8px"
-            fontSize="14px"
-            align="center"
-            fontWeight="bold"
-            color={colorsAnalytics.textGray}
-            flexShrink={0}
-            justify="space-between"
-            overflowX={isMobile ? "auto" : "visible"}
-            css={
-              isMobile
-                ? {
-                    "&::-webkit-scrollbar": {
-                      display: "none",
-                    },
-                    scrollbarWidth: "none",
-                  }
-                : undefined
-            }
-          >
-            <Flex align="center" flex="1" minW={isMobile ? "900px" : "auto"}>
-              <Box w="50px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>#</Text>
-              </Box>
-              <Box w="104px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>ID</Text>
-              </Box>
-              <Box w="109px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Time</Text>
-              </Box>
-              <Box w="99px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
-              </Box>
-              <Box w="365px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap</Text>
-              </Box>
-              <Box w="95px">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
-              </Box>
-              <Flex flex="1">
-                <Text fontFamily={FONT_FAMILIES.SF_PRO}>Flow</Text>
+          {/* Header Row with Filter Buttons - Only show in table mode */}
+          {viewMode === "table" && (
+            <Flex
+              px="16px"
+              pt="16px"
+              pb="8px"
+              fontSize="14px"
+              align="center"
+              fontWeight="bold"
+              color={colorsAnalytics.textGray}
+              flexShrink={0}
+              justify="space-between"
+              overflowX={isMobile ? "auto" : "visible"}
+              css={
+                isMobile
+                  ? {
+                      "&::-webkit-scrollbar": {
+                        display: "none",
+                      },
+                      scrollbarWidth: "none",
+                    }
+                  : undefined
+              }
+            >
+              <Flex align="center" flex="1" minW={isMobile ? "900px" : "auto"}>
+                <Box w="50px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>#</Text>
+                </Box>
+                <Box w="104px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>ID</Text>
+                </Box>
+                <Box w="109px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>Time</Text>
+                </Box>
+                <Box w="99px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
+                </Box>
+                <Box w="365px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap</Text>
+                </Box>
+                <Box w="95px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>Rift Fee</Text>
+                </Box>
+                <Flex flex="1">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>Flow</Text>
+                </Flex>
               </Flex>
-            </Flex>
 
-            {/* Filter Buttons */}
-            <Flex gap="8px" ml="16px">
+              {/* Filter Buttons */}
+              <Flex gap="8px" ml="16px">
+                <Button
+                  size="sm"
+                  onClick={() => setFilter("failed")}
+                  bg={filter === "failed" ? colorsAnalytics.greenBackground : "transparent"}
+                  borderWidth="2px"
+                  borderRadius="16px"
+                  borderColor={
+                    filter === "failed" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+                  }
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontSize="12px"
+                  px="12px"
+                  _hover={
+                    filter === "failed"
+                      ? {}
+                      : {
+                          opacity: 0.8,
+                        }
+                  }
+                >
+                  Failed
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setFilter("created")}
+                  bg={filter === "created" ? colorsAnalytics.greenBackground : "transparent"}
+                  borderWidth="2px"
+                  borderRadius="16px"
+                  borderColor={
+                    filter === "created" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+                  }
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontSize="12px"
+                  px="12px"
+                  _hover={
+                    filter === "created"
+                      ? {}
+                      : {
+                          opacity: 0.8,
+                        }
+                  }
+                >
+                  Awaiting Deposit
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setFilter("in-progress")}
+                  bg={filter === "in-progress" ? colorsAnalytics.greenBackground : "transparent"}
+                  borderWidth="2px"
+                  borderRadius="16px"
+                  borderColor={
+                    filter === "in-progress"
+                      ? colorsAnalytics.greenOutline
+                      : colorsAnalytics.borderGray
+                  }
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontSize="12px"
+                  px="12px"
+                  _hover={
+                    filter === "in-progress"
+                      ? {}
+                      : {
+                          opacity: 0.8,
+                        }
+                  }
+                >
+                  In-Progress
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setFilter("completed")}
+                  bg={filter === "completed" ? colorsAnalytics.greenBackground : "transparent"}
+                  borderWidth="2px"
+                  borderRadius={isMobile ? "13px" : "16px"}
+                  borderColor={
+                    filter === "completed"
+                      ? colorsAnalytics.greenOutline
+                      : colorsAnalytics.borderGray
+                  }
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontSize={isMobile ? "10px" : "12px"}
+                  px={isMobile ? "10px" : "12px"}
+                  _hover={
+                    filter === "completed"
+                      ? {}
+                      : {
+                          opacity: 0.8,
+                        }
+                  }
+                >
+                  Completed
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setFilter("all")}
+                  bg={filter === "all" ? colorsAnalytics.greenBackground : "transparent"}
+                  borderWidth="2px"
+                  borderRadius="16px"
+                  borderColor={
+                    filter === "all" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
+                  }
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontSize="12px"
+                  px="12px"
+                  _hover={
+                    filter === "all"
+                      ? {}
+                      : {
+                          opacity: 0.8,
+                        }
+                  }
+                >
+                  All
+                </Button>
+              </Flex>
+
+              {/* Pruning Indicator
+            {prunedSwapCount > 0 && isAtTop && (
+              <Text
+                fontSize="12px"
+                color={colorsAnalytics.textGray}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                ml="16px"
+                fontStyle="italic"
+              >
+                {prunedSwapCount} older swaps pruned • Scroll down to load more
+              </Text>
+            )} */}
+            </Flex>
+          )}
+
+          {/* Filter Buttons for Card Mode */}
+          {viewMode === "cards" && (
+            <Flex gap={isMobile ? "6px" : "8px"} px="16px" pt="16px" pb="8px" justify="flex-end">
               <Button
                 size="sm"
                 onClick={() => setFilter("failed")}
                 bg={filter === "failed" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
-                borderRadius="16px"
+                borderRadius={isMobile ? "13px" : "16px"}
                 borderColor={
                   filter === "failed" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
+                fontSize={isMobile ? "10px" : "12px"}
+                px={isMobile ? "10px" : "12px"}
                 _hover={
                   filter === "failed"
                     ? {}
@@ -1405,14 +1934,14 @@ export const SwapHistory: React.FC<{
                 onClick={() => setFilter("created")}
                 bg={filter === "created" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
-                borderRadius="16px"
+                borderRadius={isMobile ? "13px" : "16px"}
                 borderColor={
                   filter === "created" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
+                fontSize={isMobile ? "10px" : "12px"}
+                px={isMobile ? "10px" : "12px"}
                 _hover={
                   filter === "created"
                     ? {}
@@ -1421,14 +1950,14 @@ export const SwapHistory: React.FC<{
                       }
                 }
               >
-                Awaiting Deposit
+                Created
               </Button>
               <Button
                 size="sm"
                 onClick={() => setFilter("in-progress")}
                 bg={filter === "in-progress" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
-                borderRadius="16px"
+                borderRadius={isMobile ? "13px" : "16px"}
                 borderColor={
                   filter === "in-progress"
                     ? colorsAnalytics.greenOutline
@@ -1436,8 +1965,8 @@ export const SwapHistory: React.FC<{
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
+                fontSize={isMobile ? "10px" : "12px"}
+                px={isMobile ? "10px" : "12px"}
                 _hover={
                   filter === "in-progress"
                     ? {}
@@ -1476,14 +2005,14 @@ export const SwapHistory: React.FC<{
                 onClick={() => setFilter("all")}
                 bg={filter === "all" ? colorsAnalytics.greenBackground : "transparent"}
                 borderWidth="2px"
-                borderRadius="16px"
+                borderRadius={isMobile ? "13px" : "16px"}
                 borderColor={
                   filter === "all" ? colorsAnalytics.greenOutline : colorsAnalytics.borderGray
                 }
                 color={colorsAnalytics.offWhite}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="12px"
-                px="12px"
+                fontSize={isMobile ? "10px" : "12px"}
+                px={isMobile ? "10px" : "12px"}
                 _hover={
                   filter === "all"
                     ? {}
@@ -1495,26 +2024,13 @@ export const SwapHistory: React.FC<{
                 All
               </Button>
             </Flex>
+          )}
 
-            {/* Pruning Indicator
-            {prunedSwapCount > 0 && isAtTop && (
-              <Text
-                fontSize="12px"
-                color={colorsAnalytics.textGray}
-                fontFamily={FONT_FAMILIES.SF_PRO}
-                ml="16px"
-                fontStyle="italic"
-              >
-                {prunedSwapCount} older swaps pruned • Scroll down to load more
-              </Text>
-            )} */}
-          </Flex>
-
-          {/* Rows */}
+          {/* Rows/Cards */}
           <Box
             flex="1"
             overflowY="auto"
-            overflowX={isMobile ? "auto" : "hidden"}
+            overflowX={isMobile && viewMode === "table" ? "auto" : "hidden"}
             onScroll={handleScroll}
             mr="8px"
             css={{
@@ -1535,7 +2051,11 @@ export const SwapHistory: React.FC<{
             }}
             minHeight="0"
           >
-            <Flex direction="column" w="100%" minW={isMobile ? "900px" : "100%"}>
+            <Flex
+              direction="column"
+              w="100%"
+              minW={isMobile && viewMode === "table" ? "900px" : "100%"}
+            >
               {isInitialLoad && swaps.length === 0 ? (
                 <Flex justify="center" align="center" py="40px">
                   <Spinner size="md" color={colorsAnalytics.offWhite} />
@@ -1560,15 +2080,27 @@ export const SwapHistory: React.FC<{
                               : undefined
                         }
                       >
-                        <Row
-                          swap={s}
-                          currentTime={currentTime}
-                          onClick={() => {
-                            setSelectedSwap(s);
-                            setIsModalOpen(true);
-                          }}
-                          isMobile={isMobile}
-                        />
+                        {viewMode === "cards" ? (
+                          <Card
+                            swap={s}
+                            currentTime={currentTime}
+                            onClick={() => {
+                              setSelectedSwap(s);
+                              setIsModalOpen(true);
+                            }}
+                            isMobile={isMobile}
+                          />
+                        ) : (
+                          <Row
+                            swap={s}
+                            currentTime={currentTime}
+                            onClick={() => {
+                              setSelectedSwap(s);
+                              setIsModalOpen(true);
+                            }}
+                            isMobile={isMobile}
+                          />
+                        )}
                       </Flex>
                     );
                   })}

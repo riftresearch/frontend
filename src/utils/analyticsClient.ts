@@ -334,9 +334,9 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   const userTxChain: "ETH" | "BTC" = direction === "BTC_TO_EVM" ? "BTC" : "ETH";
   const mmTxChain: "ETH" | "BTC" = direction === "BTC_TO_EVM" ? "ETH" : "BTC";
 
-  // [12] Format confirmation labels (cbBTC caps at 4+, BTC caps at 2+)
+  // [12] Format confirmation labels based on chain (EVM needs 4+, BTC needs 2+)
   const userConfsLabel =
-    userAsset === "cbBTC"
+    userTxChain === "ETH"
       ? userConfs >= 4
         ? "4+ Confs"
         : `${userConfs} Confs`
@@ -344,7 +344,7 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
         ? "2+ Confs"
         : `${userConfs} Confs`;
   const mmConfsLabel =
-    mmAsset === "cbBTC"
+    mmTxChain === "ETH"
       ? mmConfs >= 4
         ? "4+ Confs"
         : `${mmConfs} Confs`

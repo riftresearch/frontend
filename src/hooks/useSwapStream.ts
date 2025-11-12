@@ -130,8 +130,8 @@ export function useSwapStream(): SwapWebSocketResult {
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            console.log("📨 RAW WebSocket message:", JSON.stringify(message, null, 2));
-            console.log("📊 total_swaps field:", message.total_swaps, typeof message.total_swaps);
+            // console.log("📨 RAW WebSocket message:", JSON.stringify(message, null, 2));
+            // console.log("📊 total_swaps field:", message.total_swaps, typeof message.total_swaps);
 
             switch (message.type) {
               case "connected":
@@ -217,68 +217,36 @@ export function useSwapStream(): SwapWebSocketResult {
                   console.warn("⚠️ No total_swaps in swap_created message");
                 }
                 if (typeof message.completed_swaps === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting completed swaps:",
-                    message.completed_swaps
-                  );
                   setCompletedSwaps(message.completed_swaps);
                 }
                 if (typeof message.created_swaps === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting created swaps:",
-                    message.created_swaps
-                  );
                   setCreatedSwaps(message.created_swaps);
                 }
                 if (typeof message.in_progress_swaps === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting in-progress swaps:",
-                    message.in_progress_swaps
-                  );
                   setInProgressSwaps(message.in_progress_swaps);
                 }
                 if (typeof message.unique_users === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting unique users:",
-                    message.unique_users
-                  );
                   setUniqueUsers(message.unique_users);
                 }
                 if (message.total_volume_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting total volume:",
-                    message.total_volume_sats
-                  );
                   setTotalVolumeSats(message.total_volume_sats);
                 }
                 if (message.total_volume_usd) {
                   setTotalVolumeUsd(message.total_volume_usd);
                 }
                 if (message.total_rift_fees_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting total rift fees:",
-                    message.total_rift_fees_sats
-                  );
                   setTotalRiftFeesSats(message.total_rift_fees_sats);
                 }
                 if (message.total_rift_fees_usd) {
                   setTotalRiftFeesUsd(message.total_rift_fees_usd);
                 }
                 if (message.total_network_fees_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting total network fees:",
-                    message.total_network_fees_sats
-                  );
                   setTotalNetworkFeesSats(message.total_network_fees_sats);
                 }
                 if (message.total_network_fees_usd) {
                   setTotalNetworkFeesUsd(message.total_network_fees_usd);
                 }
                 if (message.total_liquidity_fees_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_CREATED] Setting total liquidity fees:",
-                    message.total_liquidity_fees_sats
-                  );
                   setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
                 }
                 if (message.total_liquidity_fees_usd) {
@@ -294,72 +262,39 @@ export function useSwapStream(): SwapWebSocketResult {
 
                 // Update ALL aggregate statistics - not just some!
                 if (typeof message.total_swaps === "number") {
-                  console.log("[WEBSOCKET_SWAP_UPDATED] Setting total swaps:", message.total_swaps);
                   setTotalSwaps(message.total_swaps);
                 }
                 if (typeof message.completed_swaps === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting completed swaps:",
-                    message.completed_swaps
-                  );
                   setCompletedSwaps(message.completed_swaps);
                 }
                 if (typeof message.created_swaps === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting created swaps:",
-                    message.created_swaps
-                  );
                   setCreatedSwaps(message.created_swaps);
                 }
                 if (typeof message.in_progress_swaps === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting in-progress swaps:",
-                    message.in_progress_swaps
-                  );
                   setInProgressSwaps(message.in_progress_swaps);
                 }
                 if (typeof message.unique_users === "number") {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting unique users:",
-                    message.unique_users
-                  );
                   setUniqueUsers(message.unique_users);
                 }
                 if (message.total_volume_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting total volume:",
-                    message.total_volume_sats
-                  );
                   setTotalVolumeSats(message.total_volume_sats);
                 }
                 if (message.total_volume_usd) {
                   setTotalVolumeUsd(message.total_volume_usd);
                 }
                 if (message.total_rift_fees_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting total rift fees:",
-                    message.total_rift_fees_sats
-                  );
                   setTotalRiftFeesSats(message.total_rift_fees_sats);
                 }
                 if (message.total_rift_fees_usd) {
                   setTotalRiftFeesUsd(message.total_rift_fees_usd);
                 }
                 if (message.total_network_fees_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting total network fees:",
-                    message.total_network_fees_sats
-                  );
                   setTotalNetworkFeesSats(message.total_network_fees_sats);
                 }
                 if (message.total_network_fees_usd) {
                   setTotalNetworkFeesUsd(message.total_network_fees_usd);
                 }
                 if (message.total_liquidity_fees_sats) {
-                  console.log(
-                    "[WEBSOCKET_SWAP_UPDATED] Setting total liquidity fees:",
-                    message.total_liquidity_fees_sats
-                  );
                   setTotalLiquidityFeesSats(message.total_liquidity_fees_sats);
                 }
                 if (message.total_liquidity_fees_usd) {
