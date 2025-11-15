@@ -859,178 +859,178 @@ export function UnifiedTransactionWidget({
     );
   }
 
-  // EXPIRED VIEW (Bitcoin deposits only)
-  if (isExpired && swapType === "bitcoin-deposit" && bitcoinAddress) {
-    return (
-      <Flex direction="column" alignItems="center" gap="20px" w="100%">
-        {isMobile && (
-          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
-            <SwapDetailsPill
-              width="100%"
-              inputAmount={inputAmount}
-              inputAsset={inputAsset}
-              inputAssetIconUrl={inputAssetIconUrl}
-              outputAmount={outputAmount}
-              outputAsset={outputAsset}
-              isMobile={isMobile}
-            />
-          </Box>
-        )}
+  // // EXPIRED VIEW (Bitcoin deposits only)
+  // if (isExpired && swapType === "bitcoin-deposit" && bitcoinAddress) {
+  //   return (
+  //     <Flex direction="column" alignItems="center" gap="20px" w="100%">
+  //       {isMobile && (
+  //         <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+  //           <SwapDetailsPill
+  //             width="100%"
+  //             inputAmount={inputAmount}
+  //             inputAsset={inputAsset}
+  //             inputAssetIconUrl={inputAssetIconUrl}
+  //             outputAmount={outputAmount}
+  //             outputAsset={outputAsset}
+  //             isMobile={isMobile}
+  //           />
+  //         </Box>
+  //       )}
 
-        <Box
-          w={isMobile ? "100%" : "805px"}
-          h={isMobile ? "600px" : "510px"}
-          borderRadius="40px"
-          mt="70px"
-          boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
-          backdropFilter="blur(9px)"
-          display="flex"
-          flexDirection="column"
-          alignItems="center"
-          justifyContent="center"
-          gap="24px"
-          position="relative"
-          _before={{
-            content: '""',
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: "40px",
-            padding: "3px",
-            background:
-              "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
-            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            maskComposite: "xor",
-            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            WebkitMaskComposite: "xor",
-          }}
-        >
-          {!isMobile && (
-            <Box position="absolute" top="15px" zIndex={2}>
-              <SwapDetailsPill
-                inputAmount={inputAmount}
-                inputAsset={inputAsset}
-                inputAssetIconUrl={inputAssetIconUrl}
-                outputAmount={outputAmount}
-                outputAsset={outputAsset}
-                isMobile={isMobile}
-              />
-            </Box>
-          )}
+  //       <Box
+  //         w={isMobile ? "100%" : "805px"}
+  //         h={isMobile ? "600px" : "510px"}
+  //         borderRadius="40px"
+  //         mt="70px"
+  //         boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+  //         backdropFilter="blur(9px)"
+  //         display="flex"
+  //         flexDirection="column"
+  //         alignItems="center"
+  //         justifyContent="center"
+  //         gap="24px"
+  //         position="relative"
+  //         _before={{
+  //           content: '""',
+  //           position: "absolute",
+  //           top: 0,
+  //           left: 0,
+  //           right: 0,
+  //           bottom: 0,
+  //           borderRadius: "40px",
+  //           padding: "3px",
+  //           background:
+  //             "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+  //           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+  //           maskComposite: "xor",
+  //           WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+  //           WebkitMaskComposite: "xor",
+  //         }}
+  //       >
+  //         {!isMobile && (
+  //           <Box position="absolute" top="15px" zIndex={2}>
+  //             <SwapDetailsPill
+  //               inputAmount={inputAmount}
+  //               inputAsset={inputAsset}
+  //               inputAssetIconUrl={inputAssetIconUrl}
+  //               outputAmount={outputAmount}
+  //               outputAsset={outputAsset}
+  //               isMobile={isMobile}
+  //             />
+  //           </Box>
+  //         )}
 
-          <Flex direction="column" alignItems="center" gap="16px" zIndex={1}>
-            <Text
-              fontSize="24px"
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              color={colors.offWhite}
-              letterSpacing="1px"
-            >
-              SWAP EXPIRED
-            </Text>
-            <Text
-              fontSize="16px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.offWhite}
-              textAlign="center"
-              px="40px"
-              mb={isMobile ? "0px" : "15px"}
-              lineHeight="1.6"
-            >
-              Your time to initiate a swap has expired. You can start a new swap with the button
-              below.
-            </Text>
+  //         <Flex direction="column" alignItems="center" gap="16px" zIndex={1}>
+  //           <Text
+  //             fontSize="24px"
+  //             fontFamily={FONT_FAMILIES.NOSTROMO}
+  //             color={colors.offWhite}
+  //             letterSpacing="1px"
+  //           >
+  //             SWAP EXPIRED
+  //           </Text>
+  //           <Text
+  //             fontSize="16px"
+  //             fontFamily={FONT_FAMILIES.AUX_MONO}
+  //             color={colors.offWhite}
+  //             textAlign="center"
+  //             px="40px"
+  //             mb={isMobile ? "0px" : "15px"}
+  //             lineHeight="1.6"
+  //           >
+  //             Your time to initiate a swap has expired. You can start a new swap with the button
+  //             below.
+  //           </Text>
 
-            {currentSwapId && (
-              <Flex
-                alignItems="center"
-                gap="8px"
-                bg="rgba(251, 191, 36, 0.15)"
-                borderRadius="12px"
-                padding="10px 16px"
-                border="1px solid rgba(251, 191, 36, 0.4)"
-                cursor="pointer"
-                onClick={() => copyToClipboard(currentSwapId, "Swap ID")}
-                _hover={{ bg: "rgba(251, 191, 36, 0.2)" }}
-                transition="all 0.2s"
-              >
-                <Text
-                  color="rgba(251, 191, 36, 0.9)"
-                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                  fontSize="13px"
-                  fontWeight="normal"
-                >
-                  SWAP ID - {currentSwapId.slice(0, 8)}...{currentSwapId.slice(-8)}
-                </Text>
-                <LuCopy color="rgba(251, 191, 36, 0.9)" size={14} />
-              </Flex>
-            )}
-          </Flex>
+  //           {currentSwapId && (
+  //             <Flex
+  //               alignItems="center"
+  //               gap="8px"
+  //               bg="rgba(251, 191, 36, 0.15)"
+  //               borderRadius="12px"
+  //               padding="10px 16px"
+  //               border="1px solid rgba(251, 191, 36, 0.4)"
+  //               cursor="pointer"
+  //               onClick={() => copyToClipboard(currentSwapId, "Swap ID")}
+  //               _hover={{ bg: "rgba(251, 191, 36, 0.2)" }}
+  //               transition="all 0.2s"
+  //             >
+  //               <Text
+  //                 color="rgba(251, 191, 36, 0.9)"
+  //                 fontFamily={FONT_FAMILIES.AUX_MONO}
+  //                 fontSize="13px"
+  //                 fontWeight="normal"
+  //               >
+  //                 SWAP ID - {currentSwapId.slice(0, 8)}...{currentSwapId.slice(-8)}
+  //               </Text>
+  //               <LuCopy color="rgba(251, 191, 36, 0.9)" size={14} />
+  //             </Flex>
+  //           )}
+  //         </Flex>
 
-          <Flex gap="16px" justifyContent="center" flexWrap="wrap">
-            {bitcoinDepositTx && (
-              <Box
-                as="button"
-                onClick={() =>
-                  window.open(`https://mempool.space/tx/${bitcoinDepositTx}`, "_blank")
-                }
-                border="2px solid rgba(255, 255, 255, 0.3)"
-                borderRadius="16px"
-                width={isMobile ? "160px" : "180px"}
-                background="rgba(255, 255, 255, 0.1)"
-                padding="12px 16px"
-                cursor="pointer"
-                transition="all 0.2s"
-                zIndex={1}
-                _hover={{
-                  transform: "translateY(-2px)",
-                  bg: "rgba(255, 255, 255, 0.15)",
-                }}
-              >
-                <Text
-                  color="white"
-                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                  fontSize="13px"
-                  fontWeight="normal"
-                  letterSpacing="0.5px"
-                >
-                  VIEW DEPOSIT TXN
-                </Text>
-              </Box>
-            )}
+  //         <Flex gap="16px" justifyContent="center" flexWrap="wrap">
+  //           {bitcoinDepositTx && (
+  //             <Box
+  //               as="button"
+  //               onClick={() =>
+  //                 window.open(`https://mempool.space/tx/${bitcoinDepositTx}`, "_blank")
+  //               }
+  //               border="2px solid rgba(255, 255, 255, 0.3)"
+  //               borderRadius="16px"
+  //               width={isMobile ? "160px" : "180px"}
+  //               background="rgba(255, 255, 255, 0.1)"
+  //               padding="12px 16px"
+  //               cursor="pointer"
+  //               transition="all 0.2s"
+  //               zIndex={1}
+  //               _hover={{
+  //                 transform: "translateY(-2px)",
+  //                 bg: "rgba(255, 255, 255, 0.15)",
+  //               }}
+  //             >
+  //               <Text
+  //                 color="white"
+  //                 fontFamily={FONT_FAMILIES.NOSTROMO}
+  //                 fontSize="13px"
+  //                 fontWeight="normal"
+  //                 letterSpacing="0.5px"
+  //               >
+  //                 VIEW DEPOSIT TXN
+  //               </Text>
+  //             </Box>
+  //           )}
 
-            <Box
-              as="button"
-              onClick={handleNewSwap}
-              borderRadius="16px"
-              width={isMobile ? "140px" : "160px"}
-              border="2px solid #6651B3"
-              background="rgba(86, 50, 168, 0.30)"
-              padding="12px 16px"
-              cursor="pointer"
-              transition="all 0.2s"
-              zIndex={1}
-              _hover={{
-                transform: "translateY(-2px)",
-                boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
-              }}
-            >
-              <Text
-                color="white"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                fontSize="14px"
-                fontWeight="normal"
-                letterSpacing="0.5px"
-              >
-                NEW SWAP
-              </Text>
-            </Box>
-          </Flex>
-        </Box>
-      </Flex>
-    );
-  }
+  //           <Box
+  //             as="button"
+  //             onClick={handleNewSwap}
+  //             borderRadius="16px"
+  //             width={isMobile ? "140px" : "160px"}
+  //             border="2px solid #6651B3"
+  //             background="rgba(86, 50, 168, 0.30)"
+  //             padding="12px 16px"
+  //             cursor="pointer"
+  //             transition="all 0.2s"
+  //             zIndex={1}
+  //             _hover={{
+  //               transform: "translateY(-2px)",
+  //               boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
+  //             }}
+  //           >
+  //             <Text
+  //               color="white"
+  //               fontFamily={FONT_FAMILIES.NOSTROMO}
+  //               fontSize="14px"
+  //               fontWeight="normal"
+  //               letterSpacing="0.5px"
+  //             >
+  //               NEW SWAP
+  //             </Text>
+  //           </Box>
+  //         </Flex>
+  //       </Box>
+  //     </Flex>
+  //   );
+  // }
 
   // NORMAL SWAP VIEW
   return (
