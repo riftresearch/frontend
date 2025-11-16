@@ -4,6 +4,7 @@ import { TokenData, PermitAllowance, PermitDataForSwap, ApprovalState } from "./
 import { Quote } from "./rfqClient";
 import { UniswapQuoteResponse } from "./uniswapRouter";
 import { FeeOverview } from "./swapHelpers";
+import { CowSwapQuoteResponse } from "./cowswapClient";
 
 type DepositFlowState =
   | "0-not-started"
@@ -15,6 +16,12 @@ type DepositFlowState =
   | "6-RefundingUser"
   | "7-RefundingMM"
   | "8-Failed";
+
+export enum SwapRouter {
+  UNISWAP = "UNISWAP",
+  COWSWAP = "COWSWAP",
+  AERODROME = "AERODROME",
+}
 
 export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
 
@@ -57,8 +64,12 @@ export const useStore = create<{
   setOutputUsdValue: (value: string) => void;
   uniswapQuote: UniswapQuoteResponse | null;
   setUniswapQuote: (quote: UniswapQuoteResponse | null) => void;
+  cowswapQuote: CowSwapQuoteResponse | null;
+  setCowswapQuote: (quote: CowSwapQuoteResponse | null) => void;
   rfqQuote: Quote | null;
   setRfqQuote: (quote: Quote | null) => void;
+  swapRouter: SwapRouter;
+  setSwapRouter: (router: SwapRouter) => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
   bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
@@ -147,9 +158,13 @@ export const useStore = create<{
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
   uniswapQuote: null,
   setUniswapQuote: (quote: UniswapQuoteResponse | null) => set({ uniswapQuote: quote }),
+  cowswapQuote: null,
+  setCowswapQuote: (quote: CowSwapQuoteResponse | null) => set({ cowswapQuote: quote }),
   rfqQuote: null,
   setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
-  slippageBips: 10,
+  swapRouter: SwapRouter.UNISWAP,
+  setSwapRouter: (router: SwapRouter) => set({ swapRouter: router }),
+  slippageBips: 5,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
   bitcoinDepositInfo: null,
   setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) =>

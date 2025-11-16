@@ -105,6 +105,10 @@ function getV4QuoterContract() {
  * @returns The amount with slippage applied
  */
 function applySlippage(amount: string, slippageBps: number, isAmountIn: boolean): string {
+  if (slippageBps === 0) {
+    return amount;
+  }
+
   const amountBigInt = BigInt(amount);
   const slippageMultiplier = isAmountIn
     ? BigInt(10_000 + slippageBps) // Increase amountIn for exact output protection

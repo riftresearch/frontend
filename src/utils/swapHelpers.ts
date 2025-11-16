@@ -23,7 +23,8 @@ import {
   MaxAllowanceTransferAmount,
   type PermitSingle,
 } from "@uniswap/permit2-sdk";
-import { useStore } from "./store";
+import { useStore, SwapRouter } from "./store";
+import { createCowSwapClient, CowSwapQuoteResponse } from "./cowswapClient";
 
 /**
  * Fetch gas parameters from the API
@@ -75,7 +76,7 @@ const SATS_PER_BTC = 100_000_000;
 /**
  * Default slippage in basis points
  */
-const DEFAULT_SLIPPAGE_BPS = 10; // 0.1% = 10 basis points
+const DEFAULT_SLIPPAGE_BPS = 0; // 0.1% = 10 basis points
 
 /**
  * Response from ERC20 to BTC quote combining Uniswap and RFQ
@@ -84,6 +85,8 @@ const DEFAULT_SLIPPAGE_BPS = 10; // 0.1% = 10 basis points
 export interface ERC20ToBTCQuoteResponse {
   /** Uniswap quote with pricing information (optional for cbBTC direct swaps) */
   uniswapQuote?: UniswapQuoteResponse;
+  /** CowSwap quote with pricing information (optional, used when router is COWSWAP) */
+  cowswapQuote?: CowSwapQuoteResponse;
   /** Final BTC output amount (formatted string) - for exact input mode */
   btcOutputAmount?: string;
   /** Required ERC20/ETH input amount (formatted string) - for exact output mode */
@@ -121,6 +124,10 @@ export interface FeeOverview {
  * @returns The adjusted amount as a string
  */
 export function applySlippage(amount: bigint | string, slippageBps?: number): string {
+  if (slippageBps === 0) {
+    return amount.toString();
+  }
+
   const amountBigInt = typeof amount === "string" ? BigInt(amount) : amount;
   const slippage = slippageBps ?? DEFAULT_SLIPPAGE_BPS;
   const slippageMultiplier = 1 - slippage / 10000;
@@ -357,8 +364,8 @@ export async function callRFQ(
 
 /**
  * Get combined quote for ERC20/ETH -> BTC
- * This combines Uniswap (ERC20 -> cbBTC) with RFQ (cbBTC -> BTC)
- * For cbBTC input, skips Uniswap and goes direct to RFQ
+ * This combines Uniswap/CowSwap (ERC20 -> cbBTC) with RFQ (cbBTC -> BTC)
+ * For cbBTC input, skips Uniswap/CowSwap and goes direct to RFQ
  */
 export async function getERC20ToBTCQuote(
   sellToken: string,
@@ -366,7 +373,8 @@ export async function getERC20ToBTCQuote(
   decimals: number,
   userAddress: string,
   slippageBps?: number,
-  validFor?: number
+  validFor?: number,
+  router: SwapRouter = SwapRouter.UNISWAP
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     // Check if input token is cbBTC
@@ -400,32 +408,53 @@ export async function getERC20ToBTCQuote(
       };
     }
 
-    // For non-cbBTC tokens, use Uniswap + RFQ flow
-    const uniswapRouter = createUniswapRouter();
+    // For non-cbBTC tokens, use Uniswap/CowSwap + RFQ flow
+    let cbBTCAmount: string;
+    let uniswapQuote: UniswapQuoteResponse | undefined;
+    let cowswapQuote: CowSwapQuoteResponse | undefined;
+    let routerExpiration: Date;
 
-    // Step 1: Get Uniswap quote for ERC20/ETH -> cbBTC
-    // console.log("Getting Uniswap quote for", sellToken, "->", "cbBTC");
-    const uniswapQuote = await uniswapRouter.getQuote({
-      sellToken,
-      amountIn,
-      decimals,
-      userAddress,
-      slippageBps,
-      validFor,
-      // router: "v3",
-    });
+    if (router === SwapRouter.COWSWAP) {
+      // Step 1: Get CowSwap quote for ERC20/ETH -> cbBTC
+      console.log("Getting CowSwap quote for", sellToken, "->", "cbBTC");
+      const cowswapClient = createCowSwapClient();
 
-    console.log("uniswapQuote", uniswapQuote);
+      const cowswapResponse = await cowswapClient.getQuote({
+        sellToken,
+        sellAmount: amountIn,
+        slippageBps,
+        validFor,
+        userAddress,
+      });
 
-    const cbBTCAmount = uniswapQuote.amountOut;
-    // console.log("Uniswap quote: will receive", cbBTCAmount, "cbBTC (in base units)");
+      console.log("cowswapQuote", cowswapResponse);
 
-    // Apply slippage to cbBTC amount for RFQ quote (already applied in quote, but doublecheck)
-    const adjustedCbBTCAmount = cbBTCAmount;
-    // console.log("Adjusted cbBTC amount after slippage:", adjustedCbBTCAmount);
+      cbBTCAmount = cowswapResponse.quote.quote.buyAmount;
+      cowswapQuote = cowswapResponse;
+      routerExpiration = cowswapResponse.expiresAt;
+    } else {
+      // Step 1: Get Uniswap quote for ERC20/ETH -> cbBTC
+      console.log("Getting Uniswap quote for", sellToken, "->", "cbBTC");
+      const uniswapRouter = createUniswapRouter();
 
-    // Step 2: Get RFQ quote for cbBTC -> BTC using adjusted amount
-    const rfqQuote = await callRFQ(adjustedCbBTCAmount, "ExactInput", true);
+      const uniswapResponse = await uniswapRouter.getQuote({
+        sellToken,
+        amountIn,
+        decimals,
+        userAddress,
+        slippageBps,
+        validFor,
+      });
+
+      console.log("uniswapQuote", uniswapResponse);
+
+      cbBTCAmount = uniswapResponse.amountOut;
+      uniswapQuote = uniswapResponse;
+      routerExpiration = uniswapResponse.expiresAt;
+    }
+
+    // Step 2: Get RFQ quote for cbBTC -> BTC using cbBTC amount
+    const rfqQuote = await callRFQ(cbBTCAmount, "ExactInput", true);
 
     if (!rfqQuote) {
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -437,13 +466,11 @@ export async function getERC20ToBTCQuote(
     }
 
     // Step 3: Format BTC output amount
-    // Convert hex string to decimal string
     const btcOutputAmount = formatLotAmount(rfqQuote.to);
 
     // Step 4: Determine earliest expiration
-    const uniswapExpiration = uniswapQuote.expiresAt;
     const rfqExpiration = new Date(rfqQuote.expires_at);
-    const expiresAt = uniswapExpiration < rfqExpiration ? uniswapExpiration : rfqExpiration;
+    const expiresAt = routerExpiration < rfqExpiration ? routerExpiration : rfqExpiration;
 
     // Clear "no routes" error on successful quote
     const { setHasNoRoutesError } = useStore.getState();
@@ -451,6 +478,7 @@ export async function getERC20ToBTCQuote(
 
     return {
       uniswapQuote,
+      cowswapQuote,
       btcOutputAmount,
       rfqQuote,
       expiresAt,
@@ -573,7 +601,8 @@ export async function getERC20ToBTCQuoteExactOutput(
   selectedInputToken: TokenData | null,
   userAddress: string,
   slippageBps?: number,
-  validFor?: number
+  validFor?: number,
+  router: SwapRouter = SwapRouter.UNISWAP
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     if (!selectedInputToken) {
@@ -613,42 +642,71 @@ export async function getERC20ToBTCQuoteExactOutput(
       };
     }
 
-    // Step 2: Get Uniswap quote for ERC20/ETH -> cbBTC using exact output
-    const uniswapRouter = createUniswapRouter();
-    const buyToken = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"; // cbBTC
+    // Step 2: Get Uniswap/CowSwap quote for ERC20/ETH -> cbBTC using exact output
     const sellToken = selectedInputToken?.address || "ETH";
+    let erc20InputFormatted: string;
+    let uniswapQuote: UniswapQuoteResponse | undefined;
+    let cowswapQuote: CowSwapQuoteResponse | undefined;
+    let routerExpiration: Date;
 
-    // console.log(
-    //   "Getting Uniswap quote (exact output) for",
-    //   sellToken,
-    //   "->",
-    //   cbBTCFormatted,
-    //   "cbBTC"
-    // );
+    if (router === SwapRouter.COWSWAP) {
+      // Get CowSwap quote (exact output = buyAmount)
+      console.log(
+        "Getting CowSwap quote (exact output) for",
+        sellToken,
+        "->",
+        cbBTCFormatted,
+        "cbBTC"
+      );
+      const cowswapClient = createCowSwapClient();
 
-    const uniswapQuote = await uniswapRouter.getQuote({
-      sellToken,
-      amountOut: BigInt(cbBTCAmountNeeded).toString(), // Convert hex to decimal string
-      decimals: selectedInputToken.decimals,
-      userAddress,
-      slippageBps,
-      validFor,
-      // router: "v3",
-    });
+      const cowswapResponse = await cowswapClient.getQuote({
+        sellToken,
+        buyAmount: BigInt(cbBTCAmountNeeded).toString(),
+        slippageBps,
+        validFor,
+        userAddress,
+      });
 
-    // console.log("uniswapQuote", uniswapQuote);
+      console.log("cowswapQuote", cowswapResponse);
 
-    // For exact output, the API returns the required input amount in amountIn field (with slippage already applied)
-    const erc20AmountNeeded = uniswapQuote.amountIn;
-    // console.log("Uniswap quote: need", erc20AmountNeeded, "of", sellToken, "(in base units, slippage included)");
+      // For exact output, sellAmount tells us how much input token we need
+      const erc20AmountNeeded = cowswapResponse.sellAmount!;
+      erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
+      cowswapQuote = cowswapResponse;
+      routerExpiration = cowswapResponse.expiresAt;
+    } else {
+      // Get Uniswap quote
+      console.log(
+        "Getting Uniswap quote (exact output) for",
+        sellToken,
+        "->",
+        cbBTCFormatted,
+        "cbBTC"
+      );
+      const uniswapRouter = createUniswapRouter();
 
-    // Format the input amount for display
-    const erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
+      const uniswapResponse = await uniswapRouter.getQuote({
+        sellToken,
+        amountOut: BigInt(cbBTCAmountNeeded).toString(),
+        decimals: selectedInputToken.decimals,
+        userAddress,
+        slippageBps,
+        validFor,
+      });
+
+      console.log("uniswapQuote", uniswapResponse);
+
+      // For exact output, the API returns the required input amount in amountIn field
+      const erc20AmountNeeded = uniswapResponse.amountIn;
+      erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
+      uniswapQuote = uniswapResponse;
+      routerExpiration = uniswapResponse.expiresAt;
+    }
 
     // Determine earliest expiration
-    const uniswapExpiration = uniswapQuote.expiresAt;
     const rfqExpiration = new Date(rfqQuoteData.expires_at);
-    const expiresAt = uniswapExpiration < rfqExpiration ? uniswapExpiration : rfqExpiration;
+    const expiresAt = routerExpiration < rfqExpiration ? routerExpiration : rfqExpiration;
 
     console.log("Combined exact output quote complete:", {
       btcOutputAmount,
@@ -662,6 +720,7 @@ export async function getERC20ToBTCQuoteExactOutput(
 
     return {
       uniswapQuote,
+      cowswapQuote,
       erc20InputAmount: erc20InputFormatted,
       rfqQuote: rfqQuoteData,
       expiresAt,

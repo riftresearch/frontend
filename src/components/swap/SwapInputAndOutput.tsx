@@ -18,7 +18,7 @@ import { InfoSVG } from "../other/SVGs";
 import { Tooltip } from "@/components/other/Tooltip";
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
-import { useStore } from "@/utils/store";
+import { useStore, SwapRouter } from "@/utils/store";
 import { TokenData, ApprovalState } from "@/utils/types";
 import {
   EVMAccountWarningModal,
@@ -112,9 +112,13 @@ export const SwapInputAndOutput = () => {
     outputUsdValue,
     setOutputUsdValue,
     setUniswapQuote,
+    setCowswapQuote,
     setRfqQuote,
     rfqQuote,
     uniswapQuote,
+    cowswapQuote,
+    swapRouter,
+    setSwapRouter,
     slippageBips,
     payoutAddress,
     setPayoutAddress,
@@ -239,25 +243,12 @@ export const SwapInputAndOutput = () => {
           console.log("Input value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(null);
           setOutputAmount("");
           setIsLoadingQuote(false);
           return;
         }
-
-        // Check if input value exceeds maximum BTC liquidity
-        // if (
-        //   parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
-        //   usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
-        // ) {
-        //   console.log("Input value exceeds maximum BTC liquidity");
-        //   setUniswapQuote(null);
-        //   setRfqQuote(null);
-        //   setOutputAmount("");
-        //   setIsLoadingQuote(false);
-        //   setExceedsAvailableBTCLiquidity(true);
-        //   return;
-        // }
       } else {
         console.log("no price");
         console.log("btcPrice", btcPrice);
@@ -279,7 +270,7 @@ export const SwapInputAndOutput = () => {
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
         const sellToken = selectedInputToken?.address || "ETH";
 
-        console.log("getting quote for", sellToken, sellAmount);
+        console.log("getting quote for", sellToken, sellAmount, "with router", swapRouter);
         // Get combined quote (handles cbBTC internally)
         const quoteResponse = await getERC20ToBTCQuote(
           sellToken,
@@ -288,7 +279,9 @@ export const SwapInputAndOutput = () => {
           userEvmAccountAddress
             ? userEvmAccountAddress
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-          slippageBips
+          slippageBips,
+          undefined,
+          swapRouter
         );
 
         console.log("quoteResponse", quoteResponse);
@@ -301,6 +294,7 @@ export const SwapInputAndOutput = () => {
 
         if (quoteResponse) {
           setUniswapQuote(quoteResponse.uniswapQuote || null);
+          setCowswapQuote(quoteResponse.cowswapQuote || null);
           setRfqQuote(quoteResponse.rfqQuote);
           setOutputAmount(quoteResponse.btcOutputAmount || "");
           setIsLoadingQuote(false);
@@ -308,21 +302,42 @@ export const SwapInputAndOutput = () => {
           setExceedsAvailableBTCLiquidity(false);
 
           // Calculate and set fee overview
-          if (btcPrice && price) {
-            const fees = calculateFees(
-              quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
-              quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
-              quoteResponse.uniswapQuote?.amountOut || "0",
-              quoteResponse.uniswapQuote?.amountIn || "0",
-              price,
-              btcPrice,
-              selectedInputToken.decimals
-            );
-            setFeeOverview(fees);
+          if (btcPrice) {
+            // Use cowswapQuote values if available, otherwise use uniswapQuote
+            const cbBTCOut = quoteResponse.cowswapQuote
+              ? quoteResponse.cowswapQuote.quote.quote.buyAmount
+              : quoteResponse.uniswapQuote?.amountOut || "0";
+            const erc20In = quoteResponse.cowswapQuote
+              ? quoteResponse.cowswapQuote.quote.quote.sellAmount
+              : quoteResponse.uniswapQuote?.amountIn || "0";
+
+            // Get price for fee calculation
+            let price: number | null = null;
+            if (selectedInputToken.ticker === "ETH") {
+              price = ethPrice;
+            } else if (selectedInputToken.ticker === "cbBTC") {
+              price = btcPrice;
+            } else {
+              price = erc20Price;
+            }
+
+            if (price) {
+              const fees = calculateFees(
+                quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
+                quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
+                cbBTCOut,
+                erc20In,
+                price,
+                btcPrice,
+                selectedInputToken.decimals
+              );
+              setFeeOverview(fees);
+            }
           }
         } else {
           // Clear state on failure
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(null);
           setOutputAmount("");
           setFeeOverview(null);
@@ -335,6 +350,7 @@ export const SwapInputAndOutput = () => {
           setExceedsAvailableBTCLiquidity(true);
         }
         setUniswapQuote(null);
+        setCowswapQuote(null);
         setRfqQuote(null);
         setOutputAmount("");
         setFeeOverview(null);
@@ -348,6 +364,7 @@ export const SwapInputAndOutput = () => {
       userEvmAccountAddress,
       selectedInputToken,
       setUniswapQuote,
+      setCowswapQuote,
       setRfqQuote,
       setOutputAmount,
       ethPrice,
@@ -356,6 +373,7 @@ export const SwapInputAndOutput = () => {
       slippageBips,
       setFeeOverview,
       liquidity,
+      swapRouter,
     ]
   );
 
@@ -390,6 +408,7 @@ export const SwapInputAndOutput = () => {
           console.log("Output value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
           setIsLoadingQuote(false);
@@ -404,6 +423,7 @@ export const SwapInputAndOutput = () => {
         ) {
           console.log("Output value exceeds maximum BTC liquidity");
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
           setIsLoadingQuote(false);
@@ -428,7 +448,9 @@ export const SwapInputAndOutput = () => {
           userEvmAccountAddress
             ? userEvmAccountAddress
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-          slippageBips
+          slippageBips,
+          undefined,
+          swapRouter
         );
 
         // Check if this is still the latest request
@@ -439,6 +461,7 @@ export const SwapInputAndOutput = () => {
 
         if (quoteResponse) {
           setUniswapQuote(quoteResponse.uniswapQuote || null);
+          setCowswapQuote(quoteResponse.cowswapQuote || null);
           setRfqQuote(quoteResponse.rfqQuote);
 
           // Truncate input amount to 8 decimals for display
@@ -450,21 +473,42 @@ export const SwapInputAndOutput = () => {
           setRefetchQuote(false);
 
           // Calculate and set fee overview
-          if (btcPrice && price) {
-            const fees = calculateFees(
-              quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
-              quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
-              quoteResponse.uniswapQuote?.amountOut || "0",
-              quoteResponse.uniswapQuote?.amountIn || "0",
-              price,
-              btcPrice,
-              selectedInputToken.decimals
-            );
-            setFeeOverview(fees);
+          if (btcPrice) {
+            // Use cowswapQuote values if available, otherwise use uniswapQuote
+            const cbBTCOut = quoteResponse.cowswapQuote
+              ? quoteResponse.cowswapQuote.quote.quote.buyAmount
+              : quoteResponse.uniswapQuote?.amountOut || "0";
+            const erc20In = quoteResponse.cowswapQuote
+              ? quoteResponse.cowswapQuote.quote.quote.sellAmount
+              : quoteResponse.uniswapQuote?.amountIn || "0";
+
+            // Get price for fee calculation
+            let price: number | null = null;
+            if (selectedInputToken.ticker === "ETH") {
+              price = ethPrice;
+            } else if (selectedInputToken.ticker === "cbBTC") {
+              price = btcPrice;
+            } else {
+              price = erc20Price;
+            }
+
+            if (price) {
+              const fees = calculateFees(
+                quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
+                quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
+                cbBTCOut,
+                erc20In,
+                price,
+                btcPrice,
+                selectedInputToken.decimals
+              );
+              setFeeOverview(fees);
+            }
           }
         } else {
           // Clear state on failure
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
           setFeeOverview(null);
@@ -474,6 +518,7 @@ export const SwapInputAndOutput = () => {
       } catch (error) {
         console.error("Failed to fetch exact output quote:", error);
         setUniswapQuote(null);
+        setCowswapQuote(null);
         setRfqQuote(null);
         setRawInputAmount("");
         setFeeOverview(null);
@@ -487,13 +532,16 @@ export const SwapInputAndOutput = () => {
       userEvmAccountAddress,
       selectedInputToken,
       setUniswapQuote,
+      setCowswapQuote,
       setRfqQuote,
       setRawInputAmount,
       btcPrice,
       slippageBips,
       erc20Price,
+      ethPrice,
       setFeeOverview,
       liquidity,
+      swapRouter,
     ]
   );
 
@@ -548,6 +596,7 @@ export const SwapInputAndOutput = () => {
       if (!isAboveMinSwap(usdValue, btcPrice)) {
         console.log("Value below minimum swap threshold");
         setUniswapQuote(null);
+        setCowswapQuote(null);
         setRfqQuote(null);
         setIsLoadingQuote(false);
         if (mode === "ExactInput") {
@@ -565,6 +614,7 @@ export const SwapInputAndOutput = () => {
       ) {
         console.log("Value exceeds maximum cbBTC liquidity");
         setUniswapQuote(null);
+        setCowswapQuote(null);
         setRfqQuote(null);
         setIsLoadingQuote(false);
         if (mode === "ExactInput") {
@@ -593,8 +643,9 @@ export const SwapInputAndOutput = () => {
         }
 
         if (rfqQuoteResponse) {
-          // Clear Uniswap quote (not needed for BTC -> cbBTC)
+          // Clear Uniswap and CowSwap quotes (not needed for BTC -> cbBTC)
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(rfqQuoteResponse);
           setIsLoadingQuote(false);
           setRefetchQuote(false);
@@ -640,6 +691,7 @@ export const SwapInputAndOutput = () => {
         } else {
           // Clear state on failure
           setUniswapQuote(null);
+          setCowswapQuote(null);
           setRfqQuote(null);
           setFeeOverview(null);
           setIsLoadingQuote(false);
@@ -652,6 +704,7 @@ export const SwapInputAndOutput = () => {
       } catch (error) {
         console.error(`Failed to fetch BTC->ERC20 quote (${mode}):`, error);
         setUniswapQuote(null);
+        setCowswapQuote(null);
         setRfqQuote(null);
         setFeeOverview(null);
         setIsLoadingQuote(false);
@@ -753,8 +806,17 @@ export const SwapInputAndOutput = () => {
       console.log(`Calculated USD value: ${usdValue}`);
       setInputUsdValue(usdValue);
 
+      // Set router based on USD value threshold
+      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
+      if (usdValueFloat > 2500) {
+        setSwapRouter(SwapRouter.COWSWAP);
+      } else {
+        setSwapRouter(SwapRouter.UNISWAP);
+      }
+
       // Clear existing quotes when user types
       setUniswapQuote(null);
+      setCowswapQuote(null);
       setRfqQuote(null);
 
       if (!value || parseFloat(value) <= 0) {
@@ -827,8 +889,17 @@ export const SwapInputAndOutput = () => {
       const usdValue = calculateUsdValue(value, outputTicker, ethPrice, btcPrice, erc20Price);
       setOutputUsdValue(usdValue);
 
+      // Set router based on USD value threshold
+      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
+      if (usdValueFloat > 2500) {
+        setSwapRouter(SwapRouter.COWSWAP);
+      } else {
+        setSwapRouter(SwapRouter.UNISWAP);
+      }
+
       // Clear existing quotes when user types
       setUniswapQuote(null);
+      setCowswapQuote(null);
       setRfqQuote(null);
 
       if (!value || parseFloat(value) <= 0) {
@@ -924,6 +995,7 @@ export const SwapInputAndOutput = () => {
       setRawInputAmount(truncateAmount(adjustedInputAmount));
       setFullPrecisionInputAmount(adjustedInputAmount);
       setUniswapQuote(null);
+      setCowswapQuote(null);
       setRfqQuote(null);
       return;
     }
@@ -996,6 +1068,7 @@ export const SwapInputAndOutput = () => {
 
     // Clear existing quotes when max is clicked
     setUniswapQuote(null);
+    setCowswapQuote(null);
     setRfqQuote(null);
 
     // Set loading state
@@ -1070,6 +1143,7 @@ export const SwapInputAndOutput = () => {
 
     // Clear existing quotes when max is clicked
     setUniswapQuote(null);
+    setCowswapQuote(null);
     setRfqQuote(null);
 
     // Set loading state
@@ -1128,6 +1202,7 @@ export const SwapInputAndOutput = () => {
 
     // Clear existing quotes
     setUniswapQuote(null);
+    setCowswapQuote(null);
     setRfqQuote(null);
 
     // Set loading state
@@ -1308,7 +1383,7 @@ export const SwapInputAndOutput = () => {
           // User is editing output field - fetch exact output quote
           fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
         }
-      }, 15000);
+      }, 10000);
     }
 
     // Cleanup on unmount or when conditions change
