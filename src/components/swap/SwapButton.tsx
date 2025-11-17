@@ -18,7 +18,7 @@ import {
   IS_FRONTEND_PAUSED,
 } from "@/utils/constants";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
-import { useStore } from "@/utils/store";
+import { useStore, SwapRouter, CowswapOrderStatus } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { reownModal } from "@/utils/wallet";
@@ -27,6 +27,7 @@ import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
+import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -36,6 +37,9 @@ export const SwapButton = () => {
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
+
+  // CowSwap client
+  const cowswapClient = useCowSwapClient();
 
   // Local state
   const [isSigningPermit, setIsSigningPermit] = useState(false);
@@ -55,6 +59,7 @@ export const SwapButton = () => {
     outputAmount,
     isSwappingForBTC,
     uniswapQuote,
+    cowswapQuote,
     rfqQuote,
     slippageBips,
     payoutAddress,
@@ -77,6 +82,11 @@ export const SwapButton = () => {
     setRefetchQuote,
     setUniswapQuote,
     setRfqQuote,
+    swapRouter,
+    cowswapOrderStatus,
+    setCowswapOrderStatus,
+    cowswapOrderData,
+    setCowswapOrderData,
   } = useStore();
   // Ref to track previous refetchQuote value for retry detection
   const prevRefetchQuoteRef = useRef(refetchQuote);
@@ -134,7 +144,7 @@ export const SwapButton = () => {
 
   // Helper function to check if permit is needed
   const needsPermit = useCallback(() => {
-    if (isNativeETH || isCbBTC || !selectedInputToken || !rawInputAmount) {
+    if (isNativeETH || isCbBTC || !rawInputAmount) {
       return false;
     }
 
@@ -179,8 +189,8 @@ export const SwapButton = () => {
 
   // Handle Permit2 signature
   const signPermit2 = useCallback(async () => {
-    console.log("signPermit2", selectedInputToken?.address);
-    if (!selectedInputToken?.address || !userEvmAccountAddress || !permitAllowance) {
+    console.log("signPermit2", selectedInputToken.address);
+    if (!selectedInputToken.address || !userEvmAccountAddress || !permitAllowance) {
       console.error("Missing required data for permit");
       return;
     }
@@ -235,7 +245,7 @@ export const SwapButton = () => {
 
   // Approve Permit2 to spend tokens
   const approvePermit2 = useCallback(async () => {
-    if (!selectedInputToken?.address) {
+    if (!selectedInputToken.address) {
       console.error("No token selected for approval");
       return;
     }
@@ -386,28 +396,18 @@ export const SwapButton = () => {
     const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
     const FAKE_OTC = process.env.NEXT_PUBLIC_FAKE_OTC === "true";
 
-    // Skip validation if in fake mode
-    if (FAKE_RFQ) {
-      if (!uniswapQuote || !userEvmAccountAddress || !selectedInputToken) {
-        toastError(new Error("Missing quote data"), {
-          title: "Swap Failed",
-          description: "Please refresh the quote and try again",
-        });
-        return;
-      }
-    } else {
-      if (!uniswapQuote || !rfqQuote || !userEvmAccountAddress || !selectedInputToken) {
-        setRefetchQuote(true);
-        return;
-      }
+    // Validate userEvmAccountAddress first
+    if (!userEvmAccountAddress) {
+      toastError(new Error("Wallet not connected"), {
+        title: "Swap Failed",
+        description: "Please connect your wallet",
+      });
+      return;
     }
 
-    // Ensure we have userEvmAccountAddress and selectedInputToken for the actual swap
-    if (!userEvmAccountAddress || !selectedInputToken) {
-      toastError(new Error("Missing account or token data"), {
-        title: "Swap Failed",
-        description: "Please connect your wallet and select a token",
-      });
+    // Check RFQ quote if not in fake mode
+    if (!FAKE_RFQ && !rfqQuote) {
+      setRefetchQuote(true);
       return;
     }
 
@@ -452,9 +452,57 @@ export const SwapButton = () => {
         setSwapResponse(otcSwap);
       }
 
-      // Step 2: Build Uniswap swap transaction with deposit address as receiver
+      // Step 2: Check router type and execute appropriate swap
+      if (swapRouter === SwapRouter.COWSWAP) {
+        // CowSwap order submission flow
+        console.log("Submitting CowSwap order to deposit address:", depositAddress);
+
+        if (!cowswapClient) {
+          throw new Error("CowSwap client not available");
+        }
+
+        if (!cowswapQuote) {
+          setRefetchQuote(true);
+          return;
+        }
+
+        // Set status to signing
+        setCowswapOrderStatus(CowswapOrderStatus.SIGNING);
+
+        // Submit order using CowSwap client
+        const sellToken = selectedInputToken.address;
+        const decimals = selectedInputToken.decimals;
+
+        // Use buyAmount from the quote (exact output)
+        const buyAmount = cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString();
+
+        const orderId = await cowswapClient.submitOrder({
+          sellToken,
+          buyAmount,
+          decimals,
+          slippageBps: slippageBips,
+          validFor: 600, // 10 minutes
+          userAddress: userEvmAccountAddress,
+          receiver: depositAddress, // Send cbBTC to OTC deposit address
+        });
+
+        console.log("CowSwap order submitted:", orderId);
+
+        // Store order ID and set status to signed
+        setCowswapOrderData({ id: orderId, order: null });
+        setCowswapOrderStatus(CowswapOrderStatus.SIGNED);
+
+        // Transaction is now complete - polling will handle status updates
+        return;
+      }
+
+      // Uniswap flow (existing code)
       console.log("Building Uniswap swap transaction with, deposit address: ", depositAddress);
 
+      if (!uniswapQuote) {
+        setRefetchQuote(true);
+        return;
+      }
       const uniswapRouter = createUniswapRouter();
       const sellToken = selectedInputToken.address;
       const decimals = selectedInputToken.decimals;
@@ -527,6 +575,7 @@ export const SwapButton = () => {
     }
   }, [
     uniswapQuote,
+    cowswapQuote,
     rfqQuote,
     userEvmAccountAddress,
     selectedInputToken,
@@ -540,6 +589,10 @@ export const SwapButton = () => {
     isNativeETH,
     setPermitDataForSwap,
     fullPrecisionInputAmount,
+    swapRouter,
+    cowswapClient,
+    setCowswapOrderStatus,
+    setCowswapOrderData,
   ]);
 
   // Handle BTC->cbBTC swap using OTC
@@ -872,6 +925,65 @@ export const SwapButton = () => {
     }
   }, [refetchQuote, rfqQuote, swapButtonPressed, startSwap]);
 
+  // CowSwap order status polling
+  useEffect(() => {
+    // Only poll when order is signed
+    if (
+      cowswapOrderStatus !== CowswapOrderStatus.SIGNED ||
+      !cowswapOrderData?.id ||
+      !cowswapClient
+    ) {
+      return;
+    }
+
+    console.log("Starting CowSwap order status polling for order:", cowswapOrderData.id);
+
+    const pollOrderStatus = async () => {
+      try {
+        const order = await cowswapClient.sdk.getOrder({ orderUid: cowswapOrderData.id! });
+        console.log("Order status:", order.status);
+        console.log("Sell amount:", order.sellAmount);
+        console.log("Buy amount:", order.buyAmount);
+
+        // Update order data
+        setCowswapOrderData({ id: cowswapOrderData.id, order });
+
+        // Check order status and update accordingly
+        if (order.status === "fulfilled" || order.status === "presignaturePending") {
+          console.log("CowSwap order succeeded");
+          setCowswapOrderStatus(CowswapOrderStatus.SUCCESS);
+          setTransactionConfirmed(true);
+        } else if (order.status === "cancelled" || order.status === "expired") {
+          console.log("CowSwap order failed or cancelled");
+          setCowswapOrderStatus(CowswapOrderStatus.FAIL);
+        }
+        // For other statuses (open, scheduled), continue polling
+      } catch (error) {
+        console.error("Error polling order status:", error);
+        // Don't fail on polling errors, just log them
+      }
+    };
+
+    // Poll immediately
+    pollOrderStatus();
+
+    // Then poll every 10 seconds
+    const intervalId = setInterval(pollOrderStatus, 10000);
+
+    // Cleanup interval on unmount or when status changes
+    return () => {
+      console.log("Stopping CowSwap order status polling");
+      clearInterval(intervalId);
+    };
+  }, [
+    cowswapOrderStatus,
+    cowswapOrderData?.id,
+    cowswapClient,
+    setCowswapOrderData,
+    setCowswapOrderStatus,
+    setTransactionConfirmed,
+  ]);
+
   // Handle keyboard events (Enter to submit)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -913,7 +1025,7 @@ export const SwapButton = () => {
 
     if (exceedsUserBalance) {
       return {
-        text: `Not enough ${selectedInputToken?.ticker || ""}`,
+        text: `Not enough ${selectedInputToken.ticker}`,
         handler: undefined,
         showSpinner: false,
       };
@@ -956,6 +1068,15 @@ export const SwapButton = () => {
     if (isConfirming) {
       return {
         text: "Signing Swap...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    // If signing CowSwap order
+    if (cowswapOrderStatus === CowswapOrderStatus.SIGNING) {
+      return {
+        text: "Signing Order...",
         handler: undefined,
         showSpinner: true,
       };

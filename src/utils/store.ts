@@ -23,6 +23,19 @@ export enum SwapRouter {
   AERODROME = "AERODROME",
 }
 
+export enum CowswapOrderStatus {
+  NO_ORDER = "NO_ORDER",
+  SIGNING = "SIGNING",
+  SIGNED = "SIGNED",
+  SUCCESS = "SUCCESS",
+  FAIL = "FAIL",
+}
+
+export interface CowswapOrderData {
+  id: string | null;
+  order: any | null; // EnrichedOrder from SDK - using any to avoid direct dependency import
+}
+
 export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
 
 export const useStore = create<{
@@ -108,6 +121,10 @@ export const useStore = create<{
   setInputBelowMinimum: (value: boolean) => void;
   refetchQuote: boolean;
   setRefetchQuote: (value: boolean) => void;
+  cowswapOrderStatus: CowswapOrderStatus;
+  setCowswapOrderStatus: (status: CowswapOrderStatus) => void;
+  cowswapOrderData: CowswapOrderData | null;
+  setCowswapOrderData: (data: CowswapOrderData | null) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -204,4 +221,8 @@ export const useStore = create<{
   setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
   refetchQuote: false,
   setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
+  cowswapOrderStatus: CowswapOrderStatus.NO_ORDER,
+  setCowswapOrderStatus: (status: CowswapOrderStatus) => set({ cowswapOrderStatus: status }),
+  cowswapOrderData: null,
+  setCowswapOrderData: (data: CowswapOrderData | null) => set({ cowswapOrderData: data }),
 }));

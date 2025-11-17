@@ -219,11 +219,6 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
-      if (!selectedInputToken) {
-        console.log("no selected input token");
-        return;
-      }
-
       // Check if the input value is above minimum swap threshold
       const inputValue = parseFloat(amountToQuote);
       let price: number | null = null;
@@ -393,15 +388,11 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
-      if (!selectedInputToken) {
-        return;
-      }
-
       // Check if the output BTC value is above minimum swap threshold
       const outputValue = parseFloat(btcAmountToQuote);
 
       let price;
-      if (!selectedInputToken || selectedInputToken.ticker === "ETH") {
+      if (selectedInputToken.ticker === "ETH") {
         price = ethPrice;
       } else if (selectedInputToken.address) {
         price = erc20Price;
@@ -565,10 +556,6 @@ export const SwapInputAndOutput = () => {
 
       // Validate inputs
       if (isSwappingForBTC || !amountToQuote || parseFloat(amountToQuote) <= 0) {
-        return;
-      }
-
-      if (!selectedInputToken) {
         return;
       }
 
@@ -806,7 +793,7 @@ export const SwapInputAndOutput = () => {
       setFullPrecisionInputAmount(null);
 
       // Update USD value using helper
-      const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "" : "BTC";
+      const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
       console.log(
         `Calculating USD for input: amount=${value}, ticker=${inputTicker}, ethPrice=${ethPrice}, btcPrice=${btcPrice}, erc20Price=${erc20Price}`
       );
@@ -816,7 +803,7 @@ export const SwapInputAndOutput = () => {
 
       // Set router based on USD value threshold
       const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      if (usdValueFloat > 2500) {
+      if (usdValueFloat > 300) {
         setSwapRouter(SwapRouter.COWSWAP);
       } else {
         setSwapRouter(SwapRouter.UNISWAP);
@@ -977,7 +964,7 @@ export const SwapInputAndOutput = () => {
     console.log("currentInputBalance", currentInputBalance);
 
     // Calculate currentInputBalance in USD for comparisons
-    const balanceInputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
+    const balanceInputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
     const balanceUsd = calculateUsdValue(
       currentInputBalance,
       balanceInputTicker,
@@ -1015,7 +1002,7 @@ export const SwapInputAndOutput = () => {
     }
 
     // If ETH is selected, fetch gas data and adjust for gas costs
-    if (selectedInputToken?.ticker === "ETH") {
+    if (selectedInputToken.ticker === "ETH") {
       try {
         const response = await fetch(`/api/eth-gas?chainId=${evmConnectWalletChainId || 1}`);
         if (response.ok) {
@@ -1064,7 +1051,7 @@ export const SwapInputAndOutput = () => {
     setHasStartedTyping(true);
 
     // Update USD value using full precision
-    const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
+    const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
     const usdValue = calculateUsdValue(
       adjustedInputAmount,
       inputTicker,
@@ -1303,9 +1290,8 @@ export const SwapInputAndOutput = () => {
   useEffect(() => {
     // Only set default if:
     // 1. We've checked for cookies (isInitialMountRef is false)
-    // 2. No token is currently selected
-    // 3. We haven't loaded from cookie
-    if (!isInitialMountRef.current && !selectedInputToken && !hasLoadedFromCookieRef.current) {
+    // 2. We haven't loaded from cookie
+    if (!isInitialMountRef.current && !hasLoadedFromCookieRef.current) {
       const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
       setSelectedInputToken(ETH_TOKEN);
     }
@@ -1331,7 +1317,7 @@ export const SwapInputAndOutput = () => {
 
   // Update USD values when prices or amounts change
   useEffect(() => {
-    const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
+    const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
     const inputUsd = calculateUsdValue(rawInputAmount, inputTicker, ethPrice, btcPrice, erc20Price);
     setInputUsdValue(inputUsd);
 
@@ -1460,7 +1446,7 @@ export const SwapInputAndOutput = () => {
       // 3. We have a valid input amount
       if (
         permitAllowance !== null ||
-        !selectedInputToken?.address ||
+        !selectedInputToken.address ||
         selectedInputToken.ticker === "ETH" ||
         selectedInputToken.ticker === "cbBTC" ||
         !userEvmAccountAddress ||
@@ -1503,7 +1489,7 @@ export const SwapInputAndOutput = () => {
     if (
       rawInputAmount &&
       parseFloat(rawInputAmount) > 0 &&
-      selectedInputToken?.address &&
+      selectedInputToken.address &&
       selectedInputToken.ticker !== "cbBTC" &&
       userEvmAccountAddress &&
       permitAllowance === null
@@ -1550,7 +1536,7 @@ export const SwapInputAndOutput = () => {
     // For ETH, check if input exceeds balance minus gas cost
     const checkEthGasBalance = async () => {
       if (
-        selectedInputToken?.ticker === "ETH" &&
+        selectedInputToken.ticker === "ETH" &&
         inputFloat > balanceFloat * 0.9 &&
         inputFloat <= balanceFloat
       ) {
@@ -1595,9 +1581,9 @@ export const SwapInputAndOutput = () => {
         let price: number | null = null;
         if (isSwappingForBTC) {
           // ERC20 -> BTC
-          if (selectedInputToken?.ticker === "ETH") {
+          if (selectedInputToken.ticker === "ETH") {
             price = ethPrice;
-          } else if (selectedInputToken?.address) {
+          } else if (selectedInputToken.address) {
             price = erc20Price;
           }
         } else {
@@ -1661,9 +1647,9 @@ export const SwapInputAndOutput = () => {
           // If user has more than MM liquidity (in terms of what they can swap)
           // and they're trying to swap more than MM liquidity, show the error
           let price: number | null = null;
-          if (selectedInputToken?.ticker === "ETH") {
+          if (selectedInputToken.ticker === "ETH") {
             price = ethPrice;
-          } else if (selectedInputToken?.address) {
+          } else if (selectedInputToken.address) {
             price = erc20Price;
           }
           if (price && btcPrice) {
@@ -1845,13 +1831,13 @@ export const SwapInputAndOutput = () => {
     if (inputFloat > 0 && (!outputAmount || parseFloat(outputAmount) <= 0)) {
       // Get the price of the input token
       let price: number | null = null;
-      const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
+      const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
 
       if (inputTicker === "ETH") {
         price = ethPrice;
       } else if (inputTicker === "BTC") {
         price = btcPrice;
-      } else if (selectedInputToken?.address) {
+      } else if (selectedInputToken.address) {
         price = erc20Price;
       }
 
@@ -2089,7 +2075,7 @@ export const SwapInputAndOutput = () => {
 
             <Flex>
               {exceedsUserBalance &&
-              selectedInputToken?.ticker === "ETH" &&
+              selectedInputToken.ticker === "ETH" &&
               currentInputBalance &&
               parseFloat(rawInputAmount) <= parseFloat(currentInputBalance) ? (
                 <>
@@ -2280,7 +2266,7 @@ export const SwapInputAndOutput = () => {
             <Flex direction="row" justify="flex-end" h="21px" align="center">
               {currentInputBalance && parseFloat(currentInputBalance) > 0 && (
                 <Tooltip
-                  show={showMaxTooltip && selectedInputToken?.ticker === "ETH" && isAtAdjustedMax}
+                  show={showMaxTooltip && selectedInputToken.ticker === "ETH" && isAtAdjustedMax}
                   onMouseEnter={() => setShowMaxTooltip(true)}
                   onMouseLeave={() => setShowMaxTooltip(false)}
                   hoverText="Max excludes ETH for gas"
@@ -2551,7 +2537,7 @@ export const SwapInputAndOutput = () => {
               ethPrice,
               btcPrice,
               erc20Price,
-              isSwappingForBTC ? selectedInputToken?.ticker : selectedOutputToken?.ticker || "CBBTC"
+              isSwappingForBTC ? selectedInputToken.ticker : selectedOutputToken?.ticker || "CBBTC"
             )}
           </Text>
           <Spacer />
