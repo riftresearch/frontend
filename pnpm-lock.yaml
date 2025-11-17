@@ -17,6 +17,12 @@ importers:
       '@cowprotocol/cow-sdk':
         specifier: ^7.0.9
         version: 7.0.10(ajv@8.17.1)(cross-fetch@4.1.0)(ipfs-only-hash@4.0.0)(multiformats@9.9.0)
+      '@cowprotocol/sdk-trading':
+        specifier: ^0.4.6
+        version: 0.4.6(ajv@8.17.1)(cross-fetch@4.1.0)(ipfs-only-hash@4.0.0)(multiformats@9.9.0)
+      '@cowprotocol/sdk-viem-adapter':
+        specifier: ^0.2.0
+        version: 0.2.0(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
       '@emotion/react':
         specifier: ^11
         version: 11.14.0(@types/react@19.2.2)(react@19.2.0)
@@ -286,23 +292,54 @@ packages:
       ipfs-only-hash: ^4.x
       multiformats: ^9.x
 
+  '@cowprotocol/sdk-app-data@4.1.6':
+    resolution: {integrity: sha512-wPy0p1HibKKBjGrH9iRYDGGYIzIJQORRAdy/IB+PRojBLTeBEkTp9HKvNHwDaPhdAlV19e/U5p65WM4b5sKW5A==}
+    peerDependencies:
+      ajv: ^8.x
+      cross-fetch: ^3.x
+      ipfs-only-hash: ^4.x
+      multiformats: ^9.x
+
   '@cowprotocol/sdk-common@0.2.1':
     resolution: {integrity: sha512-7EBKg7CyKLAtmDZdAh5Nsv2KPstUNbdLuNXtCimQk+TNb6OhWgNnCuCf9tOCyQ/yllQvXfNEc5shdXQfx5VXdw==}
+
+  '@cowprotocol/sdk-common@0.3.0':
+    resolution: {integrity: sha512-xk2VUjO4+XI5968r1pYFbqUxM2nmBcVPvGIw0pcqDpx4OLef0Flr3tuHtZY42RYYa6nNsNKOBV9Jd4RauYUOgQ==}
 
   '@cowprotocol/sdk-config@0.1.0':
     resolution: {integrity: sha512-tbGbsa0IzlwDEAzl/03m/p7/AHe3p2BmdUykytVfLAGzKT8/8TDgD2FULtr5n4oaBFDpHCApaFZvpplQufZDGQ==}
 
+  '@cowprotocol/sdk-config@0.3.0':
+    resolution: {integrity: sha512-EUDqXMSYsgLdXDnvC9sc9ozpsjQdP6R738R0kKNWp/mTI9j7wsI9sVrDcKIoX7qH+pu0aRmRxEFbEbW7uXUcIg==}
+
   '@cowprotocol/sdk-contracts-ts@0.4.0':
     resolution: {integrity: sha512-JYfsMvijdV5wZAgBJkyxgbB6rvcYsj6kS74BgkTawEJ3dQw6jnlFCsHrvgLNTom1ZlRhYPdm1jLC8oKDChJDZQ==}
 
+  '@cowprotocol/sdk-contracts-ts@0.5.0':
+    resolution: {integrity: sha512-QAx07lJG1HoldgzMSqXTf5iXB7eihTBS20h3WYD7h6yaoDcKjb06/vVp1g4aCgze0n/3ceYpthVDAVTnn3/fOw==}
+
   '@cowprotocol/sdk-order-book@0.1.2':
     resolution: {integrity: sha512-dYJESuhxqJ1mcrp8Fmxg88dRildymh88xeOtJsOYIep8yMixCluSBQTmfokNeraYGytTWL187cyPtOvC95pneg==}
+
+  '@cowprotocol/sdk-order-book@0.2.0':
+    resolution: {integrity: sha512-OeSHMGVEx7LCX+7ZnoRwLdIkJX25/tiquCVaocagrqzyPPPxD/TOg6BGLjgvl0kzoXLtfoSQ3CSz3IfvN/Etlg==}
+
+  '@cowprotocol/sdk-order-signing@0.1.11':
+    resolution: {integrity: sha512-6tbAC0yv0T4fm8y8xUFQqLGooyIJt5e0XKc40KZdLOMqHBzsocgOqPDLcalWMaTREVYTgO1bUUFqfPTNjLZJBA==}
 
   '@cowprotocol/sdk-order-signing@0.1.6':
     resolution: {integrity: sha512-z/KUPsIPo3NcclR/K6QrvXlIX9EC9Bum4FrqLIIHWTouute7FRAk2mkdCgVvqZaIrzhzwx9Qs8rkUoMl74/fzw==}
 
   '@cowprotocol/sdk-trading@0.4.1':
     resolution: {integrity: sha512-CzOXxp9Fy0t6Oktf67lBmxIv2Mq9Z3CLqD6wxrGo5lqEuMsd7tynTcUoeR28T7YPUzH5+JW3uT7yH5dTYtPnPw==}
+
+  '@cowprotocol/sdk-trading@0.4.6':
+    resolution: {integrity: sha512-vGuTZl+js0TAOa+3eeglEQvy7HA4+9uaVFwWViZm+GsqEEUuL273Xfsig3ETqIpQTk8iD7BI1D+WBn5NvEOtjA==}
+
+  '@cowprotocol/sdk-viem-adapter@0.2.0':
+    resolution: {integrity: sha512-7bn2606tLmGba/sQfJYpxniU+Ztn/eKUABi8VVcE7JYaiCaDF5SbWd6i6E1/3LBSd3VoSJq/b77a5aU5g8fkrg==}
+    peerDependencies:
+      viem: ^2.28.4
 
   '@ecies/ciphers@0.2.4':
     resolution: {integrity: sha512-t+iX+Wf5nRKyNzk8dviW3Ikb/280+aEJAnw9YXvCp2tYGPSkMki+NRY+8aNLmVFv3eNtMdvViPNOPxS8SZNP+w==}
@@ -7070,9 +7107,25 @@ snapshots:
       json-stringify-deterministic: 1.0.12
       multiformats: 9.9.0
 
+  '@cowprotocol/sdk-app-data@4.1.6(ajv@8.17.1)(cross-fetch@4.1.0)(ipfs-only-hash@4.0.0)(multiformats@9.9.0)':
+    dependencies:
+      '@cowprotocol/sdk-common': 0.3.0
+      ajv: 8.17.1
+      cross-fetch: 4.1.0
+      ipfs-only-hash: 4.0.0
+      json-stringify-deterministic: 1.0.12
+      multiformats: 9.9.0
+
   '@cowprotocol/sdk-common@0.2.1': {}
 
+  '@cowprotocol/sdk-common@0.3.0': {}
+
   '@cowprotocol/sdk-config@0.1.0':
+    dependencies:
+      exponential-backoff: 3.1.3
+      limiter: 2.1.0
+
+  '@cowprotocol/sdk-config@0.3.0':
     dependencies:
       exponential-backoff: 3.1.3
       limiter: 2.1.0
@@ -7082,6 +7135,11 @@ snapshots:
       '@cowprotocol/sdk-common': 0.2.1
       '@cowprotocol/sdk-config': 0.1.0
 
+  '@cowprotocol/sdk-contracts-ts@0.5.0':
+    dependencies:
+      '@cowprotocol/sdk-common': 0.3.0
+      '@cowprotocol/sdk-config': 0.3.0
+
   '@cowprotocol/sdk-order-book@0.1.2':
     dependencies:
       '@cowprotocol/sdk-common': 0.2.1
@@ -7089,6 +7147,25 @@ snapshots:
       cross-fetch: 3.2.0
       exponential-backoff: 3.1.3
       limiter: 3.0.0
+    transitivePeerDependencies:
+      - encoding
+
+  '@cowprotocol/sdk-order-book@0.2.0':
+    dependencies:
+      '@cowprotocol/sdk-common': 0.3.0
+      '@cowprotocol/sdk-config': 0.3.0
+      cross-fetch: 3.2.0
+      exponential-backoff: 3.1.3
+      limiter: 3.0.0
+    transitivePeerDependencies:
+      - encoding
+
+  '@cowprotocol/sdk-order-signing@0.1.11':
+    dependencies:
+      '@cowprotocol/sdk-common': 0.3.0
+      '@cowprotocol/sdk-config': 0.3.0
+      '@cowprotocol/sdk-contracts-ts': 0.5.0
+      '@cowprotocol/sdk-order-book': 0.2.0
     transitivePeerDependencies:
       - encoding
 
@@ -7116,6 +7193,27 @@ snapshots:
       - encoding
       - ipfs-only-hash
       - multiformats
+
+  '@cowprotocol/sdk-trading@0.4.6(ajv@8.17.1)(cross-fetch@4.1.0)(ipfs-only-hash@4.0.0)(multiformats@9.9.0)':
+    dependencies:
+      '@cowprotocol/sdk-app-data': 4.1.6(ajv@8.17.1)(cross-fetch@4.1.0)(ipfs-only-hash@4.0.0)(multiformats@9.9.0)
+      '@cowprotocol/sdk-common': 0.3.0
+      '@cowprotocol/sdk-config': 0.3.0
+      '@cowprotocol/sdk-contracts-ts': 0.5.0
+      '@cowprotocol/sdk-order-book': 0.2.0
+      '@cowprotocol/sdk-order-signing': 0.1.11
+      deepmerge: 4.3.1
+    transitivePeerDependencies:
+      - ajv
+      - cross-fetch
+      - encoding
+      - ipfs-only-hash
+      - multiformats
+
+  '@cowprotocol/sdk-viem-adapter@0.2.0(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))':
+    dependencies:
+      '@cowprotocol/sdk-common': 0.3.0
+      viem: 2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)
 
   '@ecies/ciphers@0.2.4(@noble/ciphers@1.3.0)':
     dependencies:
@@ -12858,8 +12956,8 @@ snapshots:
       '@typescript-eslint/parser': 8.46.2(eslint@9.38.0)(typescript@5.9.3)
       eslint: 9.38.0
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0)
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0))(eslint@9.38.0)
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.38.0)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.38.0)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.38.0)
       eslint-plugin-react: 7.37.5(eslint@9.38.0)
       eslint-plugin-react-hooks: 5.2.0(eslint@9.38.0)
@@ -12882,7 +12980,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0):
+  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.38.0):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
       debug: 4.4.3(supports-color@8.1.1)
@@ -12893,22 +12991,22 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0))(eslint@9.38.0)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.38.0)
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0))(eslint@9.38.0):
+  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.38.0):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
       '@typescript-eslint/parser': 8.46.2(eslint@9.38.0)(typescript@5.9.3)
       eslint: 9.38.0
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0)
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.38.0)
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0))(eslint@9.38.0):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.38.0):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -12919,7 +13017,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.38.0
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint@9.38.0))(eslint@9.38.0))(eslint@9.38.0)
+      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.46.2(eslint@9.38.0)(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.38.0)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3

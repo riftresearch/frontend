@@ -4,7 +4,7 @@ import { TokenData, PermitAllowance, PermitDataForSwap, ApprovalState } from "./
 import { Quote } from "./rfqClient";
 import { UniswapQuoteResponse } from "./uniswapRouter";
 import { FeeOverview } from "./swapHelpers";
-import { CowSwapQuoteResponse } from "./cowswapClient";
+import type { QuoteResults } from "@cowprotocol/sdk-trading";
 
 type DepositFlowState =
   | "0-not-started"
@@ -64,8 +64,8 @@ export const useStore = create<{
   setOutputUsdValue: (value: string) => void;
   uniswapQuote: UniswapQuoteResponse | null;
   setUniswapQuote: (quote: UniswapQuoteResponse | null) => void;
-  cowswapQuote: CowSwapQuoteResponse | null;
-  setCowswapQuote: (quote: CowSwapQuoteResponse | null) => void;
+  cowswapQuote: QuoteResults | null;
+  setCowswapQuote: (quote: QuoteResults | null) => void;
   rfqQuote: Quote | null;
   setRfqQuote: (quote: Quote | null) => void;
   swapRouter: SwapRouter;
@@ -159,7 +159,7 @@ export const useStore = create<{
   uniswapQuote: null,
   setUniswapQuote: (quote: UniswapQuoteResponse | null) => set({ uniswapQuote: quote }),
   cowswapQuote: null,
-  setCowswapQuote: (quote: CowSwapQuoteResponse | null) => set({ cowswapQuote: quote }),
+  setCowswapQuote: (quote: QuoteResults | null) => set({ cowswapQuote: quote }),
   rfqQuote: null,
   setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
   swapRouter: SwapRouter.UNISWAP,

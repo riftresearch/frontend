@@ -3,6 +3,7 @@ import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -52,6 +53,9 @@ export const SwapInputAndOutput = () => {
   // ============================================================================
 
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
+
+  // CowSwap client hook
+  const cowswapClient = useCowSwapClient();
 
   // Liquidity hook
   const liquidity = useMaxLiquidity();
@@ -268,7 +272,7 @@ export const SwapInputAndOutput = () => {
         // Convert amount to base units
         const decimals = selectedInputToken.decimals;
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
-        const sellToken = selectedInputToken?.address || "ETH";
+        const sellToken = selectedInputToken.address;
 
         console.log("getting quote for", sellToken, sellAmount, "with router", swapRouter);
         // Get combined quote (handles cbBTC internally)
@@ -281,7 +285,8 @@ export const SwapInputAndOutput = () => {
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
           slippageBips,
           undefined,
-          swapRouter
+          swapRouter,
+          cowswapClient
         );
 
         console.log("quoteResponse", quoteResponse);
@@ -305,10 +310,10 @@ export const SwapInputAndOutput = () => {
           if (btcPrice) {
             // Use cowswapQuote values if available, otherwise use uniswapQuote
             const cbBTCOut = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.quote.quote.buyAmount
+              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
               : quoteResponse.uniswapQuote?.amountOut || "0";
             const erc20In = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.quote.quote.sellAmount
+              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
               : quoteResponse.uniswapQuote?.amountIn || "0";
 
             // Get price for fee calculation
@@ -374,6 +379,7 @@ export const SwapInputAndOutput = () => {
       setFeeOverview,
       liquidity,
       swapRouter,
+      cowswapClient,
     ]
   );
 
@@ -450,7 +456,8 @@ export const SwapInputAndOutput = () => {
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
           slippageBips,
           undefined,
-          swapRouter
+          swapRouter,
+          cowswapClient
         );
 
         // Check if this is still the latest request
@@ -476,10 +483,10 @@ export const SwapInputAndOutput = () => {
           if (btcPrice) {
             // Use cowswapQuote values if available, otherwise use uniswapQuote
             const cbBTCOut = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.quote.quote.buyAmount
+              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
               : quoteResponse.uniswapQuote?.amountOut || "0";
             const erc20In = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.quote.quote.sellAmount
+              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
               : quoteResponse.uniswapQuote?.amountIn || "0";
 
             // Get price for fee calculation
@@ -542,6 +549,7 @@ export const SwapInputAndOutput = () => {
       setFeeOverview,
       liquidity,
       swapRouter,
+      cowswapClient,
     ]
   );
 
@@ -969,7 +977,7 @@ export const SwapInputAndOutput = () => {
     console.log("currentInputBalance", currentInputBalance);
 
     // Calculate currentInputBalance in USD for comparisons
-    const balanceInputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
+    const balanceInputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
     const balanceUsd = calculateUsdValue(
       currentInputBalance,
       balanceInputTicker,
@@ -1056,7 +1064,7 @@ export const SwapInputAndOutput = () => {
     setHasStartedTyping(true);
 
     // Update USD value using full precision
-    const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
+    const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
     const usdValue = calculateUsdValue(
       adjustedInputAmount,
       inputTicker,
@@ -1323,7 +1331,7 @@ export const SwapInputAndOutput = () => {
 
   // Update USD values when prices or amounts change
   useEffect(() => {
-    const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
+    const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
     const inputUsd = calculateUsdValue(rawInputAmount, inputTicker, ethPrice, btcPrice, erc20Price);
     setInputUsdValue(inputUsd);
 
@@ -1837,7 +1845,7 @@ export const SwapInputAndOutput = () => {
     if (inputFloat > 0 && (!outputAmount || parseFloat(outputAmount) <= 0)) {
       // Get the price of the input token
       let price: number | null = null;
-      const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker || "ETH" : "BTC";
+      const inputTicker = isSwappingForBTC ? selectedInputToken?.ticker : "BTC";
 
       if (inputTicker === "ETH") {
         price = ethPrice;
@@ -2543,9 +2551,7 @@ export const SwapInputAndOutput = () => {
               ethPrice,
               btcPrice,
               erc20Price,
-              isSwappingForBTC
-                ? selectedInputToken?.ticker || "ETH"
-                : selectedOutputToken?.ticker || "CBBTC"
+              isSwappingForBTC ? selectedInputToken?.ticker : selectedOutputToken?.ticker || "CBBTC"
             )}
           </Text>
           <Spacer />
