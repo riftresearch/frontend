@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text, Flex, Button, Tooltip } from "@chakra-ui/react";
+import { Box, Text, Flex, Button, Tooltip, Input } from "@chakra-ui/react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { RiftLogo } from "@/components/other/RiftLogo";
@@ -11,11 +11,15 @@ import { MarketMakers } from "../other/MarketMakers";
 import { ErrorLogs } from "../other/ErrorLogs";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import NumberFlow from "@number-flow/react";
-import { FiRefreshCw } from "react-icons/fi";
+import { FiRefreshCw, FiSearch, FiX, FiExternalLink, FiUser } from "react-icons/fi";
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
-import { toastSuccess } from "@/utils/toast";
+import { toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { AdminChats } from "./AdminChats";
+import { useRouter } from "next/router";
+import { getSwap, mapDbRowToAdminSwap } from "@/utils/analyticsClient";
+import { AdminSwapItem } from "@/utils/types";
+import { colors } from "@/utils/colors";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -23,6 +27,8 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { isMobile } = useWindowSize();
+  const router = useRouter();
+
   // Get WebSocket data with new fields - use these directly for real-time updates
   const {
     totalSwaps,
@@ -50,12 +56,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [feesCurrency, setFeesCurrency] = React.useState<"usd" | "btc">("usd");
   const [volumeCurrency, setVolumeCurrency] = React.useState<"usd" | "btc">("usd");
 
+  // Swap ID search state
+  const [swapIdInput, setSwapIdInput] = React.useState("");
+  const [isSearching, setIsSearching] = React.useState(false);
+  const [selectedSwap, setSelectedSwap] = React.useState<AdminSwapItem | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = React.useState(false);
+
   const cycleFees = () => {
     setFeesDisplayMode((prev) => {
       if (prev === "rift") return "network";
       if (prev === "network") return "liquidity";
       return "rift";
     });
+  };
+
+  const handleSearchSwap = async () => {
+    const trimmedId = swapIdInput.trim();
+    if (!trimmedId) {
+      toastError(null, {
+        title: "Invalid Swap ID",
+        description: "Please enter a swap ID",
+      });
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      // Fetch the swap data
+      const swapData = await getSwap(trimmedId);
+
+      // Map it to AdminSwapItem format (same as UserSwapHistory)
+      const mappedSwap = mapDbRowToAdminSwap(swapData);
+
+      // Show the modal with the swap details
+      setSelectedSwap(mappedSwap);
+      setIsDetailsModalOpen(true);
+
+      toastSuccess({
+        title: "Swap Found",
+        description: `Viewing swap ${trimmedId.slice(0, 8)}...`,
+      });
+    } catch (error: any) {
+      console.error("Failed to find swap:", error);
+      toastError(null, {
+        title: "Swap Not Found",
+        description: error.message || "Could not find a swap with that ID",
+      });
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   // Callback for SwapHistory component (not needed for display, but keeps the interface)
@@ -159,11 +209,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         direction="column"
       >
         {/* HEADER */}
-        <Flex justify="space-between" align="center">
+        <Flex justify="space-between" align="center" flexWrap="wrap" gap="16px">
           <Box cursor="pointer" onClick={() => window.location.reload()}>
             <RiftLogo width="110" height="28" fill={colorsAnalytics.offWhite} />
           </Box>
-          <Flex align="center" gap="24px">
+          <Flex align="center" gap="24px" flexWrap="wrap">
+            {/* Swap ID Search - Collapsible */}
+            <Flex align="center" gap="12px">
+              {isSearchExpanded ? (
+                <Flex align="center" gap="8px">
+                  <Input
+                    placeholder="Search by Swap ID..."
+                    value={swapIdInput}
+                    onChange={(e) => setSwapIdInput(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter") {
+                        handleSearchSwap();
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!swapIdInput) {
+                        setIsSearchExpanded(false);
+                      }
+                    }}
+                    autoFocus
+                    bg="rgba(0, 0, 0, 0.5)"
+                    border={`2px solid ${colorsAnalytics.borderGray}`}
+                    borderRadius="8px"
+                    color={colorsAnalytics.offWhite}
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="13px"
+                    px="12px"
+                    h="36px"
+                    w={isMobile ? "200px" : "280px"}
+                    _placeholder={{ color: colorsAnalytics.textGray }}
+                    _focus={{
+                      borderColor: "rgba(86, 50, 168, 0.6)",
+                      boxShadow: "none",
+                    }}
+                  />
+                  <Button
+                    onClick={handleSearchSwap}
+                    loading={isSearching}
+                    bg="rgba(86, 50, 168, 0.15)"
+                    border={`2px solid rgba(86, 50, 168, 0.4)`}
+                    color={colorsAnalytics.offWhite}
+                    _hover={{ bg: "rgba(86, 50, 168, 0.25)" }}
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="13px"
+                    h="36px"
+                    px="16px"
+                    borderRadius="8px"
+                    minW="auto"
+                  >
+                    <FiSearch />
+                  </Button>
+                </Flex>
+              ) : (
+                <Button
+                  onClick={() => setIsSearchExpanded(true)}
+                  bg="transparent"
+                  border={`2px solid ${colorsAnalytics.borderGray}`}
+                  borderRadius="8px"
+                  color={colorsAnalytics.offWhite}
+                  _hover={{ bg: "rgba(255, 255, 255, 0.05)" }}
+                  h="36px"
+                  px="12px"
+                  minW="auto"
+                >
+                  <FiSearch size={18} />
+                </Button>
+              )}
+
+              {/* Person Icon - Navigate to Simulate */}
+              <Button
+                onClick={() => router.push("/admin/simulate")}
+                bg="transparent"
+                border={`2px solid ${colorsAnalytics.borderGray}`}
+                borderRadius="8px"
+                color={colorsAnalytics.offWhite}
+                _hover={{ bg: "rgba(255, 255, 255, 0.05)" }}
+                h="36px"
+                px="12px"
+                minW="auto"
+              >
+                <FiUser size={18} />
+              </Button>
+            </Flex>
             <Text fontSize="sm" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
               Admin Dashboard &nbsp;|&nbsp;{" "}
               {new Date().toLocaleTimeString([], {
@@ -717,6 +849,242 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <ErrorLogs />
         </Flex> */}
       </Flex>
+
+      {/* Swap Details Modal */}
+      {isDetailsModalOpen && selectedSwap && (
+        <Flex
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          width="100vw"
+          height="100vh"
+          zIndex={999998}
+          bg="rgba(0, 0, 0, 0.85)"
+          align="center"
+          justify="center"
+          style={{
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={() => setIsDetailsModalOpen(false)}
+        >
+          <Box
+            bg="#1a1a1a"
+            borderWidth={2}
+            w="600px"
+            maxWidth="90%"
+            maxH="80vh"
+            overflowY="auto"
+            borderColor={colors.borderGray}
+            borderRadius="20px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={colors.offWhite}
+            position="relative"
+            p="32px"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <Flex justify="space-between" align="center" mb="24px">
+              <Text fontSize="24px" fontFamily={FONT_FAMILIES.NOSTROMO} fontWeight="bold">
+                Swap Details
+              </Text>
+              <Button
+                bg="transparent"
+                border="none"
+                color={colors.textGray}
+                _hover={{ color: colors.offWhite }}
+                onClick={() => setIsDetailsModalOpen(false)}
+                p="5px"
+                minW="auto"
+                h="auto"
+              >
+                <FiX size={24} />
+              </Button>
+            </Flex>
+
+            {/* Content */}
+            <Flex direction="column" gap="16px">
+              {/* Swap ID */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Swap ID
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite} fontFamily={FONT_FAMILIES.AUX_MONO}>
+                  {selectedSwap.id}
+                </Text>
+              </Flex>
+
+              {/* Direction */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Direction
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {selectedSwap.direction === "BTC_TO_EVM" ? "BTC → cbBTC" : "cbBTC → BTC"}
+                </Text>
+              </Flex>
+
+              {/* Amount */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Amount
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {selectedSwap.swapInitialAmountBtc.toFixed(8)} BTC ($
+                  {selectedSwap.swapInitialAmountUsd.toFixed(2)})
+                </Text>
+              </Flex>
+
+              {/* EVM Address */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  EVM Address
+                </Text>
+                <Text
+                  fontSize="14px"
+                  color={colors.offWhite}
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  wordBreak="break-all"
+                >
+                  {selectedSwap.evmAccountAddress}
+                </Text>
+              </Flex>
+
+              {/* Chain */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Chain
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {selectedSwap.chain}
+                </Text>
+              </Flex>
+
+              {/* Fees */}
+              <Flex direction="column" gap="8px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Fees
+                </Text>
+                <Flex direction="column" gap="4px" pl="12px">
+                  <Flex justify="space-between">
+                    <Text fontSize="13px" color={colors.textGray}>
+                      Rift Fee:
+                    </Text>
+                    <Text fontSize="13px" color={colors.offWhite}>
+                      {selectedSwap.riftFeeSats.toLocaleString()} sats
+                    </Text>
+                  </Flex>
+                  <Flex justify="space-between">
+                    <Text fontSize="13px" color={colors.textGray}>
+                      Network Fee:
+                    </Text>
+                    <Text fontSize="13px" color={colors.offWhite}>
+                      ${selectedSwap.networkFeeUsd.toFixed(2)}
+                    </Text>
+                  </Flex>
+                  <Flex justify="space-between">
+                    <Text fontSize="13px" color={colors.textGray}>
+                      MM Fee:
+                    </Text>
+                    <Text fontSize="13px" color={colors.offWhite}>
+                      ${selectedSwap.mmFeeUsd.toFixed(2)}
+                    </Text>
+                  </Flex>
+                </Flex>
+              </Flex>
+
+              {/* Created At */}
+              <Flex direction="column" gap="4px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Created At
+                </Text>
+                <Text fontSize="14px" color={colors.offWhite}>
+                  {new Date(selectedSwap.swapCreationTimestamp).toLocaleString()}
+                </Text>
+              </Flex>
+
+              {/* Flow Steps */}
+              <Flex direction="column" gap="8px">
+                <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                  Flow Steps
+                </Text>
+                <Flex direction="column" gap="4px" pl="12px">
+                  {selectedSwap.flow
+                    .filter((s) => s.status !== "settled")
+                    .map((step, idx) => (
+                      <Flex key={idx} justify="space-between" align="center">
+                        <Text fontSize="13px" color={colors.textGray}>
+                          {step.status}:
+                        </Text>
+                        <Text
+                          fontSize="13px"
+                          color={
+                            step.state === "completed"
+                              ? "#22c55e"
+                              : step.state === "inProgress"
+                                ? "#3b82f6"
+                                : colors.textGray
+                          }
+                        >
+                          {step.state} ({step.duration})
+                        </Text>
+                      </Flex>
+                    ))}
+                </Flex>
+              </Flex>
+
+              {/* Raw Data */}
+              {selectedSwap.rawData && (
+                <Flex direction="column" gap="8px">
+                  <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
+                    Raw Data (Full Swap Response)
+                  </Text>
+                  <Box
+                    bg="#0a0a0a"
+                    border={`1px solid ${colors.borderGray}`}
+                    borderRadius="8px"
+                    p="12px"
+                    maxH="300px"
+                    overflowY="auto"
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="11px"
+                  >
+                    <pre
+                      style={{
+                        margin: 0,
+                        color: colors.offWhite,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {JSON.stringify(selectedSwap.rawData, null, 2)}
+                    </pre>
+                  </Box>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(selectedSwap.rawData, null, 2));
+                      toastSuccess({
+                        title: "Copied to clipboard",
+                        description: "Complete swap data copied",
+                      });
+                    }}
+                    bg="rgba(34, 197, 94, 0.15)"
+                    border={`2px solid rgba(34, 197, 94, 0.4)`}
+                    color={colors.offWhite}
+                    _hover={{ bg: "rgba(34, 197, 94, 0.25)" }}
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    fontSize="12px"
+                  >
+                    Copy Raw Data to Clipboard
+                  </Button>
+                </Flex>
+              )}
+            </Flex>
+          </Box>
+        </Flex>
+      )}
     </Flex>
   );
 };

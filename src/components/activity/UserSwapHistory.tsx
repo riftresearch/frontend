@@ -290,12 +290,18 @@ async function fetchUserSwaps(
     // Filter out swaps that are pending or at waiting_user_deposit_initiated WITHOUT a refund available
     // (these are created but user never deposited)
     // But KEEP waiting_user_deposit_initiated swaps that have refund available (partial deposits)
+
     const swaps = allSwaps.filter((swap: AdminSwapItem) => {
       const currentStep =
         swap.flow.find((s: AdminSwapFlowStep) => s.state === "inProgress") ||
         swap.flow[swap.flow.length - 1];
       const currentStatus = currentStep?.status;
       const swapIsRefundAvailable = (swap as any).isRefundAvailable;
+
+      console.log("[FETCH USER SWAPS] Filtering swap:", swap.id, {
+        currentStatus,
+        swapIsRefundAvailable,
+      });
 
       // Exclude pending swaps
       if (currentStatus === "pending") return false;
@@ -321,10 +327,18 @@ async function fetchUserSwaps(
 
 interface UserSwapHistoryProps {
   onInitialLoadComplete?: () => void;
+  simulatedAddress?: string; // Optional simulated address for admin view
 }
 
-export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({ onInitialLoadComplete }) => {
-  const { address, isConnected } = useAccount();
+export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
+  onInitialLoadComplete,
+  simulatedAddress,
+}) => {
+  const { address: walletAddress, isConnected } = useAccount();
+
+  // Use simulated address if provided, otherwise use wallet address
+  const address = simulatedAddress || walletAddress;
+  const isSimulating = !!simulatedAddress;
   const router = useRouter();
   const { isMobile } = useWindowSize();
   const [swaps, setSwaps] = useState<AdminSwapItem[]>([]);
@@ -376,7 +390,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({ onInitialLoadC
 
   // Fetch initial swaps with retry logic and set up polling
   useEffect(() => {
-    if (!isConnected || !address) {
+    // Skip if no address (not connected and not simulating)
+    if (!address || (!isConnected && !isSimulating)) {
       setSwaps([]);
       setPage(0);
       setHasMore(true);
@@ -423,7 +438,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({ onInitialLoadC
 
     // Cleanup interval on unmount or when address/connection changes
     return () => clearInterval(pollInterval);
-  }, [address, isConnected]);
+  }, [address, isConnected, isSimulating]);
 
   // Fetch next page
   const fetchNextPage = useCallback(async () => {
@@ -478,7 +493,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({ onInitialLoadC
     );
   }
 
-  if (!isConnected) {
+  // Only show "not connected" UI if not simulating and not connected
+  if (!isConnected && !isSimulating) {
     return (
       <GridFlex
         width={isMobile ? "100%" : "100%"}

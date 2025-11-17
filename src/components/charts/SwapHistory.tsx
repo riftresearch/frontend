@@ -612,7 +612,9 @@ const Card: React.FC<{
                       color={colorsAnalytics.offWhite}
                       fontFamily={FONT_FAMILIES.SF_PRO}
                     >
-                      cbBTC
+                      {isMobile
+                        ? swap.swapInitialAmountBtc.toFixed(6)
+                        : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                     </Text>
                     <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
                   </>
