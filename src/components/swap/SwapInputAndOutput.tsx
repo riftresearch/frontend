@@ -911,7 +911,7 @@ export const SwapInputAndOutput = () => {
 
       // Set up debounced quote fetch (75ms delay)
       if (value && parseFloat(value) > 0 && !getQuoteForInputRef.current) {
-        // Check if output is below minimum (3000 sats = 0.00003 BTC)
+        // Check if output is below min (3000 sats = 0.00003 BTC)
         const outputFloat = parseFloat(value);
 
         if (outputFloat < MIN_BTC) {
