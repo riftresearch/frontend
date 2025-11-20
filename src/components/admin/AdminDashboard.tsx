@@ -15,7 +15,6 @@ import { FiRefreshCw } from "react-icons/fi";
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
 import { toastSuccess } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { AdminChats } from "./AdminChats";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -665,19 +664,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
         {/* FEEDBACK CHATS */}
         <Flex mt="20px" mb="20px" direction="column">
-          <Text
-            ml="5px"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-            fontWeight="bold"
-            mt="18px"
-            fontSize="35px"
-            style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
-            mb="28px"
-          >
-            Feedback Chats
-          </Text>
-          <AdminChats />
+          <Flex justify="space-between" align="center" mb="20px">
+            <Text
+              ml="5px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontWeight="bold"
+              fontSize="35px"
+              style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+            >
+              Feedback Chats
+            </Text>
+            <Button
+              onClick={() => (window.location.href = "/chats")}
+              bg={colorsAnalytics.greenBackground}
+              border={`2px solid ${colorsAnalytics.greenOutline}`}
+              color={colorsAnalytics.offWhite}
+              _hover={{
+                opacity: 0.8,
+              }}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontSize="14px"
+              px="16px"
+              py="6px"
+              borderRadius="12px"
+              h="auto"
+            >
+              View All Chats
+            </Button>
+          </Flex>
         </Flex>
 
         {/* RIFT LOGO */}
