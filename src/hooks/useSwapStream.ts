@@ -206,7 +206,7 @@ export function useSwapStream(): SwapWebSocketResult {
               case "swap":
                 // New swap was created
                 const newSwapData = message.data || message;
-                console.log("🆕 New swap queued:", newSwapData.id);
+                // console.log("🆕 New swap queued:", newSwapData.id);
                 newSwapQueueRef.current.push(newSwapData);
                 processNewSwapQueue();
 
@@ -256,7 +256,7 @@ export function useSwapStream(): SwapWebSocketResult {
 
               case "swap_updated":
                 // Existing swap was updated (status/stage changed)
-                console.log("🔄 Swap update queued:", message.data?.id);
+                // console.log("🔄 Swap update queued:", message.data?.id);
                 updateSwapQueueRef.current.push(message.data);
                 processUpdateQueue();
 
@@ -305,7 +305,7 @@ export function useSwapStream(): SwapWebSocketResult {
               default:
                 // Handle plain swap object (not wrapped in {type, data})
                 if (message.id) {
-                  console.log("🆕 New swap queued (plain):", message.id);
+                  // console.log("🆕 New swap queued (plain):", message.id);
                   newSwapQueueRef.current.push(message);
                   processNewSwapQueue();
                 } else {

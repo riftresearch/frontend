@@ -886,7 +886,7 @@ export const SwapInputAndOutput = () => {
 
       // Set router based on USD value threshold
       const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      if (usdValueFloat > 2500) {
+      if (usdValueFloat > 300) {
         setSwapRouter(SwapRouter.COWSWAP);
       } else {
         setSwapRouter(SwapRouter.UNISWAP);

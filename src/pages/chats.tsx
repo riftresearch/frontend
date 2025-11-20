@@ -37,6 +37,35 @@ const ChatsPage: NextPage = () => {
     };
   }, []);
 
+  // Track tab visibility and auto-refresh if inactive for more than 5 minutes
+  useEffect(() => {
+    let lastVisibleTime = Date.now();
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab became hidden, store the current time
+        lastVisibleTime = Date.now();
+      } else {
+        // Tab became visible, check if more than 5 minutes have passed
+        const timeAway = Date.now() - lastVisibleTime;
+        const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+        if (timeAway > fiveMinutes) {
+          console.log(
+            `[ADMIN CHATS PAGE] Tab was inactive for ${Math.round(timeAway / 1000 / 60)} minutes. Auto-refreshing...`
+          );
+          window.location.reload();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const handleAuthenticated = (password: string) => {
     setAdminPasswordCookie(password);
     setIsAuthenticated(true);
