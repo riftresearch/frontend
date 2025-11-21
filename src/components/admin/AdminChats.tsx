@@ -801,6 +801,30 @@ export const AdminChats: React.FC = () => {
                               </Flex>
                             </Flex>
 
+                            {/* Amount */}
+                            <Flex align="center" gap="6px" mb="6px">
+                              <Text
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                fontSize="12px"
+                                color={colorsAnalytics.offWhite}
+                                fontWeight="500"
+                              >
+                                {swap.swapInitialAmountBtc.toFixed(6)} BTC
+                              </Text>
+                              <Text
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                fontSize="11px"
+                                color={colorsAnalytics.textGray}
+                              >
+                                (~$
+                                {swap.swapInitialAmountUsd.toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                  minimumFractionDigits: 2,
+                                })}
+                                )
+                              </Text>
+                            </Flex>
+
                             <Flex justify="space-between" align="center" mb="6px">
                               <Text
                                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1235,6 +1259,31 @@ export const AdminChats: React.FC = () => {
                                   {endAsset}
                                 </Text>
                               </Flex>
+                            </Flex>
+
+                            {/* Amount */}
+                            <Flex align="center" gap="4px" mb="6px">
+                              <Text
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                fontSize="11px"
+                                color={colorsAnalytics.offWhite}
+                                fontWeight="500"
+                              >
+                                {swap.swapInitialAmountBtc.toFixed(6)} BTC
+                              </Text>
+                            </Flex>
+                            <Flex align="center" gap="4px" mb="6px">
+                              <Text
+                                fontFamily={FONT_FAMILIES.AUX_MONO}
+                                fontSize="10px"
+                                color={colorsAnalytics.textGray}
+                              >
+                                ~$
+                                {swap.swapInitialAmountUsd.toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                  minimumFractionDigits: 2,
+                                })}
+                              </Text>
                             </Flex>
 
                             <Flex justify="space-between" align="center" mb="4px">
