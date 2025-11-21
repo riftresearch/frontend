@@ -17,6 +17,7 @@ import {
   PERMIT2_ADDRESS,
   IS_FRONTEND_PAUSED,
 } from "@/utils/constants";
+import { OTCServerError } from "@/utils/otcClient";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { useStore } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
@@ -27,6 +28,27 @@ import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
 import { createUniswapRouter } from "@/utils/uniswapRouter";
+
+// Helper function to handle OTC errors with specific messaging
+const handleOTCError = (error: unknown) => {
+  console.error("OTC Error:", error);
+
+  // Check if it's an OFAC-related error
+  if (error instanceof OTCServerError && error.isOFACSanctioned()) {
+    toastError(error, {
+      title: "Address Blocked",
+      description:
+        "This address is blocked due to sanctions compliance. We cannot process swaps for sanctioned addresses.",
+    });
+    return;
+  }
+
+  // Default error message
+  toastError(error, {
+    title: "Swap Failed",
+    description: "Try refreshing the quote and try again.",
+  });
+};
 
 export const SwapButton = () => {
   // ============================================================================
@@ -360,10 +382,7 @@ export const SwapButton = () => {
 
       setSwapButtonPressed(false);
       setSwapResponse(null);
-      toastError(error, {
-        title: "Swap Failed",
-        description: "Try refreshing the quote and try again.",
-      });
+      handleOTCError(error);
     }
   }, [
     rfqQuote,
@@ -520,10 +539,7 @@ export const SwapButton = () => {
 
       setSwapResponse(null);
       setSwapButtonPressed(false);
-      toastError(error, {
-        title: "Swap Failed",
-        description: "Try refreshing the quote and try again.",
-      });
+      handleOTCError(error);
     }
   }, [
     uniswapQuote,
@@ -586,10 +602,7 @@ export const SwapButton = () => {
 
       setSwapButtonPressed(false);
       setSwapResponse(null);
-      toastError(error, {
-        title: "Swap Failed",
-        description: "Try refreshing the quote and try again.",
-      });
+      handleOTCError(error);
     }
   }, [
     rfqQuote,
