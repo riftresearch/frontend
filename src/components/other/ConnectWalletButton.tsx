@@ -47,14 +47,45 @@ export const ConnectWalletButton: React.FC = () => {
       cid: number
     ): Promise<TokenBalance[]> => {
       try {
-        const response = await fetch(`/api/token-balance?wallet=${walletAddress}&chainId=${cid}`, {
-          method: "GET",
-        });
-        const data = await response.json();
-        if (data.result?.result) {
-          return data.result.result as TokenBalance[];
+        console.log(
+          "[Balance Check] Fetching token balance for address:",
+          walletAddress,
+          "chainId:",
+          cid
+        );
+
+        const allTokens: TokenBalance[] = [];
+        let page = 1;
+        let hasMorePages = true;
+
+        // Fetch all pages of tokens
+        while (hasMorePages) {
+          const response = await fetch(
+            `/api/token-balance?wallet=${walletAddress}&chainId=${cid}&page=${page}`,
+            { method: "GET" }
+          );
+          const data = await response.json();
+
+          if (data.result?.result && Array.isArray(data.result.result)) {
+            const tokens = data.result.result as TokenBalance[];
+            allTokens.push(...tokens);
+
+            console.log(
+              `[Balance Check] Fetched page ${page}: ${tokens.length} tokens (total: ${allTokens.length})`
+            );
+
+            // Check if there are more pages
+            // QuickNode returns less than perPage (100) when it's the last page
+            hasMorePages = tokens.length === 100;
+            page++;
+          } else {
+            hasMorePages = false;
+          }
         }
-        return [];
+
+        console.log("[Balance Check] Total tokens fetched:", allTokens.length);
+        console.log("[Balance Check] All tokens:", allTokens);
+        return allTokens;
       } catch (e) {
         console.error("Failed to fetch wallet tokens:", e);
         return [];
@@ -88,6 +119,12 @@ export const ConnectWalletButton: React.FC = () => {
 
     const fetchUserEth = async (walletAddress: string, cid: number): Promise<TokenData | null> => {
       try {
+        console.log(
+          "[Balance Check] Fetching ETH balance for address:",
+          walletAddress,
+          "chainId:",
+          cid
+        );
         const response = await fetch(`/api/eth-balance?wallet=${walletAddress}&chainId=${cid}`, {
           method: "GET",
         });
