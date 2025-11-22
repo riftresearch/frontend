@@ -75,8 +75,8 @@ export const ConnectWalletButton: React.FC = () => {
             );
 
             // Check if there are more pages
-            // QuickNode returns less than perPage (100) when it's the last page
-            hasMorePages = tokens.length === 100;
+
+            hasMorePages = tokens.length >= 50;
             page++;
           } else {
             hasMorePages = false;
@@ -97,20 +97,56 @@ export const ConnectWalletButton: React.FC = () => {
       chain: "ethereum" | "base"
     ): Promise<Record<string, TokenPrice & { decimals?: number }>> => {
       try {
-        const addrParam = addresses.join(",");
-        const response = await fetch(`/api/token-price?chain=${chain}&addresses=${addrParam}`, {
-          method: "GET",
-        });
-        const data = await response.json();
-        if (data.coins) {
-          const prices: Record<string, TokenPrice & { decimals?: number }> = {};
-          for (const [key, coinData] of Object.entries<any>(data.coins)) {
-            const address = key.split(":")[1]?.toLowerCase();
-            prices[address] = coinData as TokenPrice & { decimals?: number };
-          }
-          return prices;
+        // Batch addresses into chunks of 30 to avoid URL length limits and API rate limits
+        const BATCH_SIZE = 30;
+        const batches: string[][] = [];
+
+        for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+          batches.push(addresses.slice(i, i + BATCH_SIZE));
         }
-        return {};
+
+        console.log(
+          `[Price Check] Fetching prices for ${addresses.length} tokens in ${batches.length} batches`
+        );
+
+        // Fetch all batches in parallel
+        const batchPromises = batches.map(async (batch, index) => {
+          const addrParam = batch.join(",");
+          console.log(
+            `[Price Check] Fetching batch ${index + 1}/${batches.length} (${batch.length} tokens)`
+          );
+
+          const response = await fetch(`/api/token-price?chain=${chain}&addresses=${addrParam}`, {
+            method: "GET",
+          });
+
+          if (!response.ok) {
+            console.error(`Failed to fetch prices for batch ${index + 1}:`, response.status);
+            return {};
+          }
+
+          const data = await response.json();
+          return data.coins || {};
+        });
+
+        // Wait for all batches to complete
+        const batchResults = await Promise.all(batchPromises);
+
+        // Merge all batch results into a single prices object
+        const prices: Record<string, TokenPrice & { decimals?: number }> = {};
+        for (const batchData of batchResults) {
+          for (const [key, coinData] of Object.entries<any>(batchData)) {
+            const address = key.split(":")[1]?.toLowerCase();
+            if (address) {
+              prices[address] = coinData as TokenPrice & { decimals?: number };
+            }
+          }
+        }
+
+        console.log(
+          `[Price Check] Successfully fetched prices for ${Object.keys(prices).length} tokens`
+        );
+        return prices;
       } catch (e) {
         console.error("Failed to fetch token prices:", e);
         return {};
