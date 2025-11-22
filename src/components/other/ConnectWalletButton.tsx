@@ -47,14 +47,45 @@ export const ConnectWalletButton: React.FC = () => {
       cid: number
     ): Promise<TokenBalance[]> => {
       try {
-        const response = await fetch(`/api/token-balance?wallet=${walletAddress}&chainId=${cid}`, {
-          method: "GET",
-        });
-        const data = await response.json();
-        if (data.result?.result) {
-          return data.result.result as TokenBalance[];
+        console.log(
+          "[Balance Check] Fetching token balance for address:",
+          walletAddress,
+          "chainId:",
+          cid
+        );
+
+        const allTokens: TokenBalance[] = [];
+        let page = 1;
+        let hasMorePages = true;
+
+        // Fetch all pages of tokens
+        while (hasMorePages) {
+          const response = await fetch(
+            `/api/token-balance?wallet=${walletAddress}&chainId=${cid}&page=${page}`,
+            { method: "GET" }
+          );
+          const data = await response.json();
+
+          if (data.result?.result && Array.isArray(data.result.result)) {
+            const tokens = data.result.result as TokenBalance[];
+            allTokens.push(...tokens);
+
+            console.log(
+              `[Balance Check] Fetched page ${page}: ${tokens.length} tokens (total: ${allTokens.length})`
+            );
+
+            // Check if there are more pages
+
+            hasMorePages = tokens.length >= 50;
+            page++;
+          } else {
+            hasMorePages = false;
+          }
         }
-        return [];
+
+        console.log("[Balance Check] Total tokens fetched:", allTokens.length);
+        console.log("[Balance Check] All tokens:", allTokens);
+        return allTokens;
       } catch (e) {
         console.error("Failed to fetch wallet tokens:", e);
         return [];
@@ -66,20 +97,56 @@ export const ConnectWalletButton: React.FC = () => {
       chain: "ethereum" | "base"
     ): Promise<Record<string, TokenPrice & { decimals?: number }>> => {
       try {
-        const addrParam = addresses.join(",");
-        const response = await fetch(`/api/token-price?chain=${chain}&addresses=${addrParam}`, {
-          method: "GET",
-        });
-        const data = await response.json();
-        if (data.coins) {
-          const prices: Record<string, TokenPrice & { decimals?: number }> = {};
-          for (const [key, coinData] of Object.entries<any>(data.coins)) {
-            const address = key.split(":")[1]?.toLowerCase();
-            prices[address] = coinData as TokenPrice & { decimals?: number };
-          }
-          return prices;
+        // Batch addresses into chunks of 30 to avoid URL length limits and API rate limits
+        const BATCH_SIZE = 30;
+        const batches: string[][] = [];
+
+        for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+          batches.push(addresses.slice(i, i + BATCH_SIZE));
         }
-        return {};
+
+        console.log(
+          `[Price Check] Fetching prices for ${addresses.length} tokens in ${batches.length} batches`
+        );
+
+        // Fetch all batches in parallel
+        const batchPromises = batches.map(async (batch, index) => {
+          const addrParam = batch.join(",");
+          console.log(
+            `[Price Check] Fetching batch ${index + 1}/${batches.length} (${batch.length} tokens)`
+          );
+
+          const response = await fetch(`/api/token-price?chain=${chain}&addresses=${addrParam}`, {
+            method: "GET",
+          });
+
+          if (!response.ok) {
+            console.error(`Failed to fetch prices for batch ${index + 1}:`, response.status);
+            return {};
+          }
+
+          const data = await response.json();
+          return data.coins || {};
+        });
+
+        // Wait for all batches to complete
+        const batchResults = await Promise.all(batchPromises);
+
+        // Merge all batch results into a single prices object
+        const prices: Record<string, TokenPrice & { decimals?: number }> = {};
+        for (const batchData of batchResults) {
+          for (const [key, coinData] of Object.entries<any>(batchData)) {
+            const address = key.split(":")[1]?.toLowerCase();
+            if (address) {
+              prices[address] = coinData as TokenPrice & { decimals?: number };
+            }
+          }
+        }
+
+        console.log(
+          `[Price Check] Successfully fetched prices for ${Object.keys(prices).length} tokens`
+        );
+        return prices;
       } catch (e) {
         console.error("Failed to fetch token prices:", e);
         return {};
@@ -88,6 +155,12 @@ export const ConnectWalletButton: React.FC = () => {
 
     const fetchUserEth = async (walletAddress: string, cid: number): Promise<TokenData | null> => {
       try {
+        console.log(
+          "[Balance Check] Fetching ETH balance for address:",
+          walletAddress,
+          "chainId:",
+          cid
+        );
         const response = await fetch(`/api/eth-balance?wallet=${walletAddress}&chainId=${cid}`, {
           method: "GET",
         });
