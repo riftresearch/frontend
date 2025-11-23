@@ -452,6 +452,7 @@ export const SwapButton = () => {
         setSwapResponse(otcSwap);
       }
 
+      console.log("executing with swapRouter", swapRouter);
       // Step 2: Check router type and execute appropriate swap
       if (swapRouter === SwapRouter.COWSWAP) {
         // CowSwap order submission flow

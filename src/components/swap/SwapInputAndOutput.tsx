@@ -210,7 +210,7 @@ export const SwapInputAndOutput = () => {
 
   // Fetch quote for ERC20/ETH -> BTC (combines CowSwap + RFQ)
   const fetchERC20ToBTCQuote = useCallback(
-    async (inputAmount?: string, requestId?: number) => {
+    async (inputAmount?: string, requestId?: number, router?: SwapRouter) => {
       // Use provided amount or fall back to state
       const amountToQuote = inputAmount ?? rawInputAmount;
 
@@ -269,7 +269,8 @@ export const SwapInputAndOutput = () => {
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
         const sellToken = selectedInputToken.address;
 
-        console.log("getting quote for", sellToken, sellAmount, "with router", swapRouter);
+        const routerToUse = router ?? swapRouter;
+        console.log("getting quote for", sellToken, sellAmount, "with router", routerToUse);
         // Get combined quote (handles cbBTC internally)
         const quoteResponse = await getERC20ToBTCQuote(
           sellToken,
@@ -280,7 +281,7 @@ export const SwapInputAndOutput = () => {
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
           slippageBips,
           undefined,
-          swapRouter,
+          routerToUse,
           cowswapClient
         );
 
@@ -380,7 +381,7 @@ export const SwapInputAndOutput = () => {
 
   // Fetch quote for ERC20/ETH -> BTC (exact output mode)
   const fetchERC20ToBTCQuoteExactOutput = useCallback(
-    async (outputAmountOverride?: string, requestId?: number) => {
+    async (outputAmountOverride?: string, requestId?: number, router?: SwapRouter) => {
       // Use provided amount or fall back to state
       const btcAmountToQuote = outputAmountOverride ?? outputAmount;
 
@@ -439,6 +440,7 @@ export const SwapInputAndOutput = () => {
         // Clear any previous "no routes" error
         setHasNoRoutesError(false);
 
+        const routerToUse = router ?? swapRouter;
         const quoteResponse = await getERC20ToBTCQuoteExactOutput(
           btcAmountToQuote,
           selectedInputToken,
@@ -447,7 +449,7 @@ export const SwapInputAndOutput = () => {
             : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
           slippageBips,
           undefined,
-          swapRouter,
+          routerToUse,
           cowswapClient
         );
 
@@ -803,11 +805,9 @@ export const SwapInputAndOutput = () => {
 
       // Set router based on USD value threshold
       const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      if (usdValueFloat > 300) {
-        setSwapRouter(SwapRouter.COWSWAP);
-      } else {
-        setSwapRouter(SwapRouter.UNISWAP);
-      }
+      console.log("usdValueFloat", usdValueFloat);
+      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
+      setSwapRouter(computedRouter);
 
       // Clear existing quotes when user types
       setUniswapQuote(null);
@@ -839,7 +839,7 @@ export const SwapInputAndOutput = () => {
         if (isSwappingForBTC) {
           // Fetch exact input quote for ERC20/ETH -> BTC
           quoteDebounceTimerRef.current = setTimeout(() => {
-            fetchERC20ToBTCQuote(value, currentRequestId);
+            fetchERC20ToBTCQuote(value, currentRequestId, computedRouter);
           }, 125);
         } else {
           // Fetch exact input quote for BTC -> ERC20/ETH
@@ -886,11 +886,8 @@ export const SwapInputAndOutput = () => {
 
       // Set router based on USD value threshold
       const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      if (usdValueFloat > 300) {
-        setSwapRouter(SwapRouter.COWSWAP);
-      } else {
-        setSwapRouter(SwapRouter.UNISWAP);
-      }
+      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
+      setSwapRouter(computedRouter);
 
       // Clear existing quotes when user types
       setUniswapQuote(null);
@@ -932,7 +929,7 @@ export const SwapInputAndOutput = () => {
         if (isSwappingForBTC) {
           // Fetch exact output quote for ERC20/ETH -> BTC
           outputQuoteDebounceTimerRef.current = setTimeout(() => {
-            fetchERC20ToBTCQuoteExactOutput(value, currentRequestId);
+            fetchERC20ToBTCQuoteExactOutput(value, currentRequestId, computedRouter);
           }, 75);
         } else {
           // Fetch exact output quote for BTC -> ERC20/ETH
@@ -1061,6 +1058,11 @@ export const SwapInputAndOutput = () => {
     );
     setInputUsdValue(usdValue);
 
+    // Calculate router based on USD value threshold
+    const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
+    const computedRouter = usdValueFloat > 500 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
+    setSwapRouter(computedRouter);
+
     // Clear existing quotes when max is clicked
     setUniswapQuote(null);
     setCowswapQuote(null);
@@ -1082,7 +1084,7 @@ export const SwapInputAndOutput = () => {
 
       if (isSwappingForBTC) {
         // Fetch exact input quote for ERC20/ETH -> BTC using full precision
-        fetchERC20ToBTCQuote(adjustedInputAmount, currentRequestId);
+        fetchERC20ToBTCQuote(adjustedInputAmount, currentRequestId, computedRouter);
       } else {
         // there is no max button for BTC -> ERC20/ETH
         // Fetch exact input quote for BTC -> ERC20/ETH
@@ -1136,6 +1138,11 @@ export const SwapInputAndOutput = () => {
     );
     setOutputUsdValue(usdValue);
 
+    // Calculate router based on USD value threshold
+    const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
+    const computedRouter = usdValueFloat > 500 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
+    setSwapRouter(computedRouter);
+
     // Clear existing quotes when max is clicked
     setUniswapQuote(null);
     setCowswapQuote(null);
@@ -1157,7 +1164,7 @@ export const SwapInputAndOutput = () => {
 
       if (isSwappingForBTC) {
         // Fetch exact output quote for ERC20/ETH -> BTC
-        fetchERC20ToBTCQuoteExactOutput(truncatedOutputAmount, currentRequestId);
+        fetchERC20ToBTCQuoteExactOutput(truncatedOutputAmount, currentRequestId, computedRouter);
       } else {
         // Fetch exact output quote for BTC -> ERC20/ETH
         fetchBTCtoERC20Quote(truncatedOutputAmount, "ExactOutput", currentRequestId);
@@ -1195,6 +1202,10 @@ export const SwapInputAndOutput = () => {
     );
     setOutputUsdValue(usdValue);
 
+    // Always use UNISWAP for minimum clicks
+    const computedRouter = SwapRouter.UNISWAP;
+    setSwapRouter(computedRouter);
+
     // Clear existing quotes
     setUniswapQuote(null);
     setCowswapQuote(null);
@@ -1215,7 +1226,7 @@ export const SwapInputAndOutput = () => {
 
     if (isSwappingForBTC) {
       // Fetch exact output quote for ERC20/ETH -> BTC
-      fetchERC20ToBTCQuoteExactOutput(minOutputAmountStr, currentRequestId);
+      fetchERC20ToBTCQuoteExactOutput(minOutputAmountStr, currentRequestId, computedRouter);
     } else {
       // Fetch exact output quote for BTC -> ERC20/ETH
       fetchBTCtoERC20Quote(minOutputAmountStr, "ExactOutput", currentRequestId);
@@ -1919,7 +1930,20 @@ export const SwapInputAndOutput = () => {
       // Determine which price we need based on selected token
       console.log("Auto-refetching ERC20->BTC quote after prices loaded");
       setRefetchERC20toBTCQuote(false);
-      fetchERC20ToBTCQuote();
+
+      // Calculate USD value and determine router
+      const inputTicker = selectedInputToken.ticker;
+      const usdValue = calculateUsdValue(
+        rawInputAmount,
+        inputTicker,
+        ethPrice,
+        btcPrice,
+        erc20Price
+      );
+      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
+      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
+
+      fetchERC20ToBTCQuote(undefined, undefined, computedRouter);
     }
 
     // For ERC20 -> BTC exact output
@@ -1932,7 +1956,20 @@ export const SwapInputAndOutput = () => {
     ) {
       console.log("Auto-refetching ERC20->BTC exact output quote after prices loaded");
       setRefetchERC20toBTCQuoteExactOutput(false);
-      fetchERC20ToBTCQuoteExactOutput();
+
+      // Calculate USD value and determine router
+      const outputTicker = "BTC";
+      const usdValue = calculateUsdValue(
+        outputAmount,
+        outputTicker,
+        ethPrice,
+        btcPrice,
+        erc20Price
+      );
+      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
+      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
+
+      fetchERC20ToBTCQuoteExactOutput(undefined, undefined, computedRouter);
     }
 
     // For BTC -> ERC20
