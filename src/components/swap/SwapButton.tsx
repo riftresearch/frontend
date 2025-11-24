@@ -413,6 +413,7 @@ export const SwapButton = () => {
 
     try {
       let depositAddress: string;
+      let otcSwap: any = null;
 
       if (FAKE_OTC) {
         // In fake OTC mode, use user's wallet address as deposit address
@@ -434,7 +435,7 @@ export const SwapButton = () => {
         console.log("🟠 [METADATA] Creating ERC20->BTC swap with metadata:");
         console.log("  - Amount in metadata:", amountForMetadata);
 
-        const otcSwap = await otcClient.createSwap({
+        otcSwap = await otcClient.createSwap({
           quote: rfqQuote!,
           user_destination_address: payoutAddress,
           user_evm_account_address: userEvmAccountAddress,
@@ -492,6 +493,31 @@ export const SwapButton = () => {
         // Store order ID and set status to signed
         setCowswapOrderData({ id: orderId, order: null });
         setCowswapOrderStatus(CowswapOrderStatus.SIGNED);
+
+        // Store CowSwap order ID in swap metadata
+        if (otcSwap?.swap_id) {
+          try {
+            await fetch(`/api/swap/${otcSwap.swap_id}/metadata`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                metadata: {
+                  cowswapOrderId: orderId,
+                },
+              }),
+            });
+            console.log("CowSwap order ID stored in swap metadata");
+          } catch (error) {
+            console.error("Failed to store CowSwap order ID in metadata:", error);
+            // Don't fail the swap if metadata update fails
+          }
+        }
+
+        // Redirect to swap tracking page
+        if (otcSwap?.swap_id) {
+          console.log("Redirecting to swap page with ID:", otcSwap.swap_id);
+          router.push(`/swap/${otcSwap.swap_id}`);
+        }
 
         // Transaction is now complete - polling will handle status updates
         return;
