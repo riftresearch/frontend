@@ -5,21 +5,10 @@ import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { Flex } from "@chakra-ui/react";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
-import { StatsOverview } from "@/components/other/StatsOverview";
-import useWindowSize from "@/hooks/useWindowSize";
-import { useState } from "react";
 
 export default function History() {
-  const { isMobile } = useWindowSize();
-  const [showStats, setShowStats] = useState(false);
-
   useSyncChainIdToStore();
   useBtcEthPrices(); // Fetch BTC/ETH prices for liquidity display
-
-  // Show stats once initial loading completes
-  const handleInitialLoadComplete = () => {
-    setShowStats(true);
-  };
 
   return (
     <>
@@ -45,14 +34,7 @@ export default function History() {
           py="20px"
           flex="1"
         >
-          <UserSwapHistory onInitialLoadComplete={handleInitialLoadComplete} />
-
-          {/* Stats Overview at bottom - only show after initial spinner completes */}
-          {showStats && (
-            <Flex w="100%" maxW="1400px" mt={isMobile ? "10px" : "15px"} mb="40px">
-              <StatsOverview />
-            </Flex>
-          )}
+          <UserSwapHistory />
         </Flex>
         {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
         process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (

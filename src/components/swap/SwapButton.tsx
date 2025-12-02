@@ -1,5 +1,6 @@
-import { Flex, Text, Spinner } from "@chakra-ui/react";
+import { Flex, Text, Spinner, Box, Button, Checkbox } from "@chakra-ui/react";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { FONT_FAMILIES } from "@/utils/font";
 import { useRouter } from "next/router";
 import {
   useAccount,
@@ -46,6 +47,23 @@ export const SwapButton = () => {
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
   const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
+
+  // Terms of Service modal state
+  const [showTosModal, setShowTosModal] = useState(false);
+  const [tosChecked, setTosChecked] = useState(false);
+
+  // Check if user has agreed to ToS
+  const hasTosAgreement = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("rift_tos_agreed") === "true";
+  }, []);
+
+  // Save ToS agreement
+  const saveTosAgreement = useCallback(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("rift_tos_agreed", "true");
+    }
+  }, []);
 
   // Global store
   const {
@@ -1158,8 +1176,26 @@ export const SwapButton = () => {
       return;
     }
 
+    // Check ToS agreement before proceeding
+    if (!hasTosAgreement()) {
+      setShowTosModal(true);
+      return;
+    }
+
     if (!isButtonDisabled && buttonConfig.handler) {
       buttonConfig.handler();
+    }
+  };
+
+  // Handler for ToS agreement
+  const handleTosAgree = () => {
+    if (tosChecked) {
+      saveTosAgreement();
+      setShowTosModal(false);
+      // Proceed with the swap after agreement
+      if (!isButtonDisabled && buttonConfig.handler) {
+        buttonConfig.handler();
+      }
     }
   };
 
@@ -1192,6 +1228,147 @@ export const SwapButton = () => {
           {buttonConfig.text}
         </Text>
       </Flex>
+
+      {/* Terms of Service Modal */}
+      {showTosModal && (
+        <Box
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          bg="rgba(0, 0, 0, 0.85)"
+          zIndex={9999}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          onClick={() => setShowTosModal(false)}
+        >
+          <Box
+            bg="#0a0a0a"
+            border={`2px solid ${colors.borderGray}`}
+            borderRadius="24px"
+            p={isMobile ? "24px" : "32px"}
+            maxW="450px"
+            w={isMobile ? "90%" : "450px"}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text
+              fontSize={isMobile ? "20px" : "24px"}
+              fontFamily={FONT_FAMILIES.NOSTROMO}
+              color={colors.offWhite}
+              mb="16px"
+              textAlign="center"
+            >
+              Terms of Use
+            </Text>
+            <Text
+              fontSize="14px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              color={colors.textGray}
+              mb="24px"
+              textAlign="center"
+              letterSpacing="-0.5px"
+            >
+              To use Rift, you must agree to our Terms of Service and Privacy Policy.
+            </Text>
+
+            <Flex
+              align="flex-start"
+              gap="12px"
+              mb="24px"
+              cursor="pointer"
+              onClick={() => setTosChecked(!tosChecked)}
+            >
+              <Checkbox.Root
+                checked={tosChecked}
+                onCheckedChange={(e) => setTosChecked(!!e.checked)}
+                colorPalette="orange"
+                size="lg"
+              >
+                <Checkbox.HiddenInput />
+                <Checkbox.Control
+                  borderColor={colors.borderGray}
+                  bg="transparent"
+                  _checked={{
+                    bg: colors.RiftOrange,
+                    borderColor: colors.RiftOrange,
+                  }}
+                >
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+              </Checkbox.Root>
+              <Text
+                fontSize="13px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={colors.offWhite}
+                letterSpacing="-0.3px"
+                lineHeight="1.5"
+              >
+                I agree to Rift&apos;s{" "}
+                <a
+                  href="https://rift.exchange/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: colors.RiftOrange,
+                    textDecoration: "underline",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a
+                  href="https://rift.exchange/pp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: colors.RiftOrange,
+                    textDecoration: "underline",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </a>
+              </Text>
+            </Flex>
+
+            <Flex gap="12px">
+              <Button
+                flex={1}
+                onClick={() => setShowTosModal(false)}
+                bg="transparent"
+                border={`2px solid ${colors.borderGray}`}
+                color={colors.offWhite}
+                borderRadius="12px"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="14px"
+                h="48px"
+                _hover={{ bg: "rgba(255,255,255,0.05)" }}
+              >
+                Cancel
+              </Button>
+              <Button
+                flex={1}
+                onClick={handleTosAgree}
+                bg={tosChecked ? colors.RiftOrange : "rgba(255,143,40,0.3)"}
+                border="none"
+                color={colors.offWhite}
+                borderRadius="12px"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="14px"
+                h="48px"
+                opacity={tosChecked ? 1 : 0.5}
+                cursor={tosChecked ? "pointer" : "not-allowed"}
+                _hover={{ opacity: tosChecked ? 0.9 : 0.5 }}
+              >
+                Continue
+              </Button>
+            </Flex>
+          </Box>
+        </Box>
+      )}
     </Flex>
   );
 };

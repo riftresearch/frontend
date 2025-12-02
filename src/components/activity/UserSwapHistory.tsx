@@ -1067,7 +1067,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({ onInitialLoadC
         </Flex>
       ) : (
         // Desktop: GridFlex with fixed height and scrolling
-        <GridFlex width="100%" borderRadius="40px" heightBlocks={9} contentPadding={0}>
+        <GridFlex width="100%" borderRadius="40px" heightBlocks={12} contentPadding={0}>
           <Flex direction="column" w="100%" h="100%">
             {loading ? (
               <Flex w="100%" justify="center" align="center" py="80px">

@@ -2595,8 +2595,8 @@ export const SwapInputAndOutput = () => {
                 feeOverview ? (
                   <>
                     {[
-                      { key: "protocol", ...feeOverview.protocolFee },
                       { key: "erc20", ...feeOverview.erc20Fee },
+                      { key: "protocol", ...feeOverview.protocolFee },
                       { key: "network", ...feeOverview.networkFee },
                     ]
                       .filter((fee) => fee.fee !== "$0.00")

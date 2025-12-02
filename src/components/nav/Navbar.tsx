@@ -193,6 +193,7 @@ export const Navbar = ({}) => {
             <Flex gap="12px">
               {navItem("Swap", "/")}
               {navItem("History", "/history")}
+              {navItem("Stats", "/stats")}
               {/* {navItem('OTC', '/otc')} */}
             </Flex>
             <Flex ml="25px" gap="30px" align="center">

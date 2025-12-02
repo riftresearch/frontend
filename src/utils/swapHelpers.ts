@@ -102,11 +102,11 @@ export interface ERC20ToBTCQuoteResponse {
  * Fee breakdown overview for a swap
  */
 export interface FeeOverview {
-  networkFee: {
+  erc20Fee: {
     fee: string;
     description: string;
   };
-  erc20Fee: {
+  networkFee: {
     fee: string;
     description: string;
   };
@@ -172,13 +172,13 @@ export function calculateFees(
   // Calculate total fees
   const totalFeesUSD = networkFeeUSD + protocolFeeUSD + erc20FeeUSD;
   const feeOverview: FeeOverview = {
+    erc20Fee: {
+      fee: formatUsdValue(erc20FeeUSD),
+      description: "cbBTC Fee",
+    },
     networkFee: {
       fee: formatUsdValue(networkFeeUSD),
       description: "Gas Fee",
-    },
-    erc20Fee: {
-      fee: formatUsdValue(erc20FeeUSD),
-      description: "Swap Fee",
     },
     protocolFee: {
       fee: formatUsdValue(protocolFeeUSD),

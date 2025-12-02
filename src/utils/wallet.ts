@@ -39,8 +39,8 @@ export const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID;
 // TODO: Disable anvilNetwork in production
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   //anvilNetwork,
-  // base,
   mainnet,
+  base,
 ];
 
 // Create the Wagmi Adapter
@@ -53,7 +53,7 @@ export const wagmiAdapter = new WagmiAdapter({
   projectId: projectId || "",
   chains: [
     mainnet,
-    // base,
+    base,
     // anvilNetwork
   ],
   transports: {
@@ -63,11 +63,11 @@ export const wagmiAdapter = new WagmiAdapter({
       http("https://rpc.flashbots.net"),
       http("https://eth.drpc.org"),
     ]),
-    // [base.id]: fallback([
-    //   http("https://mainnet.base.org"),
-    //   http("https://base.llamarpc.com"),
-    //   http("https://base.drpc.org"),
-    // ]),
+    [base.id]: fallback([
+      http("https://mainnet.base.org"),
+      http("https://base.llamarpc.com"),
+      http("https://base.drpc.org"),
+    ]),
     //[anvilNetwork.id]: http(CHAIN_SCOPED_CONFIGS[anvilNetwork.id].rpcUrl),
   },
 });
