@@ -14,6 +14,7 @@ import type { TokenData, TokenBalance, TokenPrice } from "@/utils/types";
 import { preloadImages } from "@/utils/imagePreload";
 import { FALLBACK_TOKEN_ICON, ETH_ICON } from "@/utils/constants";
 import useWindowSize from "@/hooks/useWindowSize";
+import { fetchTokenPrices as fetchDefiLlamaPrices } from "@/utils/defiLlamaClient";
 
 const getCustomChainName = (chainId: number): string => {
   if (chainId === 1337) return "Rift Devnet";
@@ -111,22 +112,17 @@ export const ConnectWalletButton: React.FC = () => {
 
         // Fetch all batches in parallel
         const batchPromises = batches.map(async (batch, index) => {
-          const addrParam = batch.join(",");
           console.log(
             `[Price Check] Fetching batch ${index + 1}/${batches.length} (${batch.length} tokens)`
           );
 
-          const response = await fetch(`/api/token-price?chain=${chain}&addresses=${addrParam}`, {
-            method: "GET",
-          });
-
-          if (!response.ok) {
-            console.error(`Failed to fetch prices for batch ${index + 1}:`, response.status);
+          try {
+            const data = await fetchDefiLlamaPrices(chain, batch);
+            return data.coins || {};
+          } catch (error) {
+            console.error(`Failed to fetch prices for batch ${index + 1}:`, error);
             return {};
           }
-
-          const data = await response.json();
-          return data.coins || {};
         });
 
         // Wait for all batches to complete

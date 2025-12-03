@@ -42,6 +42,7 @@ import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
 import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
+import { fetchTokenPrice } from "@/utils/defiLlamaClient";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -177,21 +178,12 @@ export const SwapInputAndOutput = () => {
         evmConnectWalletChainId === 1 || !evmConnectWalletChainId ? "ethereum" : "base";
       try {
         console.log(`Fetching ERC20 price for ${tokenData.ticker} (${tokenData.address})`);
-        const response = await fetch(
-          `/api/token-price?chain=${chainName}&addresses=${tokenData.address}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          const key = `${chainName}:${tokenData.address.toLowerCase()}`;
-          const coin = data?.coins?.[key];
-          if (coin && typeof coin.price === "number") {
-            console.log(`ERC20 price for ${tokenData.ticker}: $${coin.price}`);
-            setErc20Price(coin.price);
-          } else {
-            console.warn(`No price data found for ${tokenData.ticker} at key ${key}`);
-          }
+        const tokenPrice = await fetchTokenPrice(chainName, tokenData.address);
+        if (tokenPrice && typeof tokenPrice.price === "number") {
+          console.log(`ERC20 price for ${tokenData.ticker}: $${tokenPrice.price}`);
+          setErc20Price(tokenPrice.price);
         } else {
-          console.error(`Failed to fetch price for ${tokenData.ticker}: ${response.status}`);
+          console.warn(`No price data found for ${tokenData.ticker}`);
         }
       } catch (error) {
         console.error("Failed to fetch ERC20 price:", error);
