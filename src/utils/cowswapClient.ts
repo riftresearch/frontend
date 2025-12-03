@@ -141,7 +141,7 @@ export class CowSwapClient {
       // Configure advanced settings for fast price quality quote
       const advancedSettings: SwapAdvancedSettings = {
         quoteRequest: {
-          priceQuality: request.priceQuality ?? PriceQuality.FAST,
+          priceQuality: request.priceQuality ?? PriceQuality.OPTIMAL,
         },
       };
 
