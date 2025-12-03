@@ -342,7 +342,9 @@ export async function filterRefunds(
   // If swap is still waiting for user deposit but user sent less than required amount
   if (
     swapStatus === "waiting_user_deposit_initiated" ||
-    swapStatus === "WaitingUserDepositInitiated"
+    swapStatus === "waiting_user_deposit_confirmed" ||
+    swapStatus === "WaitingUserDepositInitiated" ||
+    swapStatus === "WaitingUserDepositConfirmed"
   ) {
     console.log(`[PARTIAL DEPOSIT CHECK] Swap ${mappedSwap.id}: Checking for partial deposit...`);
 
@@ -350,28 +352,34 @@ export async function filterRefunds(
 
     if (userDepositChain === "bitcoin" && expectedAmount) {
       try {
-        const electrsUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}`;
-        const electrsResponse = await fetch(electrsUrl);
-        if (electrsResponse.ok) {
-          const electrsData = await electrsResponse.json();
-          const totalBalance =
-            (electrsData.chain_stats?.funded_txo_sum || 0) -
-            (electrsData.chain_stats?.spent_txo_sum || 0);
-          const mempoolBalance =
-            (electrsData.mempool_stats?.funded_txo_sum || 0) -
-            (electrsData.mempool_stats?.spent_txo_sum || 0);
-          const actualBalance = totalBalance + mempoolBalance;
+        // Fetch UTXOs for the address to check individual UTXO amounts
+        const utxosUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}/utxo`;
+        const utxosResponse = await fetch(utxosUrl);
+        if (utxosResponse.ok) {
+          const utxos = await utxosResponse.json();
+          const expectedAmountSats = parseInt(expectedAmount);
 
-          if (actualBalance > 0 && actualBalance < parseInt(expectedAmount)) {
+          // Check if there's at least one UTXO >= expected amount
+          const hasValidUtxo = utxos.some((utxo: any) => utxo.value >= expectedAmountSats);
+
+          // Calculate total balance for logging
+          const totalBalance = utxos.reduce((sum: number, utxo: any) => sum + utxo.value, 0);
+
+          console.log(
+            `[PARTIAL DEPOSIT] Bitcoin: Expected ${expectedAmountSats} sats, total balance ${totalBalance} sats, has valid UTXO: ${hasValidUtxo}`
+          );
+
+          // If there's balance but no single UTXO meets requirement, refund is available
+          if (totalBalance > 0 && !hasValidUtxo) {
             console.log(
-              `[PARTIAL DEPOSIT] Bitcoin: Expected ${expectedAmount} sats, got ${actualBalance} sats - refund available`
+              `[PARTIAL DEPOSIT] Bitcoin: No single UTXO >= ${expectedAmountSats} sats - refund available`
             );
             isRefundAvailable = true;
             return { isRefundAvailable, shouldMarkAsRefunded, isPartialDeposit: true };
           }
         }
       } catch (error) {
-        console.warn(`Error checking Bitcoin balance for partial deposit:`, error);
+        console.warn(`Error checking Bitcoin UTXOs for partial deposit:`, error);
       }
     } else if (expectedAmount) {
       // EVM partial deposit check
@@ -418,31 +426,54 @@ export async function filterRefunds(
     // by looking up if the deposit address has any balance
 
     if (userDepositChain === "bitcoin") {
-      // look up if the deposit address has any balance from the electrs endpoint
+      // Check UTXOs to ensure at least one UTXO >= expected deposit amount
       try {
-        const electrsUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}`;
-        const electrsResponse = await fetch(electrsUrl);
-        if (!electrsResponse.ok) {
-          console.warn(`Failed to fetch Bitcoin balance for ${userDepositAddress}`);
+        const utxosUrl = `${GLOBAL_CONFIG.esploraUrl}/address/${userDepositAddress}/utxo`;
+        const utxosResponse = await fetch(utxosUrl);
+        if (!utxosResponse.ok) {
+          console.warn(`Failed to fetch Bitcoin UTXOs for ${userDepositAddress}`);
           isRefundAvailable = false; // Default to not available if we can't check
         } else {
-          const electrsData = await electrsResponse.json();
-          // Check if address has any confirmed or unconfirmed balance
-          const totalBalance =
-            (electrsData.chain_stats?.funded_txo_sum || 0) -
-            (electrsData.chain_stats?.spent_txo_sum || 0);
-          const mempoolBalance =
-            (electrsData.mempool_stats?.funded_txo_sum || 0) -
-            (electrsData.mempool_stats?.spent_txo_sum || 0);
-          const hasBalance = totalBalance + mempoolBalance > 0;
-          isRefundAvailable = hasBalance;
-          shouldMarkAsRefunded = !hasBalance; // No balance means funds were withdrawn
+          const utxos = await utxosResponse.json();
+          const expectedAmount = row.quote?.from_amount ? parseInt(row.quote.from_amount) : 0;
+
+          // Calculate total balance for logging
+          const totalBalance = utxos.reduce((sum: number, utxo: any) => sum + utxo.value, 0);
+
+          // Check if there's at least one UTXO >= expected amount
+          const hasValidUtxo =
+            expectedAmount > 0
+              ? utxos.some((utxo: any) => utxo.value >= expectedAmount)
+              : totalBalance > 0; // If no expected amount, just check if any balance exists
+
           console.log(
-            `[BALANCE CHECK] Bitcoin balance for ${userDepositAddress}: ${totalBalance + mempoolBalance} sats, shouldMarkAsRefunded: ${shouldMarkAsRefunded}`
+            `[BALANCE CHECK] Bitcoin UTXOs for ${userDepositAddress}: ${utxos.length} UTXOs, total ${totalBalance} sats, expected ${expectedAmount} sats, has valid UTXO: ${hasValidUtxo}`
           );
+
+          // If there's balance but no valid UTXO (or no balance at all), mark appropriately
+          if (totalBalance > 0 && !hasValidUtxo) {
+            // Has balance but no single UTXO meets requirement - refund available
+            isRefundAvailable = true;
+            shouldMarkAsRefunded = false;
+            console.log(
+              `[BALANCE CHECK] Bitcoin: Has balance but no UTXO >= ${expectedAmount} sats - refund available`
+            );
+          } else if (totalBalance === 0) {
+            // No balance - funds were already withdrawn/refunded
+            isRefundAvailable = false;
+            shouldMarkAsRefunded = true;
+            console.log(`[BALANCE CHECK] Bitcoin: No balance - marking as refunded`);
+          } else {
+            // Has valid UTXO - swap can proceed, no refund needed
+            isRefundAvailable = false;
+            shouldMarkAsRefunded = false;
+            console.log(
+              `[BALANCE CHECK] Bitcoin: Has valid UTXO >= ${expectedAmount} sats - swap can proceed`
+            );
+          }
         }
       } catch (error) {
-        console.warn(`Error checking Bitcoin balance for ${userDepositAddress}:`, error);
+        console.warn(`Error checking Bitcoin UTXOs for ${userDepositAddress}:`, error);
         isRefundAvailable = false; // Default to not available if we can't check
       }
     } else {

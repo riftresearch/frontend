@@ -98,6 +98,8 @@ export interface FullyQualifiedTDXQuote {
 }
 
 export class OTCServerError extends Error {
+  public errorBody?: any; // Parsed error body if JSON
+
   constructor(
     public status: number,
     public statusText: string,
@@ -105,6 +107,31 @@ export class OTCServerError extends Error {
   ) {
     super(`OTC Server Error: ${status} ${statusText}${body ? `: ${body}` : ""}`);
     this.name = "OTCServerError";
+
+    // Try to parse the body as JSON for easier access to error details
+    if (body) {
+      try {
+        this.errorBody = JSON.parse(body);
+      } catch {
+        // Body is not JSON, leave errorBody undefined
+      }
+    }
+  }
+
+  /**
+   * Check if this error is due to OFAC sanctions
+   */
+  isOFACSanctioned(): boolean {
+    if (this.status !== 403) return false;
+
+    const details = this.errorBody?.error?.details || "";
+    const message = this.errorBody?.error?.message || "";
+
+    return (
+      details.includes("blocked due to risk classification") ||
+      details.includes("OFAC") ||
+      message.includes("Authorization failed")
+    );
   }
 }
 
@@ -203,7 +230,20 @@ export class OTCServerClient {
         clearTimeout(timeoutId);
         lastError = error instanceof Error ? error : new Error("Unknown error");
 
-        // If this was the last attempt, mark server as dead
+        // Check if this is a client error (4xx) - these should NOT be retried
+        // Client errors indicate issues with the request itself (bad data, auth, etc)
+        if (error instanceof OTCServerError && error.status >= 400 && error.status < 500) {
+          console.log(`OTC request failed with client error ${error.status} - not retrying`);
+
+          // Don't mark server as dead for client errors - server is working fine
+          setIsOtcServerDead(false);
+          setIsRetryingOtcServer(false);
+          setOtcRetryCount(0);
+
+          throw error;
+        }
+
+        // If this was the last attempt, mark server as dead (only for server errors/timeouts)
         if (attempt === MAX_RETRIES) {
           console.error(`OTC request failed after ${MAX_RETRIES} retries`);
           setIsOtcServerDead(true);
@@ -219,7 +259,7 @@ export class OTCServerClient {
           throw error;
         }
 
-        // Continue to next retry attempt
+        // Continue to next retry attempt (only for server errors/network issues)
         console.log(
           `OTC request failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), will retry...`
         );
