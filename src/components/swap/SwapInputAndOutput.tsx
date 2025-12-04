@@ -19,7 +19,7 @@ import { InfoSVG } from "../other/SVGs";
 import { Tooltip } from "@/components/other/Tooltip";
 import { FONT_FAMILIES } from "@/utils/font";
 import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
-import { useStore, SwapRouter } from "@/utils/store";
+import { useStore } from "@/utils/store";
 import { TokenData, ApprovalState } from "@/utils/types";
 import {
   EVMAccountWarningModal,
@@ -39,6 +39,7 @@ import {
   satsToBtc,
   truncateAmount,
 } from "@/utils/swapHelpers";
+import { PriceQuality } from "@cowprotocol/cow-sdk";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
 import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
@@ -116,14 +117,10 @@ export const SwapInputAndOutput = () => {
     setInputUsdValue,
     outputUsdValue,
     setOutputUsdValue,
-    setUniswapQuote,
     setCowswapQuote,
     setRfqQuote,
     rfqQuote,
-    uniswapQuote,
     cowswapQuote,
-    swapRouter,
-    setSwapRouter,
     slippageBips,
     payoutAddress,
     setPayoutAddress,
@@ -148,6 +145,7 @@ export const SwapInputAndOutput = () => {
     setInputBelowMinimum,
     refetchQuote,
     setRefetchQuote,
+    setIsAwaitingOptimalQuote,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -200,9 +198,85 @@ export const SwapInputAndOutput = () => {
     [evmConnectWalletChainId, setErc20Price]
   );
 
+  // Helper to process a quote response and update UI
+  const processQuoteResponse = useCallback(
+    (
+      quoteResponse: Awaited<ReturnType<typeof getERC20ToBTCQuote>>,
+      requestId: number | undefined,
+      priceQuality: PriceQuality
+    ) => {
+      // Check if this is still the latest request
+      if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+        console.log(`Ignoring stale ${priceQuality} quote response`, requestId);
+        return;
+      }
+
+      if (quoteResponse) {
+        console.log(`Processing ${priceQuality} quote response`);
+        setCowswapQuote(quoteResponse.cowswapQuote || null);
+        setRfqQuote(quoteResponse.rfqQuote);
+        setOutputAmount(quoteResponse.btcOutputAmount || "");
+        setIsLoadingQuote(false);
+        setRefetchQuote(false);
+        setExceedsAvailableBTCLiquidity(false);
+
+        // Mark optimal quote as received when OPTIMAL arrives
+        if (priceQuality === PriceQuality.OPTIMAL) {
+          setIsAwaitingOptimalQuote(false);
+        }
+
+        // Calculate and set fee overview
+        if (btcPrice) {
+          const cbBTCOut = quoteResponse.cowswapQuote
+            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
+            : "0";
+          const erc20In = quoteResponse.cowswapQuote
+            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
+            : "0";
+
+          // Get price for fee calculation
+          let price: number | null = null;
+          if (selectedInputToken.ticker === "ETH") {
+            price = ethPrice;
+          } else if (selectedInputToken.ticker === "cbBTC") {
+            price = btcPrice;
+          } else {
+            price = erc20Price;
+          }
+
+          if (price) {
+            const fees = calculateFees(
+              quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
+              quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
+              cbBTCOut,
+              erc20In,
+              price,
+              btcPrice,
+              selectedInputToken.decimals
+            );
+            setFeeOverview(fees);
+          }
+        }
+      }
+    },
+    [
+      btcPrice,
+      ethPrice,
+      erc20Price,
+      selectedInputToken,
+      setCowswapQuote,
+      setRfqQuote,
+      setOutputAmount,
+      setFeeOverview,
+      setIsAwaitingOptimalQuote,
+    ]
+  );
+
   // Fetch quote for ERC20/ETH -> BTC (combines CowSwap + RFQ)
+  // Fires FAST quote first for quick UI, then OPTIMAL quote for best price
+  // If isRefresh is true, only fetches OPTIMAL (for periodic refreshes)
   const fetchERC20ToBTCQuote = useCallback(
-    async (inputAmount?: string, requestId?: number, router?: SwapRouter) => {
+    async (inputAmount?: string, requestId?: number, isRefresh: boolean = false) => {
       // Use provided amount or fall back to state
       const amountToQuote = inputAmount ?? rawInputAmount;
 
@@ -233,7 +307,6 @@ export const SwapInputAndOutput = () => {
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Input value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
-          setUniswapQuote(null);
           setCowswapQuote(null);
           setRfqQuote(null);
           setOutputAmount("");
@@ -244,7 +317,6 @@ export const SwapInputAndOutput = () => {
         console.log("no price");
         console.log("btcPrice", btcPrice);
         console.log("price", price);
-        // setIsLoadingQuote(false);
         // Set refetch flag if we have an amount to quote
         if (amountToQuote && parseFloat(amountToQuote) > 0) {
           setRefetchERC20toBTCQuote(true);
@@ -252,111 +324,79 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
-      try {
-        // Clear any previous "no routes" error
-        setHasNoRoutesError(false);
+      // Clear any previous "no routes" error
+      setHasNoRoutesError(false);
 
-        // Convert amount to base units
-        const decimals = selectedInputToken.decimals;
-        const sellAmount = parseUnits(amountToQuote, decimals).toString();
-        const sellToken = selectedInputToken.address;
+      // Mark that we're waiting for an optimal quote
+      setIsAwaitingOptimalQuote(true);
 
-        const routerToUse = router ?? swapRouter;
-        console.log("getting quote for", sellToken, sellAmount, "with router", routerToUse);
-        // Get combined quote (handles cbBTC internally)
-        const quoteResponse = await getERC20ToBTCQuote(
+      // Convert amount to base units
+      const decimals = selectedInputToken.decimals;
+      const sellAmount = parseUnits(amountToQuote, decimals).toString();
+      const sellToken = selectedInputToken.address;
+      const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
+      console.log("getting quote for", sellToken, sellAmount);
+
+      // Fire FAST quote first (non-blocking) - will update UI quickly
+      // Skip FAST quote on refresh since we already have a quote displayed
+      if (!isRefresh) {
+        getERC20ToBTCQuote(
           sellToken,
           sellAmount,
           decimals,
-          userEvmAccountAddress
-            ? userEvmAccountAddress
-            : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+          userAddr,
           slippageBips,
           undefined,
-          routerToUse,
-          cowswapClient
-        );
+          cowswapClient,
+          PriceQuality.FAST
+        )
+          .then((quoteResponse) => {
+            console.log("FAST quoteResponse", quoteResponse);
+            processQuoteResponse(quoteResponse, requestId, PriceQuality.FAST);
+          })
+          .catch((error) => {
+            console.error("Failed to fetch FAST quote:", error);
+            // Don't clear state on FAST failure - OPTIMAL may still succeed
+          });
+      }
 
-        console.log("quoteResponse", quoteResponse);
-
-        // Check if this is still the latest request
-        if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
-          console.log("Ignoring stale quote response", requestId);
-          return;
-        }
-
-        if (quoteResponse) {
-          setUniswapQuote(quoteResponse.uniswapQuote || null);
-          setCowswapQuote(quoteResponse.cowswapQuote || null);
-          setRfqQuote(quoteResponse.rfqQuote);
-          setOutputAmount(quoteResponse.btcOutputAmount || "");
-          setIsLoadingQuote(false);
-          setRefetchQuote(false);
-          setExceedsAvailableBTCLiquidity(false);
-
-          // Calculate and set fee overview
-          if (btcPrice) {
-            // Use cowswapQuote values if available, otherwise use uniswapQuote
-            const cbBTCOut = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
-              : quoteResponse.uniswapQuote?.amountOut || "0";
-            const erc20In = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
-              : quoteResponse.uniswapQuote?.amountIn || "0";
-
-            // Get price for fee calculation
-            let price: number | null = null;
-            if (selectedInputToken.ticker === "ETH") {
-              price = ethPrice;
-            } else if (selectedInputToken.ticker === "cbBTC") {
-              price = btcPrice;
-            } else {
-              price = erc20Price;
-            }
-
-            if (price) {
-              const fees = calculateFees(
-                quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
-                quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
-                cbBTCOut,
-                erc20In,
-                price,
-                btcPrice,
-                selectedInputToken.decimals
-              );
-              setFeeOverview(fees);
-            }
+      // Fire OPTIMAL quote (non-blocking) - will update UI with better price when ready
+      getERC20ToBTCQuote(
+        sellToken,
+        sellAmount,
+        decimals,
+        userAddr,
+        slippageBips,
+        undefined,
+        cowswapClient,
+        PriceQuality.OPTIMAL
+      )
+        .then((quoteResponse) => {
+          console.log("OPTIMAL quoteResponse", quoteResponse);
+          processQuoteResponse(quoteResponse, requestId, PriceQuality.OPTIMAL);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch OPTIMAL quote:", error);
+          if ((error as Error).message === "Insufficient balance to fulfill quote") {
+            setExceedsAvailableBTCLiquidity(true);
           }
-        } else {
-          // Clear state on failure
-          setUniswapQuote(null);
+          // Mark optimal quote as no longer pending (failed)
+          setIsAwaitingOptimalQuote(false);
+          // Only clear state if both quotes fail (FAST already tried)
           setCowswapQuote(null);
           setRfqQuote(null);
           setOutputAmount("");
           setFeeOverview(null);
           setIsLoadingQuote(false);
           setRefetchQuote(false);
-        }
-      } catch (error) {
-        console.error("Failed to fetch quote:", error);
-        if ((error as Error).message === "Insufficient balance to fulfill quote") {
-          setExceedsAvailableBTCLiquidity(true);
-        }
-        setUniswapQuote(null);
-        setCowswapQuote(null);
-        setRfqQuote(null);
-        setOutputAmount("");
-        setFeeOverview(null);
-        setIsLoadingQuote(false);
-        setRefetchQuote(false);
-      }
+        });
     },
     [
       isSwappingForBTC,
       rawInputAmount,
       userEvmAccountAddress,
       selectedInputToken,
-      setUniswapQuote,
       setCowswapQuote,
       setRfqQuote,
       setOutputAmount,
@@ -366,14 +406,95 @@ export const SwapInputAndOutput = () => {
       slippageBips,
       setFeeOverview,
       liquidity,
-      swapRouter,
       cowswapClient,
+      processQuoteResponse,
+      setIsAwaitingOptimalQuote,
+    ]
+  );
+
+  // Helper to process an exact output quote response and update UI
+  const processExactOutputQuoteResponse = useCallback(
+    (
+      quoteResponse: Awaited<ReturnType<typeof getERC20ToBTCQuoteExactOutput>>,
+      requestId: number | undefined,
+      priceQuality: PriceQuality
+    ) => {
+      // Check if this is still the latest request
+      if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+        console.log(`Ignoring stale ${priceQuality} exact output quote response`, requestId);
+        return;
+      }
+
+      if (quoteResponse) {
+        console.log(`Processing ${priceQuality} exact output quote response`);
+        setCowswapQuote(quoteResponse.cowswapQuote || null);
+        setRfqQuote(quoteResponse.rfqQuote);
+
+        // Truncate input amount to 8 decimals for display
+        const inputAmount = quoteResponse.erc20InputAmount || "";
+        const truncatedInput = truncateAmount(inputAmount);
+
+        setRawInputAmount(truncatedInput);
+        setIsLoadingQuote(false);
+        setRefetchQuote(false);
+
+        // Mark optimal quote as received when OPTIMAL arrives
+        if (priceQuality === PriceQuality.OPTIMAL) {
+          setIsAwaitingOptimalQuote(false);
+        }
+
+        // Calculate and set fee overview
+        if (btcPrice) {
+          const cbBTCOut = quoteResponse.cowswapQuote
+            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
+            : "0";
+          const erc20In = quoteResponse.cowswapQuote
+            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
+            : "0";
+
+          // Get price for fee calculation
+          let price: number | null = null;
+          if (selectedInputToken.ticker === "ETH") {
+            price = ethPrice;
+          } else if (selectedInputToken.ticker === "cbBTC") {
+            price = btcPrice;
+          } else {
+            price = erc20Price;
+          }
+
+          if (price) {
+            const fees = calculateFees(
+              quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
+              quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
+              cbBTCOut,
+              erc20In,
+              price,
+              btcPrice,
+              selectedInputToken.decimals
+            );
+            setFeeOverview(fees);
+          }
+        }
+      }
+    },
+    [
+      btcPrice,
+      ethPrice,
+      erc20Price,
+      selectedInputToken,
+      setCowswapQuote,
+      setRfqQuote,
+      setRawInputAmount,
+      setFeeOverview,
+      setIsAwaitingOptimalQuote,
     ]
   );
 
   // Fetch quote for ERC20/ETH -> BTC (exact output mode)
+  // Fires FAST quote first for quick UI, then OPTIMAL quote for best price
+  // If isRefresh is true, only fetches OPTIMAL (for periodic refreshes)
   const fetchERC20ToBTCQuoteExactOutput = useCallback(
-    async (outputAmountOverride?: string, requestId?: number, router?: SwapRouter) => {
+    async (outputAmountOverride?: string, requestId?: number, isRefresh: boolean = false) => {
       // Use provided amount or fall back to state
       const btcAmountToQuote = outputAmountOverride ?? outputAmount;
 
@@ -384,20 +505,12 @@ export const SwapInputAndOutput = () => {
       // Check if the output BTC value is above minimum swap threshold
       const outputValue = parseFloat(btcAmountToQuote);
 
-      let price;
-      if (selectedInputToken.ticker === "ETH") {
-        price = ethPrice;
-      } else if (selectedInputToken.address) {
-        price = erc20Price;
-      }
-
       if (btcPrice) {
         const usdValue = outputValue * btcPrice;
 
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Output value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
-          setUniswapQuote(null);
           setCowswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
@@ -406,13 +519,11 @@ export const SwapInputAndOutput = () => {
         }
 
         // Check if output value exceeds maximum BTC liquidity
-        // Check if input value exceeds maximum BTC liquidity
         if (
           parseFloat(liquidity.maxBTCLiquidityInUsd) > 0 &&
           usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
         ) {
           console.log("Output value exceeds maximum BTC liquidity");
-          setUniswapQuote(null);
           setCowswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
@@ -420,7 +531,6 @@ export const SwapInputAndOutput = () => {
           return;
         }
       } else {
-        // setIsLoadingQuote(false);
         // Set refetch flag if we have an amount to quote
         if (btcAmountToQuote && parseFloat(btcAmountToQuote) > 0) {
           setRefetchERC20toBTCQuoteExactOutput(true);
@@ -428,113 +538,78 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
-      try {
-        // Clear any previous "no routes" error
-        setHasNoRoutesError(false);
+      // Clear any previous "no routes" error
+      setHasNoRoutesError(false);
 
-        const routerToUse = router ?? swapRouter;
-        const quoteResponse = await getERC20ToBTCQuoteExactOutput(
+      // Mark that we're waiting for an optimal quote
+      setIsAwaitingOptimalQuote(true);
+
+      const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
+      // Fire FAST quote first (non-blocking) - will update UI quickly
+      // Skip FAST quote on refresh since we already have a quote displayed
+      if (!isRefresh) {
+        getERC20ToBTCQuoteExactOutput(
           btcAmountToQuote,
           selectedInputToken,
-          userEvmAccountAddress
-            ? userEvmAccountAddress
-            : "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+          userAddr,
           slippageBips,
           undefined,
-          routerToUse,
-          cowswapClient
-        );
+          cowswapClient,
+          PriceQuality.FAST
+        )
+          .then((quoteResponse) => {
+            console.log("FAST exact output quoteResponse", quoteResponse);
+            processExactOutputQuoteResponse(quoteResponse, requestId, PriceQuality.FAST);
+          })
+          .catch((error) => {
+            console.error("Failed to fetch FAST exact output quote:", error);
+            // Don't clear state on FAST failure - OPTIMAL may still succeed
+          });
+      }
 
-        // Check if this is still the latest request
-        if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
-          console.log("Ignoring stale exact output quote response", requestId);
-          return;
-        }
-
-        if (quoteResponse) {
-          setUniswapQuote(quoteResponse.uniswapQuote || null);
-          setCowswapQuote(quoteResponse.cowswapQuote || null);
-          setRfqQuote(quoteResponse.rfqQuote);
-
-          // Truncate input amount to 8 decimals for display
-          const inputAmount = quoteResponse.erc20InputAmount || "";
-          const truncatedInput = truncateAmount(inputAmount);
-
-          setRawInputAmount(truncatedInput);
-          setIsLoadingQuote(false);
-          setRefetchQuote(false);
-
-          // Calculate and set fee overview
-          if (btcPrice) {
-            // Use cowswapQuote values if available, otherwise use uniswapQuote
-            const cbBTCOut = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
-              : quoteResponse.uniswapQuote?.amountOut || "0";
-            const erc20In = quoteResponse.cowswapQuote
-              ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
-              : quoteResponse.uniswapQuote?.amountIn || "0";
-
-            // Get price for fee calculation
-            let price: number | null = null;
-            if (selectedInputToken.ticker === "ETH") {
-              price = ethPrice;
-            } else if (selectedInputToken.ticker === "cbBTC") {
-              price = btcPrice;
-            } else {
-              price = erc20Price;
-            }
-
-            if (price) {
-              const fees = calculateFees(
-                quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
-                quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
-                cbBTCOut,
-                erc20In,
-                price,
-                btcPrice,
-                selectedInputToken.decimals
-              );
-              setFeeOverview(fees);
-            }
-          }
-        } else {
-          // Clear state on failure
-          setUniswapQuote(null);
+      // Fire OPTIMAL quote (non-blocking) - will update UI with better price when ready
+      getERC20ToBTCQuoteExactOutput(
+        btcAmountToQuote,
+        selectedInputToken,
+        userAddr,
+        slippageBips,
+        undefined,
+        cowswapClient,
+        PriceQuality.OPTIMAL
+      )
+        .then((quoteResponse) => {
+          console.log("OPTIMAL exact output quoteResponse", quoteResponse);
+          processExactOutputQuoteResponse(quoteResponse, requestId, PriceQuality.OPTIMAL);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch OPTIMAL exact output quote:", error);
+          // Mark optimal quote as no longer pending (failed)
+          setIsAwaitingOptimalQuote(false);
+          // Only clear state if both quotes fail (FAST already tried)
           setCowswapQuote(null);
           setRfqQuote(null);
           setRawInputAmount("");
           setFeeOverview(null);
           setIsLoadingQuote(false);
           setRefetchQuote(false);
-        }
-      } catch (error) {
-        console.error("Failed to fetch exact output quote:", error);
-        setUniswapQuote(null);
-        setCowswapQuote(null);
-        setRfqQuote(null);
-        setRawInputAmount("");
-        setFeeOverview(null);
-        setIsLoadingQuote(false);
-        setRefetchQuote(false);
-      }
+        });
     },
     [
       isSwappingForBTC,
       outputAmount,
       userEvmAccountAddress,
       selectedInputToken,
-      setUniswapQuote,
       setCowswapQuote,
       setRfqQuote,
       setRawInputAmount,
       btcPrice,
       slippageBips,
-      erc20Price,
-      ethPrice,
       setFeeOverview,
       liquidity,
-      swapRouter,
       cowswapClient,
+      processExactOutputQuoteResponse,
+      setIsAwaitingOptimalQuote,
     ]
   );
 
@@ -584,7 +659,6 @@ export const SwapInputAndOutput = () => {
 
       if (!isAboveMinSwap(usdValue, btcPrice)) {
         console.log("Value below minimum swap threshold");
-        setUniswapQuote(null);
         setCowswapQuote(null);
         setRfqQuote(null);
         setIsLoadingQuote(false);
@@ -602,7 +676,6 @@ export const SwapInputAndOutput = () => {
         usdValue > parseFloat(liquidity.maxCbBTCLiquidityInUsd)
       ) {
         console.log("Value exceeds maximum cbBTC liquidity");
-        setUniswapQuote(null);
         setCowswapQuote(null);
         setRfqQuote(null);
         setIsLoadingQuote(false);
@@ -632,8 +705,7 @@ export const SwapInputAndOutput = () => {
         }
 
         if (rfqQuoteResponse) {
-          // Clear Uniswap and CowSwap quotes (not needed for BTC -> cbBTC)
-          setUniswapQuote(null);
+          // Clear CowSwap quote (not needed for BTC -> cbBTC)
           setCowswapQuote(null);
           setRfqQuote(rfqQuoteResponse);
           setIsLoadingQuote(false);
@@ -679,7 +751,6 @@ export const SwapInputAndOutput = () => {
           }
         } else {
           // Clear state on failure
-          setUniswapQuote(null);
           setCowswapQuote(null);
           setRfqQuote(null);
           setFeeOverview(null);
@@ -692,7 +763,6 @@ export const SwapInputAndOutput = () => {
         }
       } catch (error) {
         console.error(`Failed to fetch BTC->ERC20 quote (${mode}):`, error);
-        setUniswapQuote(null);
         setCowswapQuote(null);
         setRfqQuote(null);
         setFeeOverview(null);
@@ -709,7 +779,6 @@ export const SwapInputAndOutput = () => {
       rawInputAmount,
       outputAmount,
       selectedInputToken,
-      setUniswapQuote,
       setRfqQuote,
       setOutputAmount,
       setRawInputAmount,
@@ -795,14 +864,7 @@ export const SwapInputAndOutput = () => {
       console.log(`Calculated USD value: ${usdValue}`);
       setInputUsdValue(usdValue);
 
-      // Set router based on USD value threshold
-      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      console.log("usdValueFloat", usdValueFloat);
-      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
-      setSwapRouter(computedRouter);
-
       // Clear existing quotes when user types
-      setUniswapQuote(null);
       setCowswapQuote(null);
       setRfqQuote(null);
 
@@ -831,7 +893,7 @@ export const SwapInputAndOutput = () => {
         if (isSwappingForBTC) {
           // Fetch exact input quote for ERC20/ETH -> BTC
           quoteDebounceTimerRef.current = setTimeout(() => {
-            fetchERC20ToBTCQuote(value, currentRequestId, computedRouter);
+            fetchERC20ToBTCQuote(value, currentRequestId);
           }, 125);
         } else {
           // Fetch exact input quote for BTC -> ERC20/ETH
@@ -876,13 +938,7 @@ export const SwapInputAndOutput = () => {
       const usdValue = calculateUsdValue(value, outputTicker, ethPrice, btcPrice, erc20Price);
       setOutputUsdValue(usdValue);
 
-      // Set router based on USD value threshold
-      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
-      setSwapRouter(computedRouter);
-
       // Clear existing quotes when user types
-      setUniswapQuote(null);
       setCowswapQuote(null);
       setRfqQuote(null);
 
@@ -921,7 +977,7 @@ export const SwapInputAndOutput = () => {
         if (isSwappingForBTC) {
           // Fetch exact output quote for ERC20/ETH -> BTC
           outputQuoteDebounceTimerRef.current = setTimeout(() => {
-            fetchERC20ToBTCQuoteExactOutput(value, currentRequestId, computedRouter);
+            fetchERC20ToBTCQuoteExactOutput(value, currentRequestId);
           }, 75);
         } else {
           // Fetch exact output quote for BTC -> ERC20/ETH
@@ -978,7 +1034,6 @@ export const SwapInputAndOutput = () => {
       setOutputAmount("");
       setRawInputAmount(truncateAmount(adjustedInputAmount));
       setFullPrecisionInputAmount(adjustedInputAmount);
-      setUniswapQuote(null);
       setCowswapQuote(null);
       setRfqQuote(null);
       return;
@@ -1050,13 +1105,7 @@ export const SwapInputAndOutput = () => {
     );
     setInputUsdValue(usdValue);
 
-    // Calculate router based on USD value threshold
-    const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-    const computedRouter = usdValueFloat > 500 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
-    setSwapRouter(computedRouter);
-
     // Clear existing quotes when max is clicked
-    setUniswapQuote(null);
     setCowswapQuote(null);
     setRfqQuote(null);
 
@@ -1076,7 +1125,7 @@ export const SwapInputAndOutput = () => {
 
       if (isSwappingForBTC) {
         // Fetch exact input quote for ERC20/ETH -> BTC using full precision
-        fetchERC20ToBTCQuote(adjustedInputAmount, currentRequestId, computedRouter);
+        fetchERC20ToBTCQuote(adjustedInputAmount, currentRequestId);
       } else {
         // there is no max button for BTC -> ERC20/ETH
         // Fetch exact input quote for BTC -> ERC20/ETH
@@ -1130,13 +1179,7 @@ export const SwapInputAndOutput = () => {
     );
     setOutputUsdValue(usdValue);
 
-    // Calculate router based on USD value threshold
-    const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-    const computedRouter = usdValueFloat > 500 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
-    setSwapRouter(computedRouter);
-
     // Clear existing quotes when max is clicked
-    setUniswapQuote(null);
     setCowswapQuote(null);
     setRfqQuote(null);
 
@@ -1156,7 +1199,7 @@ export const SwapInputAndOutput = () => {
 
       if (isSwappingForBTC) {
         // Fetch exact output quote for ERC20/ETH -> BTC
-        fetchERC20ToBTCQuoteExactOutput(truncatedOutputAmount, currentRequestId, computedRouter);
+        fetchERC20ToBTCQuoteExactOutput(truncatedOutputAmount, currentRequestId);
       } else {
         // Fetch exact output quote for BTC -> ERC20/ETH
         fetchBTCtoERC20Quote(truncatedOutputAmount, "ExactOutput", currentRequestId);
@@ -1194,12 +1237,7 @@ export const SwapInputAndOutput = () => {
     );
     setOutputUsdValue(usdValue);
 
-    // Always use UNISWAP for minimum clicks
-    const computedRouter = SwapRouter.UNISWAP;
-    setSwapRouter(computedRouter);
-
     // Clear existing quotes
-    setUniswapQuote(null);
     setCowswapQuote(null);
     setRfqQuote(null);
 
@@ -1218,7 +1256,7 @@ export const SwapInputAndOutput = () => {
 
     if (isSwappingForBTC) {
       // Fetch exact output quote for ERC20/ETH -> BTC
-      fetchERC20ToBTCQuoteExactOutput(minOutputAmountStr, currentRequestId, computedRouter);
+      fetchERC20ToBTCQuoteExactOutput(minOutputAmountStr, currentRequestId);
     } else {
       // Fetch exact output quote for BTC -> ERC20/ETH
       fetchBTCtoERC20Quote(minOutputAmountStr, "ExactOutput", currentRequestId);
@@ -1375,10 +1413,12 @@ export const SwapInputAndOutput = () => {
 
         if (getQuoteForInputRef.current) {
           // User is editing input field - fetch exact input quote
-          fetchERC20ToBTCQuote(undefined, currentRequestId);
+          // Pass isRefresh=true to only fetch OPTIMAL (skip FAST since we already have a quote)
+          fetchERC20ToBTCQuote(undefined, currentRequestId, true);
         } else {
           // User is editing output field - fetch exact output quote
-          fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
+          // Pass isRefresh=true to only fetch OPTIMAL (skip FAST since we already have a quote)
+          fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId, true);
         }
       }, 10000);
     }
@@ -1882,17 +1922,18 @@ export const SwapInputAndOutput = () => {
         const currentRequestId = quoteRequestIdRef.current;
 
         // Fetch quote based on which field was last edited
+        // Pass isRefresh=true since we already have a quote displayed
         if (lastEditedField === "input") {
           if (isSwappingForBTC) {
             console.log("refetching ERC20 to BTC quote");
-            await fetchERC20ToBTCQuote(undefined, currentRequestId);
+            await fetchERC20ToBTCQuote(undefined, currentRequestId, true);
           } else {
             await fetchBTCtoERC20Quote(undefined, "ExactInput", currentRequestId);
           }
         } else {
           if (isSwappingForBTC) {
             console.log("refetching ERC20 to BTC exact output quote");
-            await fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId);
+            await fetchERC20ToBTCQuoteExactOutput(undefined, currentRequestId, true);
           } else {
             await fetchBTCtoERC20Quote(undefined, "ExactOutput", currentRequestId);
           }
@@ -1923,19 +1964,7 @@ export const SwapInputAndOutput = () => {
       console.log("Auto-refetching ERC20->BTC quote after prices loaded");
       setRefetchERC20toBTCQuote(false);
 
-      // Calculate USD value and determine router
-      const inputTicker = selectedInputToken.ticker;
-      const usdValue = calculateUsdValue(
-        rawInputAmount,
-        inputTicker,
-        ethPrice,
-        btcPrice,
-        erc20Price
-      );
-      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
-
-      fetchERC20ToBTCQuote(undefined, undefined, computedRouter);
+      fetchERC20ToBTCQuote();
     }
 
     // For ERC20 -> BTC exact output
@@ -1949,19 +1978,7 @@ export const SwapInputAndOutput = () => {
       console.log("Auto-refetching ERC20->BTC exact output quote after prices loaded");
       setRefetchERC20toBTCQuoteExactOutput(false);
 
-      // Calculate USD value and determine router
-      const outputTicker = "BTC";
-      const usdValue = calculateUsdValue(
-        outputAmount,
-        outputTicker,
-        ethPrice,
-        btcPrice,
-        erc20Price
-      );
-      const usdValueFloat = parseFloat(usdValue.replace(/[$,]/g, ""));
-      const computedRouter = usdValueFloat > 250 ? SwapRouter.COWSWAP : SwapRouter.UNISWAP;
-
-      fetchERC20ToBTCQuoteExactOutput(undefined, undefined, computedRouter);
+      fetchERC20ToBTCQuoteExactOutput();
     }
 
     // For BTC -> ERC20

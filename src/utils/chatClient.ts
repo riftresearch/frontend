@@ -1,6 +1,9 @@
 const BASE = "https://ookzpviwfhzfarouusah.supabase.co/functions/v1/chats";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
+// Result type for operations that can fail without throwing
+export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+
 // Normalize address to lowercase before sending
 const addr = (a: string) => a.trim().toLowerCase();
 
@@ -29,12 +32,12 @@ export async function createChat(address: string, meta: any = {}) {
   return (await r.json()).id as string;
 }
 
-export async function listChats(address: string) {
+export async function listChats(address: string): Promise<Result<ChatThread[]>> {
   const r = await fetch(`${BASE}/list?address=${encodeURIComponent(addr(address))}`, {
     headers: getHeaders(),
   });
-  if (!r.ok) throw new Error(await r.text());
-  return await r.json();
+  if (!r.ok) return { ok: false, error: await r.text() };
+  return { ok: true, data: await r.json() };
 }
 
 export async function getThread(chatId: string, address: string) {

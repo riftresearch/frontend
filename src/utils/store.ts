@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { CreateSwapResponse } from "./otcClient";
 import { TokenData, PermitAllowance, PermitDataForSwap, ApprovalState } from "./types";
 import { Quote } from "./rfqClient";
-import { UniswapQuoteResponse } from "./uniswapRouter";
 import { FeeOverview } from "./swapHelpers";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
 
@@ -16,12 +15,6 @@ type DepositFlowState =
   | "6-RefundingUser"
   | "7-RefundingMM"
   | "8-Failed";
-
-export enum SwapRouter {
-  UNISWAP = "UNISWAP",
-  COWSWAP = "COWSWAP",
-  AERODROME = "AERODROME",
-}
 
 export enum CowswapOrderStatus {
   NO_ORDER = "NO_ORDER",
@@ -75,14 +68,10 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => void;
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
-  uniswapQuote: UniswapQuoteResponse | null;
-  setUniswapQuote: (quote: UniswapQuoteResponse | null) => void;
   cowswapQuote: QuoteResults | null;
   setCowswapQuote: (quote: QuoteResults | null) => void;
   rfqQuote: Quote | null;
   setRfqQuote: (quote: Quote | null) => void;
-  swapRouter: SwapRouter;
-  setSwapRouter: (router: SwapRouter) => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
   bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
@@ -121,6 +110,8 @@ export const useStore = create<{
   setInputBelowMinimum: (value: boolean) => void;
   refetchQuote: boolean;
   setRefetchQuote: (value: boolean) => void;
+  isAwaitingOptimalQuote: boolean;
+  setIsAwaitingOptimalQuote: (value: boolean) => void;
   cowswapOrderStatus: CowswapOrderStatus;
   setCowswapOrderStatus: (status: CowswapOrderStatus) => void;
   cowswapOrderData: CowswapOrderData | null;
@@ -173,14 +164,10 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
   outputUsdValue: "$0.00",
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
-  uniswapQuote: null,
-  setUniswapQuote: (quote: UniswapQuoteResponse | null) => set({ uniswapQuote: quote }),
   cowswapQuote: null,
   setCowswapQuote: (quote: QuoteResults | null) => set({ cowswapQuote: quote }),
   rfqQuote: null,
   setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
-  swapRouter: SwapRouter.UNISWAP,
-  setSwapRouter: (router: SwapRouter) => set({ swapRouter: router }),
   slippageBips: 5,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
   bitcoinDepositInfo: null,
@@ -221,6 +208,8 @@ export const useStore = create<{
   setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
   refetchQuote: false,
   setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
+  isAwaitingOptimalQuote: false,
+  setIsAwaitingOptimalQuote: (value: boolean) => set({ isAwaitingOptimalQuote: value }),
   cowswapOrderStatus: CowswapOrderStatus.NO_ORDER,
   setCowswapOrderStatus: (status: CowswapOrderStatus) => set({ cowswapOrderStatus: status }),
   cowswapOrderData: null,

@@ -1,6 +1,7 @@
 /**
  * TypeScript client for CowSwap Protocol
  * Provides typed access to quote and order creation for ERC20 -> cbBTC swaps
+ * Supports multiple chains (Ethereum mainnet and Base) with chain-specific SDK instances
  */
 
 import { SupportedChainId, PriceQuality } from "@cowprotocol/cow-sdk";
@@ -9,13 +10,15 @@ import { OrderKind } from "@cowprotocol/cow-sdk";
 import type { TradeParameters } from "@cowprotocol/sdk-trading";
 import { ViemAdapter } from "@cowprotocol/sdk-viem-adapter";
 import type { WalletClient, PublicClient } from "viem";
-import { applySlippageExactOutput, applySlippage } from "./swapHelpers";
 
 // Constants
 const CBBTC_ADDRESS = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 const NATIVE_ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const DEFAULT_SLIPPAGE_BPS = 5; // 0.05% = 5 basis points
 const DEFAULT_VALID_FOR_SECONDS = 300; // 5 minutes
+
+/** Chains supported by this client */
+export type CowSwapSupportedChain = SupportedChainId.MAINNET | SupportedChainId.BASE;
 
 /**
  * CowSwap quote request parameters
@@ -35,19 +38,25 @@ export interface CowSwapQuoteRequest {
   validFor?: number;
   /** User's wallet address */
   userAddress: string;
-  /** Price quality preference (defaults to FAST) */
+  /** Price quality preference (defaults to OPTIMAL) */
   priceQuality?: PriceQuality;
   /** Optional receiver address for the order */
   receiver?: string;
+  /** Chain to execute on (defaults to mainnet) */
+  chainId?: CowSwapSupportedChain;
 }
 
 /**
  * CowSwap client configuration
+ * Single wallet client shared across chains, separate public clients per chain
  */
 export interface CowSwapClientConfig {
+  /** Wallet client for signing - shared across all chains */
   walletClient?: WalletClient;
-  publicClient: PublicClient;
-  chainId?: SupportedChainId;
+  /** Public client for Ethereum mainnet */
+  mainnetPublicClient: PublicClient;
+  /** Public client for Base */
+  basePublicClient: PublicClient;
 }
 
 /**
@@ -66,36 +75,48 @@ export class CowSwapError extends Error {
 
 /**
  * CowSwap Client for interacting with CowSwap Protocol
+ * Maintains separate SDK instances for each supported chain
  */
 export class CowSwapClient {
-  private readonly tradingSdk: TradingSdk;
-  private readonly chainId: SupportedChainId;
+  private readonly mainnetSdk: TradingSdk;
+  private readonly baseSdk: TradingSdk;
 
   constructor(config: CowSwapClientConfig) {
-    this.chainId = config.chainId ?? SupportedChainId.MAINNET;
-
-    // Initialize ViemAdapter with provided clients
-    const adapter = new ViemAdapter({
-      provider: config.publicClient,
-      walletClient: config.walletClient, // may be undefined for quote-only
+    // Initialize mainnet SDK
+    const mainnetAdapter = new ViemAdapter({
+      provider: config.mainnetPublicClient,
+      walletClient: config.walletClient,
     });
-
-    // Initialize TradingSdk with app code and adapter
-    this.tradingSdk = new TradingSdk(
-      {
-        appCode: "app.rift.trade",
-        chainId: this.chainId,
-      },
+    this.mainnetSdk = new TradingSdk(
+      { appCode: "app.rift.trade", chainId: SupportedChainId.MAINNET },
       {},
-      adapter
+      mainnetAdapter
+    );
+
+    // Initialize Base SDK
+    const baseAdapter = new ViemAdapter({
+      provider: config.basePublicClient,
+      walletClient: config.walletClient,
+    });
+    this.baseSdk = new TradingSdk(
+      { appCode: "app.rift.trade", chainId: SupportedChainId.BASE },
+      {},
+      baseAdapter
     );
   }
 
   /**
-   * Expose the underlying TradingSdk instance
+   * Get the SDK instance for a specific chain
    */
-  get sdk() {
-    return this.tradingSdk;
+  getSdk(chainId: CowSwapSupportedChain = SupportedChainId.MAINNET): TradingSdk {
+    return chainId === SupportedChainId.BASE ? this.baseSdk : this.mainnetSdk;
+  }
+
+  /**
+   * Expose the mainnet TradingSdk instance (for backwards compatibility)
+   */
+  get sdk(): TradingSdk {
+    return this.mainnetSdk;
   }
 
   /**
@@ -121,6 +142,7 @@ export class CowSwapClient {
           : request.sellToken;
       const validFor = request.validFor ?? DEFAULT_VALID_FOR_SECONDS;
       const slippageBps = request.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
+      const chainId = request.chainId ?? SupportedChainId.MAINNET;
 
       // Determine order kind
       const isBuyOrder = hasBuyAmount;
@@ -145,8 +167,9 @@ export class CowSwapClient {
         },
       };
 
-      // Get quote from TradingSdk and return the full quoteResults
-      const { quoteResults } = await this.tradingSdk.getQuote(tradeParameters, advancedSettings);
+      // Get quote from chain-specific SDK
+      const sdk = this.getSdk(chainId);
+      const { quoteResults } = await sdk.getQuote(tradeParameters, advancedSettings);
       return quoteResults;
     } catch (error) {
       if (error instanceof CowSwapError) {
@@ -179,6 +202,7 @@ export class CowSwapClient {
           : request.sellToken;
       const validFor = request.validFor ?? DEFAULT_VALID_FOR_SECONDS;
       const slippageBps = request.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
+      const chainId = request.chainId ?? SupportedChainId.MAINNET;
 
       // Build TradeParameters for exact output (BUY) order
       const tradeParameters: TradeParameters = {
@@ -193,8 +217,9 @@ export class CowSwapClient {
         receiver: request.receiver,
       };
 
-      // Submit order using TradingSdk
-      const { orderId } = await this.tradingSdk.postSwapOrder(tradeParameters);
+      // Submit order using chain-specific SDK
+      const sdk = this.getSdk(chainId);
+      const { orderId } = await sdk.postSwapOrder(tradeParameters);
 
       return orderId;
     } catch (error) {

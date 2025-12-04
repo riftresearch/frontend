@@ -3,10 +3,9 @@
  * Contains logic for getting quotes and managing swap flows
  */
 
-import { Asset, TokenData } from "./types";
+import { TokenData } from "./types";
 import {
   rfqClient,
-  GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
   BITCOIN_DECIMALS,
   PERMIT2_ADDRESS,
@@ -14,7 +13,6 @@ import {
   MIN_SWAP_SATS,
 } from "./constants";
 import { Quote, formatLotAmount, RfqClientError, Currency } from "./rfqClient";
-import { createUniswapRouter, UniswapQuoteResponse, UniswapRouterError } from "./uniswapRouter";
 import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
 import { validateBitcoinPayoutAddressWithNetwork } from "./bitcoinUtils";
@@ -23,9 +21,13 @@ import {
   MaxAllowanceTransferAmount,
   type PermitSingle,
 } from "@uniswap/permit2-sdk";
-import { useStore, SwapRouter } from "./store";
+import { useStore } from "./store";
 import { CowSwapClient } from "./cowswapClient";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
+import { PriceQuality } from "@cowprotocol/cow-sdk";
+
+// Re-export PriceQuality for convenience
+export { PriceQuality };
 
 /**
  * Fetch gas parameters from the API
@@ -80,13 +82,11 @@ const SATS_PER_BTC = 100_000_000;
 const DEFAULT_SLIPPAGE_BPS = 0; // 0.1% = 10 basis points
 
 /**
- * Response from ERC20 to BTC quote combining Uniswap and RFQ
+ * Response from ERC20 to BTC quote combining CowSwap and RFQ
  * Supports both exact input and exact output modes
  */
 export interface ERC20ToBTCQuoteResponse {
-  /** Uniswap quote with pricing information (optional for cbBTC direct swaps) */
-  uniswapQuote?: UniswapQuoteResponse;
-  /** CowSwap quote with pricing information (optional, used when router is COWSWAP) */
+  /** CowSwap quote with pricing information (optional for cbBTC direct swaps) */
   cowswapQuote?: QuoteResults;
   /** Final BTC output amount (formatted string) - for exact input mode */
   btcOutputAmount?: string;
@@ -365,8 +365,9 @@ export async function callRFQ(
 
 /**
  * Get combined quote for ERC20/ETH -> BTC
- * This combines Uniswap/CowSwap (ERC20 -> cbBTC) with RFQ (cbBTC -> BTC)
- * For cbBTC input, skips Uniswap/CowSwap and goes direct to RFQ
+ * This combines CowSwap (ERC20 -> cbBTC) with RFQ (cbBTC -> BTC)
+ * For cbBTC input, skips CowSwap and goes direct to RFQ
+ * @param priceQuality - CowSwap price quality (FAST for quick quotes, OPTIMAL for best price)
  */
 export async function getERC20ToBTCQuote(
   sellToken: string,
@@ -375,15 +376,15 @@ export async function getERC20ToBTCQuote(
   userAddress: string,
   slippageBps?: number,
   validFor?: number,
-  router: SwapRouter = SwapRouter.UNISWAP,
-  cowswapClient: CowSwapClient | null = null
+  cowswapClient: CowSwapClient | null = null,
+  priceQuality: PriceQuality = PriceQuality.OPTIMAL
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     // Check if input token is cbBTC
     const isCbBTC = sellToken.toLowerCase() === "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf";
 
     if (isCbBTC) {
-      // For cbBTC, skip Uniswap and go directly to RFQ
+      // For cbBTC, skip CowSwap and go directly to RFQ
       console.log("Input is cbBTC, using direct RFQ quote");
 
       const rfqQuote = await callRFQ(amountIn, "ExactInput", true);
@@ -410,58 +411,31 @@ export async function getERC20ToBTCQuote(
       };
     }
 
-    // For non-cbBTC tokens, use Uniswap/CowSwap + RFQ flow
-    let cbBTCAmount: string;
-    let uniswapQuote: UniswapQuoteResponse | undefined;
-    let cowswapQuote: QuoteResults | undefined;
-    let routerExpiration: Date;
+    // For non-cbBTC tokens, use CowSwap + RFQ flow
+    console.log("Getting CowSwap quote for", sellToken, "->", "cbBTC");
 
-    if (router === SwapRouter.COWSWAP) {
-      // Step 1: Get CowSwap quote for ERC20/ETH -> cbBTC
-      console.log("Getting CowSwap quote for", sellToken, "->", "cbBTC");
-
-      // Check if cowswapClient is available
-      if (!cowswapClient) {
-        console.error("CowSwap client not available");
-        throw new Error("CowSwap client not available");
-      }
-
-      const cowswapResponse = await cowswapClient.getQuote({
-        sellToken,
-        sellAmount: amountIn,
-        decimals,
-        slippageBps,
-        validFor,
-        userAddress,
-      });
-
-      console.log("cowswapQuote", cowswapResponse);
-
-      cbBTCAmount = cowswapResponse.amountsAndCosts.afterSlippage.buyAmount.toString();
-      cowswapQuote = cowswapResponse;
-      // Calculate expiration from tradeParameters.validFor
-      const validForSeconds = cowswapResponse.tradeParameters.validFor || 120;
-      routerExpiration = new Date(Date.now() + validForSeconds * 1000);
-    } else {
-      // Step 1: Get Uniswap quote for ERC20/ETH -> cbBTC
-      console.log("Getting Uniswap quote for", sellToken, "->", "cbBTC");
-      const uniswapRouter = createUniswapRouter();
-
-      const uniswapResponse = await uniswapRouter.getQuote({
-        sellToken,
-        amountIn,
-        decimals,
-        userAddress,
-        slippageBps,
-        validFor,
-      });
-
-      console.log("uniswapQuote", uniswapResponse);
-
-      cbBTCAmount = uniswapResponse.amountOut;
-      uniswapQuote = uniswapResponse;
-      routerExpiration = uniswapResponse.expiresAt;
+    // Check if cowswapClient is available
+    if (!cowswapClient) {
+      console.error("CowSwap client not available");
+      throw new Error("CowSwap client not available");
     }
+
+    const cowswapResponse = await cowswapClient.getQuote({
+      sellToken,
+      sellAmount: amountIn,
+      decimals,
+      slippageBps,
+      validFor,
+      userAddress,
+      priceQuality,
+    });
+
+    console.log("cowswapQuote", cowswapResponse, "priceQuality:", priceQuality);
+
+    const cbBTCAmount = cowswapResponse.amountsAndCosts.afterSlippage.buyAmount.toString();
+    // Calculate expiration from tradeParameters.validFor
+    const validForSeconds = cowswapResponse.tradeParameters.validFor || 120;
+    const routerExpiration = new Date(Date.now() + validForSeconds * 1000);
 
     // Step 2: Get RFQ quote for cbBTC -> BTC using cbBTC amount
     const rfqQuote = await callRFQ(cbBTCAmount, "ExactInput", true);
@@ -487,8 +461,7 @@ export async function getERC20ToBTCQuote(
     setHasNoRoutesError(false);
 
     return {
-      uniswapQuote,
-      cowswapQuote,
+      cowswapQuote: cowswapResponse,
       btcOutputAmount,
       rfqQuote,
       expiresAt,
@@ -497,13 +470,7 @@ export async function getERC20ToBTCQuote(
     console.error("Failed to get ERC20 to BTC quote:", error);
 
     // Handle specific error types
-    if (error instanceof UniswapRouterError) {
-      // Check if it's a "no routes found" error
-      if (error.message.includes("No routes found")) {
-        const { setHasNoRoutesError } = useStore.getState();
-        setHasNoRoutesError(true);
-      }
-    } else if (error instanceof RfqClientError) {
+    if (error instanceof RfqClientError) {
       toastError(error, {
         title: "RFQ Quote Failed",
         description: error.message,
@@ -605,6 +572,7 @@ export function applySlippageExactOutput(amount: bigint | string, slippageBps?: 
 /**
  * Get combined quote for ERC20/ETH -> BTC using exact output
  * User specifies desired BTC output, we calculate required input
+ * @param priceQuality - CowSwap price quality (FAST for quick quotes, OPTIMAL for best price)
  */
 export async function getERC20ToBTCQuoteExactOutput(
   btcOutputAmount: string,
@@ -612,8 +580,8 @@ export async function getERC20ToBTCQuoteExactOutput(
   userAddress: string,
   slippageBps?: number,
   validFor?: number,
-  router: SwapRouter = SwapRouter.UNISWAP,
-  cowswapClient: CowSwapClient | null = null
+  cowswapClient: CowSwapClient | null = null,
+  priceQuality: PriceQuality = PriceQuality.OPTIMAL
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     if (!selectedInputToken) {
@@ -624,8 +592,6 @@ export async function getERC20ToBTCQuoteExactOutput(
     const btcAmountInSats = parseUnits(btcOutputAmount, BITCOIN_DECIMALS).toString();
 
     // Step 1: Get RFQ quote for cbBTC -> BTC using exact output mode
-    // console.log("Getting RFQ quote (exact output) for", btcAmountInSats, "sats BTC");
-
     const rfqQuoteData = await callRFQ(btcAmountInSats, "ExactOutput", true);
 
     if (!rfqQuoteData) {
@@ -634,7 +600,6 @@ export async function getERC20ToBTCQuoteExactOutput(
 
     // The "from" amount is how much cbBTC we need
     const cbBTCAmountNeeded = rfqQuoteData.from.amount;
-    // console.log("RFQ quote: need", cbBTCAmountNeeded, "cbBTC (in base units)");
 
     // Check if input token is cbBTC
     const isCbBTC = selectedInputToken.ticker === "cbBTC";
@@ -653,75 +618,41 @@ export async function getERC20ToBTCQuoteExactOutput(
       };
     }
 
-    // Step 2: Get Uniswap/CowSwap quote for ERC20/ETH -> cbBTC using exact output
+    // Step 2: Get CowSwap quote for ERC20/ETH -> cbBTC using exact output
     const sellToken = selectedInputToken.address;
-    let erc20InputFormatted: string;
-    let uniswapQuote: UniswapQuoteResponse | undefined;
-    let cowswapQuote: QuoteResults | undefined;
-    let routerExpiration: Date;
 
-    if (router === SwapRouter.COWSWAP) {
-      // Get CowSwap quote (exact output = buyAmount)
-      console.log(
-        "Getting CowSwap quote (exact output) for",
-        sellToken,
-        "->",
-        cbBTCFormatted,
-        "cbBTC"
-      );
+    console.log(
+      "Getting CowSwap quote (exact output) for",
+      sellToken,
+      "->",
+      cbBTCFormatted,
+      "cbBTC"
+    );
 
-      // Check if cowswapClient is available
-      if (!cowswapClient) {
-        console.error("CowSwap client not available");
-        throw new Error("CowSwap client not available");
-      }
-
-      const cowswapResponse = await cowswapClient.getQuote({
-        sellToken,
-        buyAmount: BigInt(cbBTCAmountNeeded).toString(),
-        decimals: selectedInputToken.decimals,
-        slippageBps,
-        validFor,
-        userAddress,
-      });
-
-      console.log("cowswapQuote", cowswapResponse);
-
-      // For exact output, sellAmount tells us how much input token we need
-      const erc20AmountNeeded = cowswapResponse.amountsAndCosts.afterSlippage.sellAmount.toString();
-      erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
-      cowswapQuote = cowswapResponse;
-      // Calculate expiration from tradeParameters.validFor
-      const validForSeconds = cowswapResponse.tradeParameters.validFor || 120;
-      routerExpiration = new Date(Date.now() + validForSeconds * 1000);
-    } else {
-      // Get Uniswap quote
-      console.log(
-        "Getting Uniswap quote (exact output) for",
-        sellToken,
-        "->",
-        cbBTCFormatted,
-        "cbBTC"
-      );
-      const uniswapRouter = createUniswapRouter();
-
-      const uniswapResponse = await uniswapRouter.getQuote({
-        sellToken,
-        amountOut: BigInt(cbBTCAmountNeeded).toString(),
-        decimals: selectedInputToken.decimals,
-        userAddress,
-        slippageBps,
-        validFor,
-      });
-
-      console.log("uniswapQuote", uniswapResponse);
-
-      // For exact output, the API returns the required input amount in amountIn field
-      const erc20AmountNeeded = uniswapResponse.amountIn;
-      erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
-      uniswapQuote = uniswapResponse;
-      routerExpiration = uniswapResponse.expiresAt;
+    // Check if cowswapClient is available
+    if (!cowswapClient) {
+      console.error("CowSwap client not available");
+      throw new Error("CowSwap client not available");
     }
+
+    const cowswapResponse = await cowswapClient.getQuote({
+      sellToken,
+      buyAmount: BigInt(cbBTCAmountNeeded).toString(),
+      decimals: selectedInputToken.decimals,
+      slippageBps,
+      validFor,
+      userAddress,
+      priceQuality,
+    });
+
+    console.log("cowswapQuote", cowswapResponse, "priceQuality:", priceQuality);
+
+    // For exact output, sellAmount tells us how much input token we need
+    const erc20AmountNeeded = cowswapResponse.amountsAndCosts.afterSlippage.sellAmount.toString();
+    const erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
+    // Calculate expiration from tradeParameters.validFor
+    const validForSeconds = cowswapResponse.tradeParameters.validFor || 120;
+    const routerExpiration = new Date(Date.now() + validForSeconds * 1000);
 
     // Determine earliest expiration
     const rfqExpiration = new Date(rfqQuoteData.expires_at);
@@ -738,8 +669,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     setHasNoRoutesError(false);
 
     return {
-      uniswapQuote,
-      cowswapQuote,
+      cowswapQuote: cowswapResponse,
       erc20InputAmount: erc20InputFormatted,
       rfqQuote: rfqQuoteData,
       expiresAt,
@@ -748,13 +678,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     console.error("Failed to get ERC20 to BTC quote (exact output):", error);
 
     // Handle specific error types
-    if (error instanceof UniswapRouterError) {
-      // Check if it's a "no routes found" error
-      if (error.message.includes("No routes found")) {
-        const { setHasNoRoutesError } = useStore.getState();
-        setHasNoRoutesError(true);
-      }
-    } else if (error instanceof RfqClientError) {
+    if (error instanceof RfqClientError) {
       toastError(error, {
         title: "RFQ Quote Failed",
         description: error.message,

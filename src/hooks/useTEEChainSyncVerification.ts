@@ -4,10 +4,11 @@ import {
   ETH_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
   BTC_CLIENT_BLOCK_HEIGHT_DIFF_THRESHOLD,
 } from "@/utils/constants";
-import {wagmiAdapter} from "@/utils/wallet";
+import { wagmiAdapter } from "@/utils/wallet";
 import { useQuery } from "@tanstack/react-query";
 import { createPublicClient, http, type Block } from "viem";
-import { mainnet } from "viem/chains";
+import { base, mainnet } from "viem/chains";
+import { usePublicClient } from "wagmi";
 
 /**
  * Bitcoin block header from Esplora API
@@ -43,12 +44,6 @@ interface ChainSyncResult {
   error?: string;
 }
 
-// Create a public client for Ethereum RPC calls
-const ethereumClient = createPublicClient({
-  chain: mainnet,
-  transport: http("https://eth.llamarpc.com"),
-});
-
 /**
  * Fetches Bitcoin block header from Esplora API
  */
@@ -81,6 +76,9 @@ async function fetchLatestBitcoinHeight(): Promise<number> {
  * and compares them against the TEE's reported best hashes
  */
 export function useTEEChainSyncVerification() {
+  const ethereumClient = usePublicClient({ chainId: mainnet.id });
+  const baseClient = usePublicClient({ chainId: base.id });
+
   const query = useQuery<ChainSyncResult>({
     queryKey: ["chain-sync-verification"],
     queryFn: async () => {
@@ -104,12 +102,12 @@ export function useTEEChainSyncVerification() {
           throw new Error(`Invalid Ethereum hash from TEE: ${bestTEEEthereumHash}`);
         }
 
-
         // Fetch headers from actual chains
         const [ethereumHeader, bitcoinHeader, latestEthBlock, latestBtcHeight] = await Promise.all([
-          ethereumClient.getBlock({ blockHash: bestTEEEthereumHash as `0x${string}` }),
+          // safety: we know ethereumClient is ready because of the enabled check
+          ethereumClient!.getBlock({ blockHash: bestTEEEthereumHash as `0x${string}` }),
           fetchBitcoinBlockHeader(bestTEEBitcoinHash),
-          ethereumClient.getBlockNumber(),
+          ethereumClient!.getBlockNumber(),
           fetchLatestBitcoinHeight(),
         ]);
 
@@ -186,7 +184,7 @@ export function useTEEChainSyncVerification() {
         };
       }
     },
-    enabled: true,
+    enabled: !!ethereumClient && !!baseClient,
     refetchInterval: 1000 * 60 * 60, // Refetch every 1 hour
     staleTime: 1000 * 60 * 60, // Consider stale after 1 hour
     retry: 3,

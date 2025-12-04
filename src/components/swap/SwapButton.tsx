@@ -20,7 +20,7 @@ import {
 } from "@/utils/constants";
 import { OTCServerError } from "@/utils/otcClient";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
-import { useStore, SwapRouter, CowswapOrderStatus } from "@/utils/store";
+import { useStore, CowswapOrderStatus } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { reownModal } from "@/utils/wallet";
@@ -28,7 +28,6 @@ import { Address, erc20Abi, parseUnits, maxUint256 } from "viem";
 import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
-import { createUniswapRouter } from "@/utils/uniswapRouter";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 
 // Helper function to handle OTC errors with specific messaging
@@ -98,7 +97,6 @@ export const SwapButton = () => {
     fullPrecisionInputAmount,
     outputAmount,
     isSwappingForBTC,
-    uniswapQuote,
     cowswapQuote,
     rfqQuote,
     slippageBips,
@@ -120,13 +118,12 @@ export const SwapButton = () => {
     inputBelowMinimum,
     refetchQuote,
     setRefetchQuote,
-    setUniswapQuote,
     setRfqQuote,
-    swapRouter,
     cowswapOrderStatus,
     setCowswapOrderStatus,
     cowswapOrderData,
     setCowswapOrderData,
+    isAwaitingOptimalQuote,
   } = useStore();
   // Ref to track previous refetchQuote value for retry detection
   const prevRefetchQuoteRef = useRef(refetchQuote);
@@ -230,7 +227,7 @@ export const SwapButton = () => {
   // Handle Permit2 signature
   const signPermit2 = useCallback(async () => {
     console.log("signPermit2", selectedInputToken.address);
-    if (!selectedInputToken.address || !userEvmAccountAddress || !permitAllowance) {
+    if (!selectedInputToken.address || !userEvmAccountAddress) {
       console.error("Missing required data for permit");
       return;
     }
@@ -242,24 +239,29 @@ export const SwapButton = () => {
       // Clear old permit data before signing new one
       setPermitDataForSwap(null);
 
-      console.log("Signing Permit2...", {
-        token: selectedInputToken.address,
-        nonce: permitAllowance.nonce,
-      });
+      if (permitAllowance) {
+        console.log("Signing Permit2...", {
+          token: selectedInputToken.address,
+          nonce: permitAllowance.nonce,
+        });
 
-      const { permit, dataToSign } = buildPermitDataToSign(
-        Number(permitAllowance.nonce),
-        selectedInputToken.address,
-        userEvmAccountAddress,
-        evmConnectWalletChainId
-      );
+        const { permit, dataToSign } = buildPermitDataToSign(
+          Number(permitAllowance.nonce),
+          selectedInputToken.address,
+          userEvmAccountAddress,
+          evmConnectWalletChainId
+        );
 
-      console.log("permit", permit);
-      console.log("dataToSign", dataToSign);
-      const signature = await signTypedDataAsync(dataToSign);
+        console.log("permit", permit);
+        console.log("dataToSign", dataToSign);
+        const signature = await signTypedDataAsync(dataToSign);
 
-      console.log("Permit2 signed successfully");
-      setPermitDataForSwap({ permit, signature });
+        console.log("Permit2 signed successfully");
+        setPermitDataForSwap({ permit, signature });
+      } else {
+        console.error("No permit data available");
+        return;
+      }
     } catch (error) {
       console.error("Permit signing failed:", error);
       toastInfo({
@@ -424,8 +426,18 @@ export const SwapButton = () => {
     writeContract,
   ]);
 
-  // Handle ERC20->BTC swap using Uniswap + OTC
+  // Handle ERC20->BTC swap using CowSwap + OTC
   const executeERC20ToBTCSwap = useCallback(async () => {
+    // Wait for optimal quote before proceeding
+    if (isAwaitingOptimalQuote) {
+      console.log("Waiting for optimal quote to arrive...");
+      toastInfo({
+        title: "Fetching Best Price",
+        description: "Please wait while we find the best price for you...",
+      });
+      return;
+    }
+
     // Clear old permit data when starting a new swap
     setPermitDataForSwap(null);
 
@@ -490,143 +502,68 @@ export const SwapButton = () => {
         setSwapResponse(otcSwap);
       }
 
-      console.log("executing with swapRouter", swapRouter);
-      // Step 2: Check router type and execute appropriate swap
-      if (swapRouter === SwapRouter.COWSWAP) {
-        // CowSwap order submission flow
-        console.log("Submitting CowSwap order to deposit address:", depositAddress);
+      // Step 2: Submit CowSwap order
+      console.log("Submitting CowSwap order to deposit address:", depositAddress);
 
-        if (!cowswapClient) {
-          throw new Error("CowSwap client not available");
-        }
-
-        if (!cowswapQuote) {
-          setRefetchQuote(true);
-          return;
-        }
-
-        // Set status to signing
-        setCowswapOrderStatus(CowswapOrderStatus.SIGNING);
-
-        // Submit order using CowSwap client
-        const sellToken = selectedInputToken.address;
-        const decimals = selectedInputToken.decimals;
-
-        // Use buyAmount from the quote (exact output)
-        const buyAmount = cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString();
-
-        const orderId = await cowswapClient.submitOrder({
-          sellToken,
-          buyAmount,
-          decimals,
-          slippageBps: slippageBips,
-          validFor: 600, // 10 minutes
-          userAddress: userEvmAccountAddress,
-          receiver: depositAddress, // Send cbBTC to OTC deposit address
-        });
-
-        console.log("CowSwap order submitted:", orderId);
-
-        // Store order ID and set status to signed
-        setCowswapOrderData({ id: orderId, order: null });
-        setCowswapOrderStatus(CowswapOrderStatus.SIGNED);
-
-        // Store CowSwap order ID in swap metadata
-        if (otcSwap?.swap_id) {
-          try {
-            await fetch(`/api/swap/${otcSwap.swap_id}/metadata`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                metadata: {
-                  cowswapOrderId: orderId,
-                },
-              }),
-            });
-            console.log("CowSwap order ID stored in swap metadata");
-          } catch (error) {
-            console.error("Failed to store CowSwap order ID in metadata:", error);
-            // Don't fail the swap if metadata update fails
-          }
-        }
-
-        // Redirect to swap tracking page
-        if (otcSwap?.swap_id) {
-          console.log("Redirecting to swap page with ID:", otcSwap.swap_id);
-          router.push(`/swap/${otcSwap.swap_id}`);
-        }
-
-        // Transaction is now complete - polling will handle status updates
-        return;
+      if (!cowswapClient) {
+        throw new Error("CowSwap client not available");
       }
 
-      // Uniswap flow (existing code)
-      console.log("Building Uniswap swap transaction with, deposit address: ", depositAddress);
-
-      if (!uniswapQuote) {
+      if (!cowswapQuote) {
         setRefetchQuote(true);
         return;
       }
-      const uniswapRouter = createUniswapRouter();
+
+      // Set status to signing
+      setCowswapOrderStatus(CowswapOrderStatus.SIGNING);
+
+      // Submit order using CowSwap client
       const sellToken = selectedInputToken.address;
       const decimals = selectedInputToken.decimals;
 
-      const swapTransaction = await uniswapRouter.buildSwapTransaction(
+      // Use buyAmount from the quote (exact output)
+      const buyAmount = cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString();
+
+      const orderId = await cowswapClient.submitOrder({
         sellToken,
+        buyAmount,
         decimals,
-        userEvmAccountAddress,
-        uniswapQuote.routerType, // Pass the router type from the quote
-        uniswapQuote.amountIn,
-        depositAddress, // Set receiver to OTC deposit address
-        slippageBips,
-        600, // validFor: 10 minutes
-        permitDataForSwap?.permit || null,
-        permitDataForSwap?.signature || "",
-        // V4 fields from stored quote
-        uniswapQuote.poolKey,
-        uniswapQuote.path,
-        uniswapQuote.currencyIn,
-        uniswapQuote.isFirstToken,
-        uniswapQuote.amountOut,
-        uniswapQuote.isExactOutput
-      );
+        slippageBps: slippageBips,
+        validFor: 600, // 10 minutes
+        userAddress: userEvmAccountAddress,
+        receiver: depositAddress, // Send cbBTC to OTC deposit address
+      });
 
-      console.log("Swap transaction built:", swapTransaction);
-      console.log("Transaction to:", swapTransaction.to);
-      console.log("Transaction value:", swapTransaction.value);
+      console.log("CowSwap order submitted:", orderId);
 
-      // Execute the swap transaction
-      console.log("Executing swap transaction...");
-      const gasParams = await fetchGasParams(evmConnectWalletChainId);
-      console.log(
-        "Gas params for swap execution:",
-        gasParams
-          ? {
-              maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
-              maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
-            }
-          : undefined
-      );
+      // Store order ID and set status to signed
+      setCowswapOrderData({ id: orderId, order: null });
+      setCowswapOrderStatus(CowswapOrderStatus.SIGNED);
 
-      // Conditional logging based on token type
-      if (swapTransaction.routerType === "v4" && !isNativeETH) {
-        console.log("[V4] Executing V4 swap with ERC20");
-      } else if (swapTransaction.routerType === "v4" && isNativeETH) {
-        console.log("[V4] Executing V4 swap with ETH");
-      } else {
-        console.log("[V2/V3] Executing V2/V3 swap");
+      // Store CowSwap order ID in swap metadata
+      if (otcSwap?.swap_id) {
+        try {
+          await fetch(`/api/swap/${otcSwap.swap_id}/metadata`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              metadata: {
+                cowswapOrderId: orderId,
+              },
+            }),
+          });
+          console.log("CowSwap order ID stored in swap metadata");
+        } catch (error) {
+          console.error("Failed to store CowSwap order ID in metadata:", error);
+          // Don't fail the swap if metadata update fails
+        }
       }
 
-      // Execute the transaction
-      sendTransaction({
-        to: swapTransaction.to as Address,
-        data: swapTransaction.calldata as `0x${string}`,
-        value: BigInt(swapTransaction.value),
-        ...(gasParams && {
-          maxFeePerGas: gasParams.maxFeePerGas,
-          maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-        }),
-      });
+      // Redirect to swap tracking page
+      if (otcSwap?.swap_id) {
+        console.log("Redirecting to swap page with ID:", otcSwap.swap_id);
+        router.push(`/swap/${otcSwap.swap_id}`);
+      }
     } catch (error) {
       console.error("ERC20->BTC swap failed:", error);
 
@@ -635,7 +572,6 @@ export const SwapButton = () => {
       handleOTCError(error);
     }
   }, [
-    uniswapQuote,
     cowswapQuote,
     rfqQuote,
     userEvmAccountAddress,
@@ -645,15 +581,12 @@ export const SwapButton = () => {
     rawInputAmount,
     slippageBips,
     evmConnectWalletChainId,
-    sendTransaction,
-    permitDataForSwap,
-    isNativeETH,
     setPermitDataForSwap,
     fullPrecisionInputAmount,
-    swapRouter,
     cowswapClient,
     setCowswapOrderStatus,
     setCowswapOrderData,
+    isAwaitingOptimalQuote,
   ]);
 
   // Handle BTC->cbBTC swap using OTC
@@ -721,7 +654,7 @@ export const SwapButton = () => {
         return;
       }
 
-      // For ERC20->BTC swaps, use the new Uniswap flow
+      // For ERC20->BTC swaps, use the CowSwap flow
       if (isSwappingForBTC) {
         setSwapButtonPressed(true);
         await executeERC20ToBTCSwap();
@@ -880,7 +813,6 @@ export const SwapButton = () => {
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
       setIsSigningPermit(false);
-      setUniswapQuote(null);
       setRfqQuote(null);
       setRefetchQuote(true);
 

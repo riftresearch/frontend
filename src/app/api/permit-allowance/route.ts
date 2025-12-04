@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, Address, erc20Abi, parseUnits } from "viem";
 import { mainnet } from "viem/chains";
-import { PERMIT2_ABI, PERMIT2_ADDRESS, UNIVERSAL_ROUTER_ADDRESS } from "../uniswap-router/v4ABIs";
+import { PERMIT2_ABI, PERMIT2_ADDRESS, UNIVERSAL_ROUTER_ADDRESS } from "@/utils/constants";
 
 export async function GET(request: NextRequest) {
   try {

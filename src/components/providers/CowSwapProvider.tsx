@@ -2,23 +2,25 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { usePublicClient, useWalletClient } from "wagmi";
-import { mainnet } from "viem/chains";
+import { mainnet, base } from "viem/chains";
 import { CowSwapClient } from "@/utils/cowswapClient";
 
 const CowSwapContext = createContext<CowSwapClient | null>(null);
 
 export function CowSwapProvider({ children }: { children: ReactNode }) {
-  const publicClient = usePublicClient({ chainId: mainnet.id });
+  const mainnetPublicClient = usePublicClient({ chainId: mainnet.id });
+  const basePublicClient = usePublicClient({ chainId: base.id });
   const { data: walletClient } = useWalletClient();
 
   const client = useMemo(() => {
-    if (!publicClient) return null;
+    if (!mainnetPublicClient || !basePublicClient) return null;
 
     return new CowSwapClient({
-      publicClient,
+      mainnetPublicClient,
+      basePublicClient,
       walletClient: walletClient ?? undefined,
     });
-  }, [publicClient, walletClient]);
+  }, [mainnetPublicClient, basePublicClient, walletClient]);
 
   return <CowSwapContext.Provider value={client}>{children}</CowSwapContext.Provider>;
 }
@@ -27,4 +29,3 @@ export function useCowSwapClient() {
   const ctx = useContext(CowSwapContext);
   return ctx; // may be null if publicClient not ready yet
 }
-

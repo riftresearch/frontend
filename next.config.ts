@@ -47,10 +47,6 @@ const nextConfig: NextConfig = {
     "pino-pretty",
     "lokijs",
     "encoding",
-    "@uniswap/smart-order-router",
-    "@uniswap/v3-sdk",
-    "@uniswap/v4-sdk",
-    "@uniswap/sdk-core",
   ],
 };
 
