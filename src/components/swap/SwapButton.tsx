@@ -431,11 +431,24 @@ export const SwapButton = () => {
     // Wait for optimal quote before proceeding
     if (isAwaitingOptimalQuote) {
       console.log("Waiting for optimal quote to arrive...");
-      toastInfo({
-        title: "Fetching Best Price",
-        description: "Please wait while we find the best price for you...",
-      });
-      return;
+      // Poll until optimal quote arrives (check every 100ms, timeout after 10s)
+      const maxWaitMs = 10000;
+      const pollIntervalMs = 100;
+      let waited = 0;
+      while (useStore.getState().isAwaitingOptimalQuote && waited < maxWaitMs) {
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        waited += pollIntervalMs;
+      }
+      // If still waiting after timeout, abort
+      if (useStore.getState().isAwaitingOptimalQuote) {
+        console.error("Timed out waiting for optimal quote");
+        toastError(new Error("Quote timeout"), {
+          title: "Quote Timeout",
+          description: "Unable to fetch optimal price. Please try again.",
+        });
+        return;
+      }
+      console.log("Optimal quote received, proceeding with swap");
     }
 
     // Clear old permit data when starting a new swap
