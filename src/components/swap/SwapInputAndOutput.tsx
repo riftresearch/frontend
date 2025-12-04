@@ -38,6 +38,7 @@ import {
   getMinSwapValueUsd,
   satsToBtc,
   truncateAmount,
+  getSlippageBpsForNotional,
 } from "@/utils/swapHelpers";
 import { PriceQuality } from "@cowprotocol/cow-sdk";
 import { formatUnits, parseUnits } from "viem";
@@ -121,7 +122,6 @@ export const SwapInputAndOutput = () => {
     setRfqQuote,
     rfqQuote,
     cowswapQuote,
-    slippageBips,
     payoutAddress,
     setPayoutAddress,
     addressValidation,
@@ -313,6 +313,78 @@ export const SwapInputAndOutput = () => {
           setIsLoadingQuote(false);
           return;
         }
+
+        // Calculate dynamic slippage based on notional size
+        const dynamicSlippageBps = getSlippageBpsForNotional(usdValue);
+        console.log("dynamicSlippageBps", dynamicSlippageBps, "for usdValue", usdValue);
+
+        // Clear any previous "no routes" error
+        setHasNoRoutesError(false);
+
+        // Mark that we're waiting for an optimal quote
+        setIsAwaitingOptimalQuote(true);
+
+        // Convert amount to base units
+        const decimals = selectedInputToken.decimals;
+        const sellAmount = parseUnits(amountToQuote, decimals).toString();
+        const sellToken = selectedInputToken.address;
+        const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
+        console.log("getting quote for", sellToken, sellAmount);
+
+        // Fire FAST quote first (non-blocking) - will update UI quickly
+        // Skip FAST quote on refresh since we already have a quote displayed
+        if (!isRefresh) {
+          getERC20ToBTCQuote(
+            sellToken,
+            sellAmount,
+            decimals,
+            userAddr,
+            dynamicSlippageBps,
+            undefined,
+            cowswapClient,
+            PriceQuality.FAST
+          )
+            .then((quoteResponse) => {
+              console.log("FAST quoteResponse", quoteResponse);
+              processQuoteResponse(quoteResponse, requestId, PriceQuality.FAST);
+            })
+            .catch((error) => {
+              console.error("Failed to fetch FAST quote:", error);
+              // Don't clear state on FAST failure - OPTIMAL may still succeed
+            });
+        }
+
+        // Fire OPTIMAL quote (non-blocking) - will update UI with better price when ready
+        getERC20ToBTCQuote(
+          sellToken,
+          sellAmount,
+          decimals,
+          userAddr,
+          dynamicSlippageBps,
+          undefined,
+          cowswapClient,
+          PriceQuality.OPTIMAL
+        )
+          .then((quoteResponse) => {
+            console.log("OPTIMAL quoteResponse", quoteResponse);
+            processQuoteResponse(quoteResponse, requestId, PriceQuality.OPTIMAL);
+          })
+          .catch((error) => {
+            console.error("Failed to fetch OPTIMAL quote:", error);
+            if ((error as Error).message === "Insufficient balance to fulfill quote") {
+              setExceedsAvailableBTCLiquidity(true);
+            }
+            // Mark optimal quote as no longer pending (failed)
+            setIsAwaitingOptimalQuote(false);
+            // Only clear state if both quotes fail (FAST already tried)
+            setCowswapQuote(null);
+            setRfqQuote(null);
+            setOutputAmount("");
+            setFeeOverview(null);
+            setIsLoadingQuote(false);
+            setRefetchQuote(false);
+          });
       } else {
         console.log("no price");
         console.log("btcPrice", btcPrice);
@@ -323,74 +395,6 @@ export const SwapInputAndOutput = () => {
         }
         return;
       }
-
-      // Clear any previous "no routes" error
-      setHasNoRoutesError(false);
-
-      // Mark that we're waiting for an optimal quote
-      setIsAwaitingOptimalQuote(true);
-
-      // Convert amount to base units
-      const decimals = selectedInputToken.decimals;
-      const sellAmount = parseUnits(amountToQuote, decimals).toString();
-      const sellToken = selectedInputToken.address;
-      const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-
-      console.log("getting quote for", sellToken, sellAmount);
-
-      // Fire FAST quote first (non-blocking) - will update UI quickly
-      // Skip FAST quote on refresh since we already have a quote displayed
-      if (!isRefresh) {
-        getERC20ToBTCQuote(
-          sellToken,
-          sellAmount,
-          decimals,
-          userAddr,
-          slippageBips,
-          undefined,
-          cowswapClient,
-          PriceQuality.FAST
-        )
-          .then((quoteResponse) => {
-            console.log("FAST quoteResponse", quoteResponse);
-            processQuoteResponse(quoteResponse, requestId, PriceQuality.FAST);
-          })
-          .catch((error) => {
-            console.error("Failed to fetch FAST quote:", error);
-            // Don't clear state on FAST failure - OPTIMAL may still succeed
-          });
-      }
-
-      // Fire OPTIMAL quote (non-blocking) - will update UI with better price when ready
-      getERC20ToBTCQuote(
-        sellToken,
-        sellAmount,
-        decimals,
-        userAddr,
-        slippageBips,
-        undefined,
-        cowswapClient,
-        PriceQuality.OPTIMAL
-      )
-        .then((quoteResponse) => {
-          console.log("OPTIMAL quoteResponse", quoteResponse);
-          processQuoteResponse(quoteResponse, requestId, PriceQuality.OPTIMAL);
-        })
-        .catch((error) => {
-          console.error("Failed to fetch OPTIMAL quote:", error);
-          if ((error as Error).message === "Insufficient balance to fulfill quote") {
-            setExceedsAvailableBTCLiquidity(true);
-          }
-          // Mark optimal quote as no longer pending (failed)
-          setIsAwaitingOptimalQuote(false);
-          // Only clear state if both quotes fail (FAST already tried)
-          setCowswapQuote(null);
-          setRfqQuote(null);
-          setOutputAmount("");
-          setFeeOverview(null);
-          setIsLoadingQuote(false);
-          setRefetchQuote(false);
-        });
     },
     [
       isSwappingForBTC,
@@ -403,7 +407,6 @@ export const SwapInputAndOutput = () => {
       ethPrice,
       erc20Price,
       btcPrice,
-      slippageBips,
       setFeeOverview,
       liquidity,
       cowswapClient,
@@ -530,6 +533,72 @@ export const SwapInputAndOutput = () => {
           setIsLoadingQuote(false);
           return;
         }
+
+        // Calculate dynamic slippage based on notional size
+        const dynamicSlippageBps = getSlippageBpsForNotional(usdValue);
+        console.log(
+          "dynamicSlippageBps (exact output)",
+          dynamicSlippageBps,
+          "for usdValue",
+          usdValue
+        );
+
+        // Clear any previous "no routes" error
+        setHasNoRoutesError(false);
+
+        // Mark that we're waiting for an optimal quote
+        setIsAwaitingOptimalQuote(true);
+
+        const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
+        // Fire FAST quote first (non-blocking) - will update UI quickly
+        // Skip FAST quote on refresh since we already have a quote displayed
+        if (!isRefresh) {
+          getERC20ToBTCQuoteExactOutput(
+            btcAmountToQuote,
+            selectedInputToken,
+            userAddr,
+            dynamicSlippageBps,
+            undefined,
+            cowswapClient,
+            PriceQuality.FAST
+          )
+            .then((quoteResponse) => {
+              console.log("FAST exact output quoteResponse", quoteResponse);
+              processExactOutputQuoteResponse(quoteResponse, requestId, PriceQuality.FAST);
+            })
+            .catch((error) => {
+              console.error("Failed to fetch FAST exact output quote:", error);
+              // Don't clear state on FAST failure - OPTIMAL may still succeed
+            });
+        }
+
+        // Fire OPTIMAL quote (non-blocking) - will update UI with better price when ready
+        getERC20ToBTCQuoteExactOutput(
+          btcAmountToQuote,
+          selectedInputToken,
+          userAddr,
+          dynamicSlippageBps,
+          undefined,
+          cowswapClient,
+          PriceQuality.OPTIMAL
+        )
+          .then((quoteResponse) => {
+            console.log("OPTIMAL exact output quoteResponse", quoteResponse);
+            processExactOutputQuoteResponse(quoteResponse, requestId, PriceQuality.OPTIMAL);
+          })
+          .catch((error) => {
+            console.error("Failed to fetch OPTIMAL exact output quote:", error);
+            // Mark optimal quote as no longer pending (failed)
+            setIsAwaitingOptimalQuote(false);
+            // Only clear state if both quotes fail (FAST already tried)
+            setCowswapQuote(null);
+            setRfqQuote(null);
+            setRawInputAmount("");
+            setFeeOverview(null);
+            setIsLoadingQuote(false);
+            setRefetchQuote(false);
+          });
       } else {
         // Set refetch flag if we have an amount to quote
         if (btcAmountToQuote && parseFloat(btcAmountToQuote) > 0) {
@@ -537,63 +606,6 @@ export const SwapInputAndOutput = () => {
         }
         return;
       }
-
-      // Clear any previous "no routes" error
-      setHasNoRoutesError(false);
-
-      // Mark that we're waiting for an optimal quote
-      setIsAwaitingOptimalQuote(true);
-
-      const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-
-      // Fire FAST quote first (non-blocking) - will update UI quickly
-      // Skip FAST quote on refresh since we already have a quote displayed
-      if (!isRefresh) {
-        getERC20ToBTCQuoteExactOutput(
-          btcAmountToQuote,
-          selectedInputToken,
-          userAddr,
-          slippageBips,
-          undefined,
-          cowswapClient,
-          PriceQuality.FAST
-        )
-          .then((quoteResponse) => {
-            console.log("FAST exact output quoteResponse", quoteResponse);
-            processExactOutputQuoteResponse(quoteResponse, requestId, PriceQuality.FAST);
-          })
-          .catch((error) => {
-            console.error("Failed to fetch FAST exact output quote:", error);
-            // Don't clear state on FAST failure - OPTIMAL may still succeed
-          });
-      }
-
-      // Fire OPTIMAL quote (non-blocking) - will update UI with better price when ready
-      getERC20ToBTCQuoteExactOutput(
-        btcAmountToQuote,
-        selectedInputToken,
-        userAddr,
-        slippageBips,
-        undefined,
-        cowswapClient,
-        PriceQuality.OPTIMAL
-      )
-        .then((quoteResponse) => {
-          console.log("OPTIMAL exact output quoteResponse", quoteResponse);
-          processExactOutputQuoteResponse(quoteResponse, requestId, PriceQuality.OPTIMAL);
-        })
-        .catch((error) => {
-          console.error("Failed to fetch OPTIMAL exact output quote:", error);
-          // Mark optimal quote as no longer pending (failed)
-          setIsAwaitingOptimalQuote(false);
-          // Only clear state if both quotes fail (FAST already tried)
-          setCowswapQuote(null);
-          setRfqQuote(null);
-          setRawInputAmount("");
-          setFeeOverview(null);
-          setIsLoadingQuote(false);
-          setRefetchQuote(false);
-        });
     },
     [
       isSwappingForBTC,
@@ -604,7 +616,6 @@ export const SwapInputAndOutput = () => {
       setRfqQuote,
       setRawInputAmount,
       btcPrice,
-      slippageBips,
       setFeeOverview,
       liquidity,
       cowswapClient,

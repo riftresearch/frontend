@@ -27,7 +27,11 @@ import { reownModal } from "@/utils/wallet";
 import { Address, erc20Abi, parseUnits, maxUint256 } from "viem";
 import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
-import { fetchGasParams, buildPermitDataToSign } from "@/utils/swapHelpers";
+import {
+  fetchGasParams,
+  buildPermitDataToSign,
+  getSlippageBpsForNotional,
+} from "@/utils/swapHelpers";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 
 // Helper function to handle OTC errors with specific messaging
@@ -99,7 +103,6 @@ export const SwapButton = () => {
     isSwappingForBTC,
     cowswapQuote,
     rfqQuote,
-    slippageBips,
     payoutAddress,
     addressValidation,
     setBitcoinDepositInfo,
@@ -124,6 +127,9 @@ export const SwapButton = () => {
     cowswapOrderData,
     setCowswapOrderData,
     isAwaitingOptimalQuote,
+    btcPrice,
+    ethPrice,
+    erc20Price,
   } = useStore();
   // Ref to track previous refetchQuote value for retry detection
   const prevRefetchQuoteRef = useRef(refetchQuote);
@@ -537,11 +543,29 @@ export const SwapButton = () => {
       // Use buyAmount from the quote (exact output)
       const buyAmount = cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString();
 
+      // Calculate dynamic slippage based on notional USD value
+      let usdValue = 0;
+      const inputAmount = parseFloat(rawInputAmount || "0");
+      if (selectedInputToken.ticker === "ETH" && ethPrice) {
+        usdValue = inputAmount * ethPrice;
+      } else if (selectedInputToken.ticker === "cbBTC" && btcPrice) {
+        usdValue = inputAmount * btcPrice;
+      } else if (erc20Price) {
+        usdValue = inputAmount * erc20Price;
+      }
+      const dynamicSlippageBps = getSlippageBpsForNotional(usdValue);
+      console.log(
+        "Order submission - dynamicSlippageBps:",
+        dynamicSlippageBps,
+        "for usdValue:",
+        usdValue
+      );
+
       const orderId = await cowswapClient.submitOrder({
         sellToken,
         buyAmount,
         decimals,
-        slippageBps: slippageBips,
+        slippageBps: dynamicSlippageBps,
         validFor: 600, // 10 minutes
         userAddress: userEvmAccountAddress,
         receiver: depositAddress, // Send cbBTC to OTC deposit address
@@ -592,7 +616,6 @@ export const SwapButton = () => {
     payoutAddress,
     setSwapResponse,
     rawInputAmount,
-    slippageBips,
     evmConnectWalletChainId,
     setPermitDataForSwap,
     fullPrecisionInputAmount,
@@ -600,6 +623,9 @@ export const SwapButton = () => {
     setCowswapOrderStatus,
     setCowswapOrderData,
     isAwaitingOptimalQuote,
+    btcPrice,
+    ethPrice,
+    erc20Price,
   ]);
 
   // Handle BTC->cbBTC swap using OTC

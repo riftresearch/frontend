@@ -30,6 +30,21 @@ import { PriceQuality } from "@cowprotocol/cow-sdk";
 export { PriceQuality };
 
 /**
+ * Calculate dynamic slippage based on notional swap size (USD)
+ * Smaller swaps get higher slippage tolerance to ensure execution
+ *
+ * @param usdValue - The USD value of the swap
+ * @returns Slippage in basis points (100 bps = 1%)
+ */
+export function getSlippageBpsForNotional(usdValue: number): number {
+  if (usdValue < 10) return 200; // 2%
+  if (usdValue < 25) return 100; // 1%
+  if (usdValue < 100) return 25; // 0.25%
+  if (usdValue < 250) return 10; // 0.1%
+  return 5; // 0.05%
+}
+
+/**
  * Fetch gas parameters from the API
  * @param chainId - The chain ID to fetch gas params for
  * @returns Gas parameters (maxFeePerGas, maxPriorityFeePerGas) or undefined on error
