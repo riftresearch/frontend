@@ -114,12 +114,16 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         let results: TokenData[] = [];
 
         if (selectedNetwork === "all") {
-          // Search both networks and combine results (only Ethereum for now)
+          // Search both networks and combine results
           const ethResults = searchTokens("ethereum", debouncedQuery, 10).map((t) => ({
             ...t,
             chainId: 1,
           }));
-          results = ethResults;
+          const baseResults = searchTokens("base", debouncedQuery, 10).map((t) => ({
+            ...t,
+            chainId: 8453,
+          }));
+          results = [...ethResults, ...baseResults];
         } else {
           const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
           results = searchTokens(selectedNetwork, debouncedQuery, 10).map((t) => ({
@@ -128,10 +132,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           }));
         }
 
-        // Get user's wallet tokens (only Ethereum for now)
+        // Get user's wallet tokens
         let userTokens: TokenData[] = [];
         if (selectedNetwork === "all") {
-          userTokens = userTokensByChain[1] || [];
+          const ethTokens = userTokensByChain[1] || [];
+          const baseTokens = userTokensByChain[8453] || [];
+          userTokens = [...ethTokens, ...baseTokens];
         } else {
           const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
           userTokens = userTokensByChain[chainId] || [];
@@ -201,9 +207,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       if (isConnected && address) {
         let tokens: TokenData[] = [];
         if (selectedNetwork === "all") {
-          // Only Ethereum for now
           const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
-          tokens = ethTokens;
+          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
+          tokens = [...ethTokens, ...baseTokens];
         } else {
           const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
           tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
@@ -212,9 +218,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         // Get popular tokens for the selected network
         let allPopularTokens: TokenData[] = [];
         if (selectedNetwork === "all") {
-          // Only Ethereum for now
           const ethPopular = ETHEREUM_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 1 }));
-          allPopularTokens = ethPopular;
+          const basePopular = BASE_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 8453 }));
+          allPopularTokens = [...ethPopular, ...basePopular];
         } else {
           const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
           allPopularTokens = (chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS).map(
@@ -237,9 +243,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       } else {
         let allPopularTokens: TokenData[] = [];
         if (selectedNetwork === "all") {
-          // Only Ethereum for now
           const ethPopular = ETHEREUM_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 1 }));
-          allPopularTokens = ethPopular;
+          const basePopular = BASE_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 8453 }));
+          allPopularTokens = [...ethPopular, ...basePopular];
         } else {
           const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
           allPopularTokens = (chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS).map(
@@ -301,11 +307,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const handleNetworkSelect = async (network: Network) => {
     // Close dropdown
     setIsDropdownOpen(false);
-
-    // Don't allow selecting "base" yet (coming soon)
-    if (network === "base") {
-      return;
-    }
 
     // Update selected network (no wallet switching for "all")
     setSelectedNetwork(network);
@@ -629,14 +630,16 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     </Text>
                   </Flex>
 
-                  {/* Base (Coming Soon) */}
+                  {/* Base */}
                   <Flex
                     align="center"
                     gap="10px"
                     px="14px"
                     py="10px"
-                    cursor="not-allowed"
-                    opacity={0.5}
+                    cursor="pointer"
+                    bg={selectedNetwork === "base" ? "#2a2a2a" : "transparent"}
+                    _hover={{ bg: "#262626" }}
+                    onClick={() => handleNetworkSelect("base")}
                     transition="background 0.15s ease"
                   >
                     <Box
@@ -651,10 +654,10 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     <Text
                       fontSize="13px"
                       fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.textGray}
+                      color={colors.offWhite}
                       fontWeight="bold"
                     >
-                      Base (Soon)
+                      Base
                     </Text>
                   </Flex>
                 </Box>

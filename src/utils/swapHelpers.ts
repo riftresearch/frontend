@@ -244,18 +244,24 @@ export function getMinSwapValueUsd(bitcoinPrice: number): number {
  *
  * @param amount - The amount (either input cbBTC or output BTC depending on mode)
  * @param mode - "ExactInput" for specifying cbBTC input, "ExactOutput" for specifying BTC output
+ * @param isSwappingForBTC - Whether swapping ERC20 for BTC (true) or BTC for ERC20 (false)
+ * @param chainId - Chain ID (1 for Ethereum mainnet, 8453 for Base) - defaults to mainnet
  * @returns Quote object or null if failed
  */
 export async function callRFQ(
   amount: string,
   mode: "ExactInput" | "ExactOutput" = "ExactInput",
-  isSwappingForBTC: boolean
+  isSwappingForBTC: boolean,
+  chainId: number = 1
 ): Promise<Quote | null> {
   // Check if FAKE_RFQ mode is enabled
   const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
 
+  // Determine the EVM chain based on chainId
+  const evmChain = chainId === 8453 ? "base" : "ethereum";
+
   const CBBTC_CURRENCY = {
-    chain: "ethereum",
+    chain: evmChain,
     decimals: 8,
     token: {
       type: "Address",
@@ -383,6 +389,7 @@ export async function callRFQ(
  * This combines CowSwap (ERC20 -> cbBTC) with RFQ (cbBTC -> BTC)
  * For cbBTC input, skips CowSwap and goes direct to RFQ
  * @param priceQuality - CowSwap price quality (FAST for quick quotes, OPTIMAL for best price)
+ * @param chainId - Chain ID (1 for Ethereum mainnet, 8453 for Base)
  */
 export async function getERC20ToBTCQuote(
   sellToken: string,
@@ -392,7 +399,8 @@ export async function getERC20ToBTCQuote(
   slippageBps?: number,
   validFor?: number,
   cowswapClient: CowSwapClient | null = null,
-  priceQuality: PriceQuality = PriceQuality.OPTIMAL
+  priceQuality: PriceQuality = PriceQuality.OPTIMAL,
+  chainId: number = 1
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     // Check if input token is cbBTC
@@ -400,9 +408,9 @@ export async function getERC20ToBTCQuote(
 
     if (isCbBTC) {
       // For cbBTC, skip CowSwap and go directly to RFQ
-      console.log("Input is cbBTC, using direct RFQ quote");
+      console.log("Input is cbBTC, using direct RFQ quote, chainId:", chainId);
 
-      const rfqQuote = await callRFQ(amountIn, "ExactInput", true);
+      const rfqQuote = await callRFQ(amountIn, "ExactInput", true, chainId);
 
       if (!rfqQuote) {
         throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -435,6 +443,9 @@ export async function getERC20ToBTCQuote(
       throw new Error("CowSwap client not available");
     }
 
+    // Map chainId to CowSwap supported chain ID
+    const cowswapChainId = chainId === 8453 ? 8453 : 1;
+
     const cowswapResponse = await cowswapClient.getQuote({
       sellToken,
       sellAmount: amountIn,
@@ -443,6 +454,7 @@ export async function getERC20ToBTCQuote(
       validFor,
       userAddress,
       priceQuality,
+      chainId: cowswapChainId as any,
     });
 
     console.log("cowswapQuote", cowswapResponse, "priceQuality:", priceQuality);
@@ -453,7 +465,7 @@ export async function getERC20ToBTCQuote(
     const routerExpiration = new Date(Date.now() + validForSeconds * 1000);
 
     // Step 2: Get RFQ quote for cbBTC -> BTC using cbBTC amount
-    const rfqQuote = await callRFQ(cbBTCAmount, "ExactInput", true);
+    const rfqQuote = await callRFQ(cbBTCAmount, "ExactInput", true, chainId);
 
     if (!rfqQuote) {
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -588,6 +600,7 @@ export function applySlippageExactOutput(amount: bigint | string, slippageBps?: 
  * Get combined quote for ERC20/ETH -> BTC using exact output
  * User specifies desired BTC output, we calculate required input
  * @param priceQuality - CowSwap price quality (FAST for quick quotes, OPTIMAL for best price)
+ * @param chainId - Chain ID (1 for Ethereum mainnet, 8453 for Base)
  */
 export async function getERC20ToBTCQuoteExactOutput(
   btcOutputAmount: string,
@@ -596,7 +609,8 @@ export async function getERC20ToBTCQuoteExactOutput(
   slippageBps?: number,
   validFor?: number,
   cowswapClient: CowSwapClient | null = null,
-  priceQuality: PriceQuality = PriceQuality.OPTIMAL
+  priceQuality: PriceQuality = PriceQuality.OPTIMAL,
+  chainId: number = 1
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
     if (!selectedInputToken) {
@@ -607,7 +621,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     const btcAmountInSats = parseUnits(btcOutputAmount, BITCOIN_DECIMALS).toString();
 
     // Step 1: Get RFQ quote for cbBTC -> BTC using exact output mode
-    const rfqQuoteData = await callRFQ(btcAmountInSats, "ExactOutput", true);
+    const rfqQuoteData = await callRFQ(btcAmountInSats, "ExactOutput", true, chainId);
 
     if (!rfqQuoteData) {
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
@@ -650,6 +664,9 @@ export async function getERC20ToBTCQuoteExactOutput(
       throw new Error("CowSwap client not available");
     }
 
+    // Map chainId to CowSwap supported chain ID
+    const cowswapChainId = chainId === 8453 ? 8453 : 1;
+
     const cowswapResponse = await cowswapClient.getQuote({
       sellToken,
       buyAmount: BigInt(cbBTCAmountNeeded).toString(),
@@ -658,9 +675,17 @@ export async function getERC20ToBTCQuoteExactOutput(
       validFor,
       userAddress,
       priceQuality,
+      chainId: cowswapChainId as any,
     });
 
-    console.log("cowswapQuote", cowswapResponse, "priceQuality:", priceQuality);
+    console.log(
+      "cowswapQuote",
+      cowswapResponse,
+      "priceQuality:",
+      priceQuality,
+      "chainId:",
+      chainId
+    );
 
     // For exact output, sellAmount tells us how much input token we need
     const erc20AmountNeeded = cowswapResponse.amountsAndCosts.afterSlippage.sellAmount.toString();

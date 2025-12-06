@@ -561,6 +561,9 @@ export const SwapButton = () => {
         usdValue
       );
 
+      // Get chainId from selected token (default to mainnet)
+      const tokenChainId = selectedInputToken.chainId ?? 1;
+
       const orderId = await cowswapClient.submitOrder({
         sellToken,
         buyAmount,
@@ -569,6 +572,7 @@ export const SwapButton = () => {
         validFor: 600, // 10 minutes
         userAddress: userEvmAccountAddress,
         receiver: depositAddress, // Send cbBTC to OTC deposit address
+        chainId: tokenChainId as any,
       });
 
       console.log("CowSwap order submitted:", orderId);
@@ -967,9 +971,13 @@ export const SwapButton = () => {
 
     console.log("Starting CowSwap order status polling for order:", cowswapOrderData.id);
 
+    // Get chainId from selected token for correct SDK
+    const tokenChainId = selectedInputToken.chainId ?? 1;
+    const sdk = cowswapClient.getSdk(tokenChainId as any);
+
     const pollOrderStatus = async () => {
       try {
-        const order = await cowswapClient.sdk.getOrder({ orderUid: cowswapOrderData.id! });
+        const order = await sdk.getOrder({ orderUid: cowswapOrderData.id! });
         console.log("Order status:", order.status);
         console.log("Sell amount:", order.sellAmount);
         console.log("Buy amount:", order.buyAmount);
@@ -1011,6 +1019,7 @@ export const SwapButton = () => {
     setCowswapOrderData,
     setCowswapOrderStatus,
     setTransactionConfirmed,
+    selectedInputToken.chainId,
   ]);
 
   // Handle keyboard events (Enter to submit)

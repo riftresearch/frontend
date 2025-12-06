@@ -332,6 +332,9 @@ export const SwapInputAndOutput = () => {
 
         console.log("getting quote for", sellToken, sellAmount);
 
+        // Get chainId from selected token (default to mainnet)
+        const tokenChainId = selectedInputToken.chainId ?? 1;
+
         // Fire FAST quote first (non-blocking) - will update UI quickly
         // Skip FAST quote on refresh since we already have a quote displayed
         if (!isRefresh) {
@@ -343,7 +346,8 @@ export const SwapInputAndOutput = () => {
             dynamicSlippageBps,
             undefined,
             cowswapClient,
-            PriceQuality.FAST
+            PriceQuality.FAST,
+            tokenChainId
           )
             .then((quoteResponse) => {
               console.log("FAST quoteResponse", quoteResponse);
@@ -364,7 +368,8 @@ export const SwapInputAndOutput = () => {
           dynamicSlippageBps,
           undefined,
           cowswapClient,
-          PriceQuality.OPTIMAL
+          PriceQuality.OPTIMAL,
+          tokenChainId
         )
           .then((quoteResponse) => {
             console.log("OPTIMAL quoteResponse", quoteResponse);
@@ -551,6 +556,9 @@ export const SwapInputAndOutput = () => {
 
         const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
+        // Get chainId from selected token (default to mainnet)
+        const tokenChainId = selectedInputToken.chainId ?? 1;
+
         // Fire FAST quote first (non-blocking) - will update UI quickly
         // Skip FAST quote on refresh since we already have a quote displayed
         if (!isRefresh) {
@@ -561,7 +569,8 @@ export const SwapInputAndOutput = () => {
             dynamicSlippageBps,
             undefined,
             cowswapClient,
-            PriceQuality.FAST
+            PriceQuality.FAST,
+            tokenChainId
           )
             .then((quoteResponse) => {
               console.log("FAST exact output quoteResponse", quoteResponse);
@@ -581,7 +590,8 @@ export const SwapInputAndOutput = () => {
           dynamicSlippageBps,
           undefined,
           cowswapClient,
-          PriceQuality.OPTIMAL
+          PriceQuality.OPTIMAL,
+          tokenChainId
         )
           .then((quoteResponse) => {
             console.log("OPTIMAL exact output quoteResponse", quoteResponse);
@@ -706,8 +716,11 @@ export const SwapInputAndOutput = () => {
             : selectedOutputToken?.decimals || BITCOIN_DECIMALS;
         const quoteAmount = parseUnits(amountToQuote, decimals).toString();
 
+        // Get chainId from selected output token (for BTC -> cbBTC, output is cbBTC)
+        const tokenChainId = selectedOutputToken?.chainId ?? 1;
+
         // Call RFQ with the provided params
-        const rfqQuoteResponse = await callRFQ(quoteAmount, mode, false);
+        const rfqQuoteResponse = await callRFQ(quoteAmount, mode, false, tokenChainId);
 
         // Check if this is still the latest request
         if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
@@ -798,6 +811,7 @@ export const SwapInputAndOutput = () => {
       setFeeOverview,
       liquidity,
       selectedOutputToken?.decimals,
+      selectedOutputToken?.chainId,
     ]
   );
 
