@@ -2,11 +2,12 @@ import { Flex, Text, Box, Image, Portal, Input } from "@chakra-ui/react";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { BASE_LOGO } from "./SVGs";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { NetworkBadge } from "./NetworkBadge";
+import { useState, useEffect, useRef } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useStore } from "@/utils/store";
 import { mainnet, base } from "@reown/appkit/networks";
-import { TokenData } from "@/utils/types";
+import { TokenData, Network } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
 import useWindowSize from "@/hooks/useWindowSize";
@@ -14,6 +15,7 @@ import {
   FALLBACK_TOKEN_ICON,
   BASE_POPULAR_TOKENS,
   ETHEREUM_POPULAR_TOKENS,
+  ALL_POPULAR_TOKENS,
   ZERO_USD_DISPLAY,
 } from "@/utils/constants";
 
@@ -23,8 +25,6 @@ interface AssetSelectorModalProps {
   currentAsset: string;
 }
 
-type Network = "all" | "ethereum" | "base";
-
 export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   isOpen,
   onClose,
@@ -33,7 +33,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const { evmConnectWalletChainId } = useStore();
   const { isMobile } = useWindowSize();
 
-  const [selectedNetwork, setSelectedNetwork] = useState<Network>("all");
+  const [selectedNetwork, setSelectedNetwork] = useState<Network>(Network.ALL);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
@@ -70,6 +70,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     }
   }, [isOpen]);
 
+  // Reset selectedNetwork to ALL when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedNetwork(Network.ALL);
+      setSearchQuery("");
+    }
+  }, [isOpen]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,9 +104,13 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   // Preload popular token icons for the selected network when modal opens
   useEffect(() => {
     if (!isOpen) return;
-    const icons = (selectedNetwork === "base" ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS)
-      .map((t) => t.icon)
-      .filter(Boolean);
+    const tokens =
+      selectedNetwork === Network.ALL
+        ? ALL_POPULAR_TOKENS
+        : selectedNetwork === Network.BASE
+          ? BASE_POPULAR_TOKENS
+          : ETHEREUM_POPULAR_TOKENS;
+    const icons = tokens.map((t) => t.icon).filter(Boolean);
     preloadImages(icons as string[]);
   }, [isOpen, selectedNetwork]);
 
@@ -111,35 +123,26 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     try {
       // If there's an active query, use the search index top-10
       if (debouncedQuery.length > 0) {
-        let results: TokenData[] = [];
+        // Search tokens using the Network enum directly
+        const results = searchTokens(selectedNetwork, debouncedQuery, 10);
 
-        if (selectedNetwork === "all") {
-          // Search both networks and combine results (only Ethereum for now)
-          const ethResults = searchTokens("ethereum", debouncedQuery, 10).map((t) => ({
-            ...t,
-            chainId: 1,
-          }));
-          results = ethResults;
-        } else {
-          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
-          results = searchTokens(selectedNetwork, debouncedQuery, 10).map((t) => ({
-            ...t,
-            chainId,
-          }));
-        }
-
-        // Get user's wallet tokens (only Ethereum for now)
+        // Get user's wallet tokens
         let userTokens: TokenData[] = [];
-        if (selectedNetwork === "all") {
-          userTokens = userTokensByChain[1] || [];
+        if (selectedNetwork === Network.ALL) {
+          // Combine tokens from both chains
+          const ethTokens = userTokensByChain[1] || [];
+          const baseTokens = userTokensByChain[8453] || [];
+          userTokens = [...ethTokens, ...baseTokens];
         } else {
-          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           userTokens = userTokensByChain[chainId] || [];
         }
 
         // Replace balance and usdValue in search results if token is in user's wallet
         const mergedResults = results.map((t) => {
-          const walletToken = userTokens.find((token) => token.address === t.address);
+          const walletToken = userTokens.find(
+            (token) => token.address === t.address && token.chainId === t.chainId
+          );
           if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
             // Only populate the balance if its USD value is > 1
             return {
@@ -160,8 +163,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           const q = debouncedQuery.trim().toLowerCase();
           const isAddr = q.startsWith("0x") && /^0x[a-f0-9]{6,40}$/.test(q);
           const existsInCache = mergedResults.find((r) => r.address === q);
-          if (isAddr && !existsInCache && selectedNetwork !== "all") {
-            const networkParam = selectedNetwork === "ethereum" ? "ethereum" : "base";
+          if (isAddr && !existsInCache && selectedNetwork !== Network.ALL) {
+            const networkParam = selectedNetwork === Network.ETHEREUM ? "ethereum" : "base";
             fetch(`/api/token-metadata?network=${networkParam}&addresses=${q}`)
               .then((res) => (res.ok ? res.json() : null))
               .then((data) => {
@@ -173,6 +176,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   price: number;
                   decimals: number;
                 };
+                const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
                 const built: TokenData = {
                   name: t.name,
                   ticker: t.ticker,
@@ -181,6 +185,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   usdValue: "$0.00",
                   icon: t.icon || FALLBACK_TOKEN_ICON,
                   decimals: t.decimals,
+                  chainId,
                 };
                 setSearchResults([built]);
                 setPopularTokens([]);
@@ -200,32 +205,33 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       // No query: show wallet tokens if connected and available; otherwise popular tokens
       if (isConnected && address) {
         let tokens: TokenData[] = [];
-        if (selectedNetwork === "all") {
-          // Only Ethereum for now
+        if (selectedNetwork === Network.ALL) {
+          // Combine tokens from both chains
           const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
-          tokens = ethTokens;
+          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
+          tokens = [...ethTokens, ...baseTokens];
         } else {
-          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
+          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
         }
 
         // Get popular tokens for the selected network
-        let allPopularTokens: TokenData[] = [];
-        if (selectedNetwork === "all") {
-          // Only Ethereum for now
-          const ethPopular = ETHEREUM_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 1 }));
-          allPopularTokens = ethPopular;
+        let networkPopularTokens: TokenData[] = [];
+        if (selectedNetwork === Network.ALL) {
+          networkPopularTokens = ALL_POPULAR_TOKENS;
         } else {
-          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
-          allPopularTokens = (chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS).map(
-            (t) => ({ ...t, chainId })
-          );
+          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          networkPopularTokens = (
+            chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
+          ).map((t) => ({ ...t, chainId }));
         }
 
         // Filter popular tokens to exclude tokens user already has
-        const userTokenAddresses = new Set(tokens.map((t) => t.address.toLowerCase()));
-        const filteredPopularTokens = allPopularTokens.filter(
-          (t) => !userTokenAddresses.has(t.address.toLowerCase())
+        const userTokenAddresses = new Set(
+          tokens.map((t) => `${t.chainId}-${t.address.toLowerCase()}`)
+        );
+        const filteredPopularTokens = networkPopularTokens.filter(
+          (t) => !userTokenAddresses.has(`${t.chainId}-${t.address.toLowerCase()}`)
         );
 
         // Set user tokens
@@ -235,24 +241,22 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         preloadImages(filteredPopularTokens.map((t) => t.icon).filter(Boolean));
         setPopularTokens(filteredPopularTokens);
       } else {
-        let allPopularTokens: TokenData[] = [];
-        if (selectedNetwork === "all") {
-          // Only Ethereum for now
-          const ethPopular = ETHEREUM_POPULAR_TOKENS.map((t) => ({ ...t, chainId: 1 }));
-          allPopularTokens = ethPopular;
+        let networkPopularTokens: TokenData[] = [];
+        if (selectedNetwork === Network.ALL) {
+          networkPopularTokens = ALL_POPULAR_TOKENS;
         } else {
-          const chainId = selectedNetwork === "ethereum" ? 1 : 8453;
-          allPopularTokens = (chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS).map(
-            (t) => ({ ...t, chainId })
-          );
+          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          networkPopularTokens = (
+            chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
+          ).map((t) => ({ ...t, chainId }));
         }
-        preloadImages(allPopularTokens.map((t) => t.icon).filter(Boolean));
-        setSearchResults(allPopularTokens);
+        preloadImages(networkPopularTokens.map((t) => t.icon).filter(Boolean));
+        setSearchResults(networkPopularTokens);
         setPopularTokens([]);
       }
     } catch (e) {
       console.error("Failed to update asset list:", e);
-      setSearchResults(ETHEREUM_POPULAR_TOKENS);
+      setSearchResults(ALL_POPULAR_TOKENS);
     } finally {
       setIsLoading(false);
     }
@@ -282,6 +286,21 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     if (tokenData) {
       setSelectedInputToken(tokenData);
       setErc20Price(null);
+
+      // Switch network to the selected token's chainId
+      if (tokenData.chainId && isConnected) {
+        const targetNetwork = tokenData.chainId === 1 ? Network.ETHEREUM : Network.BASE;
+        setSelectedNetwork(targetNetwork);
+
+        // Switch wallet chain if needed
+        try {
+          const targetChainId = tokenData.chainId === 1 ? mainnet.id : base.id;
+          await switchChain({ chainId: targetChainId });
+          setEvmConnectWalletChainId(targetChainId);
+        } catch (error) {
+          console.error("Failed to switch chain:", error);
+        }
+      }
     }
     if (isSwappingForBTC) {
       setRawInputAmount("");
@@ -302,27 +321,22 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     // Close dropdown
     setIsDropdownOpen(false);
 
-    // Don't allow selecting "base" yet (coming soon)
-    if (network === "base") {
-      return;
-    }
-
     // Update selected network (no wallet switching for "all")
     setSelectedNetwork(network);
 
     // If "all" is selected or wallet not connected, just update the filter
-    if (network === "all" || !isConnected) {
+    if (network === Network.ALL || !isConnected) {
       return;
     }
 
     // Switch wallet to the selected network
-    try {
-      const targetChainId = network === "ethereum" ? mainnet.id : base.id;
-      await switchChain({ chainId: targetChainId });
-      setEvmConnectWalletChainId(targetChainId);
-    } catch (error) {
-      console.error("Failed to switch chain:", error);
-    }
+    // try {
+    //   const targetChainId = network === Network.ETHEREUM ? mainnet.id : base.id;
+    //   await switchChain({ chainId: targetChainId });
+    //   setEvmConnectWalletChainId(targetChainId);
+    // } catch (error) {
+    //   console.error("Failed to switch chain:", error);
+    // }
   };
 
   return (
@@ -379,74 +393,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               ×
             </Box>
           </Flex>
-
-          {/* Network Selector */}
-          {/* <Flex gap="12px" mb="20px">
-            <Flex
-              direction="column"
-              align="center"
-              justify="center"
-              flex="1"
-              h="80px"
-              borderRadius="12px"
-              border={`2px solid ${selectedNetwork === "ethereum" ? "#8B5CF6" : "#404040"}`}
-              bg={selectedNetwork === "ethereum" ? "rgba(139, 92, 246, 0.2)" : "#2a2a2a"}
-              cursor="pointer"
-              onClick={() => handleNetworkSelect("ethereum")}
-              _hover={{ bg: selectedNetwork === "ethereum" ? "rgba(139, 92, 246, 0.3)" : "#333" }}
-            >
-              <Box mb="8px" display="flex" alignItems="center" justifyContent="center">
-                <Image
-                  src="/images/assets/icons/ETH.svg"
-                  w="24px"
-                  h="24px"
-                  alt="Ethereum"
-                  objectFit="contain"
-                />
-              </Box>
-              <Text
-                fontSize="14px"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                color={colors.offWhite}
-                fontWeight="bold"
-              >
-                Ethereum
-              </Text>
-            </Flex>
-            <Flex
-              direction="column"
-              align="center"
-              justify="center"
-              flex="1"
-              h="80px"
-              borderRadius="12px"
-              // border={`2px solid ${selectedNetwork === 'base' ? '#0052FF' : '#404040'}`}
-              // bg={selectedNetwork === 'base' ? 'rgba(0, 82, 255, 0.2)' : '#2a2a2a'}
-              // cursor="pointer"
-              // onClick={() => handleNetworkSelect('base')}
-              // _hover={{ bg: selectedNetwork === 'base' ? 'rgba(0, 82, 255, 0.3)' : '#333' }}
-              border={`2px solid #404040`}
-              bg="#2a2a2a"
-              cursor="not-allowed"
-              // Remove onClick to disable
-              _hover={{ bg: "#2a2a2a" }}
-              opacity={0.6}
-              pointerEvents="none"
-              position="relative"
-            >
-              <Box mb="8px">
-                <BASE_LOGO width="24" height="24" />
-              </Box>
-              <Text
-                fontSize="14px"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                color={colors.offWhite}
-                fontWeight="bold"
-              >
-                Base (Soon)
-              </Text>
-            </Flex>
-          </Flex> */}
 
           {/* Search Bar with Network Dropdown */}
           <Box position="relative" mb="18px" mx="24px">
@@ -535,9 +481,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   fontWeight="bold"
                   textTransform="uppercase"
                 >
-                  {selectedNetwork === "all"
+                  {selectedNetwork === Network.ALL
                     ? "All"
-                    : selectedNetwork === "ethereum"
+                    : selectedNetwork === Network.ETHEREUM
                       ? "ETH"
                       : "Base"}
                 </Text>
@@ -577,9 +523,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     px="14px"
                     py="10px"
                     cursor="pointer"
-                    bg={selectedNetwork === "all" ? "#2a2a2a" : "transparent"}
+                    bg={selectedNetwork === Network.ALL ? "#2a2a2a" : "transparent"}
                     _hover={{ bg: "#262626" }}
-                    onClick={() => handleNetworkSelect("all")}
+                    onClick={() => handleNetworkSelect(Network.ALL)}
                     transition="background 0.15s ease"
                   >
                     <Text
@@ -599,9 +545,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     px="14px"
                     py="10px"
                     cursor="pointer"
-                    bg={selectedNetwork === "ethereum" ? "#2a2a2a" : "transparent"}
+                    bg={selectedNetwork === Network.ETHEREUM ? "#2a2a2a" : "transparent"}
                     _hover={{ bg: "#262626" }}
-                    onClick={() => handleNetworkSelect("ethereum")}
+                    onClick={() => handleNetworkSelect(Network.ETHEREUM)}
                     transition="background 0.15s ease"
                   >
                     <Box
@@ -629,14 +575,16 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     </Text>
                   </Flex>
 
-                  {/* Base (Coming Soon) */}
+                  {/* Base */}
                   <Flex
                     align="center"
                     gap="10px"
                     px="14px"
                     py="10px"
-                    cursor="not-allowed"
-                    opacity={0.5}
+                    cursor="pointer"
+                    bg={selectedNetwork === Network.BASE ? "#2a2a2a" : "transparent"}
+                    _hover={{ bg: "#262626" }}
+                    onClick={() => handleNetworkSelect(Network.BASE)}
                     transition="background 0.15s ease"
                   >
                     <Box
@@ -651,10 +599,10 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     <Text
                       fontSize="13px"
                       fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.textGray}
+                      color={colors.offWhite}
                       fontWeight="bold"
                     >
-                      Base (Soon)
+                      Base
                     </Text>
                   </Flex>
                 </Box>
@@ -788,25 +736,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                 alignItems="center"
                                 justifyContent="center"
                               >
-                                {token.chainId === 1 ? (
-                                  <Image
-                                    src="/images/assets/icons/ETH.svg"
-                                    w="14px"
-                                    h="14px"
-                                    alt="Ethereum"
-                                    objectFit="contain"
-                                  />
-                                ) : token.chainId === 8453 ? (
-                                  <Box
-                                    w="14px"
-                                    h="14px"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                  >
-                                    <BASE_LOGO width="14" height="14" />
-                                  </Box>
-                                ) : null}
+                                <NetworkBadge chainId={token.chainId} />
                               </Box>
                             )}
                           </Box>
@@ -942,25 +872,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                 alignItems="center"
                                 justifyContent="center"
                               >
-                                {token.chainId === 1 ? (
-                                  <Image
-                                    src="/images/assets/icons/ETH.svg"
-                                    w="14px"
-                                    h="14px"
-                                    alt="Ethereum"
-                                    objectFit="contain"
-                                  />
-                                ) : token.chainId === 8453 ? (
-                                  <Box
-                                    w="14px"
-                                    h="14px"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                  >
-                                    <BASE_LOGO width="14" height="14" />
-                                  </Box>
-                                ) : null}
+                                <NetworkBadge chainId={token.chainId} />
                               </Box>
                             )}
                           </Box>
@@ -1075,25 +987,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                 alignItems="center"
                                 justifyContent="center"
                               >
-                                {token.chainId === 1 ? (
-                                  <Image
-                                    src="/images/assets/icons/ETH.svg"
-                                    w="14px"
-                                    h="14px"
-                                    alt="Ethereum"
-                                    objectFit="contain"
-                                  />
-                                ) : token.chainId === 8453 ? (
-                                  <Box
-                                    w="14px"
-                                    h="14px"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                  >
-                                    <BASE_LOGO width="14" height="14" />
-                                  </Box>
-                                ) : null}
+                                <NetworkBadge chainId={token.chainId} />
                               </Box>
                             )}
                           </Box>

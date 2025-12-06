@@ -11,6 +11,7 @@ import { formatUnits } from "viem";
 import ETHEREUM_ADDRESS_METADATA from "@/utils/tokenData/1/address_to_metadata.json";
 import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.json";
 import type { TokenData, TokenBalance, TokenPrice } from "@/utils/types";
+import { Network } from "@/utils/types";
 import { preloadImages } from "@/utils/imagePreload";
 import { FALLBACK_TOKEN_ICON, ETH_ICON } from "@/utils/constants";
 import useWindowSize from "@/hooks/useWindowSize";
@@ -45,14 +46,14 @@ export const ConnectWalletButton: React.FC = () => {
   useEffect(() => {
     const fetchWalletTokens = async (
       walletAddress: string,
-      cid: number
+      chain: Network
     ): Promise<TokenBalance[]> => {
       try {
         console.log(
           "[Balance Check] Fetching token balance for address:",
           walletAddress,
-          "chainId:",
-          cid
+          "chain:",
+          chain
         );
 
         const allTokens: TokenBalance[] = [];
@@ -62,7 +63,7 @@ export const ConnectWalletButton: React.FC = () => {
         // Fetch all pages of tokens
         while (hasMorePages) {
           const response = await fetch(
-            `/api/token-balance?wallet=${walletAddress}&chainId=${cid}&page=${page}`,
+            `/api/token-balance?wallet=${walletAddress}&chainId=${chain}&page=${page}`,
             { method: "GET" }
           );
           const data = await response.json();
@@ -86,7 +87,31 @@ export const ConnectWalletButton: React.FC = () => {
 
         console.log("[Balance Check] Total tokens fetched:", allTokens.length);
         console.log("[Balance Check] All tokens:", allTokens);
-        return allTokens;
+
+        // Enrich tokens with empty names using metadata from address_to_metadata.json
+        const enrichedTokens = allTokens.map((token) => {
+          if (token.name === "" && token.chainId === 8453) {
+            // Look up metadata for Base tokens
+            const addressLower = token.address.toLowerCase();
+            const metadata = (
+              BASE_ADDRESS_METADATA as Record<
+                string,
+                { name: string; ticker: string; decimals?: number }
+              >
+            )[addressLower];
+            if (metadata) {
+              return {
+                ...token,
+                name: metadata.name || token.name,
+                symbol: metadata.ticker || token.symbol,
+                decimals: metadata.decimals ?? token.decimals,
+              };
+            }
+          }
+          return token;
+        });
+
+        return enrichedTokens;
       } catch (e) {
         console.error("Failed to fetch wallet tokens:", e);
         return [];
@@ -197,10 +222,11 @@ export const ConnectWalletButton: React.FC = () => {
       if (!isConnected || !address || !chainId) return;
       const chainName: "ethereum" | "base" = chainId === 8453 ? "base" : "ethereum";
       const metadata = chainId === 8453 ? BASE_ADDRESS_METADATA : ETHEREUM_ADDRESS_METADATA;
+      const networkEnum = chainId === 8453 ? Network.BASE : Network.ETHEREUM;
 
       // Fetch both ERC20 tokens and ETH balance in parallel
       const [walletTokens, ethToken] = await Promise.all([
-        fetchWalletTokens(address, chainId),
+        fetchWalletTokens(address, networkEnum),
         fetchUserEth(address, chainId),
       ]);
 
@@ -270,6 +296,7 @@ export const ConnectWalletButton: React.FC = () => {
         results.push(ethToken);
       }
 
+      console.log("pre sorted token results", results);
       // Filter tokens with USD value above $1 and sort by highest USD value first
       const sorted = results.sort((a, b) => {
         const usdValueA = parseFloat(a.usdValue.replace("$", ""));

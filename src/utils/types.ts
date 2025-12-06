@@ -57,6 +57,7 @@ export type TokenBalance = {
   decimals: number;
   name: string;
   symbol: string;
+  chainId: number;
 };
 
 export type TokenPrice = {
@@ -81,6 +82,12 @@ export enum ApprovalState {
   NEEDS_APPROVAL = "NEEDS_APPROVAL",
   APPROVING = "APPROVING",
   APPROVED = "APPROVED",
+}
+
+export enum Network {
+  ALL = "0",
+  ETHEREUM = "1",
+  BASE = "8453",
 }
 
 export type VirtualMachine = EVM | Bitcoin | SVM;
