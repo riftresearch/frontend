@@ -4,23 +4,11 @@
  */
 
 import { TokenData } from "./types";
-import {
-  rfqClient,
-  ZERO_USD_DISPLAY,
-  BITCOIN_DECIMALS,
-  PERMIT2_ADDRESS,
-  UNIVERSAL_ROUTER_ADDRESS,
-  MIN_SWAP_SATS,
-} from "./constants";
+import { rfqClient, ZERO_USD_DISPLAY, BITCOIN_DECIMALS, MIN_SWAP_SATS } from "./constants";
 import { Quote, formatLotAmount, RfqClientError, Currency } from "./rfqClient";
 import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
 import { validateBitcoinPayoutAddressWithNetwork } from "./bitcoinUtils";
-import {
-  AllowanceTransfer,
-  MaxAllowanceTransferAmount,
-  type PermitSingle,
-} from "@uniswap/permit2-sdk";
 import { useStore } from "./store";
 import { CowSwapClient } from "./cowswapClient";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
@@ -864,53 +852,4 @@ export function validatePayoutAddress(
     const validation = validateBitcoinPayoutAddressWithNetwork(address, "mainnet");
     return validation;
   }
-}
-
-/**
- * Build Permit2 permit data for signing
- * @param nonce - Current nonce from Permit2 contract
- * @param tokenAddress - Address of the token to permit
- * @param userAddress - Address of the user signing the permit
- * @param chainId - Chain ID for the permit
- * @returns Object containing permit and dataToSign for wagmi's signTypedData
- */
-export function buildPermitDataToSign(
-  nonce: number,
-  tokenAddress: string,
-  userAddress: string,
-  chainId: number
-) {
-  // Set expiration to 30 days from now
-  const allowanceExpiration = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
-
-  // Set signature deadline to 30 minutes from now
-  const sigDeadline = Math.floor(Date.now() / 1000) + 30 * 60;
-
-  const permit: PermitSingle = {
-    details: {
-      token: tokenAddress,
-      amount: MaxAllowanceTransferAmount.toString(), // 2^160-1
-      expiration: allowanceExpiration, // uint48
-      nonce: Number(nonce), // uint48
-    },
-    spender: UNIVERSAL_ROUTER_ADDRESS,
-    sigDeadline,
-  };
-
-  const { domain, types, values } = AllowanceTransfer.getPermitData(
-    permit,
-    PERMIT2_ADDRESS,
-    chainId
-  );
-
-  return {
-    permit,
-    dataToSign: {
-      domain: domain as any,
-      types,
-      primaryType: "PermitSingle" as const,
-      message: values as any,
-      account: userAddress as `0x${string}`,
-    },
-  };
 }

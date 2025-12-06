@@ -9,7 +9,8 @@ import { TradingSdk, type QuoteResults, type SwapAdvancedSettings } from "@cowpr
 import { OrderKind } from "@cowprotocol/cow-sdk";
 import type { TradeParameters } from "@cowprotocol/sdk-trading";
 import { ViemAdapter } from "@cowprotocol/sdk-viem-adapter";
-import type { WalletClient, PublicClient } from "viem";
+import type { WalletClient, PublicClient, Address } from "viem";
+import { maxUint256 } from "viem";
 
 // Constants
 const CBBTC_ADDRESS = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
@@ -226,6 +227,67 @@ export class CowSwapClient {
       throw new CowSwapError(
         `Failed to submit order: ${error instanceof Error ? error.message : "Unknown error"}`,
         "SUBMIT_ORDER_ERROR",
+        error
+      );
+    }
+  }
+
+  /**
+   * Get the current CowProtocol allowance for a token
+   * @param tokenAddress - Address of the token to check allowance for
+   * @param owner - Address of the token owner
+   * @param chainId - Chain to check on (defaults to mainnet)
+   * @returns Current allowance as bigint (0n if undefined)
+   */
+  async getCowProtocolAllowance(params: {
+    tokenAddress: Address;
+    owner: Address;
+    chainId?: CowSwapSupportedChain;
+  }): Promise<bigint> {
+    try {
+      const sdk = this.getSdk(params.chainId ?? SupportedChainId.MAINNET);
+      const allowance = await sdk.getCowProtocolAllowance({
+        tokenAddress: params.tokenAddress,
+        owner: params.owner,
+      });
+      // Return 0n if allowance is undefined (e.g., token not yet approved)
+      if (allowance === undefined) {
+        return 0n;
+      }
+      return allowance;
+    } catch (error) {
+      throw new CowSwapError(
+        `Failed to get allowance: ${error instanceof Error ? error.message : "Unknown error"}`,
+        "ALLOWANCE_ERROR",
+        error
+      );
+    }
+  }
+
+  /**
+   * Approve CowProtocol to spend tokens
+   * @param tokenAddress - Address of the token to approve
+   * @param amount - Amount to approve (defaults to max uint256 for unlimited approval)
+   * @param chainId - Chain to approve on (defaults to mainnet)
+   * @returns Transaction hash
+   */
+  async approveCowProtocol(params: {
+    tokenAddress: Address;
+    amount?: bigint;
+    chainId?: CowSwapSupportedChain;
+  }): Promise<`0x${string}`> {
+    try {
+      const sdk = this.getSdk(params.chainId ?? SupportedChainId.MAINNET);
+
+      const txHash = await sdk.approveCowProtocol({
+        tokenAddress: params.tokenAddress,
+        amount: params.amount ?? maxUint256,
+      });
+      return txHash as `0x${string}`;
+    } catch (error) {
+      throw new CowSwapError(
+        `Failed to approve: ${error instanceof Error ? error.message : "Unknown error"}`,
+        "APPROVAL_ERROR",
         error
       );
     }

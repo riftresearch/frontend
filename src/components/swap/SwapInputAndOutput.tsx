@@ -7,12 +7,12 @@ import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
-  UNIVERSAL_ROUTER_ADDRESS,
-  SWAP_ROUTER02_ADDRESS,
   ETHEREUM_POPULAR_TOKENS,
+  BASE_POPULAR_TOKENS,
   BITCOIN_DECIMALS,
   MIN_SWAP_SATS,
 } from "@/utils/constants";
+import { SupportedChainId } from "@cowprotocol/cow-sdk";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
 import { InfoSVG } from "../other/SVGs";
@@ -126,8 +126,6 @@ export const SwapInputAndOutput = () => {
     setPayoutAddress,
     addressValidation,
     setAddressValidation,
-    permitAllowance,
-    setPermitAllowance,
     setApprovalState,
     setSelectedInputToken,
     setSelectedOutputToken,
@@ -1363,7 +1361,7 @@ export const SwapInputAndOutput = () => {
     }
   }, [selectedInputToken, setSelectedInputToken]);
 
-  // Initialize selectedOutputToken based on swap direction
+  // Initialize selectedOutputToken based on swap direction and connected chain
   useEffect(() => {
     // Skip if we're still on initial mount and might load from cookie
     if (isInitialMountRef.current) return;
@@ -1371,10 +1369,13 @@ export const SwapInputAndOutput = () => {
     if (isSwappingForBTC) {
       setSelectedOutputToken(null);
     } else {
-      const cbBTC = ETHEREUM_POPULAR_TOKENS.find((token) => token.ticker === "cbBTC");
+      // Use chain-specific cbBTC token based on user's connected chain
+      const popularTokens =
+        evmConnectWalletChainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
+      const cbBTC = popularTokens.find((token) => token.ticker === "cbBTC");
       setSelectedOutputToken(cbBTC || null);
     }
-  }, [isSwappingForBTC, setSelectedOutputToken]);
+  }, [isSwappingForBTC, setSelectedOutputToken, evmConnectWalletChainId]);
 
   // Fetch ERC20 token price when selected token changes
   useEffect(() => {
@@ -1505,46 +1506,48 @@ export const SwapInputAndOutput = () => {
     inputAssetIdentifier,
   ]);
 
-  // Fetch permit allowance when input amount changes (debounced)
+  // Check CowSwap allowance when input amount changes (debounced)
   useEffect(() => {
-    const fetchApproval = async () => {
-      // Only fetch if:
-      // 1. permitAllowance is null (not yet fetched)
-      // 2. Token is ERC20 (not ETH or cbBTC)
-      // 3. We have a valid input amount
+    const checkAllowance = async () => {
+      // Only check if:
+      // 1. Token is ERC20 (not ETH or cbBTC)
+      // 2. We have a valid input amount
+      // 3. CowSwap client is available
       if (
-        permitAllowance !== null ||
         !selectedInputToken.address ||
         selectedInputToken.ticker === "ETH" ||
         selectedInputToken.ticker === "cbBTC" ||
         !userEvmAccountAddress ||
         !rawInputAmount ||
-        parseFloat(rawInputAmount) <= 0
+        parseFloat(rawInputAmount) <= 0 ||
+        !cowswapClient
       ) {
         return;
       }
 
       try {
-        const response = await fetch(
-          `/api/permit-allowance?userAddress=${userEvmAccountAddress}&tokenAddress=${selectedInputToken.address}&rawInputAmount=${rawInputAmount}&decimals=${selectedInputToken.decimals}`
-        );
+        const chainId =
+          evmConnectWalletChainId === 8453 ? SupportedChainId.BASE : SupportedChainId.MAINNET;
 
-        if (response.ok) {
-          const data = await response.json();
-          console.log("Permit allowance data:", data);
-          setPermitAllowance(data);
+        const currentAllowance = await cowswapClient.getCowProtocolAllowance({
+          tokenAddress: selectedInputToken.address as `0x${string}`,
+          owner: userEvmAccountAddress as `0x${string}`,
+          chainId,
+        });
 
-          // Set approval state based on whether token has allowance to Permit2
-          if (data.permit2HasAllowance) {
-            setApprovalState(ApprovalState.APPROVED);
-          } else {
-            setApprovalState(ApprovalState.NEEDS_APPROVAL);
-          }
+        const requiredAmount = parseUnits(rawInputAmount, selectedInputToken.decimals);
+        console.log("CowSwap allowance:", currentAllowance, "required:", requiredAmount);
+
+        // Set approval state based on whether allowance is sufficient
+        if (currentAllowance >= requiredAmount) {
+          setApprovalState(ApprovalState.APPROVED);
         } else {
-          console.error("Failed to fetch permit allowance");
+          setApprovalState(ApprovalState.NEEDS_APPROVAL);
         }
       } catch (error) {
-        console.error("Error fetching permit allowance:", error);
+        console.error("Error checking CowSwap allowance:", error);
+        // Default to needs approval on error
+        setApprovalState(ApprovalState.NEEDS_APPROVAL);
       }
     };
 
@@ -1553,17 +1556,18 @@ export const SwapInputAndOutput = () => {
       clearTimeout(approvalDebounceTimerRef.current);
     }
 
-    // Set up debounced approval fetch (250ms delay)
+    // Set up debounced allowance check (250ms delay)
     if (
       rawInputAmount &&
       parseFloat(rawInputAmount) > 0 &&
       selectedInputToken.address &&
+      selectedInputToken.ticker !== "ETH" &&
       selectedInputToken.ticker !== "cbBTC" &&
       userEvmAccountAddress &&
-      permitAllowance === null
+      cowswapClient
     ) {
       approvalDebounceTimerRef.current = setTimeout(() => {
-        fetchApproval();
+        checkAllowance();
       }, 250);
     }
 
@@ -1573,23 +1577,66 @@ export const SwapInputAndOutput = () => {
       }
     };
   }, [
-    permitAllowance,
     selectedInputToken,
     userEvmAccountAddress,
-    setPermitAllowance,
     setApprovalState,
     rawInputAmount,
+    cowswapClient,
+    evmConnectWalletChainId,
   ]);
 
-  // Reset permitAllowance when input token changes
-  useEffect(() => {
-    setPermitAllowance(null);
-  }, [selectedInputToken, setPermitAllowance]);
-
-  // Reset approval state when token or amount changes
+  // Reset approval state when token changes
   useEffect(() => {
     setApprovalState(ApprovalState.UNKNOWN);
   }, [selectedInputToken, setApprovalState]);
+
+  // Track previous chain ID to detect actual chain switches
+  const prevChainIdRef = useRef<number | undefined>(undefined);
+
+  // Invalidate quotes and reset state when chain changes
+  useEffect(() => {
+    // Skip on initial mount - only react to actual chain changes
+    if (prevChainIdRef.current === undefined) {
+      prevChainIdRef.current = evmConnectWalletChainId;
+      return;
+    }
+
+    // Only invalidate if chain actually changed
+    if (prevChainIdRef.current === evmConnectWalletChainId) {
+      return;
+    }
+
+    console.log(
+      "Chain changed from",
+      prevChainIdRef.current,
+      "to",
+      evmConnectWalletChainId,
+      "- invalidating quotes"
+    );
+    prevChainIdRef.current = evmConnectWalletChainId;
+
+    // Clear existing quotes - they're no longer valid for the new chain
+    setCowswapQuote(null);
+    setRfqQuote(null);
+    setFeeOverview(null);
+
+    // Reset approval state since approvals are chain-specific
+    setApprovalState(ApprovalState.UNKNOWN);
+
+    // Clear both input and output amounts to force fresh quote
+    setRawInputAmount("");
+    setOutputAmount("");
+    setFullPrecisionInputAmount(null);
+  }, [
+    evmConnectWalletChainId,
+    setCowswapQuote,
+    setRfqQuote,
+    setFeeOverview,
+    setApprovalState,
+    setRawInputAmount,
+    setOutputAmount,
+    setFullPrecisionInputAmount,
+  ]);
 
   // Check if input amount exceeds user balance
   useEffect(() => {

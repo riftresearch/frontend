@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { CreateSwapResponse } from "./otcClient";
-import { TokenData, PermitAllowance, PermitDataForSwap, ApprovalState } from "./types";
+import { TokenData, ApprovalState } from "./types";
 import { Quote } from "./rfqClient";
 import { FeeOverview } from "./swapHelpers";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
@@ -84,10 +84,6 @@ export const useStore = create<{
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }) => void;
-  permitAllowance: PermitAllowance | null;
-  setPermitAllowance: (allowance: PermitAllowance | null) => void;
-  permitDataForSwap: PermitDataForSwap | null;
-  setPermitDataForSwap: (data: PermitDataForSwap | null) => void;
   approvalState: ApprovalState;
   setApprovalState: (state: ApprovalState) => void;
   feeOverview: FeeOverview | null;
@@ -181,10 +177,6 @@ export const useStore = create<{
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }) => set({ addressValidation: validation }),
-  permitAllowance: null,
-  setPermitAllowance: (allowance: PermitAllowance | null) => set({ permitAllowance: allowance }),
-  permitDataForSwap: null,
-  setPermitDataForSwap: (data: PermitDataForSwap | null) => set({ permitDataForSwap: data }),
   approvalState: ApprovalState.UNKNOWN,
   setApprovalState: (state: ApprovalState) => set({ approvalState: state }),
   feeOverview: null,

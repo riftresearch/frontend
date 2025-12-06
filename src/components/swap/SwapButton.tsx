@@ -7,32 +7,21 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useSendTransaction,
-  useSignTypedData,
 } from "wagmi";
 import { colors } from "@/utils/colors";
-import {
-  GLOBAL_CONFIG,
-  otcClient,
-  UNIVERSAL_ROUTER_ADDRESS,
-  SWAP_ROUTER02_ADDRESS,
-  PERMIT2_ADDRESS,
-  IS_FRONTEND_PAUSED,
-} from "@/utils/constants";
+import { GLOBAL_CONFIG, otcClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
 import { OTCServerError } from "@/utils/otcClient";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { useStore, CowswapOrderStatus } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { reownModal } from "@/utils/wallet";
-import { Address, erc20Abi, parseUnits, maxUint256 } from "viem";
+import { Address, erc20Abi, parseUnits } from "viem";
 import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
-import {
-  fetchGasParams,
-  buildPermitDataToSign,
-  getSlippageBpsForNotional,
-} from "@/utils/swapHelpers";
+import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
+import { SupportedChainId } from "@cowprotocol/cow-sdk";
 
 // Helper function to handle OTC errors with specific messaging
 const handleOTCError = (error: unknown) => {
@@ -68,7 +57,6 @@ export const SwapButton = () => {
   const cowswapClient = useCowSwapClient();
 
   // Local state
-  const [isSigningPermit, setIsSigningPermit] = useState(false);
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
   const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
@@ -107,9 +95,6 @@ export const SwapButton = () => {
     addressValidation,
     setBitcoinDepositInfo,
     bitcoinDepositInfo,
-    permitAllowance,
-    permitDataForSwap,
-    setPermitDataForSwap,
     approvalState,
     setApprovalState,
     isOtcServerDead,
@@ -160,17 +145,14 @@ export const SwapButton = () => {
     hash: sendTxHash,
   });
 
-  // Permit2 signature hook
-  const { signTypedDataAsync } = useSignTypedData();
-
   // Check token allowance
   const isNativeETH = selectedInputToken.ticker === "ETH";
 
   const isCbBTC = selectedInputToken.ticker === "cbBTC";
 
-  // Button loading state combines pending transaction, permit signing, approval, and confirmation waiting
+  // Button loading state combines pending transaction, approval, and confirmation waiting
   const isButtonLoading =
-    isPending || isSendTxPending || isConfirming || isSigningPermit || isApprovalConfirming;
+    isPending || isSendTxPending || isConfirming || isApprovingToken || isApprovalConfirming;
 
   // Check if all required fields are filled
   const allFieldsFilled =
@@ -185,116 +167,10 @@ export const SwapButton = () => {
   // SWAP-RELATED FUNCTIONS
   // ============================================================================
 
-  // Helper function to check if permit is needed
-  const needsPermit = useCallback(() => {
-    if (isNativeETH || isCbBTC || !rawInputAmount) {
-      return false;
-    }
-
-    // If we already have valid permitDataForSwap, we don't need another permit
-    if (permitDataForSwap?.permit && permitDataForSwap?.signature) {
-      const currentTime = Math.floor(Date.now() / 1000);
-      const permitExpiration = permitDataForSwap.permit.sigDeadline;
-
-      // Check if permit is still valid (not expired) and for the correct token
-      if (
-        permitExpiration > currentTime &&
-        permitDataForSwap.permit.details.token.toLowerCase() ===
-          selectedInputToken.address?.toLowerCase()
-      ) {
-        return false; // Already have valid permit
-      }
-    }
-
-    if (!permitAllowance) {
-      return true; // No permit allowance info yet, assume needs permit
-    }
-
-    // Use full precision amount if available, otherwise use displayed amount
-    const amountToCheck = fullPrecisionInputAmount || rawInputAmount;
-    const sellAmount = parseUnits(amountToCheck, selectedInputToken.decimals);
-    const currentTime = Math.floor(Date.now() / 1000);
-    const expirationThreshold = currentTime + 5 * 60; // 5 minutes from now
-
-    // Need permit if allowance is insufficient or expiring soon
-    return (
-      BigInt(permitAllowance.amount) < sellAmount ||
-      Number(permitAllowance.expiration) < expirationThreshold
-    );
-  }, [
-    isNativeETH,
-    selectedInputToken,
-    rawInputAmount,
-    fullPrecisionInputAmount,
-    permitAllowance,
-    permitDataForSwap,
-  ]);
-
-  // Handle Permit2 signature
-  const signPermit2 = useCallback(async () => {
-    console.log("signPermit2", selectedInputToken.address);
-    if (!selectedInputToken.address || !userEvmAccountAddress) {
-      console.error("Missing required data for permit");
-      return;
-    }
-
-    try {
-      setSwapButtonPressed(true);
-      setIsSigningPermit(true);
-
-      // Clear old permit data before signing new one
-      setPermitDataForSwap(null);
-
-      if (permitAllowance) {
-        console.log("Signing Permit2...", {
-          token: selectedInputToken.address,
-          nonce: permitAllowance.nonce,
-        });
-
-        const { permit, dataToSign } = buildPermitDataToSign(
-          Number(permitAllowance.nonce),
-          selectedInputToken.address,
-          userEvmAccountAddress,
-          evmConnectWalletChainId
-        );
-
-        console.log("permit", permit);
-        console.log("dataToSign", dataToSign);
-        const signature = await signTypedDataAsync(dataToSign);
-
-        console.log("Permit2 signed successfully");
-        setPermitDataForSwap({ permit, signature });
-      } else {
-        console.error("No permit data available");
-        return;
-      }
-    } catch (error) {
-      console.error("Permit signing failed:", error);
-      toastInfo({
-        title: "Permit Signing Failed",
-        description:
-          "You must sign a message for Permit2 to spend your tokens to complete the swap",
-        customStyle: {
-          background: `${colors.assetTag.btc.background}`,
-        },
-      });
-    } finally {
-      setIsSigningPermit(false);
-      setSwapButtonPressed(false);
-    }
-  }, [
-    selectedInputToken,
-    userEvmAccountAddress,
-    permitAllowance,
-    evmConnectWalletChainId,
-    signTypedDataAsync,
-    setPermitDataForSwap,
-  ]);
-
-  // Approve Permit2 to spend tokens
-  const approvePermit2 = useCallback(async () => {
-    if (!selectedInputToken.address) {
-      console.error("No token selected for approval");
+  // Approve CowSwap to spend tokens using the SDK (unlimited approval)
+  const approveCowSwap = useCallback(async () => {
+    if (!selectedInputToken.address || !cowswapClient) {
+      console.error("No token selected or CowSwap client not available");
       return;
     }
 
@@ -302,25 +178,22 @@ export const SwapButton = () => {
       setSwapButtonPressed(true);
       setApprovalState(ApprovalState.APPROVING);
       setIsApprovingToken(true);
-      console.log("Approving Permit2 for token:", selectedInputToken.address);
+      console.log("Approving CowSwap for token:", selectedInputToken.address);
 
-      const gasParams = await fetchGasParams(evmConnectWalletChainId);
+      // Determine chain ID for the SDK
+      const chainId =
+        evmConnectWalletChainId === 8453 ? SupportedChainId.BASE : SupportedChainId.MAINNET;
 
-      const txConfig: any = {
-        address: selectedInputToken.address as Address,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [PERMIT2_ADDRESS as Address, maxUint256],
-      };
+      // Use unlimited approval (maxUint256) for better UX - no need to approve again
+      const txHash = await cowswapClient.approveCowProtocol({
+        tokenAddress: selectedInputToken.address as Address,
+        chainId,
+      });
 
-      if (gasParams) {
-        txConfig.maxFeePerGas = gasParams.maxFeePerGas;
-        txConfig.maxPriorityFeePerGas = gasParams.maxPriorityFeePerGas;
-      }
-
-      writeContract(txConfig);
+      console.log("CowSwap approval transaction:", txHash);
+      setApprovalTxHash(txHash);
     } catch (error) {
-      console.error("Permit2 approval failed:", error);
+      console.error("CowSwap approval failed:", error);
       setApprovalState(ApprovalState.NEEDS_APPROVAL);
       setIsApprovingToken(false);
       setSwapButtonPressed(false);
@@ -329,7 +202,7 @@ export const SwapButton = () => {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }, [selectedInputToken, evmConnectWalletChainId, writeContract, setApprovalState]);
+  }, [selectedInputToken, evmConnectWalletChainId, cowswapClient, setApprovalState]);
 
   // Handle cbBTC->BTC swap using direct OTC transfer
   const executeCBBTCtoBTCSwap = useCallback(async () => {
@@ -456,9 +329,6 @@ export const SwapButton = () => {
       }
       console.log("Optimal quote received, proceeding with swap");
     }
-
-    // Clear old permit data when starting a new swap
-    setPermitDataForSwap(null);
 
     // Check fake mode environment variables
     const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
@@ -621,7 +491,6 @@ export const SwapButton = () => {
     setSwapResponse,
     rawInputAmount,
     evmConnectWalletChainId,
-    setPermitDataForSwap,
     fullPrecisionInputAmount,
     cowswapClient,
     setCowswapOrderStatus,
@@ -723,7 +592,7 @@ export const SwapButton = () => {
     executeBTCtoCBBTCSwap,
   ]);
 
-  // Unified handler that checks permit and routes to appropriate action
+  // Unified handler that checks approval and routes to appropriate action
   const handleSwapButtonClick = useCallback(async () => {
     // Check input amount
     if (
@@ -761,30 +630,25 @@ export const SwapButton = () => {
       }
     }
 
-    // First check if we need token approval to Permit2
+    // Native ETH, cbBTC, or BTC->cbBTC swaps don't need approval
     if (isNativeETH || isCbBTC || !isSwappingForBTC) {
       await startSwap();
       return;
     }
 
+    // For ERC20 tokens, check if we need approval
     if (approvalState === ApprovalState.NEEDS_APPROVAL) {
-      await approvePermit2();
+      await approveCowSwap();
       return;
     }
 
+    // Already approved, proceed with swap
     if (approvalState === ApprovalState.APPROVED) {
-      // Then check if we need Permit2 signature
-      if (needsPermit()) {
-        await signPermit2();
-      } else {
-        await startSwap();
-      }
+      await startSwap();
     }
   }, [
     approvalState,
-    approvePermit2,
-    needsPermit,
-    signPermit2,
+    approveCowSwap,
     startSwap,
     payoutAddress,
     addressValidation,
@@ -792,6 +656,8 @@ export const SwapButton = () => {
     isWalletConnected,
     rawInputAmount,
     outputAmount,
+    isNativeETH,
+    isCbBTC,
   ]);
 
   // ============================================================================
@@ -855,17 +721,10 @@ export const SwapButton = () => {
       // Reset swap button state
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
-      setIsSigningPermit(false);
       setRfqQuote(null);
       setRefetchQuote(true);
-
-      if (permitAllowance?.permit2HasAllowance) {
-        setApprovalState(ApprovalState.APPROVED);
-      } else {
-        setApprovalState(ApprovalState.NEEDS_APPROVAL);
-      }
     }
-  }, [writeError, sendTxError]);
+  }, [writeError, sendTxError, setRfqQuote, setRefetchQuote]);
 
   // Handle transaction receipt errors
   useEffect(() => {
@@ -882,8 +741,6 @@ export const SwapButton = () => {
       // Reset swap button state
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
-      setIsSigningPermit(false);
-      // setSwapResponse(null);
     }
   }, [txError]);
 
@@ -899,12 +756,13 @@ export const SwapButton = () => {
   // Handle approval confirmation and errors
   useEffect(() => {
     if (isApprovalConfirmed) {
-      console.log("Permit2 approval confirmed");
+      console.log("CowSwap approval confirmed");
       setApprovalState(ApprovalState.APPROVED);
-      // toastSuccess({
-      //   title: "Approval Confirmed",
-      //   description: "Permit2 can now spend your tokens",
-      // });
+      setIsApprovingToken(false);
+      // Auto-execute swap after approval is confirmed
+      if (swapButtonPressed) {
+        startSwap();
+      }
     } else if (approvalTxError) {
       console.error("Approval transaction error:", approvalTxError);
       setApprovalState(ApprovalState.NEEDS_APPROVAL);
@@ -920,26 +778,7 @@ export const SwapButton = () => {
       setIsApprovingToken(false);
       setApprovalTxHash(undefined);
     }
-  }, [isApprovalConfirmed, approvalTxError, setApprovalState, isButtonLoading, signPermit2]);
-
-  useEffect(() => {
-    if (approvalState === ApprovalState.APPROVED) {
-      console.log("Auto-signing permit after approval");
-      console.log("permitDataForSwap", permitDataForSwap);
-      if (needsPermit() && swapButtonPressed) {
-        signPermit2();
-      }
-    }
-  }, [approvalState, signPermit2]);
-
-  // Auto-execute swap when permit is signed
-  useEffect(() => {
-    // When permitDataForSwap is set, automatically execute the swap
-    if (permitDataForSwap && !isNativeETH && !isButtonLoading) {
-      console.log("Auto-executing swap after permit signed");
-      startSwap();
-    }
-  }, [permitDataForSwap, isNativeETH, isButtonLoading, startSwap]);
+  }, [isApprovalConfirmed, approvalTxError, setApprovalState, swapButtonPressed, startSwap]);
 
   // Auto-retry swap after quote refetch completes
   useEffect(() => {
@@ -1077,19 +916,10 @@ export const SwapButton = () => {
       };
     }
 
-    // If approving Permit2
-    if (approvalState === ApprovalState.APPROVING || isApprovalConfirming) {
+    // If approving CowSwap
+    if (approvalState === ApprovalState.APPROVING || isApprovalConfirming || isApprovingToken) {
       return {
-        text: "Approving Permit...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-
-    // If signing permit
-    if (isSigningPermit) {
-      return {
-        text: "Sign Permit...",
+        text: "Approving...",
         handler: undefined,
         showSpinner: true,
       };
