@@ -1595,9 +1595,26 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                 <Text fontSize="11px" color={colors.textGray} textTransform="uppercase">
                   Direction
                 </Text>
-                <Text fontSize="14px" color={colors.offWhite}>
-                  {selectedSwap.direction === "BTC_TO_EVM" ? "BTC → cbBTC" : "cbBTC → BTC"}
-                </Text>
+                <Flex align="center" gap="6px">
+                  <Text fontSize="14px" color={colors.offWhite}>
+                    {selectedSwap.direction === "BTC_TO_EVM"
+                      ? "BTC"
+                      : selectedSwap.startAssetMetadata?.ticker || "cbBTC"}
+                  </Text>
+                  <Text fontSize="14px" color={colors.textGray}>
+                    →
+                  </Text>
+                  <Text fontSize="14px" color={colors.offWhite}>
+                    {selectedSwap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
+                  </Text>
+                  <Text
+                    fontSize="12px"
+                    color={selectedSwap.chain === "BASE" ? "#0052FF" : "#627EEA"}
+                    fontWeight="500"
+                  >
+                    ({selectedSwap.chain})
+                  </Text>
+                </Flex>
               </Flex>
 
               {/* Amount */}

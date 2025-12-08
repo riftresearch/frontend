@@ -80,7 +80,7 @@ export default function Stats() {
 
           {/* Volume Chart */}
           <GridFlex width="100%" heightBlocks={13} mb="40px">
-            <VolumeTxnChart />
+            <VolumeTxnChart defaultTimeframe="1m" />
           </GridFlex>
         </Flex>
         {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||

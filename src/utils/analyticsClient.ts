@@ -186,10 +186,11 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   let direction: SwapDirection = "EVM_TO_BTC";
   console.log("row.quote?.from_chain", row.quote?.from_chain);
   if (row.quote?.from_chain) {
+    const fromChain = row.quote.from_chain.toLowerCase();
     direction =
-      row.quote.from_chain === "bitcoin"
+      fromChain === "bitcoin"
         ? "BTC_TO_EVM"
-        : row.quote.from_chain === "ethereum"
+        : fromChain === "ethereum" || fromChain === "base"
           ? "EVM_TO_BTC"
           : "UNKNOWN";
   } else {
@@ -415,8 +416,11 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
     });
   }
 
-  // [14] Determine EVM chain (ETH or BASE) from quote.to_chain
-  const evmChain: "ETH" | "BASE" = row.quote?.to_chain === "base" ? "BASE" : "ETH";
+  // [14] Determine EVM chain (ETH or BASE) - use from_chain for EVM_TO_BTC, to_chain for BTC_TO_EVM
+  const evmChainSource =
+    direction === "EVM_TO_BTC" ? row.quote?.from_chain : row.quote?.to_chain;
+  const evmChain: "ETH" | "BASE" =
+    evmChainSource?.toLowerCase() === "base" ? "BASE" : "ETH";
 
   // [15] Return complete AdminSwapItem with all calculated data
   return {

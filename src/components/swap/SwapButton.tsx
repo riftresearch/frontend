@@ -1,4 +1,4 @@
-import { Flex, Text, Spinner, Box, Button, Checkbox } from "@chakra-ui/react";
+import { Flex, Text, Spinner, Box, Button } from "@chakra-ui/react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { useRouter } from "next/router";
@@ -70,6 +70,13 @@ export const SwapButton = () => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("rift_tos_agreed") === "true";
   }, []);
+
+  // Blur any focused elements when ToS modal opens to prevent focus rings
+  useEffect(() => {
+    if (showTosModal && typeof document !== "undefined") {
+      (document.activeElement as HTMLElement)?.blur?.();
+    }
+  }, [showTosModal]);
 
   // Save ToS agreement
   const saveTosAgreement = useCallback(() => {
@@ -1061,11 +1068,13 @@ export const SwapButton = () => {
           right={0}
           bottom={0}
           bg="rgba(0, 0, 0, 0.85)"
-          zIndex={9999}
+          zIndex={99999}
           display="flex"
           alignItems="center"
           justifyContent="center"
           onClick={() => setShowTosModal(false)}
+          style={{ isolation: "isolate" }}
+          borderRadius="30px"
         >
           <Box
             bg="#0a0a0a"
@@ -1075,6 +1084,9 @@ export const SwapButton = () => {
             maxW="450px"
             w={isMobile ? "90%" : "450px"}
             onClick={(e) => e.stopPropagation()}
+            position="relative"
+            zIndex={100000}
+            boxShadow="0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05)"
           >
             <Text
               fontSize={isMobile ? "20px" : "24px"}
@@ -1102,25 +1114,35 @@ export const SwapButton = () => {
               mb="24px"
               cursor="pointer"
               onClick={() => setTosChecked(!tosChecked)}
+              position="relative"
+              zIndex={100001}
             >
-              <Checkbox.Root
-                checked={tosChecked}
-                onCheckedChange={(e) => setTosChecked(!!e.checked)}
-                colorPalette="orange"
-                size="lg"
+              <Box
+                w="24px"
+                h="24px"
+                minW="24px"
+                borderRadius="6px"
+                border={`2px solid ${tosChecked ? colors.RiftOrange : colors.borderGray}`}
+                bg={tosChecked ? colors.RiftOrange : "transparent"}
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                cursor="pointer"
+                transition="all 0.15s ease"
+                mt="2px"
               >
-                <Checkbox.HiddenInput />
-                <Checkbox.Control
-                  borderColor={colors.borderGray}
-                  bg="transparent"
-                  _checked={{
-                    bg: colors.RiftOrange,
-                    borderColor: colors.RiftOrange,
-                  }}
-                >
-                  <Checkbox.Indicator />
-                </Checkbox.Control>
-              </Checkbox.Root>
+                {tosChecked && (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path
+                      d="M11.5 4L5.5 10L2.5 7"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </Box>
               <Text
                 fontSize="13px"
                 fontFamily={FONT_FAMILIES.AUX_MONO}

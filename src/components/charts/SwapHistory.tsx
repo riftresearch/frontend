@@ -521,6 +521,24 @@ const Card: React.FC<{
             </Text>
           </Flex>
         )}
+
+        <Flex direction="column" gap="4px">
+          <Text
+            fontSize={isMobile ? "10px" : "11px"}
+            color={colorsAnalytics.textGray}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+          >
+            CHAIN
+          </Text>
+          <Text
+            fontSize={isMobile ? "11px" : "13px"}
+            color={swap.chain === "BASE" ? "#0052FF" : "#627EEA"}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="500"
+          >
+            {swap.chain}
+          </Text>
+        </Flex>
       </Flex>
 
       {/* Swap and Rift Fee Row - side by side on mobile */}
@@ -875,6 +893,16 @@ const Row: React.FC<{
               0x{swap.evmAccountAddress.slice(2, 6)}...
             </Text>
           </Flex>
+        </Box>
+        <Box w="60px">
+          <Text
+            fontSize="13px"
+            color={swap.chain === "BASE" ? "#0052FF" : "#627EEA"}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontWeight="500"
+          >
+            {swap.chain}
+          </Text>
         </Box>
         <Box w="365px">
           <Flex direction="column" gap="2px">
@@ -1755,6 +1783,9 @@ export const SwapHistory: React.FC<{
                 </Box>
                 <Box w="99px">
                   <Text fontFamily={FONT_FAMILIES.SF_PRO}>User</Text>
+                </Box>
+                <Box w="60px">
+                  <Text fontFamily={FONT_FAMILIES.SF_PRO}>Chain</Text>
                 </Box>
                 <Box w="365px">
                   <Text fontFamily={FONT_FAMILIES.SF_PRO}>Swap</Text>
