@@ -155,6 +155,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         });
 
         if (mergedResults.length > 0) {
+          // Sort by USD value (descending)
+          mergedResults.sort((a, b) => {
+            const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
+            const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
+            return bValue - aValue;
+          });
           // Preload icons for search results
           preloadImages(mergedResults.map((t) => t.icon).filter(Boolean));
           setSearchResults(mergedResults);
@@ -214,6 +220,13 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
         }
+
+        // Sort tokens by USD value (descending)
+        tokens.sort((a, b) => {
+          const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
+          const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
+          return bValue - aValue;
+        });
 
         // Get popular tokens for the selected network
         let networkPopularTokens: TokenData[] = [];

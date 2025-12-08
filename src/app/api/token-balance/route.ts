@@ -1,6 +1,20 @@
 // src/app/api/token-balance/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+// Network configuration mapping chainId to RPC URL
+const NETWORKS: Record<number, { rpcUrl: string; name: string; useQuickNode: boolean }> = {
+  1: {
+    rpcUrl: process.env.QUICKNODE_ETHEREUM_URL!,
+    name: "ethereum",
+    useQuickNode: true,
+  },
+  8453: {
+    rpcUrl: `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+    name: "base",
+    useQuickNode: false,
+  },
+};
+
 // Alchemy response types
 interface AlchemyTokenBalance {
   contractAddress: string;
@@ -26,14 +40,19 @@ interface QuickNodeToken {
   chainId: number;
 }
 
-// Fetch token balances from QuickNode (for Ethereum only)
+// Fetch token balances from QuickNode (for Ethereum mainnet)
 async function fetchFromQuickNode(
   wallet: string,
+  chainId: number,
   page: number
 ): Promise<{ result: QuickNodeToken[] } | null> {
-  const quickNodeUrl = process.env.QUICKNODE_ETHEREUM_URL!;
+  const network = NETWORKS[chainId];
+  if (!network || !network.useQuickNode) {
+    console.error(`QuickNode not configured for chainId ${chainId}`);
+    return null;
+  }
 
-  const res = await fetch(quickNodeUrl, {
+  const res = await fetch(network.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -50,7 +69,7 @@ async function fetchFromQuickNode(
   if (data.result?.result && Array.isArray(data.result.result)) {
     data.result.result = data.result.result.map((token: Omit<QuickNodeToken, "chainId">) => ({
       ...token,
-      chainId: 1, // Ethereum
+      chainId,
     }));
   }
 
@@ -69,18 +88,22 @@ function hexToDecimalString(hex: string): string {
   }
 }
 
-// Fetch token balances from Alchemy (for Base)
-async function fetchFromAlchemy(wallet: string): Promise<QuickNodeToken[]> {
+// Fetch token balances from Alchemy (for non-Ethereum chains like Base)
+async function fetchFromAlchemy(wallet: string, chainId: number): Promise<QuickNodeToken[]> {
+  const network = NETWORKS[chainId];
+  if (!network || network.useQuickNode) {
+    console.error(`Alchemy not configured for chainId ${chainId}`);
+    return [];
+  }
+
   const alchemyApiKey = process.env.ALCHEMY_API_KEY;
   if (!alchemyApiKey) {
     console.error("ALCHEMY_API_KEY not configured");
     return [];
   }
 
-  const alchemyUrl = `https://base-mainnet.g.alchemy.com/v2/${alchemyApiKey}`;
-
   try {
-    const res = await fetch(alchemyUrl, {
+    const res = await fetch(network.rpcUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -110,11 +133,30 @@ async function fetchFromAlchemy(wallet: string): Promise<QuickNodeToken[]> {
       decimals: 0, // Default, will be enriched with actual metadata
       name: "", // Will be enriched
       symbol: "", // Will be enriched
-      chainId: 8453, // Base
+      chainId,
     }));
   } catch (error) {
     console.error("Failed to fetch from Alchemy:", error);
     return [];
+  }
+}
+
+// Fetch tokens for a single chain
+async function fetchTokensForChain(
+  wallet: string,
+  chainId: number,
+  page: number
+): Promise<QuickNodeToken[]> {
+  const network = NETWORKS[chainId];
+  if (!network) {
+    return [];
+  }
+
+  if (network.useQuickNode) {
+    const result = await fetchFromQuickNode(wallet, chainId, page);
+    return result?.result || [];
+  } else {
+    return fetchFromAlchemy(wallet, chainId);
   }
 }
 
@@ -129,11 +171,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "missing_wallet" }, { status: 400 });
   }
 
-  const chainId = chainIdStr ? Number(chainIdStr) : NaN;
-  if (!Number.isInteger(chainId)) {
-    return NextResponse.json({ error: "invalid_chainId" }, { status: 400 });
-  }
-
   const page = pageStr ? Number(pageStr) : 1;
   if (!Number.isInteger(page) || page < 1) {
     return NextResponse.json({ error: "invalid_page" }, { status: 400 });
@@ -143,38 +180,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "method_not_allowed" }, { status: 400 });
   }
 
-  // Handle different chain scenarios
-  switch (chainId) {
-    case 0: {
-      // ALL: Fetch from both QuickNode (Ethereum) and Alchemy (Base)
-      const [ethereumResult, baseResult] = await Promise.all([
-        fetchFromQuickNode(wallet, page),
-        fetchFromAlchemy(wallet),
-      ]);
+  // If chainId not provided or is 0, fetch from all networks
+  if (!chainIdStr || chainIdStr === "0") {
+    const chainIds = Object.keys(NETWORKS).map(Number);
+    const results = await Promise.all(
+      chainIds.map((cid) => fetchTokensForChain(wallet, cid, page))
+    );
 
-      const ethereumTokens = ethereumResult?.result || [];
-      const mergedTokens = [...ethereumTokens, ...baseResult];
-
-      console.log("data (merged)", { result: { result: mergedTokens } });
-      return NextResponse.json({ result: { result: mergedTokens } });
-    }
-
-    case 1: {
-      // Ethereum: QuickNode only
-      const result = await fetchFromQuickNode(wallet, page);
-      const data = { result };
-      console.log("data", data);
-      return NextResponse.json(data);
-    }
-
-    case 8453: {
-      // Base: Alchemy only
-      const tokens = await fetchFromAlchemy(wallet);
-      console.log("data (alchemy)", { result: { result: tokens } });
-      return NextResponse.json({ result: { result: tokens } });
-    }
-
-    default:
-      return NextResponse.json({ error: "Unsupported chain ID" }, { status: 400 });
+    const mergedTokens = results.flat();
+    console.log("data (merged)", { result: { result: mergedTokens } });
+    return NextResponse.json({ result: { result: mergedTokens } });
   }
+
+  // Handle specific chain
+  const chainId = Number(chainIdStr);
+  if (!Number.isInteger(chainId)) {
+    return NextResponse.json({ error: "invalid_chainId" }, { status: 400 });
+  }
+
+  const network = NETWORKS[chainId];
+  if (!network) {
+    return NextResponse.json({ error: "Unsupported chain ID" }, { status: 400 });
+  }
+
+  const tokens = await fetchTokensForChain(wallet, chainId, page);
+  console.log(`data (${network.name})`, { result: { result: tokens } });
+  return NextResponse.json({ result: { result: tokens } });
 }

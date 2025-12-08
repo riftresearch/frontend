@@ -45,7 +45,7 @@ import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
 import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
-import { fetchTokenPrice } from "@/utils/defiLlamaClient";
+import { fetchTokenPrice } from "@/utils/userTokensClient";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
