@@ -425,7 +425,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               bg="#131313"
               borderRadius="30px"
               py="24px"
-              w="200px"
+              w="232px"
               maxH="670px"
               border="2px solid #232323"
               onClick={(e) => e.stopPropagation()}
@@ -459,18 +459,88 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   onClick={() => handleNetworkSelect(Network.ALL)}
                   transition="background 0.15s ease"
                 >
-                  <Box
-                    w="24px"
-                    h="24px"
-                    borderRadius="50%"
-                    bg="#2a2a2a"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <Text fontSize="10px" color={colors.offWhite} fontWeight="bold">
-                      ∀
-                    </Text>
+                  {/* 4-circle network icon grid */}
+                  <Box position="relative" w="28px" h="28px">
+                    {/* Top-left: Ethereum */}
+                    <Box
+                      position="absolute"
+                      top="0"
+                      left="0"
+                      w="16px"
+                      h="16px"
+                      borderRadius="50%"
+                      bg="#1a1a2e"
+                      border="1.5px solid #131313"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      overflow="hidden"
+                      zIndex={4}
+                    >
+                      <Image
+                        src="/images/assets/icons/ETH.svg"
+                        w="10px"
+                        h="10px"
+                        alt="Ethereum"
+                        objectFit="contain"
+                      />
+                    </Box>
+                    {/* Top-right: Base */}
+                    <Box
+                      position="absolute"
+                      top="0"
+                      right="0"
+                      w="16px"
+                      h="16px"
+                      borderRadius="50%"
+                      bg="white"
+                      border="1.5px solid #131313"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      overflow="hidden"
+                      zIndex={3}
+                    >
+                      <BASE_LOGO width="10" height="10" />
+                    </Box>
+                    {/* Bottom-left: Placeholder A */}
+                    <Box
+                      position="absolute"
+                      bottom="0"
+                      left="0"
+                      w="16px"
+                      h="16px"
+                      borderRadius="50%"
+                      bg="#2a2a2a"
+                      border="1.5px solid #131313"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      zIndex={2}
+                    >
+                      <Text fontSize="8px" color={colors.textGray} fontWeight="bold">
+                        A
+                      </Text>
+                    </Box>
+                    {/* Bottom-right: Placeholder S */}
+                    <Box
+                      position="absolute"
+                      bottom="0"
+                      right="0"
+                      w="16px"
+                      h="16px"
+                      borderRadius="50%"
+                      bg="#2a2a2a"
+                      border="1.5px solid #131313"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      zIndex={1}
+                    >
+                      <Text fontSize="8px" color={colors.textGray} fontWeight="bold">
+                        S
+                      </Text>
+                    </Box>
                   </Box>
                   <Text
                     fontSize="14px"
@@ -478,7 +548,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     color={colors.offWhite}
                     fontWeight="bold"
                   >
-                    All
+                    All Networks
                   </Text>
                 </Flex>
 
