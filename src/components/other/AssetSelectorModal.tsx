@@ -79,25 +79,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     }
   }, [isOpen]);
 
-<<<<<<< HEAD
-=======
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    if (isDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isDropdownOpen]);
-
   // Auto-switch chain when wallet connects or address changes
   useEffect(() => {
     if (!isConnected) return;
@@ -121,7 +102,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     switchToChain();
   }, [isConnected, address]);
 
->>>>>>> 2b004b2 (auto switch)
   // Debounce search input
   useEffect(() => {
     const h = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 180);
