@@ -102,8 +102,8 @@ export const SwapInputAndOutput = () => {
     selectedOutputToken,
     userTokensByChain,
     evmConnectWalletChainId,
-    rawInputAmount,
-    setRawInputAmount,
+    displayedInputAmount,
+    setDisplayedInputAmount,
     fullPrecisionInputAmount,
     setFullPrecisionInputAmount,
     outputAmount,
@@ -275,7 +275,7 @@ export const SwapInputAndOutput = () => {
   const fetchERC20ToBTCQuote = useCallback(
     async (inputAmount?: string, requestId?: number, isRefresh: boolean = false) => {
       // Use provided amount or fall back to state
-      const amountToQuote = inputAmount ?? rawInputAmount;
+      const amountToQuote = inputAmount ?? displayedInputAmount;
 
       if (!isSwappingForBTC || !amountToQuote || parseFloat(amountToQuote) <= 0) {
         console.log("no amount to quote");
@@ -402,7 +402,7 @@ export const SwapInputAndOutput = () => {
     },
     [
       isSwappingForBTC,
-      rawInputAmount,
+      displayedInputAmount,
       userEvmAccountAddress,
       selectedInputToken,
       setCowswapQuote,
@@ -441,7 +441,7 @@ export const SwapInputAndOutput = () => {
         const inputAmount = quoteResponse.erc20InputAmount || "";
         const truncatedInput = truncateAmount(inputAmount);
 
-        setRawInputAmount(truncatedInput);
+        setDisplayedInputAmount(truncatedInput);
         setIsLoadingQuote(false);
         setRefetchQuote(false);
 
@@ -491,7 +491,7 @@ export const SwapInputAndOutput = () => {
       selectedInputToken,
       setCowswapQuote,
       setRfqQuote,
-      setRawInputAmount,
+      setDisplayedInputAmount,
       setFeeOverview,
       setIsAwaitingOptimalQuote,
     ]
@@ -520,7 +520,7 @@ export const SwapInputAndOutput = () => {
           // Clear quotes but don't show error - just wait for larger amount
           setCowswapQuote(null);
           setRfqQuote(null);
-          setRawInputAmount("");
+          setDisplayedInputAmount("");
           setIsLoadingQuote(false);
           return;
         }
@@ -533,7 +533,7 @@ export const SwapInputAndOutput = () => {
           console.log("Output value exceeds maximum BTC liquidity");
           setCowswapQuote(null);
           setRfqQuote(null);
-          setRawInputAmount("");
+          setDisplayedInputAmount("");
           setIsLoadingQuote(false);
           return;
         }
@@ -603,7 +603,7 @@ export const SwapInputAndOutput = () => {
             // Only clear state if both quotes fail (FAST already tried)
             setCowswapQuote(null);
             setRfqQuote(null);
-            setRawInputAmount("");
+            setDisplayedInputAmount("");
             setFeeOverview(null);
             setIsLoadingQuote(false);
             setRefetchQuote(false);
@@ -623,7 +623,7 @@ export const SwapInputAndOutput = () => {
       selectedInputToken,
       setCowswapQuote,
       setRfqQuote,
-      setRawInputAmount,
+      setDisplayedInputAmount,
       btcPrice,
       setFeeOverview,
       liquidity,
@@ -641,7 +641,7 @@ export const SwapInputAndOutput = () => {
       requestId?: number
     ) => {
       // Use provided amount or fall back to state based on mode
-      const amountToQuote = amount ?? (mode === "ExactInput" ? rawInputAmount : outputAmount);
+      const amountToQuote = amount ?? (mode === "ExactInput" ? displayedInputAmount : outputAmount);
 
       // Validate inputs
       if (isSwappingForBTC || !amountToQuote || parseFloat(amountToQuote) <= 0) {
@@ -685,7 +685,7 @@ export const SwapInputAndOutput = () => {
         if (mode === "ExactInput") {
           setOutputAmount("");
         } else {
-          setRawInputAmount("");
+          setDisplayedInputAmount("");
         }
         return;
       }
@@ -702,7 +702,7 @@ export const SwapInputAndOutput = () => {
         if (mode === "ExactInput") {
           setOutputAmount("");
         } else {
-          setRawInputAmount("");
+          setDisplayedInputAmount("");
         }
         return;
       }
@@ -756,7 +756,7 @@ export const SwapInputAndOutput = () => {
               }
               return inputAmount;
             })();
-            setRawInputAmount(truncatedInput);
+            setDisplayedInputAmount(truncatedInput);
           }
 
           // Calculate and set fee overview (erc20Fee will be $0.00)
@@ -781,7 +781,7 @@ export const SwapInputAndOutput = () => {
           if (mode === "ExactInput") {
             setOutputAmount("");
           } else {
-            setRawInputAmount("");
+            setDisplayedInputAmount("");
           }
         }
       } catch (error) {
@@ -793,18 +793,18 @@ export const SwapInputAndOutput = () => {
         if (mode === "ExactInput") {
           setOutputAmount("");
         } else {
-          setRawInputAmount("");
+          setDisplayedInputAmount("");
         }
       }
     },
     [
       isSwappingForBTC,
-      rawInputAmount,
+      displayedInputAmount,
       outputAmount,
       selectedInputToken,
       setRfqQuote,
       setOutputAmount,
-      setRawInputAmount,
+      setDisplayedInputAmount,
       btcPrice,
       erc20Price,
       setFeeOverview,
@@ -852,7 +852,7 @@ export const SwapInputAndOutput = () => {
     }
 
     // Zero out amounts and USD values
-    setRawInputAmount("");
+    setDisplayedInputAmount("");
     setOutputAmount("");
     setInputUsdValue(ZERO_USD_DISPLAY);
     setOutputUsdValue(ZERO_USD_DISPLAY);
@@ -866,13 +866,13 @@ export const SwapInputAndOutput = () => {
     let value = e.target.value;
 
     // If first character is "0" or ".", replace with "0."
-    if (rawInputAmount === "" && (value === "0" || value === ".")) {
+    if (displayedInputAmount === "" && (value === "0" || value === ".")) {
       value = "0.";
     }
 
     // Allow empty string, numbers, and decimal point (max 8 decimals)
     if (value === "" || /^\d*\.?\d{0,8}$/.test(value)) {
-      setRawInputAmount(value);
+      setDisplayedInputAmount(value);
       setLastEditedField("input");
       setHasStartedTyping(true);
       // Reset adjusted max flag and full precision when user manually edits
@@ -934,9 +934,9 @@ export const SwapInputAndOutput = () => {
     getQuoteForInputRef.current = true;
 
     // If value is "0." and user presses Backspace or Delete, clear both characters
-    if (rawInputAmount === "0." && (e.key === "Backspace" || e.key === "Delete")) {
+    if (displayedInputAmount === "0." && (e.key === "Backspace" || e.key === "Delete")) {
       e.preventDefault();
-      setRawInputAmount("");
+      setDisplayedInputAmount("");
       setOutputAmount("");
       setInputUsdValue(ZERO_USD_DISPLAY);
       setOutputUsdValue(ZERO_USD_DISPLAY);
@@ -968,7 +968,7 @@ export const SwapInputAndOutput = () => {
 
       if (!value || parseFloat(value) <= 0) {
         // Clear input if output is empty or 0
-        setRawInputAmount("");
+        setDisplayedInputAmount("");
         setInputUsdValue(ZERO_USD_DISPLAY);
         setIsLoadingQuote(false);
       }
@@ -985,7 +985,7 @@ export const SwapInputAndOutput = () => {
 
         if (outputFloat < MIN_BTC) {
           // Don't fetch quote if below minimum
-          setRawInputAmount("");
+          setDisplayedInputAmount("");
           setInputUsdValue(ZERO_USD_DISPLAY);
           setIsLoadingQuote(false);
           return;
@@ -1056,7 +1056,7 @@ export const SwapInputAndOutput = () => {
     } else {
       setInputBelowMinimum(true);
       setOutputAmount("");
-      setRawInputAmount(truncateAmount(adjustedInputAmount));
+      setDisplayedInputAmount(truncateAmount(adjustedInputAmount));
       setFullPrecisionInputAmount(adjustedInputAmount);
       setCowswapQuote(null);
       setRfqQuote(null);
@@ -1072,7 +1072,7 @@ export const SwapInputAndOutput = () => {
     // If ETH is selected, fetch gas data and adjust for gas costs
     if (selectedInputToken.ticker === "ETH") {
       try {
-        const response = await fetch(`/api/eth-gas?chainId=${evmConnectWalletChainId || 1}`);
+        const response = await fetch(`/api/eth-gas?chainId=${selectedInputToken.chainId}`);
         if (response.ok) {
           const data = await response.json();
           const maxFeePerGasHex = data.maxFeePerGas;
@@ -1080,8 +1080,8 @@ export const SwapInputAndOutput = () => {
           // Parse hex to BigInt
           const maxFeePerGas = BigInt(maxFeePerGasHex);
 
-          // Calculate gas cost: maxFeePerGas * 400000 (gas units)
-          const gasCostWei = maxFeePerGas * BigInt(400000);
+          // Calculate gas cost: maxFeePerGas * 60000 gas units (cowswap create order is ~56k)
+          const gasCostWei = maxFeePerGas * BigInt(1_250_000);
 
           // Convert wei to ETH
           const gasCostEth = formatUnits(gasCostWei, 18);
@@ -1114,7 +1114,7 @@ export const SwapInputAndOutput = () => {
     setFullPrecisionInputAmount(adjustedInputAmount);
 
     // Set the truncated balance as the displayed input amount
-    setRawInputAmount(truncateAmount(adjustedInputAmount));
+    setDisplayedInputAmount(truncateAmount(adjustedInputAmount));
     setLastEditedField("input");
     setHasStartedTyping(true);
 
@@ -1293,7 +1293,7 @@ export const SwapInputAndOutput = () => {
 
   // Reset values on mount and cleanup timers on unmount
   useEffect(() => {
-    setRawInputAmount("");
+    setDisplayedInputAmount("");
     setOutputAmount("");
     setInputUsdValue(ZERO_USD_DISPLAY);
     setOutputUsdValue(ZERO_USD_DISPLAY);
@@ -1314,7 +1314,7 @@ export const SwapInputAndOutput = () => {
       }
     };
   }, [
-    setRawInputAmount,
+    setDisplayedInputAmount,
     setOutputAmount,
     setInputUsdValue,
     setOutputUsdValue,
@@ -1386,7 +1386,13 @@ export const SwapInputAndOutput = () => {
   // Update USD values when prices or amounts change
   useEffect(() => {
     const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
-    const inputUsd = calculateUsdValue(rawInputAmount, inputTicker, ethPrice, btcPrice, erc20Price);
+    const inputUsd = calculateUsdValue(
+      displayedInputAmount,
+      inputTicker,
+      ethPrice,
+      btcPrice,
+      erc20Price
+    );
     setInputUsdValue(inputUsd);
 
     const outputTicker = isSwappingForBTC ? "BTC" : selectedOutputToken?.ticker || "ETH";
@@ -1396,7 +1402,7 @@ export const SwapInputAndOutput = () => {
     erc20Price,
     btcPrice,
     ethPrice,
-    rawInputAmount,
+    displayedInputAmount,
     outputAmount,
     isSwappingForBTC,
     selectedInputToken,
@@ -1426,8 +1432,8 @@ export const SwapInputAndOutput = () => {
     // Only set up auto-refresh if conditions are met and we have a quote
     if (
       isSwappingForBTC &&
-      rawInputAmount &&
-      parseFloat(rawInputAmount) > 0 &&
+      displayedInputAmount &&
+      parseFloat(displayedInputAmount) > 0 &&
       userEvmAccountAddress &&
       rfqQuote
     ) {
@@ -1459,7 +1465,7 @@ export const SwapInputAndOutput = () => {
     };
   }, [
     isSwappingForBTC,
-    rawInputAmount,
+    displayedInputAmount,
     userEvmAccountAddress,
     rfqQuote,
     fetchERC20ToBTCQuote,
@@ -1519,8 +1525,8 @@ export const SwapInputAndOutput = () => {
         selectedInputToken.ticker === "ETH" ||
         selectedInputToken.ticker === "cbBTC" ||
         !userEvmAccountAddress ||
-        !rawInputAmount ||
-        parseFloat(rawInputAmount) <= 0 ||
+        !displayedInputAmount ||
+        parseFloat(displayedInputAmount) <= 0 ||
         !cowswapClient
       ) {
         return;
@@ -1536,7 +1542,7 @@ export const SwapInputAndOutput = () => {
           chainId,
         });
 
-        const requiredAmount = parseUnits(rawInputAmount, selectedInputToken.decimals);
+        const requiredAmount = parseUnits(displayedInputAmount, selectedInputToken.decimals);
         console.log("CowSwap allowance:", currentAllowance, "required:", requiredAmount);
 
         // Set approval state based on whether allowance is sufficient
@@ -1559,8 +1565,8 @@ export const SwapInputAndOutput = () => {
 
     // Set up debounced allowance check (250ms delay)
     if (
-      rawInputAmount &&
-      parseFloat(rawInputAmount) > 0 &&
+      displayedInputAmount &&
+      parseFloat(displayedInputAmount) > 0 &&
       selectedInputToken.address &&
       selectedInputToken.ticker !== "ETH" &&
       selectedInputToken.ticker !== "cbBTC" &&
@@ -1581,7 +1587,7 @@ export const SwapInputAndOutput = () => {
     selectedInputToken,
     userEvmAccountAddress,
     setApprovalState,
-    rawInputAmount,
+    displayedInputAmount,
     cowswapClient,
     evmConnectWalletChainId,
   ]);
@@ -1625,7 +1631,7 @@ export const SwapInputAndOutput = () => {
     setApprovalState(ApprovalState.UNKNOWN);
 
     // Clear both input and output amounts to force fresh quote
-    setRawInputAmount("");
+    setDisplayedInputAmount("");
     setOutputAmount("");
     setFullPrecisionInputAmount(null);
   }, [
@@ -1634,19 +1640,19 @@ export const SwapInputAndOutput = () => {
     setRfqQuote,
     setFeeOverview,
     setApprovalState,
-    setRawInputAmount,
+    setDisplayedInputAmount,
     setOutputAmount,
     setFullPrecisionInputAmount,
   ]);
 
   // Check if input amount exceeds user balance
   useEffect(() => {
-    if (!rawInputAmount || !currentInputBalance || parseFloat(rawInputAmount) <= 0) {
+    if (!displayedInputAmount || !currentInputBalance || parseFloat(displayedInputAmount) <= 0) {
       setExceedsUserBalance(false);
       return;
     }
 
-    const inputFloat = parseFloat(rawInputAmount);
+    const inputFloat = parseFloat(displayedInputAmount);
     const balanceFloat = parseFloat(currentInputBalance);
 
     // For ETH, check if input exceeds balance minus gas cost
@@ -1661,7 +1667,7 @@ export const SwapInputAndOutput = () => {
           if (response.ok) {
             const data = await response.json();
             const maxFeePerGas = BigInt(data.maxFeePerGas);
-            const gasCostWei = maxFeePerGas * BigInt(400000);
+            const gasCostWei = maxFeePerGas * BigInt(1_250_000);
             const gasCostEth = parseFloat(formatUnits(gasCostWei, 18));
             const availableBalance = balanceFloat - gasCostEth;
 
@@ -1734,7 +1740,7 @@ export const SwapInputAndOutput = () => {
       });
     }
   }, [
-    rawInputAmount,
+    displayedInputAmount,
     currentInputBalance,
     isSwappingForBTC,
     liquidity.maxBTCLiquidityInUsd,
@@ -1758,8 +1764,8 @@ export const SwapInputAndOutput = () => {
         //     return;
         //   }
         //   // Check input (ERC20 sent) - convert to USD and compare with MM liquidity in USD
-        if (rawInputAmount && parseFloat(rawInputAmount) > 0 && currentInputBalance) {
-          const inputFloat = parseFloat(rawInputAmount);
+        if (displayedInputAmount && parseFloat(displayedInputAmount) > 0 && currentInputBalance) {
+          const inputFloat = parseFloat(displayedInputAmount);
           // If user has more than MM liquidity (in terms of what they can swap)
           // and they're trying to swap more than MM liquidity, show the error
           let price: number | null = null;
@@ -1809,7 +1815,7 @@ export const SwapInputAndOutput = () => {
       setExceedsAvailableBTCLiquidity(false);
     }
   }, [
-    rawInputAmount,
+    displayedInputAmount,
     outputAmount,
     lastEditedField,
     isSwappingForBTC,
@@ -1832,7 +1838,7 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
-    if (!rawInputAmount || parseFloat(rawInputAmount) <= 0) {
+    if (!displayedInputAmount || parseFloat(displayedInputAmount) <= 0) {
       setExceedsAvailableCBBTCLiquidity(false);
       return;
     }
@@ -1850,7 +1856,7 @@ export const SwapInputAndOutput = () => {
       return;
     }
 
-    const inputFloat = parseFloat(rawInputAmount);
+    const inputFloat = parseFloat(displayedInputAmount);
 
     // BTC -> cbBTC: Check if input BTC exceeds maxCbBTCLiquidity
     const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
@@ -1867,7 +1873,7 @@ export const SwapInputAndOutput = () => {
       setExceedsAvailableCBBTCLiquidity(false);
     }
   }, [
-    rawInputAmount,
+    displayedInputAmount,
     isSwappingForBTC,
     liquidity.maxCbBTCLiquidity,
     exceedsUserBalance,
@@ -1908,8 +1914,8 @@ export const SwapInputAndOutput = () => {
   // Only show this error when user is editing the INPUT field
   useEffect(() => {
     // Clear error if input is empty or zero
-    const inputFloat = parseFloat(rawInputAmount);
-    if (!rawInputAmount || !Number.isFinite(inputFloat) || inputFloat <= 0) {
+    const inputFloat = parseFloat(displayedInputAmount);
+    if (!displayedInputAmount || !Number.isFinite(inputFloat) || inputFloat <= 0) {
       setInputBelowMinimum(false);
       return;
     }
@@ -1973,7 +1979,7 @@ export const SwapInputAndOutput = () => {
     setInputBelowMinimum(false);
   }, [
     outputAmount,
-    rawInputAmount,
+    displayedInputAmount,
     exceedsUserBalance,
     isSwappingForBTC,
     selectedInputToken,
@@ -2032,7 +2038,7 @@ export const SwapInputAndOutput = () => {
     }
 
     // For ERC20 -> BTC exact input
-    if (refetchERC20toBTCQuote && isSwappingForBTC && btcPrice && rawInputAmount && price) {
+    if (refetchERC20toBTCQuote && isSwappingForBTC && btcPrice && displayedInputAmount && price) {
       // Determine which price we need based on selected token
       console.log("Auto-refetching ERC20->BTC quote after prices loaded");
       setRefetchERC20toBTCQuote(false);
@@ -2069,7 +2075,7 @@ export const SwapInputAndOutput = () => {
 
         // Determine mode and amount based on which field was last edited
         const mode = lastEditedField === "input" ? "ExactInput" : "ExactOutput";
-        const amount = mode === "ExactInput" ? rawInputAmount : outputAmount;
+        const amount = mode === "ExactInput" ? displayedInputAmount : outputAmount;
 
         if (amount && parseFloat(amount) > 0) {
           fetchBTCtoERC20Quote(amount, mode);
@@ -2084,7 +2090,7 @@ export const SwapInputAndOutput = () => {
     refetchERC20toBTCQuoteExactOutput,
     refetchBTCtoERC20Quote,
     isSwappingForBTC,
-    rawInputAmount,
+    displayedInputAmount,
     outputAmount,
     lastEditedField,
     selectedInputToken,
@@ -2119,7 +2125,7 @@ export const SwapInputAndOutput = () => {
   // console.log("[sameer] outputBelowMinimum", outputBelowMinimum);
   // console.log("[sameer] isLoadingQuote", isLoadingQuote);
   // console.log("[sameer] getQuoteForInputRef.current", getQuoteForInputRef.current);
-  // console.log("[sameer] rawInputAmount", rawInputAmount);
+  // console.log("[sameer] displayedInputAmount", displayedInputAmount);
 
   return (
     <Flex w="100%" direction="column">
@@ -2137,7 +2143,7 @@ export const SwapInputAndOutput = () => {
           <Flex direction="column" py="12px" px="8px">
             <Flex align="center" justify="space-between">
               <Text
-                color={!rawInputAmount ? colors.offWhite : colors.textGray}
+                color={!displayedInputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
                 letterSpacing="-1px"
                 fontWeight="normal"
@@ -2154,7 +2160,7 @@ export const SwapInputAndOutput = () => {
               </Flex>
             ) : (
               <Input
-                value={rawInputAmount}
+                value={displayedInputAmount}
                 onChange={handleInputChange}
                 onKeyDown={handleInputKeyDown}
                 fontFamily="Aux"
@@ -2196,7 +2202,7 @@ export const SwapInputAndOutput = () => {
               {exceedsUserBalance &&
               selectedInputToken.ticker === "ETH" &&
               currentInputBalance &&
-              parseFloat(rawInputAmount) <= parseFloat(currentInputBalance) ? (
+              parseFloat(displayedInputAmount) <= parseFloat(currentInputBalance) ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -2326,7 +2332,7 @@ export const SwapInputAndOutput = () => {
                 <Flex direction="row" align="center" gap="6px" mt="6px">
                   {isMobile && exceedsUserBalance ? undefined : (
                     <Text
-                      color={!rawInputAmount ? colors.offWhite : colors.textGray}
+                      color={!displayedInputAmount ? colors.offWhite : colors.textGray}
                       fontSize="14px"
                       letterSpacing={
                         isLoadingQuote && !getQuoteForInputRef.current ? "-4px" : "-1px"
@@ -2643,7 +2649,7 @@ export const SwapInputAndOutput = () => {
           >
             {calculateExchangeRate(
               isSwappingForBTC,
-              rawInputAmount,
+              displayedInputAmount,
               outputAmount,
               ethPrice,
               btcPrice,

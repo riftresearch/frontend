@@ -16,7 +16,7 @@ function randomHex(len: number) {
 //   for (let i = 0; i < count; i++) {
 //     const minutesAgo = i * 7 + Math.floor(Math.random() * 5); // staggered
 //     // Generate a random USD amount between $20 and $10,000,000
-//     const usd = Math.floor(Math.random() * (10_000_000 - 20 + 1)) + 20;
+//     const usd = Math.floor(Math.random() * (1_250_000 - 20 + 1)) + 20;
 //     const btc = usd / btcPriceUsd;
 //     const riftFeeBtc = btc * 0.01; // 1% fee
 //     const networkFeeUsd = Number((1 + Math.random() * 5).toFixed(2));

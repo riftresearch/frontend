@@ -54,7 +54,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setSelectedInputToken,
     setSelectedOutputToken,
     isSwappingForBTC,
-    setRawInputAmount,
+    setDisplayedInputAmount,
     setOutputAmount,
     userTokensByChain,
     setErc20Price,
@@ -389,7 +389,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       }
     }
     if (isSwappingForBTC) {
-      setRawInputAmount("");
+      setDisplayedInputAmount("");
       setOutputAmount("");
       setInputUsdValue(ZERO_USD_DISPLAY);
     } else {
