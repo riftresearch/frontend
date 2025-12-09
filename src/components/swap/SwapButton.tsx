@@ -92,7 +92,7 @@ export const SwapButton = () => {
     setTransactionConfirmed,
     selectedInputToken,
     evmConnectWalletChainId,
-    rawInputAmount,
+    displayedInputAmount,
     fullPrecisionInputAmount,
     outputAmount,
     isSwappingForBTC,
@@ -163,9 +163,9 @@ export const SwapButton = () => {
 
   // Check if all required fields are filled
   const allFieldsFilled =
-    rawInputAmount &&
+    displayedInputAmount &&
     outputAmount &&
-    parseFloat(rawInputAmount) > 0 &&
+    parseFloat(displayedInputAmount) > 0 &&
     parseFloat(outputAmount) > 0 &&
     payoutAddress &&
     addressValidation.isValid;
@@ -225,7 +225,7 @@ export const SwapButton = () => {
     try {
       // Step 1: Create OTC swap to get deposit address
       // Use full precision amount if available, otherwise use displayed amount
-      const amountToTransfer = fullPrecisionInputAmount || rawInputAmount;
+      const amountToTransfer = fullPrecisionInputAmount || displayedInputAmount;
       console.log("amountToTransfer", amountToTransfer);
 
       const startAssetMetadata = {
@@ -311,7 +311,7 @@ export const SwapButton = () => {
     payoutAddress,
     fullPrecisionInputAmount,
     setSwapResponse,
-    rawInputAmount,
+    displayedInputAmount,
     evmConnectWalletChainId,
     writeContract,
   ]);
@@ -371,7 +371,7 @@ export const SwapButton = () => {
       } else {
         // Step 1: Create OTC swap to get deposit address
         // Use full precision amount if available, otherwise use displayed amount
-        const amountForMetadata = fullPrecisionInputAmount || rawInputAmount;
+        const amountForMetadata = fullPrecisionInputAmount || displayedInputAmount;
 
         const startAssetMetadata = {
           ticker: selectedInputToken.ticker,
@@ -426,7 +426,7 @@ export const SwapButton = () => {
 
       // Calculate dynamic slippage based on notional USD value
       let usdValue = 0;
-      const inputAmount = parseFloat(rawInputAmount || "0");
+      const inputAmount = parseFloat(displayedInputAmount || "0");
       if (selectedInputToken.ticker === "ETH" && ethPrice) {
         usdValue = inputAmount * ethPrice;
       } else if (selectedInputToken.ticker === "cbBTC" && btcPrice) {
@@ -500,7 +500,7 @@ export const SwapButton = () => {
     selectedInputToken,
     payoutAddress,
     setSwapResponse,
-    rawInputAmount,
+    displayedInputAmount,
     evmConnectWalletChainId,
     fullPrecisionInputAmount,
     cowswapClient,
@@ -607,9 +607,9 @@ export const SwapButton = () => {
   const handleSwapButtonClick = useCallback(async () => {
     // Check input amount
     if (
-      !rawInputAmount ||
+      !displayedInputAmount ||
       !outputAmount ||
-      parseFloat(rawInputAmount) <= 0 ||
+      parseFloat(displayedInputAmount) <= 0 ||
       parseFloat(outputAmount) <= 0
     ) {
       toastInfo({
@@ -665,7 +665,7 @@ export const SwapButton = () => {
     addressValidation,
     isSwappingForBTC,
     isWalletConnected,
-    rawInputAmount,
+    displayedInputAmount,
     outputAmount,
     isNativeETH,
     isCbBTC,
