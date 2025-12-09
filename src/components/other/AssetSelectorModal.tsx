@@ -37,10 +37,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [popularTokens, setPopularTokens] = useState<TokenData[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Wagmi hooks for chain switching
   const { isConnected, address } = useAccount();
@@ -78,23 +76,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       setSearchQuery("");
     }
   }, [isOpen]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    if (isDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isDropdownOpen]);
 
   // Debounce search input
   useEffect(() => {
@@ -404,9 +385,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   };
 
   const handleNetworkSelect = async (network: Network) => {
-    // Close dropdown
-    setIsDropdownOpen(false);
-
     // Update selected network (no wallet switching for "all")
     setSelectedNetwork(network);
 
@@ -440,687 +418,681 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         justifyContent="center"
         onClick={onClose}
       >
-        <Box
-          bg="#131313"
-          borderRadius="30px"
-          py="24px"
-          maxW="520px"
-          w="90%"
-          maxH="670px"
-          overflowY="auto"
-          border="2px solid #232323"
-          onClick={(e) => e.stopPropagation()}
-          css={{
-            "&::-webkit-scrollbar": {
-              display: "none",
-            },
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
-          }}
-        >
-          {/* Header */}
-          <Flex justify="space-between" align="center" mb="12px" mt="-2px" mx="24px">
-            <Text
-              fontSize="16px"
-              fontFamily={FONT_FAMILIES.NOSTROMO}
-              color={colors.offWhite}
-              fontWeight="bold"
-            >
-              {isSwappingForBTC ? "Select token to send" : "Select token to receive"}
-            </Text>
+        <Flex gap="20px" align="stretch">
+          {/* Chain Selector Panel - only show when swapping FOR BTC */}
+          {isSwappingForBTC && !isMobile && (
             <Box
-              cursor="pointer"
-              onClick={onClose}
-              mt="-2px"
-              fontSize="24px"
-              color={colors.textGray}
-              _hover={{ color: colors.offWhite }}
+              bg="#131313"
+              borderRadius="30px"
+              py="24px"
+              w="200px"
+              maxH="670px"
+              border="2px solid #232323"
+              onClick={(e) => e.stopPropagation()}
             >
-              ×
-            </Box>
-          </Flex>
-
-          {/* Search Bar with Network Dropdown - only show when swapping FOR BTC */}
-          {isSwappingForBTC && (
-            <Box position="relative" mb="18px" mx="24px">
-              {/* Search Icon */}
-              <Box
-                position="absolute"
-                left="18px"
-                top="50%"
-                transform="translateY(-50%)"
-                pointerEvents="none"
-                zIndex={1}
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+              {/* Chain Selector Header */}
+              <Box mx="20px" mb="16px">
+                <Text
+                  fontSize="14px"
+                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                  color={colors.textGray}
+                  fontWeight="bold"
+                  textTransform="uppercase"
+                  letterSpacing="0.5px"
                 >
-                  <circle cx="11" cy="11" r="6" stroke={colors.textGray} strokeWidth="2" />
-                  <path
-                    d="M20 20L17 17"
-                    stroke={colors.textGray}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                  Network
+                </Text>
               </Box>
 
-              {/* Search Input */}
-              <Input
-                ref={searchInputRef}
-                placeholder="Search tokens"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                bg="#212121"
-                borderRadius="30px"
-                pl="48px"
-                pr={isMobile ? "30px" : "130px"}
-                py="12px"
-                letterSpacing="-0.9px"
-                border="none"
-                h="50px"
-                fontSize="16px"
-                fontFamily={FONT_FAMILIES.AUX_MONO}
-                color={colors.offWhite}
-                _placeholder={{ color: colors.textGray }}
-                _focus={{
-                  border: "none",
-                  boxShadow: "none",
-                  outline: "none",
-                }}
-                _hover={{
-                  border: "none",
-                  boxShadow: "none",
-                  outline: "none",
-                }}
-              />
-
-              {/* Network Dropdown */}
-              <Box
-                ref={dropdownRef}
-                position="absolute"
-                right="8px"
-                top="50%"
-                transform="translateY(-50%)"
-                zIndex={2}
-              >
-                {/* Dropdown Trigger */}
+              {/* Chain Options */}
+              <Flex direction="column" gap="4px" mx="12px">
+                {/* All Networks */}
                 <Flex
                   align="center"
-                  gap="6px"
+                  gap="12px"
                   px="12px"
-                  py="6px"
-                  bg="#131313"
-                  borderRadius="20px"
+                  py="12px"
                   cursor="pointer"
+                  borderRadius="12px"
+                  bg={selectedNetwork === Network.ALL ? "#1f1f1f" : "transparent"}
                   _hover={{ bg: "#1f1f1f" }}
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  onClick={() => handleNetworkSelect(Network.ALL)}
                   transition="background 0.15s ease"
                 >
+                  <Box
+                    w="24px"
+                    h="24px"
+                    borderRadius="50%"
+                    bg="#2a2a2a"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    <Text fontSize="10px" color={colors.offWhite} fontWeight="bold">
+                      ∀
+                    </Text>
+                  </Box>
                   <Text
-                    fontSize="13px"
+                    fontSize="14px"
                     fontFamily={FONT_FAMILIES.NOSTROMO}
                     color={colors.offWhite}
                     fontWeight="bold"
-                    textTransform="uppercase"
                   >
-                    {selectedNetwork === Network.ALL
-                      ? "All"
-                      : selectedNetwork === Network.ETHEREUM
-                        ? "ETH"
-                        : "Base"}
+                    All
                   </Text>
-                  <Box
-                    transform={isDropdownOpen ? "rotate(180deg)" : "rotate(0deg)"}
-                    transition="transform 0.2s ease"
-                  >
-                    <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
-                      <path
-                        d="M1 1L6 6L11 1"
-                        stroke={colors.textGray}
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </Box>
                 </Flex>
 
-                {/* Dropdown Menu */}
-                {isDropdownOpen && (
+                {/* Ethereum */}
+                <Flex
+                  align="center"
+                  gap="12px"
+                  px="12px"
+                  py="12px"
+                  cursor="pointer"
+                  borderRadius="12px"
+                  bg={selectedNetwork === Network.ETHEREUM ? "#1f1f1f" : "transparent"}
+                  _hover={{ bg: "#1f1f1f" }}
+                  onClick={() => handleNetworkSelect(Network.ETHEREUM)}
+                  transition="background 0.15s ease"
+                >
                   <Box
-                    position="absolute"
-                    top="calc(100% + 8px)"
-                    right="0"
-                    bg="#212121"
-                    borderRadius="12px"
-                    minW="170px"
-                    py="6px"
-                    boxShadow="0 4px 12px rgba(0, 0, 0, 0.4)"
-                    border="1px solid #2a2a2a"
+                    w="24px"
+                    h="24px"
+                    borderRadius="50%"
+                    bg="#1a1a2e"
+                    border="2px solid #131313"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    overflow="hidden"
                   >
-                    {/* All Networks */}
-                    <Flex
-                      align="center"
-                      gap="10px"
-                      px="14px"
-                      py="10px"
-                      cursor="pointer"
-                      bg={selectedNetwork === Network.ALL ? "#2a2a2a" : "transparent"}
-                      _hover={{ bg: "#262626" }}
-                      onClick={() => handleNetworkSelect(Network.ALL)}
-                      transition="background 0.15s ease"
-                    >
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.NOSTROMO}
-                        color={colors.offWhite}
-                        fontWeight="bold"
-                      >
-                        All Networks
-                      </Text>
-                    </Flex>
-
-                    {/* Ethereum */}
-                    <Flex
-                      align="center"
-                      gap="10px"
-                      px="14px"
-                      py="10px"
-                      cursor="pointer"
-                      bg={selectedNetwork === Network.ETHEREUM ? "#2a2a2a" : "transparent"}
-                      _hover={{ bg: "#262626" }}
-                      onClick={() => handleNetworkSelect(Network.ETHEREUM)}
-                      transition="background 0.15s ease"
-                    >
-                      <Box
-                        w="18px"
-                        h="18px"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <Image
-                          src="/images/assets/icons/ETH.svg"
-                          w="18px"
-                          h="18px"
-                          alt="Ethereum"
-                          objectFit="contain"
-                        />
-                      </Box>
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.NOSTROMO}
-                        color={colors.offWhite}
-                        fontWeight="bold"
-                      >
-                        Ethereum
-                      </Text>
-                    </Flex>
-
-                    {/* Base */}
-                    <Flex
-                      align="center"
-                      gap="10px"
-                      px="14px"
-                      py="10px"
-                      cursor="pointer"
-                      bg={selectedNetwork === Network.BASE ? "#2a2a2a" : "transparent"}
-                      _hover={{ bg: "#262626" }}
-                      onClick={() => handleNetworkSelect(Network.BASE)}
-                      transition="background 0.15s ease"
-                    >
-                      <Box
-                        w="18px"
-                        h="18px"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <BASE_LOGO width="18" height="18" />
-                      </Box>
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.NOSTROMO}
-                        color={colors.offWhite}
-                        fontWeight="bold"
-                      >
-                        Base
-                      </Text>
-                    </Flex>
+                    <Image
+                      src="/images/assets/icons/ETH.svg"
+                      w="14px"
+                      h="14px"
+                      alt="Ethereum"
+                      objectFit="contain"
+                    />
                   </Box>
-                )}
-              </Box>
+                  <Text
+                    fontSize="14px"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    color={colors.offWhite}
+                    fontWeight="bold"
+                  >
+                    Ethereum
+                  </Text>
+                </Flex>
+
+                {/* Base */}
+                <Flex
+                  align="center"
+                  gap="12px"
+                  px="12px"
+                  py="12px"
+                  cursor="pointer"
+                  borderRadius="12px"
+                  bg={selectedNetwork === Network.BASE ? "#1f1f1f" : "transparent"}
+                  _hover={{ bg: "#1f1f1f" }}
+                  onClick={() => handleNetworkSelect(Network.BASE)}
+                  transition="background 0.15s ease"
+                >
+                  <Box
+                    w="24px"
+                    h="24px"
+                    borderRadius="50%"
+                    bg="white"
+                    border="2px solid #131313"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    overflow="hidden"
+                  >
+                    <BASE_LOGO width="14" height="14" />
+                  </Box>
+                  <Text
+                    fontSize="14px"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    color={colors.offWhite}
+                    fontWeight="bold"
+                  >
+                    Base
+                  </Text>
+                </Flex>
+              </Flex>
             </Box>
           )}
 
-          <Flex direction="column" gap="4px" mb="20px">
-            {/* Loading state */}
-            {isLoading ? (
-              <Box mx="12px">
-                <Flex
-                  align="center"
-                  justify="center"
-                  h="60px"
-                  borderRadius="12px"
-                  bg="#131313"
-                  px="12px"
-                >
-                  <Text fontSize="14px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray}>
-                    Loading tokens...
-                  </Text>
-                </Flex>
+          {/* Main Asset Selector Modal */}
+          <Box
+            bg="#131313"
+            borderRadius="30px"
+            py="24px"
+            maxW="520px"
+            w={isMobile ? "90vw" : "520px"}
+            maxH="670px"
+            overflowY="auto"
+            border="2px solid #232323"
+            onClick={(e) => e.stopPropagation()}
+            css={{
+              "&::-webkit-scrollbar": {
+                display: "none",
+              },
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
+            {/* Header */}
+            <Flex justify="space-between" align="center" mb="12px" mt="-2px" mx="24px">
+              <Text
+                fontSize="16px"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                color={colors.offWhite}
+                fontWeight="bold"
+              >
+                {isSwappingForBTC ? "Select token to send" : "Select token to receive"}
+              </Text>
+              <Box
+                cursor="pointer"
+                onClick={onClose}
+                mt="-2px"
+                fontSize="24px"
+                color={colors.textGray}
+                _hover={{ color: colors.offWhite }}
+              >
+                ×
               </Box>
-            ) : searchResults.length === 0 && debouncedQuery.length > 0 ? (
-              <Box mx="12px">
-                <Flex
-                  direction="column"
-                  align="center"
-                  justify="center"
-                  h="120px"
-                  borderRadius="12px"
-                  bg="#131313"
-                  px="20px"
-                  gap="8px"
-                >
-                  <Text
-                    fontSize="16px"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    color={colors.offWhite}
-                    fontWeight="bold"
-                    textAlign="center"
-                  >
-                    No results found
-                  </Text>
-                  <Text
-                    fontSize="14px"
-                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                    color={colors.textGray}
-                    textAlign="center"
-                    lineHeight="1.5"
-                  >
-                    Try searching by token name or paste a contract address
-                  </Text>
-                </Flex>
-              </Box>
-            ) : (
-              <>
-                {/* Your Tokens Section - only show if wallet connected and has tokens */}
-                {isConnected && searchResults.length > 0 && (
-                  <>
-                    <Box mx="24px" mb="8px" mt="4px">
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.NOSTROMO}
-                        color={colors.textGray}
-                        fontWeight="bold"
-                        textTransform="uppercase"
-                        letterSpacing="0.5px"
-                      >
-                        Your Tokens
-                      </Text>
-                    </Box>
-                    {searchResults.map((token, index) => (
-                      <Box
-                        key={`user-${token.address || token.ticker}-${index}`}
-                        mx="12px"
-                        cursor="pointer"
-                        onClick={() => handleAssetSelect(token.ticker, token)}
-                      >
-                        <Flex
-                          align="center"
-                          py="12px"
-                          px="12px"
-                          letterSpacing="-0.6px"
-                          borderRadius="12px"
-                          bg="#131313"
-                          transition="background 0.15s ease"
-                          _hover={{ bg: "#1f1f1f" }}
-                        >
-                          {/* Token Icon with Network Badge */}
-                          <Box position="relative" mr="12px">
-                            <Flex
-                              w="40px"
-                              h="40px"
-                              borderRadius="50%"
-                              bg="#404040"
-                              align="center"
-                              justify="center"
-                              overflow="hidden"
-                            >
-                              <Image
-                                src={token.icon}
-                                w="100%"
-                                h="100%"
-                                alt={`${token.ticker} icon`}
-                                objectFit="cover"
-                              />
-                              <Text
-                                fontSize="12px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                display="none"
-                              >
-                                {token.ticker}
-                              </Text>
-                            </Flex>
+            </Flex>
 
-                            {/* Network Badge */}
-                            {token.chainId && (
-                              <Box
-                                position="absolute"
-                                bottom="-2px"
-                                right="-2px"
-                                w="20px"
-                                h="20px"
+            {/* Search Bar - only show when swapping FOR BTC */}
+            {isSwappingForBTC && (
+              <Box position="relative" mb="18px" mx="24px">
+                {/* Search Icon */}
+                <Box
+                  position="absolute"
+                  left="18px"
+                  top="50%"
+                  transform="translateY(-50%)"
+                  pointerEvents="none"
+                  zIndex={1}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <circle cx="11" cy="11" r="6" stroke={colors.textGray} strokeWidth="2" />
+                    <path
+                      d="M20 20L17 17"
+                      stroke={colors.textGray}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </Box>
+
+                {/* Search Input */}
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Search tokens"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  bg="#212121"
+                  borderRadius="30px"
+                  pl="48px"
+                  pr="20px"
+                  py="12px"
+                  letterSpacing="-0.9px"
+                  border="none"
+                  h="50px"
+                  fontSize="16px"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  color={colors.offWhite}
+                  _placeholder={{ color: colors.textGray }}
+                  _focus={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                  _hover={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                />
+              </Box>
+            )}
+
+            <Flex direction="column" gap="4px" mb="20px">
+              {/* Loading state */}
+              {isLoading ? (
+                <Box mx="12px">
+                  <Flex
+                    align="center"
+                    justify="center"
+                    h="60px"
+                    borderRadius="12px"
+                    bg="#131313"
+                    px="12px"
+                  >
+                    <Text
+                      fontSize="14px"
+                      fontFamily={FONT_FAMILIES.AUX_MONO}
+                      color={colors.textGray}
+                    >
+                      Loading tokens...
+                    </Text>
+                  </Flex>
+                </Box>
+              ) : searchResults.length === 0 && debouncedQuery.length > 0 ? (
+                <Box mx="12px">
+                  <Flex
+                    direction="column"
+                    align="center"
+                    justify="center"
+                    h="120px"
+                    borderRadius="12px"
+                    bg="#131313"
+                    px="20px"
+                    gap="8px"
+                  >
+                    <Text
+                      fontSize="16px"
+                      fontFamily={FONT_FAMILIES.NOSTROMO}
+                      color={colors.offWhite}
+                      fontWeight="bold"
+                      textAlign="center"
+                    >
+                      No results found
+                    </Text>
+                    <Text
+                      fontSize="14px"
+                      fontFamily={FONT_FAMILIES.AUX_MONO}
+                      color={colors.textGray}
+                      textAlign="center"
+                      lineHeight="1.5"
+                    >
+                      Try searching by token name or paste a contract address
+                    </Text>
+                  </Flex>
+                </Box>
+              ) : (
+                <>
+                  {/* Your Tokens Section - only show if wallet connected and has tokens */}
+                  {isConnected && searchResults.length > 0 && (
+                    <>
+                      <Box mx="24px" mb="8px" mt="4px">
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.NOSTROMO}
+                          color={colors.textGray}
+                          fontWeight="bold"
+                          textTransform="uppercase"
+                          letterSpacing="0.5px"
+                        >
+                          Your Tokens
+                        </Text>
+                      </Box>
+                      {searchResults.map((token, index) => (
+                        <Box
+                          key={`user-${token.address || token.ticker}-${index}`}
+                          mx="12px"
+                          cursor="pointer"
+                          onClick={() => handleAssetSelect(token.ticker, token)}
+                        >
+                          <Flex
+                            align="center"
+                            py="12px"
+                            px="12px"
+                            letterSpacing="-0.6px"
+                            borderRadius="12px"
+                            bg="#131313"
+                            transition="background 0.15s ease"
+                            _hover={{ bg: "#1f1f1f" }}
+                          >
+                            {/* Token Icon with Network Badge */}
+                            <Box position="relative" mr="12px">
+                              <Flex
+                                w="40px"
+                                h="40px"
                                 borderRadius="50%"
-                                bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                border="2px solid #131313"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
+                                bg="#404040"
+                                align="center"
+                                justify="center"
                                 overflow="hidden"
                               >
-                                <NetworkBadge chainId={token.chainId} />
-                              </Box>
-                            )}
-                          </Box>
-
-                          {/* Token Info */}
-                          <Flex direction="column" flex="1">
-                            <Text
-                              fontSize="16px"
-                              fontFamily={FONT_FAMILIES.NOSTROMO}
-                              color={colors.offWhite}
-                              fontWeight="bold"
-                            >
-                              {token.name}
-                            </Text>
-                            <Flex align="center" gap="8px">
-                              <Text
-                                fontSize="14px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                              >
-                                {token.ticker}
-                              </Text>
-                              {!isMobile && token.address && (
+                                <Image
+                                  src={token.icon}
+                                  w="100%"
+                                  h="100%"
+                                  alt={`${token.ticker} icon`}
+                                  objectFit="cover"
+                                />
                                 <Text
-                                  fontSize="14px"
+                                  fontSize="12px"
                                   fontFamily={FONT_FAMILIES.AUX_MONO}
-                                  color={colors.darkerGray}
+                                  color={colors.offWhite}
+                                  display="none"
                                 >
-                                  {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                                  {token.ticker}
                                 </Text>
-                              )}
-                            </Flex>
-                          </Flex>
+                              </Flex>
 
-                          {/* Balance Info - show for wallet tokens with balance > 0 */}
-                          {isConnected && token.balance !== "0" && (
-                            <Flex direction="column" align="flex-end">
+                              {/* Network Badge */}
+                              {token.chainId && (
+                                <Box
+                                  position="absolute"
+                                  bottom="-2px"
+                                  right="-2px"
+                                  w="20px"
+                                  h="20px"
+                                  borderRadius="50%"
+                                  bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
+                                  border="2px solid #131313"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  overflow="hidden"
+                                >
+                                  <NetworkBadge chainId={token.chainId} />
+                                </Box>
+                              )}
+                            </Box>
+
+                            {/* Token Info */}
+                            <Flex direction="column" flex="1">
                               <Text
                                 fontSize="16px"
                                 fontFamily={FONT_FAMILIES.NOSTROMO}
                                 color={colors.offWhite}
                                 fontWeight="bold"
                               >
-                                {formatUsdValue(token.usdValue)}
+                                {token.name}
                               </Text>
-                              <Text
-                                fontSize="14px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                              >
-                                {token.balance.slice(0, 9)}
-                              </Text>
-                            </Flex>
-                          )}
-                        </Flex>
-                      </Box>
-                    ))}
-                  </>
-                )}
-
-                {/* Popular Section - show if wallet connected and there are popular tokens to display */}
-                {isConnected && popularTokens.length > 0 && (
-                  <>
-                    <Box mx="24px" mb="8px" mt={searchResults.length > 0 ? "16px" : "4px"}>
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.NOSTROMO}
-                        color={colors.textGray}
-                        fontWeight="bold"
-                        textTransform="uppercase"
-                        letterSpacing="0.5px"
-                      >
-                        Popular
-                      </Text>
-                    </Box>
-                    {popularTokens.map((token, index) => (
-                      <Box
-                        key={`popular-${token.address || token.ticker}-${index}`}
-                        mx="12px"
-                        cursor="pointer"
-                        onClick={() => handleAssetSelect(token.ticker, token)}
-                      >
-                        <Flex
-                          align="center"
-                          py="12px"
-                          px="12px"
-                          letterSpacing="-0.6px"
-                          borderRadius="12px"
-                          bg="#131313"
-                          transition="background 0.15s ease"
-                          _hover={{ bg: "#1f1f1f" }}
-                        >
-                          {/* Token Icon with Network Badge */}
-                          <Box position="relative" mr="12px">
-                            <Flex
-                              w="40px"
-                              h="40px"
-                              borderRadius="50%"
-                              bg="#404040"
-                              align="center"
-                              justify="center"
-                              overflow="hidden"
-                            >
-                              <Image
-                                src={token.icon}
-                                w="100%"
-                                h="100%"
-                                alt={`${token.ticker} icon`}
-                                objectFit="cover"
-                              />
-                              <Text
-                                fontSize="12px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                display="none"
-                              >
-                                {token.ticker}
-                              </Text>
-                            </Flex>
-
-                            {/* Network Badge */}
-                            {token.chainId && (
-                              <Box
-                                position="absolute"
-                                bottom="-2px"
-                                right="-2px"
-                                w="20px"
-                                h="20px"
-                                borderRadius="50%"
-                                bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                border="2px solid #131313"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
-                                overflow="hidden"
-                              >
-                                <NetworkBadge chainId={token.chainId} />
-                              </Box>
-                            )}
-                          </Box>
-
-                          {/* Token Info */}
-                          <Flex direction="column" flex="1">
-                            <Text
-                              fontSize="16px"
-                              fontFamily={FONT_FAMILIES.NOSTROMO}
-                              color={colors.offWhite}
-                              fontWeight="bold"
-                            >
-                              {token.name}
-                            </Text>
-                            <Flex align="center" gap="8px">
-                              <Text
-                                fontSize="14px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                              >
-                                {token.ticker}
-                              </Text>
-                              {!isMobile && token.address && (
+                              <Flex align="center" gap="8px">
                                 <Text
                                   fontSize="14px"
                                   fontFamily={FONT_FAMILIES.AUX_MONO}
-                                  color={colors.darkerGray}
+                                  color={colors.textGray}
                                 >
-                                  {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                                  {token.ticker}
                                 </Text>
-                              )}
-                            </Flex>
-                          </Flex>
-                        </Flex>
-                      </Box>
-                    ))}
-                  </>
-                )}
-
-                {/* When not connected, show popular tokens with section header */}
-                {!isConnected && searchResults.length > 0 && (
-                  <>
-                    <Box mx="24px" mb="8px" mt="4px">
-                      <Text
-                        fontSize="13px"
-                        fontFamily={FONT_FAMILIES.NOSTROMO}
-                        color={colors.textGray}
-                        fontWeight="bold"
-                        textTransform="uppercase"
-                        letterSpacing="0.5px"
-                      >
-                        Popular
-                      </Text>
-                    </Box>
-                    {searchResults.map((token, index) => (
-                      <Box
-                        key={`${token.address || token.ticker}-${index}`}
-                        mx="12px"
-                        cursor="pointer"
-                        onClick={() => handleAssetSelect(token.ticker, token)}
-                      >
-                        <Flex
-                          align="center"
-                          py="12px"
-                          px="12px"
-                          letterSpacing="-0.6px"
-                          borderRadius="12px"
-                          bg="#131313"
-                          transition="background 0.15s ease"
-                          _hover={{ bg: "#1f1f1f" }}
-                        >
-                          {/* Token Icon with Network Badge */}
-                          <Box position="relative" mr="12px">
-                            <Flex
-                              w="40px"
-                              h="40px"
-                              borderRadius="50%"
-                              bg="#404040"
-                              align="center"
-                              justify="center"
-                              overflow="hidden"
-                            >
-                              <Image
-                                src={token.icon}
-                                w="100%"
-                                h="100%"
-                                alt={`${token.ticker} icon`}
-                                objectFit="cover"
-                              />
-                              <Text
-                                fontSize="12px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                display="none"
-                              >
-                                {token.ticker}
-                              </Text>
+                                {!isMobile && token.address && (
+                                  <Text
+                                    fontSize="14px"
+                                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                                    color={colors.darkerGray}
+                                  >
+                                    {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                                  </Text>
+                                )}
+                              </Flex>
                             </Flex>
 
-                            {/* Network Badge */}
-                            {token.chainId && (
-                              <Box
-                                position="absolute"
-                                bottom="-2px"
-                                right="-2px"
-                                w="20px"
-                                h="20px"
-                                borderRadius="50%"
-                                bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                border="2px solid #131313"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
-                                overflow="hidden"
-                              >
-                                <NetworkBadge chainId={token.chainId} />
-                              </Box>
-                            )}
-                          </Box>
-
-                          {/* Token Info */}
-                          <Flex direction="column" flex="1">
-                            <Text
-                              fontSize="16px"
-                              fontFamily={FONT_FAMILIES.NOSTROMO}
-                              color={colors.offWhite}
-                              fontWeight="bold"
-                            >
-                              {token.name}
-                            </Text>
-                            <Flex align="center" gap="8px">
-                              <Text
-                                fontSize="14px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                              >
-                                {token.ticker}
-                              </Text>
-                              {!isMobile && token.address && (
+                            {/* Balance Info - show for wallet tokens with balance > 0 */}
+                            {isConnected && token.balance !== "0" && (
+                              <Flex direction="column" align="flex-end">
+                                <Text
+                                  fontSize="16px"
+                                  fontFamily={FONT_FAMILIES.NOSTROMO}
+                                  color={colors.offWhite}
+                                  fontWeight="bold"
+                                >
+                                  {formatUsdValue(token.usdValue)}
+                                </Text>
                                 <Text
                                   fontSize="14px"
                                   fontFamily={FONT_FAMILIES.AUX_MONO}
-                                  color={colors.darkerGray}
+                                  color={colors.textGray}
                                 >
-                                  {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                                  {token.balance.slice(0, 9)}
                                 </Text>
+                              </Flex>
+                            )}
+                          </Flex>
+                        </Box>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Popular Section - show if wallet connected and there are popular tokens to display */}
+                  {isConnected && popularTokens.length > 0 && (
+                    <>
+                      <Box mx="24px" mb="8px" mt={searchResults.length > 0 ? "16px" : "4px"}>
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.NOSTROMO}
+                          color={colors.textGray}
+                          fontWeight="bold"
+                          textTransform="uppercase"
+                          letterSpacing="0.5px"
+                        >
+                          Popular
+                        </Text>
+                      </Box>
+                      {popularTokens.map((token, index) => (
+                        <Box
+                          key={`popular-${token.address || token.ticker}-${index}`}
+                          mx="12px"
+                          cursor="pointer"
+                          onClick={() => handleAssetSelect(token.ticker, token)}
+                        >
+                          <Flex
+                            align="center"
+                            py="12px"
+                            px="12px"
+                            letterSpacing="-0.6px"
+                            borderRadius="12px"
+                            bg="#131313"
+                            transition="background 0.15s ease"
+                            _hover={{ bg: "#1f1f1f" }}
+                          >
+                            {/* Token Icon with Network Badge */}
+                            <Box position="relative" mr="12px">
+                              <Flex
+                                w="40px"
+                                h="40px"
+                                borderRadius="50%"
+                                bg="#404040"
+                                align="center"
+                                justify="center"
+                                overflow="hidden"
+                              >
+                                <Image
+                                  src={token.icon}
+                                  w="100%"
+                                  h="100%"
+                                  alt={`${token.ticker} icon`}
+                                  objectFit="cover"
+                                />
+                                <Text
+                                  fontSize="12px"
+                                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                                  color={colors.offWhite}
+                                  display="none"
+                                >
+                                  {token.ticker}
+                                </Text>
+                              </Flex>
+
+                              {/* Network Badge */}
+                              {token.chainId && (
+                                <Box
+                                  position="absolute"
+                                  bottom="-2px"
+                                  right="-2px"
+                                  w="20px"
+                                  h="20px"
+                                  borderRadius="50%"
+                                  bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
+                                  border="2px solid #131313"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  overflow="hidden"
+                                >
+                                  <NetworkBadge chainId={token.chainId} />
+                                </Box>
                               )}
+                            </Box>
+
+                            {/* Token Info */}
+                            <Flex direction="column" flex="1">
+                              <Text
+                                fontSize="16px"
+                                fontFamily={FONT_FAMILIES.NOSTROMO}
+                                color={colors.offWhite}
+                                fontWeight="bold"
+                              >
+                                {token.name}
+                              </Text>
+                              <Flex align="center" gap="8px">
+                                <Text
+                                  fontSize="14px"
+                                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                                  color={colors.textGray}
+                                >
+                                  {token.ticker}
+                                </Text>
+                                {!isMobile && token.address && (
+                                  <Text
+                                    fontSize="14px"
+                                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                                    color={colors.darkerGray}
+                                  >
+                                    {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                                  </Text>
+                                )}
+                              </Flex>
                             </Flex>
                           </Flex>
-                        </Flex>
+                        </Box>
+                      ))}
+                    </>
+                  )}
+
+                  {/* When not connected, show popular tokens with section header */}
+                  {!isConnected && searchResults.length > 0 && (
+                    <>
+                      <Box mx="24px" mb="8px" mt="4px">
+                        <Text
+                          fontSize="13px"
+                          fontFamily={FONT_FAMILIES.NOSTROMO}
+                          color={colors.textGray}
+                          fontWeight="bold"
+                          textTransform="uppercase"
+                          letterSpacing="0.5px"
+                        >
+                          Popular
+                        </Text>
                       </Box>
-                    ))}
-                  </>
-                )}
-              </>
-            )}
-          </Flex>
-        </Box>
+                      {searchResults.map((token, index) => (
+                        <Box
+                          key={`${token.address || token.ticker}-${index}`}
+                          mx="12px"
+                          cursor="pointer"
+                          onClick={() => handleAssetSelect(token.ticker, token)}
+                        >
+                          <Flex
+                            align="center"
+                            py="12px"
+                            px="12px"
+                            letterSpacing="-0.6px"
+                            borderRadius="12px"
+                            bg="#131313"
+                            transition="background 0.15s ease"
+                            _hover={{ bg: "#1f1f1f" }}
+                          >
+                            {/* Token Icon with Network Badge */}
+                            <Box position="relative" mr="12px">
+                              <Flex
+                                w="40px"
+                                h="40px"
+                                borderRadius="50%"
+                                bg="#404040"
+                                align="center"
+                                justify="center"
+                                overflow="hidden"
+                              >
+                                <Image
+                                  src={token.icon}
+                                  w="100%"
+                                  h="100%"
+                                  alt={`${token.ticker} icon`}
+                                  objectFit="cover"
+                                />
+                                <Text
+                                  fontSize="12px"
+                                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                                  color={colors.offWhite}
+                                  display="none"
+                                >
+                                  {token.ticker}
+                                </Text>
+                              </Flex>
+
+                              {/* Network Badge */}
+                              {token.chainId && (
+                                <Box
+                                  position="absolute"
+                                  bottom="-2px"
+                                  right="-2px"
+                                  w="20px"
+                                  h="20px"
+                                  borderRadius="50%"
+                                  bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
+                                  border="2px solid #131313"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  overflow="hidden"
+                                >
+                                  <NetworkBadge chainId={token.chainId} />
+                                </Box>
+                              )}
+                            </Box>
+
+                            {/* Token Info */}
+                            <Flex direction="column" flex="1">
+                              <Text
+                                fontSize="16px"
+                                fontFamily={FONT_FAMILIES.NOSTROMO}
+                                color={colors.offWhite}
+                                fontWeight="bold"
+                              >
+                                {token.name}
+                              </Text>
+                              <Flex align="center" gap="8px">
+                                <Text
+                                  fontSize="14px"
+                                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                                  color={colors.textGray}
+                                >
+                                  {token.ticker}
+                                </Text>
+                                {!isMobile && token.address && (
+                                  <Text
+                                    fontSize="14px"
+                                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                                    color={colors.darkerGray}
+                                  >
+                                    {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
+                                  </Text>
+                                )}
+                              </Flex>
+                            </Flex>
+                          </Flex>
+                        </Box>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </Flex>
+          </Box>
+        </Flex>
       </Box>
     </Portal>
   );
