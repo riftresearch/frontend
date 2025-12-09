@@ -23,27 +23,6 @@ import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 import { SupportedChainId } from "@cowprotocol/cow-sdk";
 
-// Helper function to handle OTC errors with specific messaging
-const handleOTCError = (error: unknown) => {
-  console.error("OTC Error:", error);
-
-  // Check if it's an OFAC-related error
-  if (error instanceof OTCServerError && error.isOFACSanctioned()) {
-    toastError(error, {
-      title: "Address Blocked",
-      description:
-        "This address is blocked due to sanctions compliance. We cannot process swaps for sanctioned addresses.",
-    });
-    return;
-  }
-
-  // Default error message
-  toastError(error, {
-    title: "Swap Failed",
-    description: "Try refreshing the quote and try again.",
-  });
-};
-
 export const SwapButton = () => {
   // ============================================================================
   // HOOKS AND STATE
@@ -125,6 +104,38 @@ export const SwapButton = () => {
   } = useStore();
   // Ref to track previous refetchQuote value for retry detection
   const prevRefetchQuoteRef = useRef(refetchQuote);
+
+  // Helper function to handle OTC errors with specific messaging
+  // Defined inside component to access state setters for loading cancellation
+  const handleOTCError = (error: unknown) => {
+    console.error("OTC Error:", error);
+
+    // Cancel all loading states on the button
+    setSwapButtonPressed(false);
+    setIsApprovingToken(false);
+    setCowswapOrderStatus(CowswapOrderStatus.NO_ORDER);
+
+    // Clear and refetch the quote
+    setRfqQuote(null);
+    setRefetchQuote(true);
+
+    // Check if it's an OFAC-related error
+    if (error instanceof OTCServerError && error.isOFACSanctioned()) {
+      toastError(error, {
+        title: "Address Blocked",
+        description:
+          "This address is blocked due to sanctions compliance. We cannot process swaps for sanctioned addresses.",
+      });
+      return;
+    }
+
+    // Default error message
+    toastError(error, {
+      title: "Swap Failed",
+      description: "Try refreshing the quote and try again.",
+    });
+  };
+
   // Wagmi hooks for contract interactions
   const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
   const {
@@ -299,8 +310,6 @@ export const SwapButton = () => {
       writeContract(txConfig);
     } catch (error) {
       console.error("cbBTC->BTC swap failed:", error);
-
-      setSwapButtonPressed(false);
       setSwapResponse(null);
       handleOTCError(error);
     }
@@ -488,9 +497,7 @@ export const SwapButton = () => {
       }
     } catch (error) {
       console.error("ERC20->BTC swap failed:", error);
-
       setSwapResponse(null);
-      setSwapButtonPressed(false);
       handleOTCError(error);
     }
   }, [
@@ -553,8 +560,6 @@ export const SwapButton = () => {
       router.push(`/swap/${otcSwap.swap_id}`);
     } catch (error) {
       console.error("BTC->cbBTC swap failed:", error);
-
-      setSwapButtonPressed(false);
       setSwapResponse(null);
       handleOTCError(error);
     }
