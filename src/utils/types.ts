@@ -41,7 +41,7 @@ export type TokenData = {
   usdValue: string;
   icon: string;
   decimals: number;
-  chainId?: number; // Optional: 1 for Ethereum, 8453 for Base
+  chainId: number; // 1 for Ethereum, 8453 for Base
 };
 
 export type TokenMetadata = {
