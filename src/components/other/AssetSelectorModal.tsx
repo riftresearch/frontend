@@ -52,6 +52,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setSearchResults,
     setEvmConnectWalletChainId,
     setSelectedInputToken,
+    setSelectedOutputToken,
     isSwappingForBTC,
     setRawInputAmount,
     setOutputAmount,
@@ -116,11 +117,52 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
   // Token fetching/pricing handled globally; modal reads from store
 
+  // Helper to filter tokens to cbBTC only
+  const filterToCbBTCOnly = (tokens: TokenData[]): TokenData[] => {
+    return tokens.filter((t) => t.ticker === "cbBTC");
+  };
+
   // Load tokens from global store when modal opens or dependencies change
   useEffect(() => {
     if (!isOpen) return;
     setIsLoading(true);
     try {
+      // When swapping FROM BTC (not for BTC), only show cbBTC options
+      if (!isSwappingForBTC) {
+        // Get cbBTC from both chains with user balances if available
+        const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
+        const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
+        const allUserTokens = [...ethTokens, ...baseTokens];
+
+        // Filter to only cbBTC tokens from user's wallet
+        let cbBTCTokens = filterToCbBTCOnly(allUserTokens);
+
+        // If user doesn't have cbBTC in wallet, show from popular tokens
+        if (cbBTCTokens.length === 0) {
+          cbBTCTokens = filterToCbBTCOnly(ALL_POPULAR_TOKENS);
+        } else {
+          // Merge with popular tokens to ensure both chains are shown
+          const userCbBTCChains = new Set(cbBTCTokens.map((t) => t.chainId));
+          const missingChainCbBTC = filterToCbBTCOnly(ALL_POPULAR_TOKENS).filter(
+            (t) => !userCbBTCChains.has(t.chainId)
+          );
+          cbBTCTokens = [...cbBTCTokens, ...missingChainCbBTC];
+        }
+
+        // Sort by USD value (descending) so chain with balance appears first
+        cbBTCTokens.sort((a, b) => {
+          const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
+          const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
+          return bValue - aValue;
+        });
+
+        preloadImages(cbBTCTokens.map((t) => t.icon).filter(Boolean));
+        setSearchResults(cbBTCTokens);
+        setPopularTokens([]);
+        setIsLoading(false);
+        return;
+      }
+
       // If there's an active query, use the search index top-10
       if (debouncedQuery.length > 0) {
         // Search tokens using the Network enum directly
@@ -273,7 +315,15 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [isOpen, isConnected, address, selectedNetwork, userTokensByChain, debouncedQuery]);
+  }, [
+    isOpen,
+    isConnected,
+    address,
+    selectedNetwork,
+    userTokensByChain,
+    debouncedQuery,
+    isSwappingForBTC,
+  ]);
 
   if (!isOpen) return null;
 
@@ -297,8 +347,13 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const handleAssetSelect = async (asset: string, tokenData?: TokenData) => {
     console.log("handleAssetSelect", asset, tokenData);
     if (tokenData) {
-      setSelectedInputToken(tokenData);
-      setErc20Price(null);
+      // When swapping FOR BTC, set input token; when swapping FROM BTC, set output token
+      if (isSwappingForBTC) {
+        setSelectedInputToken(tokenData);
+        setErc20Price(null);
+      } else {
+        setSelectedOutputToken(tokenData);
+      }
 
       // Switch network to the selected token's chainId
       if (tokenData.chainId && isConnected) {
@@ -393,7 +448,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               color={colors.offWhite}
               fontWeight="bold"
             >
-              Select a token
+              {isSwappingForBTC ? "Select token to send" : "Select token to receive"}
             </Text>
             <Box
               cursor="pointer"
@@ -407,221 +462,223 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
             </Box>
           </Flex>
 
-          {/* Search Bar with Network Dropdown */}
-          <Box position="relative" mb="18px" mx="24px">
-            {/* Search Icon */}
-            <Box
-              position="absolute"
-              left="18px"
-              top="50%"
-              transform="translateY(-50%)"
-              pointerEvents="none"
-              zIndex={1}
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+          {/* Search Bar with Network Dropdown - only show when swapping FOR BTC */}
+          {isSwappingForBTC && (
+            <Box position="relative" mb="18px" mx="24px">
+              {/* Search Icon */}
+              <Box
+                position="absolute"
+                left="18px"
+                top="50%"
+                transform="translateY(-50%)"
+                pointerEvents="none"
+                zIndex={1}
               >
-                <circle cx="11" cy="11" r="6" stroke={colors.textGray} strokeWidth="2" />
-                <path
-                  d="M20 20L17 17"
-                  stroke={colors.textGray}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </Box>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <circle cx="11" cy="11" r="6" stroke={colors.textGray} strokeWidth="2" />
+                  <path
+                    d="M20 20L17 17"
+                    stroke={colors.textGray}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </Box>
 
-            {/* Search Input */}
-            <Input
-              ref={searchInputRef}
-              placeholder="Search tokens"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              bg="#212121"
-              borderRadius="30px"
-              pl="48px"
-              pr={isMobile ? "30px" : "130px"}
-              py="12px"
-              letterSpacing="-0.9px"
-              border="none"
-              h="50px"
-              fontSize="16px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.offWhite}
-              _placeholder={{ color: colors.textGray }}
-              _focus={{
-                border: "none",
-                boxShadow: "none",
-                outline: "none",
-              }}
-              _hover={{
-                border: "none",
-                boxShadow: "none",
-                outline: "none",
-              }}
-            />
+              {/* Search Input */}
+              <Input
+                ref={searchInputRef}
+                placeholder="Search tokens"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                bg="#212121"
+                borderRadius="30px"
+                pl="48px"
+                pr={isMobile ? "30px" : "130px"}
+                py="12px"
+                letterSpacing="-0.9px"
+                border="none"
+                h="50px"
+                fontSize="16px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={colors.offWhite}
+                _placeholder={{ color: colors.textGray }}
+                _focus={{
+                  border: "none",
+                  boxShadow: "none",
+                  outline: "none",
+                }}
+                _hover={{
+                  border: "none",
+                  boxShadow: "none",
+                  outline: "none",
+                }}
+              />
 
-            {/* Network Dropdown */}
-            <Box
-              ref={dropdownRef}
-              position="absolute"
-              right="8px"
-              top="50%"
-              transform="translateY(-50%)"
-              zIndex={2}
-            >
-              {/* Dropdown Trigger */}
-              <Flex
-                align="center"
-                gap="6px"
-                px="12px"
-                py="6px"
-                bg="#131313"
-                borderRadius="20px"
-                cursor="pointer"
-                _hover={{ bg: "#1f1f1f" }}
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                transition="background 0.15s ease"
+              {/* Network Dropdown */}
+              <Box
+                ref={dropdownRef}
+                position="absolute"
+                right="8px"
+                top="50%"
+                transform="translateY(-50%)"
+                zIndex={2}
               >
-                <Text
-                  fontSize="13px"
-                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                  color={colors.offWhite}
-                  fontWeight="bold"
-                  textTransform="uppercase"
-                >
-                  {selectedNetwork === Network.ALL
-                    ? "All"
-                    : selectedNetwork === Network.ETHEREUM
-                      ? "ETH"
-                      : "Base"}
-                </Text>
-                <Box
-                  transform={isDropdownOpen ? "rotate(180deg)" : "rotate(0deg)"}
-                  transition="transform 0.2s ease"
-                >
-                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
-                    <path
-                      d="M1 1L6 6L11 1"
-                      stroke={colors.textGray}
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </Box>
-              </Flex>
-
-              {/* Dropdown Menu */}
-              {isDropdownOpen && (
-                <Box
-                  position="absolute"
-                  top="calc(100% + 8px)"
-                  right="0"
-                  bg="#212121"
-                  borderRadius="12px"
-                  minW="170px"
+                {/* Dropdown Trigger */}
+                <Flex
+                  align="center"
+                  gap="6px"
+                  px="12px"
                   py="6px"
-                  boxShadow="0 4px 12px rgba(0, 0, 0, 0.4)"
-                  border="1px solid #2a2a2a"
+                  bg="#131313"
+                  borderRadius="20px"
+                  cursor="pointer"
+                  _hover={{ bg: "#1f1f1f" }}
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  transition="background 0.15s ease"
                 >
-                  {/* All Networks */}
-                  <Flex
-                    align="center"
-                    gap="10px"
-                    px="14px"
-                    py="10px"
-                    cursor="pointer"
-                    bg={selectedNetwork === Network.ALL ? "#2a2a2a" : "transparent"}
-                    _hover={{ bg: "#262626" }}
-                    onClick={() => handleNetworkSelect(Network.ALL)}
-                    transition="background 0.15s ease"
+                  <Text
+                    fontSize="13px"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    color={colors.offWhite}
+                    fontWeight="bold"
+                    textTransform="uppercase"
                   >
-                    <Text
-                      fontSize="13px"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.offWhite}
-                      fontWeight="bold"
-                    >
-                      All Networks
-                    </Text>
-                  </Flex>
+                    {selectedNetwork === Network.ALL
+                      ? "All"
+                      : selectedNetwork === Network.ETHEREUM
+                        ? "ETH"
+                        : "Base"}
+                  </Text>
+                  <Box
+                    transform={isDropdownOpen ? "rotate(180deg)" : "rotate(0deg)"}
+                    transition="transform 0.2s ease"
+                  >
+                    <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
+                      <path
+                        d="M1 1L6 6L11 1"
+                        stroke={colors.textGray}
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </Box>
+                </Flex>
 
-                  {/* Ethereum */}
-                  <Flex
-                    align="center"
-                    gap="10px"
-                    px="14px"
-                    py="10px"
-                    cursor="pointer"
-                    bg={selectedNetwork === Network.ETHEREUM ? "#2a2a2a" : "transparent"}
-                    _hover={{ bg: "#262626" }}
-                    onClick={() => handleNetworkSelect(Network.ETHEREUM)}
-                    transition="background 0.15s ease"
+                {/* Dropdown Menu */}
+                {isDropdownOpen && (
+                  <Box
+                    position="absolute"
+                    top="calc(100% + 8px)"
+                    right="0"
+                    bg="#212121"
+                    borderRadius="12px"
+                    minW="170px"
+                    py="6px"
+                    boxShadow="0 4px 12px rgba(0, 0, 0, 0.4)"
+                    border="1px solid #2a2a2a"
                   >
-                    <Box
-                      w="18px"
-                      h="18px"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
+                    {/* All Networks */}
+                    <Flex
+                      align="center"
+                      gap="10px"
+                      px="14px"
+                      py="10px"
+                      cursor="pointer"
+                      bg={selectedNetwork === Network.ALL ? "#2a2a2a" : "transparent"}
+                      _hover={{ bg: "#262626" }}
+                      onClick={() => handleNetworkSelect(Network.ALL)}
+                      transition="background 0.15s ease"
                     >
-                      <Image
-                        src="/images/assets/icons/ETH.svg"
+                      <Text
+                        fontSize="13px"
+                        fontFamily={FONT_FAMILIES.NOSTROMO}
+                        color={colors.offWhite}
+                        fontWeight="bold"
+                      >
+                        All Networks
+                      </Text>
+                    </Flex>
+
+                    {/* Ethereum */}
+                    <Flex
+                      align="center"
+                      gap="10px"
+                      px="14px"
+                      py="10px"
+                      cursor="pointer"
+                      bg={selectedNetwork === Network.ETHEREUM ? "#2a2a2a" : "transparent"}
+                      _hover={{ bg: "#262626" }}
+                      onClick={() => handleNetworkSelect(Network.ETHEREUM)}
+                      transition="background 0.15s ease"
+                    >
+                      <Box
                         w="18px"
                         h="18px"
-                        alt="Ethereum"
-                        objectFit="contain"
-                      />
-                    </Box>
-                    <Text
-                      fontSize="13px"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.offWhite}
-                      fontWeight="bold"
-                    >
-                      Ethereum
-                    </Text>
-                  </Flex>
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <Image
+                          src="/images/assets/icons/ETH.svg"
+                          w="18px"
+                          h="18px"
+                          alt="Ethereum"
+                          objectFit="contain"
+                        />
+                      </Box>
+                      <Text
+                        fontSize="13px"
+                        fontFamily={FONT_FAMILIES.NOSTROMO}
+                        color={colors.offWhite}
+                        fontWeight="bold"
+                      >
+                        Ethereum
+                      </Text>
+                    </Flex>
 
-                  {/* Base */}
-                  <Flex
-                    align="center"
-                    gap="10px"
-                    px="14px"
-                    py="10px"
-                    cursor="pointer"
-                    bg={selectedNetwork === Network.BASE ? "#2a2a2a" : "transparent"}
-                    _hover={{ bg: "#262626" }}
-                    onClick={() => handleNetworkSelect(Network.BASE)}
-                    transition="background 0.15s ease"
-                  >
-                    <Box
-                      w="18px"
-                      h="18px"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
+                    {/* Base */}
+                    <Flex
+                      align="center"
+                      gap="10px"
+                      px="14px"
+                      py="10px"
+                      cursor="pointer"
+                      bg={selectedNetwork === Network.BASE ? "#2a2a2a" : "transparent"}
+                      _hover={{ bg: "#262626" }}
+                      onClick={() => handleNetworkSelect(Network.BASE)}
+                      transition="background 0.15s ease"
                     >
-                      <BASE_LOGO width="18" height="18" />
-                    </Box>
-                    <Text
-                      fontSize="13px"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      color={colors.offWhite}
-                      fontWeight="bold"
-                    >
-                      Base
-                    </Text>
-                  </Flex>
-                </Box>
-              )}
+                      <Box
+                        w="18px"
+                        h="18px"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <BASE_LOGO width="18" height="18" />
+                      </Box>
+                      <Text
+                        fontSize="13px"
+                        fontFamily={FONT_FAMILIES.NOSTROMO}
+                        color={colors.offWhite}
+                        fontWeight="bold"
+                      >
+                        Base
+                      </Text>
+                    </Flex>
+                  </Box>
+                )}
+              </Box>
             </Box>
-          </Box>
+          )}
 
           <Flex direction="column" gap="4px" mb="20px">
             {/* Loading state */}

@@ -128,7 +128,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
         >
           {displayTicker}
         </Text>
-        {asset !== "BTC" && asset !== "CBBTC" && (
+        {asset !== "BTC" && (
           <FaChevronDown
             size={arrowSize}
             color="white"

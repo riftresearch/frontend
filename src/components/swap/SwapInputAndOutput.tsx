@@ -2622,17 +2622,9 @@ export const SwapInputAndOutput = () => {
           <Spacer />
           <Flex mr="8px">
             <WebAssetTag
-              cursor={
-                outputAssetIdentifier !== "BTC" && outputAssetIdentifier !== "CBBTC"
-                  ? "pointer"
-                  : "default"
-              }
+              cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
               asset={outputAssetIdentifier}
-              onDropDown={
-                outputAssetIdentifier !== "BTC" && outputAssetIdentifier !== "CBBTC"
-                  ? openAssetSelector
-                  : undefined
-              }
+              onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
               isOutput={true}
             />
           </Flex>

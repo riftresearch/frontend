@@ -160,29 +160,14 @@ export const ConnectWalletButton: React.FC = () => {
         allSortedTokens.push(...sorted);
       }
 
-      console.log("allSortedTokens", allSortedTokens);
       // Sort all tokens combined by USD value and set as search results
       const combinedSorted = allSortedTokens.sort((a, b) => {
         const usdValueA = parseFloat(a.usdValue.replace("$", ""));
         const usdValueB = parseFloat(b.usdValue.replace("$", ""));
         return usdValueB - usdValueA;
       });
-      console.log("combinedSorted", combinedSorted);
 
       setSearchResults(combinedSorted);
-
-      // Update selected input token if it's ETH and balance changed
-      // const currentChainNetwork = chainId === 8453 ? Network.BASE : Network.ETHEREUM;
-      // const currentEthToken = ethByChain[currentChainNetwork];
-      // if (
-      //   selectedInputToken?.ticker === "ETH" &&
-      //   selectedInputToken.balance !== currentEthToken?.balance &&
-      //   currentEthToken
-      // ) {
-      //   setSelectedInputToken(currentEthToken);
-      // }
-
-      console.log("[UserTokens] Fetch complete. Total tokens:", combinedSorted.length);
     };
 
     fetchAllUserTokens();
