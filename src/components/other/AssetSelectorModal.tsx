@@ -49,7 +49,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     searchResults,
     setSearchResults,
     setEvmConnectWalletChainId,
+    selectedInputToken,
     setSelectedInputToken,
+    selectedOutputToken,
     setSelectedOutputToken,
     isSwappingForBTC,
     setDisplayedInputAmount,
@@ -77,6 +79,49 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     }
   }, [isOpen]);
 
+<<<<<<< HEAD
+=======
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  // Auto-switch chain when wallet connects or address changes
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const targetChainId = isSwappingForBTC
+      ? selectedInputToken?.chainId
+      : selectedOutputToken?.chainId;
+
+    if (!targetChainId) return;
+
+    const switchToChain = async () => {
+      try {
+        const chainId = targetChainId === 1 ? mainnet.id : base.id;
+        await switchChain({ chainId });
+        setEvmConnectWalletChainId(chainId);
+      } catch (error) {
+        console.error("Failed to auto-switch chain:", error);
+      }
+    };
+
+    switchToChain();
+  }, [isConnected, address]);
+
+>>>>>>> 2b004b2 (auto switch)
   // Debounce search input
   useEffect(() => {
     const h = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 180);
