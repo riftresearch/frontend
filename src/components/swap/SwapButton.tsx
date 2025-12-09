@@ -201,12 +201,16 @@ export const SwapButton = () => {
       setApprovalTxHash(txHash);
     } catch (error) {
       console.error("CowSwap approval failed:", error);
+      let errorDescription =
+        error instanceof Error && error.message.includes("User rejected the request")
+          ? "User rejected the transaction"
+          : undefined;
       setApprovalState(ApprovalState.NEEDS_APPROVAL);
       setIsApprovingToken(false);
       setSwapButtonPressed(false);
       toastError(error, {
         title: "Approval Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: errorDescription,
       });
     }
   }, [selectedInputToken, evmConnectWalletChainId, cowswapClient, setApprovalState]);
