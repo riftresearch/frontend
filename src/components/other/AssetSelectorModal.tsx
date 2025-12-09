@@ -818,11 +818,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                 w="20px"
                                 h="20px"
                                 borderRadius="50%"
-                                bg="#131313"
+                                bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
                                 border="2px solid #131313"
                                 display="flex"
                                 alignItems="center"
                                 justifyContent="center"
+                                overflow="hidden"
                               >
                                 <NetworkBadge chainId={token.chainId} />
                               </Box>
@@ -954,11 +955,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                 w="20px"
                                 h="20px"
                                 borderRadius="50%"
-                                bg="#131313"
+                                bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
                                 border="2px solid #131313"
                                 display="flex"
                                 alignItems="center"
                                 justifyContent="center"
+                                overflow="hidden"
                               >
                                 <NetworkBadge chainId={token.chainId} />
                               </Box>
@@ -1069,11 +1071,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                 w="20px"
                                 h="20px"
                                 borderRadius="50%"
-                                bg="#131313"
+                                bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
                                 border="2px solid #131313"
                                 display="flex"
                                 alignItems="center"
                                 justifyContent="center"
+                                overflow="hidden"
                               >
                                 <NetworkBadge chainId={token.chainId} />
                               </Box>
