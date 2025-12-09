@@ -808,7 +808,9 @@ export const SwapButton = () => {
     }
   }, [refetchQuote, rfqQuote, swapButtonPressed, startSwap]);
 
-  // CowSwap order status polling
+  // CowSwap order status polling with visibility-aware behavior
+  // This fixes the bug where background tabs throttle setInterval, causing the app
+  // to appear stuck when users switch away and return
   useEffect(() => {
     // Only poll when order is signed
     if (
@@ -825,7 +827,11 @@ export const SwapButton = () => {
     const tokenChainId = selectedInputToken.chainId ?? 1;
     const sdk = cowswapClient.getSdk(tokenChainId as any);
 
+    let isPollingActive = true;
+
     const pollOrderStatus = async () => {
+      if (!isPollingActive) return;
+
       try {
         const order = await sdk.getOrder({ orderUid: cowswapOrderData.id! });
         console.log("Order status:", order.status);
@@ -851,16 +857,30 @@ export const SwapButton = () => {
       }
     };
 
-    // Poll immediately
+    // Handle visibility change - poll immediately when tab becomes visible
+    // This fixes the issue where browsers throttle setInterval in background tabs
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && isPollingActive) {
+        console.log("Tab became visible, polling CowSwap order status immediately");
+        pollOrderStatus();
+      }
+    };
+
+    // Poll immediately on mount
     pollOrderStatus();
 
     // Then poll every 10 seconds
     const intervalId = setInterval(pollOrderStatus, 10000);
 
-    // Cleanup interval on unmount or when status changes
+    // Listen for visibility changes to recover from background tab throttling
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup interval and event listener on unmount or when status changes
     return () => {
       console.log("Stopping CowSwap order status polling");
+      isPollingActive = false;
       clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [
     cowswapOrderStatus,

@@ -4,6 +4,7 @@ import { type Hash } from "viem";
 
 /**
  * Hook to track EVM transaction confirmations
+ * Uses visibility-aware polling to handle background tab throttling
  * @param txHash - Transaction hash to track
  * @param chainId - Chain ID (1 for Ethereum, 8453 for Base)
  * @param enabled - Whether to actively track confirmations
@@ -26,6 +27,8 @@ export function useEvmConfirmations(
     let isCancelled = false;
 
     async function fetchConfirmations() {
+      if (isCancelled || !publicClient) return;
+
       try {
         const receipt = await publicClient.getTransactionReceipt({
           hash: txHash as Hash,
@@ -51,15 +54,27 @@ export function useEvmConfirmations(
       }
     }
 
+    // Handle visibility change - fetch immediately when tab becomes visible
+    // This fixes the issue where browsers throttle setInterval in background tabs
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !isCancelled) {
+        fetchConfirmations();
+      }
+    };
+
     // Fetch immediately
     fetchConfirmations();
 
     // Poll every 12 seconds (roughly 1 Ethereum block time)
     const interval = setInterval(fetchConfirmations, 12000);
 
+    // Listen for visibility changes to recover from background tab throttling
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       isCancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [txHash, publicClient, enabled]);
 
