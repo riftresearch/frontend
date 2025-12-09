@@ -178,16 +178,15 @@ export const SwapInputAndOutput = () => {
         return;
       }
 
-      const chainName =
-        evmConnectWalletChainId === 1 || !evmConnectWalletChainId ? "ethereum" : "base";
+      // Use the token's chainId to determine the correct chain for price lookup
+      // Fall back to connected wallet chain, then default to ethereum
+      const tokenChainId = tokenData.chainId ?? evmConnectWalletChainId ?? 1;
+      const chainName = tokenChainId === 8453 ? "base" : "ethereum";
+
       try {
-        console.log(`Fetching ERC20 price for ${tokenData.ticker} (${tokenData.address})`);
         const tokenPrice = await fetchTokenPrice(chainName, tokenData.address);
         if (tokenPrice && typeof tokenPrice.price === "number") {
-          console.log(`ERC20 price for ${tokenData.ticker}: $${tokenPrice.price}`);
           setErc20Price(tokenPrice.price);
-        } else {
-          console.warn(`No price data found for ${tokenData.ticker}`);
         }
       } catch (error) {
         console.error("Failed to fetch ERC20 price:", error);
@@ -294,6 +293,8 @@ export const SwapInputAndOutput = () => {
       } else {
         price = erc20Price;
       }
+      console.log("[alp] price", price);
+      console.log("[alp] btcPrice", btcPrice);
 
       if (price && btcPrice) {
         const usdValue = inputValue * price;

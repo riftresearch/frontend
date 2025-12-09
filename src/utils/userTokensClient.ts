@@ -102,9 +102,10 @@ export async function fetchTokenPrice(
   chain: DefiLlamaChainParam,
   address: string
 ): Promise<DefiLlamaTokenPrice | null> {
-  const key = `${chain}:${address}`;
+  const key = `${chain}:${address.toLowerCase()}`;
   const response = await fetchTokenPrices(chain, [address]);
-  return response.coins[key] ?? null;
+  // DefiLlama returns lowercase addresses - try both cases
+  return response.coins[key] ?? response.coins[`${chain}:${address}`] ?? null;
 }
 
 /**

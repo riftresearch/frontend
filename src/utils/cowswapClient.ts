@@ -149,6 +149,7 @@ export class CowSwapClient {
       const isBuyOrder = hasBuyAmount;
 
       // Build TradeParameters for TradingSdk
+      // Note: owner is required for quotes when no wallet is connected
       const tradeParameters: TradeParameters = {
         kind: isBuyOrder ? OrderKind.BUY : OrderKind.SELL,
         sellToken,
