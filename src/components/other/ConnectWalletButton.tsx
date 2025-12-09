@@ -231,7 +231,6 @@ export const ConnectWalletButton: React.FC = () => {
             fontSize={isMobile ? "14px" : "17px"}
             paddingLeft={isMobile ? "10px" : "16px"}
             paddingRight={isMobile ? "10px" : "22px"}
-            pt={isMobile ? "0px" : "2px"}
             color={colors.offWhite}
             letterSpacing="-1px"
             h={isMobile ? "36px" : "42px"}
@@ -253,7 +252,6 @@ export const ConnectWalletButton: React.FC = () => {
             fontFamily="aux"
             fontSize={isMobile ? "14px" : "17px"}
             letterSpacing="-1px"
-            pt={isMobile ? "0px" : "2px"}
             px={isMobile ? "10px" : "18px"}
             color={colors.offWhite}
             h={isMobile ? "36px" : "42px"}
