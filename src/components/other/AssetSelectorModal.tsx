@@ -49,7 +49,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     searchResults,
     setSearchResults,
     setEvmConnectWalletChainId,
+    selectedInputToken,
     setSelectedInputToken,
+    selectedOutputToken,
     setSelectedOutputToken,
     isSwappingForBTC,
     setDisplayedInputAmount,
@@ -76,6 +78,29 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       setSearchQuery("");
     }
   }, [isOpen]);
+
+  // Auto-switch chain when wallet connects or address changes
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const targetChainId = isSwappingForBTC
+      ? selectedInputToken?.chainId
+      : selectedOutputToken?.chainId;
+
+    if (!targetChainId) return;
+
+    const switchToChain = async () => {
+      try {
+        const chainId = targetChainId === 1 ? mainnet.id : base.id;
+        await switchChain({ chainId });
+        setEvmConnectWalletChainId(chainId);
+      } catch (error) {
+        console.error("Failed to auto-switch chain:", error);
+      }
+    };
+
+    switchToChain();
+  }, [isConnected, address]);
 
   // Debounce search input
   useEffect(() => {
