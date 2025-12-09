@@ -39,6 +39,7 @@ export const SwapButton = () => {
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
   const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
+  const [isCbBTCTransferPending, setIsCbBTCTransferPending] = useState(false);
 
   // Terms of Service modal state
   const [showTosModal, setShowTosModal] = useState(false);
@@ -307,10 +308,13 @@ export const SwapButton = () => {
         txConfig.maxPriorityFeePerGas = gasParams.maxPriorityFeePerGas;
       }
 
+      // Mark that we're doing a cbBTC transfer so the effect can redirect on tx confirmation
+      setIsCbBTCTransferPending(true);
       writeContract(txConfig);
     } catch (error) {
       console.error("cbBTC->BTC swap failed:", error);
       setSwapResponse(null);
+      setIsCbBTCTransferPending(false);
       handleOTCError(error);
     }
   }, [
@@ -737,6 +741,7 @@ export const SwapButton = () => {
       // Reset swap button state
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
+      setIsCbBTCTransferPending(false);
       setRfqQuote(null);
       setRefetchQuote(true);
     }
@@ -768,6 +773,15 @@ export const SwapButton = () => {
       setIsApprovingToken(false);
     }
   }, [hash, isApprovingToken]);
+
+  // Handle cbBTC transfer: redirect to swap monitoring page when transaction is signed
+  useEffect(() => {
+    if (hash && isCbBTCTransferPending && swapResponse?.swap_id) {
+      console.log("cbBTC transfer signed, redirecting to swap page:", swapResponse.swap_id);
+      setIsCbBTCTransferPending(false);
+      router.push(`/swap/${swapResponse.swap_id}`);
+    }
+  }, [hash, isCbBTCTransferPending, swapResponse?.swap_id, router]);
 
   // Handle approval confirmation and errors
   useEffect(() => {
