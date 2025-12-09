@@ -1031,6 +1031,19 @@ export const SwapButton = () => {
     hasNoRoutesError ||
     hasValidationError;
 
+  console.log("[DEBUG] Button state:", {
+    exceedsUserBalance,
+    exceedsAvailableBTCLiquidity,
+    exceedsAvailableCBBTCLiquidity,
+    inputBelowMinimum,
+    hasValidationError,
+    isButtonLoading,
+    isOtcServerDead,
+    isRetryingOtcServer,
+    hasNoRoutesError,
+    isButtonDisabled,
+  });
+
   const handleButtonClick = () => {
     if (isRetryingOtcServer) {
       toastInfo({
