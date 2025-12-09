@@ -50,6 +50,37 @@ import { fetchTokenPrice } from "@/utils/userTokensClient";
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
 
+// Gas units buffer for ETH transfers (cowswap create order is ~56k, using 10M for safety margin)
+const ETH_GAS_UNITS = BigInt(10_000_000);
+
+// Base mainnet chainId
+const BASE_MAINNET_CHAIN_ID = 8453;
+const BASE_FIXED_GAS_COST_ETH = 0.0001;
+
+/**
+ * Fetches current gas price and computes estimated gas cost in ETH.
+ * Used to reserve ETH for gas when computing max swap amounts.
+ * Base mainnet uses a fixed gas cost due to L2 fee predictability.
+ */
+async function fetchEthGasCost(chainId: number): Promise<number | null> {
+  if (chainId === BASE_MAINNET_CHAIN_ID) {
+    return BASE_FIXED_GAS_COST_ETH;
+  }
+
+  try {
+    const response = await fetch(`/api/eth-gas?chainId=${chainId}`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const maxFeePerGas = BigInt(data.maxFeePerGas);
+    const gasCostWei = maxFeePerGas * ETH_GAS_UNITS;
+    return parseFloat(formatUnits(gasCostWei, 18));
+  } catch (error) {
+    console.error("Failed to fetch gas data:", error);
+    return null;
+  }
+}
+
 export const SwapInputAndOutput = () => {
   // ============================================================================
   // HOOKS AND STATE
@@ -1071,38 +1102,19 @@ export const SwapInputAndOutput = () => {
 
     // If ETH is selected, fetch gas data and adjust for gas costs
     if (selectedInputToken.ticker === "ETH") {
-      try {
-        const response = await fetch(`/api/eth-gas?chainId=${selectedInputToken.chainId}`);
-        if (response.ok) {
-          const data = await response.json();
-          const maxFeePerGasHex = data.maxFeePerGas;
+      const gasCostEth = await fetchEthGasCost(selectedInputToken.chainId);
+      if (gasCostEth !== null) {
+        const balanceFloat = parseFloat(currentInputBalance);
+        const adjustedAmount = balanceFloat - gasCostEth;
 
-          // Parse hex to BigInt
-          const maxFeePerGas = BigInt(maxFeePerGasHex);
-
-          // Calculate gas cost: maxFeePerGas * 60000 gas units (cowswap create order is ~56k)
-          const gasCostWei = maxFeePerGas * BigInt(1_250_000);
-
-          // Convert wei to ETH
-          const gasCostEth = formatUnits(gasCostWei, 18);
-
-          // Calculate adjusted amount: balance - gas cost
-          const balanceFloat = parseFloat(currentInputBalance);
-          const gasCostFloat = parseFloat(gasCostEth);
-          const adjustedAmount = balanceFloat - gasCostFloat;
-
-          // Ensure we don't go negative
-          if (adjustedAmount > 0) {
-            adjustedInputAmount = adjustedAmount.toString();
-            setIsAtAdjustedMax(true);
-          } else {
-            adjustedInputAmount = currentInputBalance;
-            setIsAtAdjustedMax(false);
-          }
+        if (adjustedAmount > 0) {
+          adjustedInputAmount = adjustedAmount.toString();
+          setIsAtAdjustedMax(true);
+        } else {
+          adjustedInputAmount = currentInputBalance;
+          setIsAtAdjustedMax(false);
         }
-      } catch (error) {
-        console.error("Failed to fetch gas data:", error);
-        // Fall back to using full balance if gas fetch fails
+      } else {
         setIsAtAdjustedMax(false);
       }
     } else {
@@ -1662,22 +1674,13 @@ export const SwapInputAndOutput = () => {
         inputFloat > balanceFloat * 0.9 &&
         inputFloat <= balanceFloat
       ) {
-        try {
-          const response = await fetch(`/api/eth-gas?chainId=${evmConnectWalletChainId || 1}`);
-          if (response.ok) {
-            const data = await response.json();
-            const maxFeePerGas = BigInt(data.maxFeePerGas);
-            const gasCostWei = maxFeePerGas * BigInt(1_250_000);
-            const gasCostEth = parseFloat(formatUnits(gasCostWei, 18));
-            const availableBalance = balanceFloat - gasCostEth;
-
-            if (inputFloat > availableBalance) {
-              setExceedsUserBalance(true);
-              return true;
-            }
+        const gasCostEth = await fetchEthGasCost(evmConnectWalletChainId || 1);
+        if (gasCostEth !== null) {
+          const availableBalance = balanceFloat - gasCostEth;
+          if (inputFloat > availableBalance) {
+            setExceedsUserBalance(true);
+            return true;
           }
-        } catch (error) {
-          console.error("Failed to fetch gas data for balance check:", error);
         }
       }
       return false;
