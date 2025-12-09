@@ -29,13 +29,7 @@ const getCustomChainName = (chainId: number): string => {
 
 export const ConnectWalletButton: React.FC = () => {
   const { address, isConnected } = useAccount();
-  const {
-    selectedInputToken,
-    setSelectedInputToken,
-    evmConnectWalletChainId: chainId,
-    setUserTokensForChain,
-    setSearchResults,
-  } = useStore();
+  const { evmConnectWalletChainId: chainId, setUserTokensForChain, setSearchResults } = useStore();
   const chains = useChains();
   const { isMobile } = useWindowSize();
 
@@ -171,15 +165,7 @@ export const ConnectWalletButton: React.FC = () => {
     };
 
     fetchAllUserTokens();
-  }, [
-    isConnected,
-    address,
-    setUserTokensForChain,
-    selectedInputToken,
-    setSelectedInputToken,
-    setSearchResults,
-    chainId,
-  ]);
+  }, [isConnected, address, setUserTokensForChain, setSearchResults]);
 
   // Format the user's address for display
   const displayAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";

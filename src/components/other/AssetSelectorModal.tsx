@@ -149,6 +149,15 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           cbBTCTokens = [...cbBTCTokens, ...missingChainCbBTC];
         }
 
+        // Deduplicate by chainId + address (user tokens come first, so they're preserved)
+        const seen = new Set<string>();
+        cbBTCTokens = cbBTCTokens.filter((t) => {
+          const key = `${t.chainId}-${t.address.toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
         // Sort by USD value (descending) so chain with balance appears first
         cbBTCTokens.sort((a, b) => {
           const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
@@ -262,6 +271,15 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
         }
+
+        // Deduplicate by chainId + address (user tokens come first, so they're preserved)
+        const seenTokens = new Set<string>();
+        tokens = tokens.filter((t) => {
+          const key = `${t.chainId}-${t.address.toLowerCase()}`;
+          if (seenTokens.has(key)) return false;
+          seenTokens.add(key);
+          return true;
+        });
 
         // Sort tokens by USD value (descending)
         tokens.sort((a, b) => {
