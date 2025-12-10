@@ -152,8 +152,8 @@ export const RatesSwapWidget = () => {
     setInputUsdValue,
     outputUsdValue,
     setOutputUsdValue,
-    setCowswapQuote,
-    setRfqQuote,
+    setQuotes,
+    clearQuotes,
     setSelectedInputToken,
     setSelectedOutputToken,
     setFeeOverview,
@@ -356,8 +356,7 @@ export const RatesSwapWidget = () => {
       if (price && btcPrice) {
         const usdValue = inputValue * price;
         if (!isAboveMinSwap(usdValue, btcPrice)) {
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setOutputAmount("");
           setRiftQuote(null);
           setIsLoadingRiftQuote(false);
@@ -397,8 +396,11 @@ export const RatesSwapWidget = () => {
           }
 
           if (quoteResponse) {
-            setCowswapQuote(quoteResponse.cowswapQuote || null);
-            setRfqQuote(quoteResponse.rfqQuote);
+            setQuotes({
+              cowswapQuote: quoteResponse.cowswapQuote || null,
+              rfqQuote: quoteResponse.rfqQuote,
+              quoteType: "indicative",
+            });
             setOutputAmount(quoteResponse.btcOutputAmount || "");
             setIsAwaitingOptimalQuote(false);
 
@@ -420,8 +422,7 @@ export const RatesSwapWidget = () => {
             setExceedsAvailableBTCLiquidity(true);
           }
           setIsAwaitingOptimalQuote(false);
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setOutputAmount("");
           setFeeOverview(null);
           setRiftQuote(null);
@@ -436,8 +437,7 @@ export const RatesSwapWidget = () => {
       displayedInputAmount,
       userEvmAccountAddress,
       selectedInputToken,
-      setCowswapQuote,
-      setRfqQuote,
+      clearQuotes,
       setOutputAmount,
       ethPrice,
       erc20Price,
@@ -475,8 +475,7 @@ export const RatesSwapWidget = () => {
       const usdValue = amountValue * btcPrice;
 
       if (!isAboveMinSwap(usdValue, btcPrice)) {
-        setCowswapQuote(null);
-        setRfqQuote(null);
+        clearQuotes();
         setRiftQuote(null);
         setIsLoadingRiftQuote(false);
         return;
@@ -486,8 +485,7 @@ export const RatesSwapWidget = () => {
         parseFloat(liquidity.maxCbBTCLiquidityInUsd) > 0 &&
         usdValue > parseFloat(liquidity.maxCbBTCLiquidityInUsd)
       ) {
-        setCowswapQuote(null);
-        setRfqQuote(null);
+        clearQuotes();
         setRiftQuote(null);
         setIsLoadingRiftQuote(false);
         return;
@@ -503,8 +501,11 @@ export const RatesSwapWidget = () => {
         }
 
         if (rfqQuoteResponse) {
-          setCowswapQuote(null);
-          setRfqQuote(rfqQuoteResponse);
+          setQuotes({
+            cowswapQuote: null,
+            rfqQuote: rfqQuoteResponse,
+            quoteType: "indicative",
+          });
 
           const outputAmount = formatLotAmount(rfqQuoteResponse.to);
           const truncatedOutput = (() => {
@@ -526,16 +527,14 @@ export const RatesSwapWidget = () => {
           });
           setIsLoadingRiftQuote(false);
         } else {
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setFeeOverview(null);
           setRiftQuote(null);
           setIsLoadingRiftQuote(false);
         }
       } catch (error) {
         console.error("Failed to fetch BTC->ERC20 quote:", error);
-        setCowswapQuote(null);
-        setRfqQuote(null);
+        clearQuotes();
         setFeeOverview(null);
         setRiftQuote(null);
         setIsLoadingRiftQuote(false);
@@ -545,7 +544,7 @@ export const RatesSwapWidget = () => {
       isSwappingForBTC,
       displayedInputAmount,
       selectedInputToken,
-      setRfqQuote,
+      clearQuotes,
       btcPrice,
       erc20Price,
       setFeeOverview,
@@ -605,8 +604,7 @@ export const RatesSwapWidget = () => {
       const usdValue = calculateUsdValue(value, inputTicker, ethPrice, btcPrice, erc20Price);
       setInputUsdValue(usdValue);
 
-      setCowswapQuote(null);
-      setRfqQuote(null);
+      clearQuotes();
       setRiftQuote(null);
       setRelayQuote(null);
       setRelayError(null);

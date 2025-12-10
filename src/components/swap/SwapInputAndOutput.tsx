@@ -262,8 +262,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         ) {
           console.log("input token was just changed, old quote");
           setIsLoadingQuote(false);
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setRefetchQuote(false);
           return;
         }
