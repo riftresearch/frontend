@@ -81,7 +81,11 @@ async function fetchEthGasCost(chainId: number): Promise<number | null> {
   }
 }
 
-export const SwapInputAndOutput = () => {
+interface SwapInputAndOutputProps {
+  hidePayoutAddress?: boolean;
+}
+
+export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOutputProps) => {
   // ============================================================================
   // HOOKS AND STATE
   // ============================================================================
@@ -2751,7 +2755,7 @@ export const SwapInputAndOutput = () => {
         </Flex>
 
         {/* Recipient Address - Animated (appears second) */}
-        {isSwappingForBTC && (
+        {isSwappingForBTC && !hidePayoutAddress && (
           <Flex
             direction="column"
             w="100%"

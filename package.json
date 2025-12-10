@@ -11,6 +11,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@chainflip/sdk": "^1.11.2",
     "@chakra-ui/icons": "^2.2.4",
     "@chakra-ui/react": "^3.21.0",
     "@cowprotocol/cow-sdk": "^7.0.9",

@@ -194,6 +194,7 @@ export const Navbar = ({}) => {
               {navItem("Swap", "/")}
               {navItem("History", "/history")}
               {navItem("Stats", "/stats")}
+              {/* {navItem("Rates", "/rates")} */}
               {/* {navItem('OTC', '/otc')} */}
             </Flex>
             <Flex ml="25px" gap="30px" align="center">
