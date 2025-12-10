@@ -1668,8 +1668,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     wasConnectedRef.current = isWalletConnected;
 
     // Clear existing quotes - they're no longer valid for the new chain
-    clearQuotes();
-    setFeeOverview(null);
+    // clearQuotes();
+    // setFeeOverview(null);
 
     // Reset approval state since approvals are chain-specific
     setApprovalState(ApprovalState.UNKNOWN);
