@@ -223,7 +223,6 @@ export const SwapButton = () => {
       setSwapButtonPressed(false);
       toastError(error, {
         title: "Approval Failed",
-        description: errorDescription,
       });
     }
   }, [selectedInputToken, evmConnectWalletChainId, cowswapClient, setApprovalState]);
