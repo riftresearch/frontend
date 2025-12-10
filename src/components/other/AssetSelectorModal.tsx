@@ -17,6 +17,8 @@ import {
   ETHEREUM_POPULAR_TOKENS,
   ALL_POPULAR_TOKENS,
   ZERO_USD_DISPLAY,
+  ETH_TOKEN,
+  ETH_TOKEN_BASE,
 } from "@/utils/constants";
 
 interface AssetSelectorModalProps {
@@ -197,6 +199,20 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
         // Replace balance and usdValue in search results if token is in user's wallet
         const mergedResults = results.map((t) => {
+          // Use canonical ETH token for native ETH (zero address)
+          const isNativeEth = t.address === "0x0000000000000000000000000000000000000000";
+          if (isNativeEth) {
+            const baseToken = t.chainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+            // Still merge wallet balance if available
+            const walletToken = userTokens.find(
+              (token) => token.address === t.address && token.chainId === t.chainId
+            );
+            if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
+              return { ...baseToken, balance: walletToken.balance, usdValue: walletToken.usdValue };
+            }
+            return baseToken;
+          }
+
           const walletToken = userTokens.find(
             (token) => token.address === t.address && token.chainId === t.chainId
           );
@@ -1040,7 +1056,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                             textTransform="uppercase"
                             letterSpacing="0.5px"
                           >
-                            Your Tokens
+                            {debouncedQuery.length > 0 ? "Search Results" : "Your Tokens"}
                           </Text>
                         </Box>
                         {searchResults.map((token, index) => (

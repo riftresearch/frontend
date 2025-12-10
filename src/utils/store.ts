@@ -3,6 +3,7 @@ import { CreateSwapResponse } from "./otcClient";
 import { TokenData, ApprovalState } from "./types";
 import { Quote } from "./rfqClient";
 import { FeeOverview } from "./swapHelpers";
+import { ETH_TOKEN } from "./constants";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
 
 type DepositFlowState =
@@ -120,16 +121,7 @@ export const useStore = create<{
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
-  selectedInputToken: {
-    name: "Ethereum",
-    ticker: "ETH",
-    address: "0x0000000000000000000000000000000000000000",
-    balance: "0",
-    usdValue: "$0.00",
-    icon: "https://assets.smold.app/api/chains/1/logo-128.png",
-    decimals: 18,
-    chainId: 1,
-  },
+  selectedInputToken: ETH_TOKEN,
   setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
   selectedOutputToken: null,
   setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
