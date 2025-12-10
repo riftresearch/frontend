@@ -99,6 +99,7 @@ export function UnifiedTransactionWidget({
   const [isSwapRefunded, setIsSwapRefunded] = React.useState(false);
   const [isPartialDeposit, setIsPartialDeposit] = React.useState(false);
   const [showFillingOrderWarning, setShowFillingOrderWarning] = React.useState(false);
+  const [cowSwapFailed, setCowSwapFailed] = React.useState(false);
 
   // Track EVM confirmations for user deposit (for EVM deposits)
   const userDepositTxHash = swapStatusInfo?.user_deposit_status?.tx_hash;
@@ -183,6 +184,46 @@ export function UnifiedTransactionWidget({
 
     return () => clearInterval(interval);
   }, [depositFlowState, swapStatusInfo?.created_at]);
+
+  // Check for CowSwap quote expiry (EVM deposits only, step 1)
+  useEffect(() => {
+    // Only check for EVM deposits in step 1
+    if (swapType !== "evm-deposit" || depositFlowState !== "1-WaitingUserDepositInitiated") {
+      setCowSwapFailed(false);
+      return;
+    }
+
+    const swapCreatedAt = swapStatusInfo?.created_at;
+    if (!swapCreatedAt || !currentSwapId) return;
+
+    // Set cookie with swap creation time
+    const cookieKey = `cowswap_${currentSwapId}`;
+    document.cookie = `${cookieKey}=${encodeURIComponent(swapCreatedAt)}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
+
+    const checkExpiry = () => {
+      // Read created time from specific cookie
+      const match = document.cookie.match(new RegExp(`(?:^|; )${cookieKey}=([^;]*)`));
+      const cookieValue = match?.[1];
+
+      // If cookie doesn't exist, just return
+      if (!cookieValue) return;
+
+      // Parse the URL-encoded date value (e.g., 2025-12-10T21%3A55%3A35.533Z)
+      const decodedDate = decodeURIComponent(cookieValue);
+      const createdTime = new Date(decodedDate);
+      const now = new Date();
+      const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
+
+      if (minutesSinceCreated >= 5) {
+        setCowSwapFailed(true);
+      }
+    };
+
+    checkExpiry(); // Check immediately
+    const interval = setInterval(checkExpiry, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [swapType, depositFlowState, swapStatusInfo?.created_at, currentSwapId]);
 
   // Poll for Bitcoin confirmations
   useEffect(() => {
@@ -443,6 +484,173 @@ export function UnifiedTransactionWidget({
       });
     }
   };
+
+  // COWSWAP QUOTE EXPIRED VIEW
+  if (cowSwapFailed) {
+    return (
+      <Flex direction="column" alignItems="center" gap="20px" w="100%">
+        {isMobile && (
+          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+            <SwapDetailsPill
+              width="100%"
+              inputAmount={inputAmount}
+              inputAsset={inputAsset}
+              inputAssetIconUrl={inputAssetIconUrl}
+              outputAmount={outputAmount}
+              outputAsset={outputAsset}
+              isMobile={isMobile}
+            />
+          </Box>
+        )}
+
+        <Box
+          w={isMobile ? "100%" : "805px"}
+          h={isMobile ? "600px" : "510px"}
+          borderRadius="40px"
+          mt="70px"
+          boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
+          backdropFilter="blur(9px)"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          position="relative"
+          _before={{
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: "40px",
+            padding: "3px",
+            background:
+              "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+          }}
+        >
+          <Box
+            w="100%"
+            h="50%"
+            borderRadius="40px"
+            position="absolute"
+            top="0px"
+            background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
+            display="flex"
+            backdropFilter="blur(20px)"
+            alignItems="center"
+            justifyContent="center"
+            _before={{
+              content: '""',
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              borderRadius: "40px",
+              padding: "3px",
+              background:
+                "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
+              mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+              maskComposite: "xor",
+              WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+              WebkitMaskComposite: "xor",
+            }}
+          >
+            {!isMobile && (
+              <Box position="absolute" top="15px" zIndex={2}>
+                <SwapDetailsPill
+                  inputAmount={inputAmount}
+                  inputAsset={inputAsset}
+                  inputAssetIconUrl={inputAssetIconUrl}
+                  outputAmount={outputAmount}
+                  outputAsset={outputAsset}
+                  isMobile={isMobile}
+                />
+              </Box>
+            )}
+
+            <Box
+              width="110px"
+              height="110px"
+              borderRadius="50%"
+              bg="rgba(251, 191, 36, 0.2)"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              border="3px solid rgba(251, 191, 36, 0.5)"
+              zIndex={1}
+            >
+              <svg
+                width="60"
+                height="60"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#fbbf24"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </Box>
+          </Box>
+
+          <Box
+            h="50%"
+            bottom="0px"
+            position="absolute"
+            padding="20px"
+            w="100%"
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            gap="20px"
+          >
+            <Text
+              fontSize="16px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              color={colors.offWhite}
+              textAlign="center"
+              px="40px"
+              lineHeight="1.6"
+            >
+              Quote expired, please try swap again.
+            </Text>
+
+            <Box
+              as="button"
+              onClick={handleNewSwap}
+              borderRadius="16px"
+              width={isMobile ? "240px" : "180px"}
+              border="2px solid #6651B3"
+              background="rgba(86, 50, 168, 0.30)"
+              padding="12px 16px"
+              cursor="pointer"
+              transition="all 0.2s"
+              zIndex={1}
+              _hover={{
+                transform: "translateY(-2px)",
+                boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
+              }}
+            >
+              <Text
+                color="white"
+                fontFamily={FONT_FAMILIES.NOSTROMO}
+                fontSize="14px"
+                fontWeight="normal"
+                letterSpacing="0.5px"
+              >
+                NEW SWAP
+              </Text>
+            </Box>
+          </Box>
+        </Box>
+      </Flex>
+    );
+  }
 
   // REFUNDED VIEW
   if (isSwapRefunded) {
