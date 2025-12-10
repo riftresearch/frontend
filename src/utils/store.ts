@@ -29,6 +29,9 @@ export interface CowswapOrderData {
   order: any | null; // EnrichedOrder from SDK - using any to avoid direct dependency import
 }
 
+/** Quote confidence level - indicative quotes use placeholder address, executable quotes use real user address */
+export type QuoteType = "indicative" | "executable";
+
 export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
 
 export const useStore = create<{
@@ -69,9 +72,16 @@ export const useStore = create<{
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
   cowswapQuote: QuoteResults | null;
-  setCowswapQuote: (quote: QuoteResults | null) => void;
   rfqQuote: Quote | null;
-  setRfqQuote: (quote: Quote | null) => void;
+  quoteType: QuoteType | null;
+  /** Atomically update quotes and quote type together. Pass null to clear all. */
+  setQuotes: (params: {
+    cowswapQuote: QuoteResults | null;
+    rfqQuote: Quote | null;
+    quoteType: QuoteType | null;
+  }) => void;
+  /** Clear all quotes atomically (sets cowswapQuote, rfqQuote, and quoteType to null) */
+  clearQuotes: () => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
   bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
@@ -162,9 +172,15 @@ export const useStore = create<{
   outputUsdValue: "$0.00",
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
   cowswapQuote: null,
-  setCowswapQuote: (quote: QuoteResults | null) => set({ cowswapQuote: quote }),
   rfqQuote: null,
-  setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
+  quoteType: null,
+  setQuotes: (params) =>
+    set({
+      cowswapQuote: params.cowswapQuote,
+      rfqQuote: params.rfqQuote,
+      quoteType: params.quoteType,
+    }),
+  clearQuotes: () => set({ cowswapQuote: null, rfqQuote: null, quoteType: null }),
   slippageBips: 5,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
   bitcoinDepositInfo: null,

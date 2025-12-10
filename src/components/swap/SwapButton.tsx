@@ -78,6 +78,7 @@ export const SwapButton = () => {
     isSwappingForBTC,
     cowswapQuote,
     rfqQuote,
+    quoteType,
     payoutAddress,
     addressValidation,
     setBitcoinDepositInfo,
@@ -93,7 +94,7 @@ export const SwapButton = () => {
     inputBelowMinimum,
     refetchQuote,
     setRefetchQuote,
-    setRfqQuote,
+    clearQuotes,
     cowswapOrderStatus,
     setCowswapOrderStatus,
     cowswapOrderData,
@@ -117,7 +118,7 @@ export const SwapButton = () => {
     setCowswapOrderStatus(CowswapOrderStatus.NO_ORDER);
 
     // Clear and refetch the quote
-    setRfqQuote(null);
+    clearQuotes();
     setRefetchQuote(true);
 
     // Check if it's an OFAC-related error
@@ -331,27 +332,32 @@ export const SwapButton = () => {
 
   // Handle ERC20->BTC swap using CowSwap + OTC
   const executeERC20ToBTCSwap = useCallback(async () => {
-    // Wait for optimal quote before proceeding
-    if (isAwaitingOptimalQuote) {
-      console.log("Waiting for optimal quote to arrive...");
-      // Poll until optimal quote arrives (check every 100ms, timeout after 10s)
-      const maxWaitMs = 10000;
+    // Wait for optimal quote and executable quote type before proceeding
+    if (isAwaitingOptimalQuote || quoteType !== "executable") {
+      console.log("Waiting for executable optimal quote to arrive...");
+      // Poll until optimal quote arrives and quote is executable (check every 100ms, timeout after 10s)
+      const maxWaitMs = 60000;
       const pollIntervalMs = 100;
       let waited = 0;
-      while (useStore.getState().isAwaitingOptimalQuote && waited < maxWaitMs) {
+      while (
+        (useStore.getState().isAwaitingOptimalQuote ||
+          useStore.getState().quoteType !== "executable") &&
+        waited < maxWaitMs
+      ) {
         await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
         waited += pollIntervalMs;
       }
       // If still waiting after timeout, abort
-      if (useStore.getState().isAwaitingOptimalQuote) {
-        console.error("Timed out waiting for optimal quote");
+      const state = useStore.getState();
+      if (state.isAwaitingOptimalQuote || state.quoteType !== "executable") {
+        console.error("Timed out waiting for executable optimal quote");
         toastError(new Error("Quote timeout"), {
           title: "Quote Timeout",
           description: "Unable to fetch optimal price. Please try again.",
         });
         return;
       }
-      console.log("Optimal quote received, proceeding with swap");
+      console.log("Executable optimal quote received, proceeding with swap");
     }
 
     // Check fake mode environment variables
@@ -507,6 +513,7 @@ export const SwapButton = () => {
   }, [
     cowswapQuote,
     rfqQuote,
+    quoteType,
     userEvmAccountAddress,
     selectedInputToken,
     payoutAddress,
@@ -742,10 +749,10 @@ export const SwapButton = () => {
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
       setIsCbBTCTransferPending(false);
-      setRfqQuote(null);
+      clearQuotes();
       setRefetchQuote(true);
     }
-  }, [writeError, sendTxError, setRfqQuote, setRefetchQuote]);
+  }, [writeError, sendTxError, clearQuotes, setRefetchQuote]);
 
   // Handle transaction receipt errors
   useEffect(() => {
@@ -826,6 +833,20 @@ export const SwapButton = () => {
       prevRefetchQuoteRef.current = refetchQuote;
     }
   }, [refetchQuote, rfqQuote, swapButtonPressed, startSwap]);
+
+  // Track previous wallet connection state for detecting connection events
+  const wasWalletConnectedRef = useRef(isWalletConnected);
+
+  // Auto-trigger swap when wallet connects while an executable quote exists
+  useEffect(() => {
+    const justConnected = !wasWalletConnectedRef.current && isWalletConnected;
+    wasWalletConnectedRef.current = isWalletConnected;
+
+    if (justConnected && rfqQuote !== null && quoteType !== null) {
+      console.log("Wallet connected with executable quote - triggering swap");
+      handleSwapButtonClick();
+    }
+  }, [isWalletConnected, rfqQuote, quoteType, handleSwapButtonClick]);
 
   // CowSwap order status polling with visibility-aware behavior
   // This fixes the bug where background tabs throttle setInterval, causing the app

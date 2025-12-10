@@ -3,7 +3,7 @@ import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
+import { useCowSwapContext } from "@/components/providers/CowSwapProvider";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -88,8 +88,10 @@ export const SwapInputAndOutput = () => {
 
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
 
-  // CowSwap client hook
-  const cowswapClient = useCowSwapClient();
+  // CowSwap context - provides client and indicative status
+  const cowswapContext = useCowSwapContext();
+  const cowswapClient = cowswapContext?.client ?? null;
+  const isCowswapIndicative = cowswapContext?.isIndicative ?? true;
 
   // Liquidity hook
   const liquidity = useMaxLiquidity();
@@ -149,8 +151,8 @@ export const SwapInputAndOutput = () => {
     setInputUsdValue,
     outputUsdValue,
     setOutputUsdValue,
-    setCowswapQuote,
-    setRfqQuote,
+    setQuotes,
+    clearQuotes,
     rfqQuote,
     cowswapQuote,
     payoutAddress,
@@ -241,8 +243,11 @@ export const SwapInputAndOutput = () => {
 
       if (quoteResponse) {
         console.log(`Processing ${priceQuality} quote response`);
-        setCowswapQuote(quoteResponse.cowswapQuote || null);
-        setRfqQuote(quoteResponse.rfqQuote);
+        setQuotes({
+          cowswapQuote: quoteResponse.cowswapQuote || null,
+          rfqQuote: quoteResponse.rfqQuote,
+          quoteType: isCowswapIndicative ? "indicative" : "executable",
+        });
         setOutputAmount(quoteResponse.btcOutputAmount || "");
         setIsLoadingQuote(false);
         setRefetchQuote(false);
@@ -292,11 +297,11 @@ export const SwapInputAndOutput = () => {
       ethPrice,
       erc20Price,
       selectedInputToken,
-      setCowswapQuote,
-      setRfqQuote,
+      setQuotes,
       setOutputAmount,
       setFeeOverview,
       setIsAwaitingOptimalQuote,
+      isCowswapIndicative,
     ]
   );
 
@@ -337,8 +342,7 @@ export const SwapInputAndOutput = () => {
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Input value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setOutputAmount("");
           setIsLoadingQuote(false);
           return;
@@ -413,8 +417,7 @@ export const SwapInputAndOutput = () => {
             // Mark optimal quote as no longer pending (failed)
             setIsAwaitingOptimalQuote(false);
             // Only clear state if both quotes fail (FAST already tried)
-            setCowswapQuote(null);
-            setRfqQuote(null);
+            clearQuotes();
             setOutputAmount("");
             setFeeOverview(null);
             setIsLoadingQuote(false);
@@ -436,8 +439,7 @@ export const SwapInputAndOutput = () => {
       displayedInputAmount,
       userEvmAccountAddress,
       selectedInputToken,
-      setCowswapQuote,
-      setRfqQuote,
+      clearQuotes,
       setOutputAmount,
       ethPrice,
       erc20Price,
@@ -465,8 +467,11 @@ export const SwapInputAndOutput = () => {
 
       if (quoteResponse) {
         console.log(`Processing ${priceQuality} exact output quote response`);
-        setCowswapQuote(quoteResponse.cowswapQuote || null);
-        setRfqQuote(quoteResponse.rfqQuote);
+        setQuotes({
+          cowswapQuote: quoteResponse.cowswapQuote || null,
+          rfqQuote: quoteResponse.rfqQuote,
+          quoteType: isCowswapIndicative ? "indicative" : "executable",
+        });
 
         // Truncate input amount to 8 decimals for display
         const inputAmount = quoteResponse.erc20InputAmount || "";
@@ -520,11 +525,11 @@ export const SwapInputAndOutput = () => {
       ethPrice,
       erc20Price,
       selectedInputToken,
-      setCowswapQuote,
-      setRfqQuote,
+      setQuotes,
       setDisplayedInputAmount,
       setFeeOverview,
       setIsAwaitingOptimalQuote,
+      isCowswapIndicative,
     ]
   );
 
@@ -549,8 +554,7 @@ export const SwapInputAndOutput = () => {
         if (!isAboveMinSwap(usdValue, btcPrice)) {
           console.log("Output value below minimum swap threshold");
           // Clear quotes but don't show error - just wait for larger amount
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setDisplayedInputAmount("");
           setIsLoadingQuote(false);
           return;
@@ -562,8 +566,7 @@ export const SwapInputAndOutput = () => {
           usdValue > parseFloat(liquidity.maxBTCLiquidityInUsd)
         ) {
           console.log("Output value exceeds maximum BTC liquidity");
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setDisplayedInputAmount("");
           setIsLoadingQuote(false);
           return;
@@ -632,8 +635,7 @@ export const SwapInputAndOutput = () => {
             // Mark optimal quote as no longer pending (failed)
             setIsAwaitingOptimalQuote(false);
             // Only clear state if both quotes fail (FAST already tried)
-            setCowswapQuote(null);
-            setRfqQuote(null);
+            clearQuotes();
             setDisplayedInputAmount("");
             setFeeOverview(null);
             setIsLoadingQuote(false);
@@ -652,8 +654,7 @@ export const SwapInputAndOutput = () => {
       outputAmount,
       userEvmAccountAddress,
       selectedInputToken,
-      setCowswapQuote,
-      setRfqQuote,
+      clearQuotes,
       setDisplayedInputAmount,
       btcPrice,
       setFeeOverview,
@@ -710,8 +711,7 @@ export const SwapInputAndOutput = () => {
 
       if (!isAboveMinSwap(usdValue, btcPrice)) {
         console.log("Value below minimum swap threshold");
-        setCowswapQuote(null);
-        setRfqQuote(null);
+        clearQuotes();
         setIsLoadingQuote(false);
         if (mode === "ExactInput") {
           setOutputAmount("");
@@ -727,8 +727,7 @@ export const SwapInputAndOutput = () => {
         usdValue > parseFloat(liquidity.maxCbBTCLiquidityInUsd)
       ) {
         console.log("Value exceeds maximum cbBTC liquidity");
-        setCowswapQuote(null);
-        setRfqQuote(null);
+        clearQuotes();
         setIsLoadingQuote(false);
         if (mode === "ExactInput") {
           setOutputAmount("");
@@ -759,9 +758,13 @@ export const SwapInputAndOutput = () => {
         }
 
         if (rfqQuoteResponse) {
-          // Clear CowSwap quote (not needed for BTC -> cbBTC)
-          setCowswapQuote(null);
-          setRfqQuote(rfqQuoteResponse);
+          // BTC -> cbBTC: no cowswap quote, only RFQ
+          // Quotes are executable when wallet is connected (destination known)
+          setQuotes({
+            cowswapQuote: null,
+            rfqQuote: rfqQuoteResponse,
+            quoteType: isWalletConnected ? "executable" : "indicative",
+          });
           setIsLoadingQuote(false);
           setRefetchQuote(false);
 
@@ -805,8 +808,7 @@ export const SwapInputAndOutput = () => {
           }
         } else {
           // Clear state on failure
-          setCowswapQuote(null);
-          setRfqQuote(null);
+          clearQuotes();
           setFeeOverview(null);
           setIsLoadingQuote(false);
           if (mode === "ExactInput") {
@@ -817,8 +819,7 @@ export const SwapInputAndOutput = () => {
         }
       } catch (error) {
         console.error(`Failed to fetch BTC->ERC20 quote (${mode}):`, error);
-        setCowswapQuote(null);
-        setRfqQuote(null);
+        clearQuotes();
         setFeeOverview(null);
         setIsLoadingQuote(false);
         if (mode === "ExactInput") {
@@ -833,7 +834,8 @@ export const SwapInputAndOutput = () => {
       displayedInputAmount,
       outputAmount,
       selectedInputToken,
-      setRfqQuote,
+      setQuotes,
+      clearQuotes,
       setOutputAmount,
       setDisplayedInputAmount,
       btcPrice,
@@ -842,6 +844,7 @@ export const SwapInputAndOutput = () => {
       liquidity,
       selectedOutputToken?.decimals,
       selectedOutputToken?.chainId,
+      isWalletConnected,
     ]
   );
 
@@ -920,8 +923,7 @@ export const SwapInputAndOutput = () => {
       setInputUsdValue(usdValue);
 
       // Clear existing quotes when user types
-      setCowswapQuote(null);
-      setRfqQuote(null);
+      clearQuotes();
 
       if (!value || parseFloat(value) <= 0) {
         // Clear output if input is empty or 0
@@ -994,8 +996,7 @@ export const SwapInputAndOutput = () => {
       setOutputUsdValue(usdValue);
 
       // Clear existing quotes when user types
-      setCowswapQuote(null);
-      setRfqQuote(null);
+      clearQuotes();
 
       if (!value || parseFloat(value) <= 0) {
         // Clear input if output is empty or 0
@@ -1089,8 +1090,7 @@ export const SwapInputAndOutput = () => {
       setOutputAmount("");
       setDisplayedInputAmount(truncateAmount(adjustedInputAmount));
       setFullPrecisionInputAmount(adjustedInputAmount);
-      setCowswapQuote(null);
-      setRfqQuote(null);
+      clearQuotes();
       return;
     }
 
@@ -1142,8 +1142,7 @@ export const SwapInputAndOutput = () => {
     setInputUsdValue(usdValue);
 
     // Clear existing quotes when max is clicked
-    setCowswapQuote(null);
-    setRfqQuote(null);
+    clearQuotes();
 
     // Set loading state
     setIsLoadingQuote(true);
@@ -1216,8 +1215,7 @@ export const SwapInputAndOutput = () => {
     setOutputUsdValue(usdValue);
 
     // Clear existing quotes when max is clicked
-    setCowswapQuote(null);
-    setRfqQuote(null);
+    clearQuotes();
 
     // Set loading state
     setIsLoadingQuote(true);
@@ -1274,8 +1272,7 @@ export const SwapInputAndOutput = () => {
     setOutputUsdValue(usdValue);
 
     // Clear existing quotes
-    setCowswapQuote(null);
-    setRfqQuote(null);
+    clearQuotes();
 
     // Set loading state
     setIsLoadingQuote(true);
@@ -1611,50 +1608,66 @@ export const SwapInputAndOutput = () => {
 
   // Track previous chain ID to detect actual chain switches
   const prevChainIdRef = useRef<number | undefined>(undefined);
+  // Track previous wallet connection state to detect initial connection vs chain switch
+  const wasConnectedRef = useRef<boolean>(false);
 
-  // Invalidate quotes and reset state when chain changes
+  // Invalidate quotes and reset state when chain changes (only for active chain switches)
   useEffect(() => {
     // Skip on initial mount - only react to actual chain changes
     if (prevChainIdRef.current === undefined) {
       prevChainIdRef.current = evmConnectWalletChainId;
+      wasConnectedRef.current = isWalletConnected;
       return;
     }
 
     // Only invalidate if chain actually changed
     if (prevChainIdRef.current === evmConnectWalletChainId) {
+      wasConnectedRef.current = isWalletConnected;
       return;
     }
+
+    // Detect if this is an initial wallet connection (wasn't connected before, now is)
+    const isInitialConnection = !wasConnectedRef.current && isWalletConnected;
 
     console.log(
       "Chain changed from",
       prevChainIdRef.current,
       "to",
       evmConnectWalletChainId,
-      "- invalidating quotes"
+      isInitialConnection
+        ? "- initial wallet connection, preserving input"
+        : "- invalidating quotes"
     );
     prevChainIdRef.current = evmConnectWalletChainId;
+    wasConnectedRef.current = isWalletConnected;
 
     // Clear existing quotes - they're no longer valid for the new chain
-    setCowswapQuote(null);
-    setRfqQuote(null);
+    clearQuotes();
     setFeeOverview(null);
 
     // Reset approval state since approvals are chain-specific
     setApprovalState(ApprovalState.UNKNOWN);
 
-    // Clear both input and output amounts to force fresh quote
-    setDisplayedInputAmount("");
-    setOutputAmount("");
-    setFullPrecisionInputAmount(null);
+    // Only clear input/output amounts if this is an active chain switch (not initial connection)
+    // For initial wallet connection, preserve the amounts so we can re-fetch quotes
+    if (!isInitialConnection) {
+      setDisplayedInputAmount("");
+      setOutputAmount("");
+      setFullPrecisionInputAmount(null);
+    } else {
+      // For initial connection, trigger a quote refetch with the preserved amounts
+      setRefetchQuote(true);
+    }
   }, [
     evmConnectWalletChainId,
-    setCowswapQuote,
-    setRfqQuote,
+    isWalletConnected,
+    clearQuotes,
     setFeeOverview,
     setApprovalState,
     setDisplayedInputAmount,
     setOutputAmount,
     setFullPrecisionInputAmount,
+    setRefetchQuote,
   ]);
 
   // Check if input amount exceeds user balance

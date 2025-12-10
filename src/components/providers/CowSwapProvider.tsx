@@ -7,7 +7,13 @@ import { privateKeyToAccount } from "viem/accounts";
 import { mainnet, base } from "viem/chains";
 import { CowSwapClient } from "@/utils/cowswapClient";
 
-const CowSwapContext = createContext<CowSwapClient | null>(null);
+export interface CowSwapContextValue {
+  client: CowSwapClient;
+  /** True when using placeholder wallet (no real wallet connected) - quotes are indicative only */
+  isIndicative: boolean;
+}
+
+const CowSwapContext = createContext<CowSwapContextValue | null>(null);
 
 // Placeholder private key for creating a dummy wallet client before user connects
 // This is NOT used for signing real transactions - only as a placeholder
@@ -26,20 +32,30 @@ export function CowSwapProvider({ children }: { children: ReactNode }) {
   const basePublicClient = usePublicClient({ chainId: base.id });
   const { data: walletClient } = useWalletClient();
 
-  const client = useMemo(() => {
+  const contextValue = useMemo(() => {
     if (!mainnetPublicClient || !basePublicClient) return null;
 
-    return new CowSwapClient({
+    const client = new CowSwapClient({
       mainnetPublicClient,
       basePublicClient,
       walletClient: walletClient ?? placeholderWalletClient,
     });
+
+    return {
+      client,
+      isIndicative: !walletClient,
+    };
   }, [mainnetPublicClient, basePublicClient, walletClient]);
 
-  return <CowSwapContext.Provider value={client}>{children}</CowSwapContext.Provider>;
+  return <CowSwapContext.Provider value={contextValue}>{children}</CowSwapContext.Provider>;
 }
 
-export function useCowSwapClient() {
+export function useCowSwapClient(): CowSwapClient | null {
   const ctx = useContext(CowSwapContext);
-  return ctx; // may be null if publicClient not ready yet
+  return ctx?.client ?? null;
+}
+
+/** Returns the full context including indicative status */
+export function useCowSwapContext(): CowSwapContextValue | null {
+  return useContext(CowSwapContext);
 }
