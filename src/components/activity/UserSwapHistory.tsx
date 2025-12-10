@@ -345,7 +345,6 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
   const pageSize = 15; // Load 15 swaps per page to enable scrolling without overwhelming
   const fetchingRef = useRef(false);
   const [isInitialMount, setIsInitialMount] = useState(true);
@@ -393,7 +392,6 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     // Skip if no address (not connected and not simulating)
     if (!address || (!isConnected && !isSimulating)) {
       setSwaps([]);
-      setPage(0);
       setHasMore(true);
       return;
     }
@@ -418,20 +416,45 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
       setSwaps(result.swaps);
       setHasMore(result.hasMore);
-      setPage(1);
       setLoading(false);
     };
 
     fetchWithRetries();
 
-    // Set up polling every 3 seconds - only refresh first page
+    // Set up polling every 3 seconds - refresh and merge intelligently
     const pollInterval = setInterval(() => {
       fetchUserSwaps(address, pageSize, 0).then(({ swaps: newSwaps }) => {
         setSwaps((prev) => {
-          // Update existing swaps and add any new ones from first page
-          const existingIds = new Set(prev.slice(pageSize).map((s) => s.id));
-          const updatedFirstPage = newSwaps.filter((s) => !existingIds.has(s.id));
-          return [...updatedFirstPage, ...prev.slice(pageSize)];
+          if (prev.length === 0) return newSwaps;
+
+          // Create a map of all existing swaps by ID for fast lookup
+          const swapMap = new Map<string, AdminSwapItem>();
+          prev.forEach((s) => swapMap.set(s.id, s));
+
+          // Update existing swaps with fresh data from first page
+          // and add any new swaps to the front
+          const newSwapIds = new Set<string>();
+          newSwaps.forEach((s) => {
+            newSwapIds.add(s.id);
+            swapMap.set(s.id, s); // Update or add
+          });
+
+          // Rebuild the list: new swaps first (in order), then existing swaps not in new batch
+          const result: AdminSwapItem[] = [];
+
+          // Add new/updated swaps from the first page in their order
+          newSwaps.forEach((s) => {
+            result.push(swapMap.get(s.id)!);
+          });
+
+          // Add remaining swaps that weren't in the new batch (preserving their order)
+          prev.forEach((s) => {
+            if (!newSwapIds.has(s.id)) {
+              result.push(s);
+            }
+          });
+
+          return result;
         });
       });
     }, 3000);
@@ -440,7 +463,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     return () => clearInterval(pollInterval);
   }, [address, isConnected, isSimulating]);
 
-  // Fetch next page
+  // Fetch next page - use actual swaps count as offset to handle filtered items correctly
   const fetchNextPage = useCallback(async () => {
     if (loadingMore || !hasMore || fetchingRef.current || !address) return;
 
@@ -448,24 +471,41 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     setLoadingMore(true);
 
     try {
-      const offset = page * pageSize;
-      const { swaps: newSwaps, hasMore: more } = await fetchUserSwaps(address, pageSize, offset);
+      // Use actual swaps length as offset instead of page * pageSize
+      // This handles cases where filtering reduced the count
+      const currentSwapsCount = swaps.length;
+      const { swaps: newSwaps, hasMore: more } = await fetchUserSwaps(
+        address,
+        pageSize,
+        currentSwapsCount
+      );
 
-      setSwaps((prev) => {
-        const existingIds = new Set(prev.map((s) => s.id));
-        const filtered = newSwaps.filter((s) => !existingIds.has(s.id));
-        return [...prev, ...filtered];
-      });
+      if (newSwaps.length === 0) {
+        // No more swaps to load
+        setHasMore(false);
+      } else {
+        setSwaps((prev) => {
+          const existingIds = new Set(prev.map((s) => s.id));
+          const filtered = newSwaps.filter((s) => !existingIds.has(s.id));
 
-      setHasMore(more);
-      setPage((p) => p + 1);
+          // If we got items but all were duplicates, there might still be more
+          // but we need to fetch further
+          if (filtered.length === 0 && more) {
+            // Don't update state, will retry with higher offset on next scroll
+            return prev;
+          }
+
+          return [...prev, ...filtered];
+        });
+        setHasMore(more && newSwaps.length > 0);
+      }
     } catch (error) {
       console.error("Error fetching next page:", error);
     } finally {
       fetchingRef.current = false;
       setLoadingMore(false);
     }
-  }, [address, page, pageSize, loadingMore, hasMore]);
+  }, [address, pageSize, loadingMore, hasMore, swaps.length]);
 
   // Handle scroll for infinite loading
   const handleScroll = useCallback(
