@@ -1632,69 +1632,86 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setApprovalState(ApprovalState.UNKNOWN);
   }, [selectedInputToken, setApprovalState]);
 
-  // Track previous chain ID to detect actual chain switches
-  const prevChainIdRef = useRef<number | undefined>(undefined);
-  // Track previous wallet connection state to detect initial connection vs chain switch
-  const wasConnectedRef = useRef<boolean>(false);
+  // Track previous state to detect actual changes and dedupe effect runs
+  const prevStateRef = useRef<{
+    chainId: number | undefined;
+    wasConnected: boolean;
+  }>({ chainId: undefined, wasConnected: false });
+  // Track when initial connection was detected to handle multi-run connection events
+  const initialConnectionTimeRef = useRef<number | null>(null);
 
   // Invalidate quotes and reset state when chain changes (only for active chain switches)
   useEffect(() => {
-    // Skip on initial mount - only react to actual chain changes
-    if (prevChainIdRef.current === undefined) {
-      prevChainIdRef.current = evmConnectWalletChainId;
-      wasConnectedRef.current = isWalletConnected;
+    const prev = prevStateRef.current;
+    console.log("[alp] prev", prev);
+
+    // Detect transition from disconnected -> connected (this render vs previous render)
+    const isInitialConnection = !prev.wasConnected && isWalletConnected;
+
+    // If this is a fresh initial connection, record the timestamp
+    if (isInitialConnection) {
+      initialConnectionTimeRef.current = Date.now();
+    }
+
+    // Consider it part of initial connection if within 500ms of detecting one
+    // This handles cases where wallet connection triggers multiple state updates
+    const isInInitialConnectionWindow =
+      initialConnectionTimeRef.current !== null &&
+      Date.now() - initialConnectionTimeRef.current < 500;
+
+    // Compute what changed
+    const chainChanged = prev.chainId !== undefined && prev.chainId !== evmConnectWalletChainId;
+
+    // Update tracked state for next run
+    prevStateRef.current = {
+      chainId: evmConnectWalletChainId,
+      wasConnected: isWalletConnected,
+    };
+
+    // Skip on initial mount
+    if (prev.chainId === undefined) {
       return;
     }
 
-    // Only invalidate if chain actually changed
-    if (prevChainIdRef.current === evmConnectWalletChainId) {
-      wasConnectedRef.current = isWalletConnected;
+    // If this is an initial connection, just trigger quote refetch (don't clear anything)
+    if (isInitialConnection) {
+      console.log("[alp] Wallet connected - triggering quote refetch");
+      setRefetchQuote(true);
       return;
     }
 
-    // Detect if this is an initial wallet connection (wasn't connected before, now is)
-    const isInitialConnection = !wasConnectedRef.current && isWalletConnected;
+    // Only process chain changes below this point (and only if already connected)
+    if (!chainChanged) {
+      return;
+    }
 
     console.log(
-      "Chain changed from",
-      prevChainIdRef.current,
+      "[alp] Chain changed from",
+      prev.chainId,
       "to",
       evmConnectWalletChainId,
-      isInitialConnection
-        ? "- initial wallet connection, preserving input"
-        : "- invalidating quotes"
+      isInInitialConnectionWindow ? "- part of initial connection" : "- invalidating quotes"
     );
-    prevChainIdRef.current = evmConnectWalletChainId;
-    wasConnectedRef.current = isWalletConnected;
-
-    // Clear existing quotes - they're no longer valid for the new chain
-    // clearQuotes();
-    // setFeeOverview(null);
 
     // Reset approval state since approvals are chain-specific
     setApprovalState(ApprovalState.UNKNOWN);
 
-    // Only clear input/output amounts if this is an active chain switch (not initial connection)
-    // For initial wallet connection, preserve the amounts so we can re-fetch quotes
-    if (!isInitialConnection) {
+    // If this chain change is part of the initial connection window, don't clear - just refetch
+    if (isInInitialConnectionWindow) {
+      console.log(
+        "[alp] Chain change is part of initial connection - preserving state, refetching"
+      );
+      setRefetchQuote(true);
+    } else {
+      console.log("[alp] Clearing quotes and amounts for chain switch");
+      // Clear existing quotes and amounts - they're no longer valid for the new chain
+      clearQuotes();
+      setFeeOverview(null);
       setDisplayedInputAmount("");
       setOutputAmount("");
       setFullPrecisionInputAmount(null);
-    } else {
-      // For initial connection, trigger a quote refetch with the preserved amounts
-      setRefetchQuote(true);
     }
-  }, [
-    evmConnectWalletChainId,
-    isWalletConnected,
-    clearQuotes,
-    setFeeOverview,
-    setApprovalState,
-    setDisplayedInputAmount,
-    setOutputAmount,
-    setFullPrecisionInputAmount,
-    setRefetchQuote,
-  ]);
+  }, [evmConnectWalletChainId, isWalletConnected]);
 
   // Check if input amount exceeds user balance
   useEffect(() => {
