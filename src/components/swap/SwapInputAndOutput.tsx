@@ -177,6 +177,7 @@ export const SwapInputAndOutput = () => {
     refetchQuote,
     setRefetchQuote,
     setIsAwaitingOptimalQuote,
+    hasNoRoutesError,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -207,6 +208,7 @@ export const SwapInputAndOutput = () => {
         !tokenData?.address ||
         tokenData.address === "0x0000000000000000000000000000000000000000"
       ) {
+        setHasNoRoutesError(false);
         setErc20Price(null);
         return;
       }
@@ -220,9 +222,13 @@ export const SwapInputAndOutput = () => {
         const tokenPrice = await fetchTokenPrice(chainName, tokenData.address);
         if (tokenPrice && typeof tokenPrice.price === "number") {
           setErc20Price(tokenPrice.price);
+          setHasNoRoutesError(false);
+        } else {
+          setHasNoRoutesError(true);
         }
       } catch (error) {
         console.error("Failed to fetch ERC20 price:", error);
+        setHasNoRoutesError(true);
       }
     },
     [evmConnectWalletChainId, setErc20Price]
@@ -242,6 +248,22 @@ export const SwapInputAndOutput = () => {
       }
 
       if (quoteResponse) {
+        // input token was just changed, old quote
+        if (
+          (selectedInputToken.ticker !== "ETH" &&
+            selectedInputToken.address !== quoteResponse.cowswapQuote?.tradeParameters.sellToken) ||
+          (selectedInputToken.ticker === "ETH" &&
+            quoteResponse.cowswapQuote?.tradeParameters.sellToken !==
+              "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE")
+        ) {
+          console.log("input token was just changed, old quote");
+          setIsLoadingQuote(false);
+          setCowswapQuote(null);
+          setRfqQuote(null);
+          setRefetchQuote(false);
+          return;
+        }
+
         console.log(`Processing ${priceQuality} quote response`);
         setQuotes({
           cowswapQuote: quoteResponse.cowswapQuote || null,
@@ -929,7 +951,6 @@ export const SwapInputAndOutput = () => {
         // Clear output if input is empty or 0
         setOutputAmount("");
         setOutputUsdValue(ZERO_USD_DISPLAY);
-        setIsLoadingQuote(false);
       }
 
       // Clear any existing debounce timer
@@ -939,7 +960,7 @@ export const SwapInputAndOutput = () => {
 
       // Set up debounced quote fetch (125ms delay)
       // Pass the value directly to avoid stale closure issues
-      if (value && parseFloat(value) > 0 && getQuoteForInputRef.current) {
+      if (value && parseFloat(value) > 0 && getQuoteForInputRef.current && !hasNoRoutesError) {
         // Show loading state
         setIsLoadingQuote(true);
 
@@ -958,6 +979,8 @@ export const SwapInputAndOutput = () => {
             fetchBTCtoERC20Quote(value, "ExactInput", currentRequestId);
           }, 125);
         }
+      } else {
+        setIsLoadingQuote(false);
       }
     }
   };

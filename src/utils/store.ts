@@ -5,6 +5,18 @@ import { Quote } from "./rfqClient";
 import { FeeOverview } from "./swapHelpers";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
 
+// Inline to avoid circular dependency with constants.ts
+const DEFAULT_INPUT_TOKEN: TokenData = {
+  name: "Ethereum",
+  ticker: "ETH",
+  address: "0x0000000000000000000000000000000000000000",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.smold.app/api/chains/1/logo-128.png",
+  decimals: 18,
+  chainId: 1,
+};
+
 type DepositFlowState =
   | "0-not-started"
   | "1-WaitingUserDepositInitiated"
@@ -130,16 +142,7 @@ export const useStore = create<{
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
-  selectedInputToken: {
-    name: "Ethereum",
-    ticker: "ETH",
-    address: "0x0000000000000000000000000000000000000000",
-    balance: "0",
-    usdValue: "$0.00",
-    icon: "https://assets.smold.app/api/chains/1/logo-128.png",
-    decimals: 18,
-    chainId: 1,
-  },
+  selectedInputToken: DEFAULT_INPUT_TOKEN,
   setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
   selectedOutputToken: null,
   setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
