@@ -11,11 +11,17 @@ import { MarketMakers } from "../other/MarketMakers";
 import { ErrorLogs } from "../other/ErrorLogs";
 import { useSwapStream } from "@/hooks/useSwapStream";
 import NumberFlow from "@number-flow/react";
-import { FiRefreshCw, FiSearch, FiX, FiExternalLink, FiUser } from "react-icons/fi";
+import {
+  FiRefreshCw,
+  FiSearch,
+  FiX,
+  FiExternalLink,
+  FiUser,
+  FiMessageSquare,
+} from "react-icons/fi";
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
 import { toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { AdminChats } from "./AdminChats";
 import { useRouter } from "next/router";
 import { getSwap, mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { AdminSwapItem } from "@/utils/types";
@@ -795,7 +801,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <TopUsers />
         </Flex>
 
-        {/* FEEDBACK CHATS */}
+        {/* FEEDBACK CHATS BUTTON */}
         <Flex mt="20px" mb="20px" direction="column">
           <Text
             ml="5px"
@@ -809,7 +815,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           >
             Feedback Chats
           </Text>
-          <AdminChats />
+          <Button
+            onClick={() => router.push("/chats")}
+            bg={colorsAnalytics.greenBackground}
+            borderWidth="2px"
+            borderColor={colorsAnalytics.greenOutline}
+            color={colorsAnalytics.offWhite}
+            _hover={{ opacity: 0.8 }}
+            fontFamily={FONT_FAMILIES.SF_PRO}
+            fontSize="16px"
+            h="50px"
+            px="24px"
+            borderRadius="12px"
+            w="fit-content"
+          >
+            <Flex align="center" gap="10px">
+              <FiMessageSquare size={20} />
+              View Feedback Chats
+            </Flex>
+          </Button>
         </Flex>
 
         {/* RIFT LOGO */}

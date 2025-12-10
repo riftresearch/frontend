@@ -24,96 +24,125 @@ export const StatsOverview: React.FC = () => {
   // Check if data has loaded
   const hasDataLoaded = completedSwaps > 0 || totalVolumeUsdNum > 0;
 
+  // Mobile layout - stacked vertically like admin dashboard
   if (isMobile) {
-    if (windowSize.width < 400) {
-      return <></>;
-    } else {
-      return (
-        <Flex justify="space-between" align="center" gap="8px" w="100%">
-          {/* TOTAL VOLUME - 50% */}
-          <GridFlex width="calc(50% - 3px)" heightBlocks={1.4}>
-            <Box position="relative" w="100%" h="100%">
-              <Flex direction="column" pl="15px" pt="10px">
-                <Text
-                  color={colorsAnalytics.textGray}
-                  fontFamily={FONT_FAMILIES.SF_PRO}
-                  fontSize="9px"
-                  fontWeight="bold"
-                  mb="6px"
-                >
-                  All User Volume
-                </Text>
-                <Box mt="-8px">
-                  {hasDataLoaded ? (
-                    <NumberFlow
-                      value={
-                        volumeCurrency === "usd"
-                          ? totalVolumeUsdNum
-                          : parseInt(totalVolumeSats) || 0
-                      }
-                      format={
-                        volumeCurrency === "usd"
-                          ? {
-                              style: "currency",
-                              currency: "USD",
-                              maximumFractionDigits: 2,
-                            }
-                          : {
-                              notation: "compact",
-                              maximumFractionDigits: 2,
-                            }
-                      }
-                      suffix={volumeCurrency === "usd" ? undefined : " sats"}
-                      style={{
-                        fontFamily: FONT_FAMILIES.SF_PRO,
-                        fontSize: "18px",
-                        fontWeight: "bold",
-                        color: colorsAnalytics.offWhite,
-                      }}
-                    />
-                  ) : (
-                    <Text
-                      fontFamily={FONT_FAMILIES.SF_PRO}
-                      fontSize="24px"
-                      fontWeight="bold"
-                      color="#3a3a3a"
-                    >
-                      --
-                    </Text>
-                  )}
-                </Box>
-              </Flex>
-            </Box>
-          </GridFlex>
-
-          {/* COMPLETED SWAPS - 25% */}
-          <GridFlex width="calc(25% - 3px)" heightBlocks={1.4}>
-            <Flex direction="column" pl="15px" pt="10px">
+    return (
+      <Flex justify="space-between" align="center" gap="12px" w="100%" direction="column">
+        {/* TOTAL VOLUME - Full width on mobile */}
+        <GridFlex width="100%" heightBlocks={3}>
+          <Box position="relative" w="100%" h="100%">
+            <Button
+              size="sm"
+              onClick={() => setVolumeCurrency(volumeCurrency === "usd" ? "btc" : "usd")}
+              bg="transparent"
+              borderWidth="2px"
+              borderRadius="12px"
+              borderColor={colorsAnalytics.borderGray}
+              color={colorsAnalytics.offWhite}
+              _hover={{ opacity: 0.8 }}
+              minW="32px"
+              h="32px"
+              p={0}
+              position="absolute"
+              top="18px"
+              right="20px"
+              zIndex={1}
+            >
+              {volumeCurrency === "usd" ? <FaDollarSign /> : <FaBitcoin />}
+            </Button>
+            <Flex direction="column" pl="25px" pt="18px">
               <Text
                 color={colorsAnalytics.textGray}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="9px"
+                fontSize="19px"
                 fontWeight="bold"
-                mb="6px"
+                mb="8px"
+              >
+                All User Volume
+              </Text>
+              <Box mt="-11px">
+                {hasDataLoaded ? (
+                  <NumberFlow
+                    value={
+                      volumeCurrency === "usd" ? totalVolumeUsdNum : parseInt(totalVolumeSats) || 0
+                    }
+                    format={
+                      volumeCurrency === "usd"
+                        ? {
+                            style: "currency",
+                            currency: "USD",
+                            maximumFractionDigits: 2,
+                          }
+                        : {
+                            notation: "compact",
+                            maximumFractionDigits: 2,
+                          }
+                    }
+                    suffix={volumeCurrency === "usd" ? undefined : " sats"}
+                    style={{
+                      fontFamily: FONT_FAMILIES.SF_PRO,
+                      fontSize: "49px",
+                      fontWeight: "bold",
+                      color: colorsAnalytics.offWhite,
+                      textShadow: "0 0 18px rgba(255,255,255,0.22)",
+                    }}
+                  />
+                ) : (
+                  <Text
+                    fontFamily={FONT_FAMILIES.SF_PRO}
+                    fontSize="49px"
+                    fontWeight="bold"
+                    color="#3a3a3a"
+                  >
+                    --
+                  </Text>
+                )}
+              </Box>
+            </Flex>
+          </Box>
+        </GridFlex>
+
+        {/* Bottom row - SWAPS and USERS side by side */}
+        <Flex w="100%" gap="12px">
+          {/* COMPLETED SWAPS */}
+          <GridFlex width="50%" heightBlocks={3}>
+            <Flex direction="column" pl="25px" pt="18px">
+              <Text
+                color={colorsAnalytics.textGray}
+                fontFamily={FONT_FAMILIES.SF_PRO}
+                fontSize="19px"
+                fontWeight="bold"
+                mb="8px"
               >
                 Total Swaps
               </Text>
-              <Box mt="-8px">
+              <Box
+                mt="-12px"
+                cursor="pointer"
+                onClick={() => {
+                  navigator.clipboard.writeText(completedSwaps.toString());
+                  toastSuccess({
+                    title: "Copied to clipboard",
+                    description: `${completedSwaps.toLocaleString()} swaps`,
+                  });
+                }}
+              >
                 {hasDataLoaded ? (
                   <NumberFlow
                     value={completedSwaps}
                     format={{ notation: "compact" }}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
-                      fontSize: "20px",
+                      fontSize: "49px",
                       fontWeight: "bold",
                       color: colorsAnalytics.offWhite,
+                      textShadow: "0 0 18px rgba(255,255,255,0.22)",
                     }}
                   />
                 ) : (
                   <Text
                     fontFamily={FONT_FAMILIES.SF_PRO}
-                    fontSize="18px"
+                    fontSize="49px"
                     fontWeight="bold"
                     color="#3a3a3a"
                   >
@@ -124,34 +153,45 @@ export const StatsOverview: React.FC = () => {
             </Flex>
           </GridFlex>
 
-          {/* UNIQUE USERS - 25% */}
-          <GridFlex width="calc(25% - 3px)" heightBlocks={1.4}>
-            <Flex direction="column" pl="15px" pt="10px">
+          {/* UNIQUE USERS */}
+          <GridFlex width="50%" heightBlocks={3}>
+            <Flex direction="column" pl="25px" pt="18px">
               <Text
                 color={colorsAnalytics.textGray}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="9px"
+                fontSize="19px"
                 fontWeight="bold"
-                mb="6px"
+                mb="8px"
               >
-                Users
+                Unique Users
               </Text>
-              <Box mt="-8px">
+              <Box
+                mt="-12px"
+                cursor="pointer"
+                onClick={() => {
+                  navigator.clipboard.writeText(uniqueUsers.toString());
+                  toastSuccess({
+                    title: "Copied to clipboard",
+                    description: `${uniqueUsers.toLocaleString()} users`,
+                  });
+                }}
+              >
                 {hasDataLoaded ? (
                   <NumberFlow
                     value={uniqueUsers}
                     format={{ notation: "compact" }}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
-                      fontSize: "18px",
+                      fontSize: "49px",
                       fontWeight: "bold",
                       color: colorsAnalytics.offWhite,
+                      textShadow: "0 0 18px rgba(255,255,255,0.22)",
                     }}
                   />
                 ) : (
                   <Text
                     fontFamily={FONT_FAMILIES.SF_PRO}
-                    fontSize="18px"
+                    fontSize="49px"
                     fontWeight="bold"
                     color="#3a3a3a"
                   >
@@ -162,50 +202,69 @@ export const StatsOverview: React.FC = () => {
             </Flex>
           </GridFlex>
         </Flex>
-      );
-    }
+      </Flex>
+    );
   }
 
-  // Desktop layout - 50%, 25%, 25%
+  // Desktop layout
   return (
-    <Flex justify="space-between" align="center" gap="8px" w="100%" alignSelf="center">
-      {/* TOTAL VOLUME - 50% */}
-      <GridFlex widthBlocks={15} heightBlocks={2.3}>
+    <Flex justify="space-between" align="center" gap="20px" w="100%" alignSelf="center">
+      {/* TOTAL VOLUME */}
+      <GridFlex widthBlocks={10} heightBlocks={3}>
         <Box position="relative" w="100%" h="100%">
           <Button
             size="sm"
             onClick={() => setVolumeCurrency(volumeCurrency === "usd" ? "btc" : "usd")}
             bg="transparent"
             borderWidth="2px"
-            borderRadius="8px"
+            borderRadius="12px"
             borderColor={colorsAnalytics.borderGray}
             color={colorsAnalytics.offWhite}
             _hover={{ opacity: 0.8 }}
-            minW="26px"
-            h="26px"
+            minW="32px"
+            h="32px"
             p={0}
             position="absolute"
-            top="12px"
-            right="15px"
+            top="18px"
+            right="20px"
             zIndex={1}
-            fontSize="11px"
           >
             {volumeCurrency === "usd" ? <FaDollarSign /> : <FaBitcoin />}
           </Button>
-          <Flex direction="column" pl="22px" pt="14px">
+          <Flex direction="column" pl="25px" pt="18px">
             <Text
               color={colorsAnalytics.textGray}
               fontFamily={FONT_FAMILIES.SF_PRO}
-              fontSize="15px"
+              fontSize="19px"
               fontWeight="bold"
-              mb="6px"
+              mb="8px"
             >
               All User Volume
             </Text>
-            <Box mt="-8px">
+            <Box mt="-11px">
               <Tooltip.Root openDelay={200} closeDelay={0}>
                 <Tooltip.Trigger asChild>
-                  <Box display="inline-block" cursor="pointer">
+                  <Box
+                    display="inline-block"
+                    cursor="pointer"
+                    onClick={() => {
+                      const isUsd = volumeCurrency === "usd";
+                      if (isUsd) {
+                        navigator.clipboard.writeText(totalVolumeUsdNum.toFixed(2));
+                        toastSuccess({
+                          title: "Copied to clipboard",
+                          description: `$${totalVolumeUsdNum.toFixed(2)}`,
+                        });
+                      } else {
+                        const satsValue = parseInt(totalVolumeSats) || 0;
+                        navigator.clipboard.writeText(satsValue.toString());
+                        toastSuccess({
+                          title: "Copied to clipboard",
+                          description: `${satsValue.toLocaleString()} sats`,
+                        });
+                      }
+                    }}
+                  >
                     {hasDataLoaded ? (
                       <NumberFlow
                         value={
@@ -228,15 +287,16 @@ export const StatsOverview: React.FC = () => {
                         suffix={volumeCurrency === "usd" ? undefined : " sats"}
                         style={{
                           fontFamily: FONT_FAMILIES.SF_PRO,
-                          fontSize: "37px",
+                          fontSize: "49px",
                           fontWeight: "bold",
                           color: colorsAnalytics.offWhite,
+                          textShadow: "0 0 18px rgba(255,255,255,0.22)",
                         }}
                       />
                     ) : (
                       <Text
                         fontFamily={FONT_FAMILIES.SF_PRO}
-                        fontSize="37px"
+                        fontSize="49px"
                         fontWeight="bold"
                         color="#3a3a3a"
                       >
@@ -271,25 +331,28 @@ export const StatsOverview: React.FC = () => {
         </Box>
       </GridFlex>
 
-      {/* COMPLETED SWAPS - 25% */}
-      <GridFlex widthBlocks={7.5} heightBlocks={2.3}>
-        <Flex direction="column" pl="22px" pt="14px">
+      {/* COMPLETED SWAPS */}
+      <GridFlex widthBlocks={10} heightBlocks={3}>
+        <Flex direction="column" pl="25px" pt="18px">
           <Text
             color={colorsAnalytics.textGray}
             fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="15px"
+            fontSize="19px"
             fontWeight="bold"
-            mb="6px"
+            mb="8px"
           >
             Total Swaps
           </Text>
           <Box
-            mt="-8px"
-            fontWeight="bold"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="37px"
+            mt="-12px"
             cursor="pointer"
+            onClick={() => {
+              navigator.clipboard.writeText(completedSwaps.toString());
+              toastSuccess({
+                title: "Copied to clipboard",
+                description: `${completedSwaps.toLocaleString()} swaps`,
+              });
+            }}
           >
             {hasDataLoaded ? (
               <NumberFlow
@@ -297,15 +360,16 @@ export const StatsOverview: React.FC = () => {
                 format={{ notation: "compact" }}
                 style={{
                   fontFamily: FONT_FAMILIES.SF_PRO,
-                  fontSize: "37px",
+                  fontSize: "49px",
                   fontWeight: "bold",
                   color: colorsAnalytics.offWhite,
+                  textShadow: "0 0 18px rgba(255,255,255,0.22)",
                 }}
               />
             ) : (
               <Text
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="37px"
+                fontSize="49px"
                 fontWeight="bold"
                 color="#3a3a3a"
               >
@@ -316,25 +380,28 @@ export const StatsOverview: React.FC = () => {
         </Flex>
       </GridFlex>
 
-      {/* UNIQUE USERS - 25% */}
-      <GridFlex widthBlocks={7.5} heightBlocks={2.3}>
-        <Flex direction="column" pl="22px" pt="14px">
+      {/* UNIQUE USERS */}
+      <GridFlex widthBlocks={10} heightBlocks={3}>
+        <Flex direction="column" pl="25px" pt="18px">
           <Text
             color={colorsAnalytics.textGray}
             fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="15px"
+            fontSize="19px"
             fontWeight="bold"
-            mb="6px"
+            mb="8px"
           >
             Unique Users
           </Text>
           <Box
-            mt="-8px"
-            fontWeight="bold"
-            color={colorsAnalytics.offWhite}
-            fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="37px"
+            mt="-12px"
             cursor="pointer"
+            onClick={() => {
+              navigator.clipboard.writeText(uniqueUsers.toString());
+              toastSuccess({
+                title: "Copied to clipboard",
+                description: `${uniqueUsers.toLocaleString()} users`,
+              });
+            }}
           >
             {hasDataLoaded ? (
               <NumberFlow
@@ -342,15 +409,16 @@ export const StatsOverview: React.FC = () => {
                 format={{ notation: "compact" }}
                 style={{
                   fontFamily: FONT_FAMILIES.SF_PRO,
-                  fontSize: "37px",
+                  fontSize: "49px",
                   fontWeight: "bold",
                   color: colorsAnalytics.offWhite,
+                  textShadow: "0 0 18px rgba(255,255,255,0.22)",
                 }}
               />
             ) : (
               <Text
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="37px"
+                fontSize="49px"
                 fontWeight="bold"
                 color="#3a3a3a"
               >

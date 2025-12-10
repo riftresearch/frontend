@@ -27,8 +27,12 @@ const TIMEFRAME_TO_BUCKET: Record<string, BucketType> = {
   all: "all_time",
 };
 
-export const VolumeTxnChart: React.FC = () => {
-  const [timeframe, setTimeframe] = React.useState<string>("1d");
+interface VolumeTxnChartProps {
+  defaultTimeframe?: string;
+}
+
+export const VolumeTxnChart: React.FC<VolumeTxnChartProps> = ({ defaultTimeframe = "1d" }) => {
+  const [timeframe, setTimeframe] = React.useState<string>(defaultTimeframe);
   const bucketType = TIMEFRAME_TO_BUCKET[timeframe] || "last_day";
 
   const {

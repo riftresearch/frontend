@@ -7,8 +7,8 @@ import { useStore } from "./store";
 
 // Types matching the Rust server responses
 
-export type ChainType = "bitcoin" | "ethereum";
-export type ChainTypeBroadcast = "Bitcoin" | "Ethereum";
+export type ChainType = "bitcoin" | "ethereum" | "base";
+export type ChainTypeBroadcast = "Bitcoin" | "Ethereum" | "Base";
 
 export interface TokenIdentifier {
   type: "Native" | "Address";

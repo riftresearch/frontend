@@ -30,6 +30,47 @@ const AdminPage: NextPage = () => {
     };
   }, []);
 
+  // Hard refresh when navigating to the page (not on initial page load)
+  useEffect(() => {
+    // Check if this is a navigation from another page (not a hard refresh)
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
+
+    if (navigation && navigation.type === "navigate") {
+      // This is a navigation from another page, force a hard refresh
+      console.log("[ADMIN PAGE] Navigation detected, forcing hard refresh...");
+      window.location.reload();
+    }
+  }, []);
+
+  // Track tab visibility and auto-refresh if inactive for more than 5 minutes
+  useEffect(() => {
+    let lastVisibleTime = Date.now();
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab became hidden, store the current time
+        lastVisibleTime = Date.now();
+      } else {
+        // Tab became visible, check if more than 5 minutes have passed
+        const timeAway = Date.now() - lastVisibleTime;
+        const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+        if (timeAway > fiveMinutes) {
+          console.log(
+            `[ADMIN PAGE] Tab was inactive for ${Math.round(timeAway / 1000 / 60)} minutes. Auto-refreshing...`
+          );
+          window.location.reload();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const handleAuthenticated = (password: string) => {
     setAdminPasswordCookie(password);
     setIsAuthenticated(true);

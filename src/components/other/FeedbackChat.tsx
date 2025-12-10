@@ -69,7 +69,12 @@ export const FeedbackChat: React.FC = () => {
   const checkForUnreadMessages = async () => {
     if (!address) return;
     try {
-      const chats = await listChats(address);
+      const result = await listChats(address);
+      if (!result.ok) {
+        console.error("Error checking for unread messages:", result.error);
+        return;
+      }
+      const chats = result.data;
 
       if (chats.length === 0) {
         setUnreadCount(0);
@@ -97,7 +102,16 @@ export const FeedbackChat: React.FC = () => {
     if (!address) return;
     setIsLoading(true);
     try {
-      const chats = await listChats(address);
+      const result = await listChats(address);
+      if (!result.ok) {
+        console.error("Error loading chats:", result.error);
+        toastError(new Error(result.error), {
+          title: "Error Loading Chats",
+          description: "Unable to load your chat history",
+        });
+        return;
+      }
+      const chats = result.data;
       console.log("[FEEDBACK CHAT] Loaded chats:", chats);
       setChatList(chats);
 
@@ -135,8 +149,10 @@ export const FeedbackChat: React.FC = () => {
       setCurrentChatId(chatId);
 
       // Reload chat list
-      const chats = await listChats(address);
-      setChatList(chats);
+      const result = await listChats(address);
+      if (result.ok) {
+        setChatList(result.data);
+      }
 
       // Load the new thread
       await loadThread(chatId);

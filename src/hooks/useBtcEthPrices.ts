@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "@/utils/store";
-import { fetchBtcEthPrices } from "@/utils/defiLlamaClient";
+import { fetchBtcEthPrices } from "@/utils/userTokensClient";
 
 const REFRESH_INTERVAL_MS = 60_000; // 1 minute
 

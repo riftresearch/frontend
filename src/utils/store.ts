@@ -1,9 +1,21 @@
 import { create } from "zustand";
 import { CreateSwapResponse } from "./otcClient";
-import { TokenData, PermitAllowance, PermitDataForSwap, ApprovalState } from "./types";
+import { TokenData, ApprovalState } from "./types";
 import { Quote } from "./rfqClient";
-import { UniswapQuoteResponse } from "./uniswapRouter";
 import { FeeOverview } from "./swapHelpers";
+import type { QuoteResults } from "@cowprotocol/sdk-trading";
+
+// Inline to avoid circular dependency with constants.ts
+const DEFAULT_INPUT_TOKEN: TokenData = {
+  name: "Ethereum",
+  ticker: "ETH",
+  address: "0x0000000000000000000000000000000000000000",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.smold.app/api/chains/1/logo-128.png",
+  decimals: 18,
+  chainId: 1,
+};
 
 type DepositFlowState =
   | "0-not-started"
@@ -15,6 +27,22 @@ type DepositFlowState =
   | "6-RefundingUser"
   | "7-RefundingMM"
   | "8-Failed";
+
+export enum CowswapOrderStatus {
+  NO_ORDER = "NO_ORDER",
+  SIGNING = "SIGNING",
+  SIGNED = "SIGNED",
+  SUCCESS = "SUCCESS",
+  FAIL = "FAIL",
+}
+
+export interface CowswapOrderData {
+  id: string | null;
+  order: any | null; // EnrichedOrder from SDK - using any to avoid direct dependency import
+}
+
+/** Quote confidence level - indicative quotes use placeholder address, executable quotes use real user address */
+export type QuoteType = "indicative" | "executable";
 
 export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
 
@@ -29,8 +57,8 @@ export const useStore = create<{
   setSelectedOutputToken: (token: TokenData | null) => void;
   isSwappingForBTC: boolean;
   setIsSwappingForBTC: (value: boolean) => void;
-  rawInputAmount: string;
-  setRawInputAmount: (value: string) => void;
+  displayedInputAmount: string;
+  setDisplayedInputAmount: (value: string) => void;
   fullPrecisionInputAmount: string | null;
   setFullPrecisionInputAmount: (value: string | null) => void;
   outputAmount: string;
@@ -55,10 +83,17 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => void;
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
-  uniswapQuote: UniswapQuoteResponse | null;
-  setUniswapQuote: (quote: UniswapQuoteResponse | null) => void;
+  cowswapQuote: QuoteResults | null;
   rfqQuote: Quote | null;
-  setRfqQuote: (quote: Quote | null) => void;
+  quoteType: QuoteType | null;
+  /** Atomically update quotes and quote type together. Pass null to clear all. */
+  setQuotes: (params: {
+    cowswapQuote: QuoteResults | null;
+    rfqQuote: Quote | null;
+    quoteType: QuoteType | null;
+  }) => void;
+  /** Clear all quotes atomically (sets cowswapQuote, rfqQuote, and quoteType to null) */
+  clearQuotes: () => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
   bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
@@ -71,10 +106,6 @@ export const useStore = create<{
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }) => void;
-  permitAllowance: PermitAllowance | null;
-  setPermitAllowance: (allowance: PermitAllowance | null) => void;
-  permitDataForSwap: PermitDataForSwap | null;
-  setPermitDataForSwap: (data: PermitDataForSwap | null) => void;
   approvalState: ApprovalState;
   setApprovalState: (state: ApprovalState) => void;
   feeOverview: FeeOverview | null;
@@ -97,6 +128,12 @@ export const useStore = create<{
   setInputBelowMinimum: (value: boolean) => void;
   refetchQuote: boolean;
   setRefetchQuote: (value: boolean) => void;
+  isAwaitingOptimalQuote: boolean;
+  setIsAwaitingOptimalQuote: (value: boolean) => void;
+  cowswapOrderStatus: CowswapOrderStatus;
+  setCowswapOrderStatus: (status: CowswapOrderStatus) => void;
+  cowswapOrderData: CowswapOrderData | null;
+  setCowswapOrderData: (data: CowswapOrderData | null) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -105,22 +142,14 @@ export const useStore = create<{
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
-  selectedInputToken: {
-    name: "Ethereum",
-    ticker: "ETH",
-    address: "0x0000000000000000000000000000000000000000",
-    balance: "0",
-    usdValue: "$0.00",
-    icon: "https://assets.smold.app/api/chains/1/logo-128.png",
-    decimals: 18,
-  },
+  selectedInputToken: DEFAULT_INPUT_TOKEN,
   setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
   selectedOutputToken: null,
   setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
   isSwappingForBTC: true,
   setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
-  rawInputAmount: "",
-  setRawInputAmount: (value: string) => set({ rawInputAmount: value }),
+  displayedInputAmount: "",
+  setDisplayedInputAmount: (value: string) => set({ displayedInputAmount: value }),
   fullPrecisionInputAmount: null,
   setFullPrecisionInputAmount: (value: string | null) => set({ fullPrecisionInputAmount: value }),
   outputAmount: "",
@@ -145,11 +174,17 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
   outputUsdValue: "$0.00",
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
-  uniswapQuote: null,
-  setUniswapQuote: (quote: UniswapQuoteResponse | null) => set({ uniswapQuote: quote }),
+  cowswapQuote: null,
   rfqQuote: null,
-  setRfqQuote: (quote: Quote | null) => set({ rfqQuote: quote }),
-  slippageBips: 10,
+  quoteType: null,
+  setQuotes: (params) =>
+    set({
+      cowswapQuote: params.cowswapQuote,
+      rfqQuote: params.rfqQuote,
+      quoteType: params.quoteType,
+    }),
+  clearQuotes: () => set({ cowswapQuote: null, rfqQuote: null, quoteType: null }),
+  slippageBips: 5,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
   bitcoinDepositInfo: null,
   setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) =>
@@ -162,10 +197,6 @@ export const useStore = create<{
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }) => set({ addressValidation: validation }),
-  permitAllowance: null,
-  setPermitAllowance: (allowance: PermitAllowance | null) => set({ permitAllowance: allowance }),
-  permitDataForSwap: null,
-  setPermitDataForSwap: (data: PermitDataForSwap | null) => set({ permitDataForSwap: data }),
   approvalState: ApprovalState.UNKNOWN,
   setApprovalState: (state: ApprovalState) => set({ approvalState: state }),
   feeOverview: null,
@@ -189,4 +220,10 @@ export const useStore = create<{
   setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
   refetchQuote: false,
   setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
+  isAwaitingOptimalQuote: false,
+  setIsAwaitingOptimalQuote: (value: boolean) => set({ isAwaitingOptimalQuote: value }),
+  cowswapOrderStatus: CowswapOrderStatus.NO_ORDER,
+  setCowswapOrderStatus: (status: CowswapOrderStatus) => set({ cowswapOrderStatus: status }),
+  cowswapOrderData: null,
+  setCowswapOrderData: (data: CowswapOrderData | null) => set({ cowswapOrderData: data }),
 }));

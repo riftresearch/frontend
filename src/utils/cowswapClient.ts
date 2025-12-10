@@ -1,30 +1,25 @@
 /**
  * TypeScript client for CowSwap Protocol
  * Provides typed access to quote and order creation for ERC20 -> cbBTC swaps
+ * Supports multiple chains (Ethereum mainnet and Base) with chain-specific SDK instances
  */
 
-import {
-  OrderBookApi,
-  OrderSigningUtils,
-  SupportedChainId,
-  OrderKind,
-  SellTokenSource,
-  BuyTokenDestination,
-  SigningScheme,
-  PriceQuality,
-} from "@cowprotocol/cow-sdk";
-import type {
-  OrderCreation,
-  OrderQuoteResponse,
-  OrderQuoteSideKindSell,
-} from "@cowprotocol/cow-sdk";
-import { applySlippage } from "./swapHelpers";
+import { SupportedChainId, PriceQuality } from "@cowprotocol/cow-sdk";
+import { TradingSdk, type QuoteResults, type SwapAdvancedSettings } from "@cowprotocol/sdk-trading";
+import { OrderKind } from "@cowprotocol/cow-sdk";
+import type { TradeParameters } from "@cowprotocol/sdk-trading";
+import { ViemAdapter } from "@cowprotocol/sdk-viem-adapter";
+import type { WalletClient, PublicClient, Address } from "viem";
+import { maxUint256 } from "viem";
 
 // Constants
 const CBBTC_ADDRESS = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 const NATIVE_ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
-const DEFAULT_SLIPPAGE_BPS = 10; // 0.1% = 10 basis points
-const DEFAULT_VALID_FOR_SECONDS = 60;
+const DEFAULT_SLIPPAGE_BPS = 5; // 0.05% = 5 basis points
+const DEFAULT_VALID_FOR_SECONDS = 300; // 5 minutes
+
+/** Chains supported by this client */
+export type CowSwapSupportedChain = SupportedChainId.MAINNET | SupportedChainId.BASE;
 
 /**
  * CowSwap quote request parameters
@@ -32,47 +27,37 @@ const DEFAULT_VALID_FOR_SECONDS = 60;
 export interface CowSwapQuoteRequest {
   /** Token to sell (address or "ETH" for native) */
   sellToken: string;
-  /** Amount to sell in base units (wei for ETH, token decimals for ERC20) */
-  sellAmount: string;
+  /** Amount to buy in base units (exactly one of buyAmount or sellAmount must be set) */
+  buyAmount?: string;
+  /** Amount to sell in base units (exactly one of buyAmount or sellAmount must be set) */
+  sellAmount?: string;
+  /** Token decimals for the sell token */
+  decimals: number;
   /** Slippage tolerance in basis points (100 bps = 1%) */
   slippageBps?: number;
   /** How long the order should be valid in seconds */
   validFor?: number;
   /** User's wallet address */
   userAddress: string;
-  /** Price quality preference (defaults to FAST) */
+  /** Price quality preference (defaults to OPTIMAL) */
   priceQuality?: PriceQuality;
-}
-
-/**
- * CowSwap quote response
- */
-export interface CowSwapQuoteResponse {
-  /** The quote details from CowSwap */
-  quote: OrderQuoteResponse;
-  /** Minimum amount of cbBTC to receive after slippage */
-  buyAmount: string;
-  /** When the quote expires */
-  expiresAt: Date;
-}
-
-/**
- * CowSwap order ready for signing
- */
-export interface CowSwapOrder {
-  /** The order parameters */
-  order: OrderCreation;
-  /** The quote ID for tracking */
-  quoteId?: number;
-  /** Expiration timestamp */
-  expiresAt: Date;
+  /** Optional receiver address for the order */
+  receiver?: string;
+  /** Chain to execute on (defaults to mainnet) */
+  chainId?: CowSwapSupportedChain;
 }
 
 /**
  * CowSwap client configuration
+ * Single wallet client shared across chains, separate public clients per chain
  */
 export interface CowSwapClientConfig {
-  chainId?: SupportedChainId;
+  /** Wallet client for signing - shared across all chains */
+  walletClient?: WalletClient;
+  /** Public client for Ethereum mainnet */
+  mainnetPublicClient: PublicClient;
+  /** Public client for Base */
+  basePublicClient: PublicClient;
 }
 
 /**
@@ -91,51 +76,107 @@ export class CowSwapError extends Error {
 
 /**
  * CowSwap Client for interacting with CowSwap Protocol
+ * Maintains separate SDK instances for each supported chain
  */
 export class CowSwapClient {
-  private readonly orderBookApi: OrderBookApi;
-  private readonly chainId: SupportedChainId;
+  private readonly mainnetSdk: TradingSdk;
+  private readonly baseSdk: TradingSdk;
 
-  constructor(config: CowSwapClientConfig = {}) {
-    this.chainId = config.chainId ?? SupportedChainId.MAINNET;
-    this.orderBookApi = new OrderBookApi({ chainId: this.chainId });
+  constructor(config: CowSwapClientConfig) {
+    // Initialize mainnet SDK
+    const mainnetAdapter = new ViemAdapter({
+      provider: config.mainnetPublicClient,
+      walletClient: config.walletClient,
+    });
+    this.mainnetSdk = new TradingSdk(
+      { appCode: "app.rift.trade", chainId: SupportedChainId.MAINNET },
+      {},
+      mainnetAdapter
+    );
+
+    // Initialize Base SDK
+    const baseAdapter = new ViemAdapter({
+      provider: config.basePublicClient,
+      walletClient: config.walletClient,
+    });
+    this.baseSdk = new TradingSdk(
+      { appCode: "app.rift.trade", chainId: SupportedChainId.BASE },
+      {},
+      baseAdapter
+    );
+  }
+
+  /**
+   * Get the SDK instance for a specific chain
+   */
+  getSdk(chainId: CowSwapSupportedChain = SupportedChainId.MAINNET): TradingSdk {
+    return chainId === SupportedChainId.BASE ? this.baseSdk : this.mainnetSdk;
+  }
+
+  /**
+   * Expose the mainnet TradingSdk instance (for backwards compatibility)
+   */
+  get sdk(): TradingSdk {
+    return this.mainnetSdk;
   }
 
   /**
    * Get a quote for selling a token for cbBTC
+   * Returns the full QuoteResults object from the SDK
    */
-  async getQuote(request: CowSwapQuoteRequest): Promise<CowSwapQuoteResponse> {
+  async getQuote(request: CowSwapQuoteRequest): Promise<QuoteResults> {
     try {
-      const sellToken =
-        request.sellToken.toUpperCase() === "ETH" ? NATIVE_ETH_ADDRESS : request.sellToken;
+      // Validate that exactly one of buyAmount or sellAmount is provided
+      const hasBuyAmount = request.buyAmount !== undefined;
+      const hasSellAmount = request.sellAmount !== undefined;
 
+      if (hasBuyAmount === hasSellAmount) {
+        throw new CowSwapError(
+          "Exactly one of buyAmount or sellAmount must be provided",
+          "INVALID_REQUEST"
+        );
+      }
+
+      const sellToken =
+        request.sellToken === "0x0000000000000000000000000000000000000000"
+          ? NATIVE_ETH_ADDRESS
+          : request.sellToken;
       const validFor = request.validFor ?? DEFAULT_VALID_FOR_SECONDS;
       const slippageBps = request.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
-      const priceQuality = request.priceQuality ?? PriceQuality.FAST;
+      const chainId = request.chainId ?? SupportedChainId.MAINNET;
 
-      // Request quote from CowSwap
-      const quoteRequest = {
+      // Determine order kind
+      const isBuyOrder = hasBuyAmount;
+
+      // Build TradeParameters for TradingSdk
+      // Note: owner is required for quotes when no wallet is connected
+      const tradeParameters: TradeParameters = {
+        kind: isBuyOrder ? OrderKind.BUY : OrderKind.SELL,
         sellToken,
+        sellTokenDecimals: request.decimals,
         buyToken: CBBTC_ADDRESS,
-        from: request.userAddress,
-        receiver: request.userAddress,
-        sellAmountBeforeFee: request.sellAmount,
-        kind: "sell" as OrderQuoteSideKindSell,
+        buyTokenDecimals: 8, // cbBTC has 8 decimals
+        amount: isBuyOrder ? request.buyAmount! : request.sellAmount!,
+        slippageBps,
         validFor,
-        priceQuality,
+        receiver: request.receiver,
       };
 
-      const quote = await this.orderBookApi.getQuote(quoteRequest);
-
-      // Calculate expiration
-      const expiresAt = new Date(Date.now() + validFor * 1000);
-
-      return {
-        quote,
-        buyAmount: quote.quote.buyAmount,
-        expiresAt,
+      // Configure advanced settings for fast price quality quote
+      const advancedSettings: SwapAdvancedSettings = {
+        quoteRequest: {
+          priceQuality: request.priceQuality ?? PriceQuality.OPTIMAL,
+        },
       };
+
+      // Get quote from chain-specific SDK
+      const sdk = this.getSdk(chainId);
+      const { quoteResults } = await sdk.getQuote(tradeParameters, advancedSettings);
+      return quoteResults;
     } catch (error) {
+      if (error instanceof CowSwapError) {
+        throw error;
+      }
       throw new CowSwapError(
         `Failed to get CowSwap quote: ${error instanceof Error ? error.message : "Unknown error"}`,
         "QUOTE_ERROR",
@@ -145,104 +186,44 @@ export class CowSwapClient {
   }
 
   /**
-   * Build an order ready for signing
+   * Submit a swap order using TradingSdk
    */
-  async buildOrder(request: CowSwapQuoteRequest, receiver?: string): Promise<CowSwapOrder> {
+  async submitOrder(request: CowSwapQuoteRequest): Promise<string> {
     try {
-      console.log("Building CowSwap order with request:", request);
-      const quoteResponse = await this.getQuote(request);
-      const { quote } = quoteResponse;
+      // Validate that buyAmount is provided (only BUY orders supported)
+      if (!request.buyAmount) {
+        throw new CowSwapError(
+          "buyAmount must be provided for order submission",
+          "INVALID_REQUEST"
+        );
+      }
 
       const sellToken =
-        request.sellToken.toUpperCase() === "ETH" ? NATIVE_ETH_ADDRESS : request.sellToken;
+        request.sellToken === "0x0000000000000000000000000000000000000000"
+          ? NATIVE_ETH_ADDRESS
+          : request.sellToken;
+      const validFor = request.validFor ?? DEFAULT_VALID_FOR_SECONDS;
+      const slippageBps = request.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
+      const chainId = request.chainId ?? SupportedChainId.MAINNET;
 
-      // Apply slippage to buy amount
-      const adjustedBuyAmount = applySlippage(quote.quote.buyAmount, request.slippageBps);
-
-      // Build the order from the quote
-      const order: OrderCreation = {
-        ...quote.quote,
+      // Build TradeParameters for exact output (BUY) order
+      const tradeParameters: TradeParameters = {
+        kind: OrderKind.BUY,
         sellToken,
+        sellTokenDecimals: request.decimals,
         buyToken: CBBTC_ADDRESS,
-        receiver: receiver ?? request.userAddress,
-        from: request.userAddress,
-        signature: "",
-        kind: OrderKind.SELL,
-        partiallyFillable: false,
-        sellTokenBalance: SellTokenSource.ERC20,
-        buyTokenBalance: BuyTokenDestination.ERC20,
-        signingScheme: SigningScheme.EIP712,
-        buyAmount: adjustedBuyAmount,
-        feeAmount: "0",
+        buyTokenDecimals: 8, // cbBTC has 8 decimals
+        amount: request.buyAmount,
+        slippageBps,
+        validFor,
+        receiver: request.receiver,
       };
 
-      return {
-        order,
-        quoteId: quote.id,
-        expiresAt: quoteResponse.expiresAt,
-      };
-    } catch (error) {
-      if (error instanceof CowSwapError) {
-        throw error;
-      }
-      throw new CowSwapError(
-        `Failed to build CowSwap order: ${error instanceof Error ? error.message : "Unknown error"}`,
-        "BUILD_ORDER_ERROR",
-        error
-      );
-    }
-  }
+      // Submit order using chain-specific SDK
+      const sdk = this.getSdk(chainId);
+      const { orderId } = await sdk.postSwapOrder(tradeParameters);
 
-  /**
-   * Get the status of an order
-   */
-  async getOrderStatus(orderUid: string): Promise<string> {
-    try {
-      const order = await this.orderBookApi.getOrder(orderUid);
-      return order.status;
-    } catch (error) {
-      throw new CowSwapError(
-        `Failed to get order status: ${error instanceof Error ? error.message : "Unknown error"}`,
-        "ORDER_STATUS_ERROR",
-        error
-      );
-    }
-  }
-
-  /**
-   * Get EIP-712 typed data for signing an order
-   */
-  async getOrderTypedData(order: OrderCreation) {
-    try {
-      // Use CowSwap SDK's signing utilities to get the typed data
-      const domain = await OrderSigningUtils.getDomain(this.chainId);
-      const types = OrderSigningUtils.getEIP712Types();
-
-      return {
-        domain,
-        types,
-        message: order,
-      };
-    } catch (error) {
-      throw new CowSwapError(
-        `Failed to get order typed data: ${error instanceof Error ? error.message : "Unknown error"}`,
-        "TYPED_DATA_ERROR",
-        error
-      );
-    }
-  }
-
-  /**
-   * Submit a signed order to CowSwap
-   */
-  async submitOrder(order: OrderCreation, signature: string): Promise<string> {
-    try {
-      const orderUid = await this.orderBookApi.sendOrder({
-        ...order,
-        signature,
-        signingScheme: SigningScheme.EIP712,
-      });
-      return orderUid;
+      return orderId;
     } catch (error) {
       throw new CowSwapError(
         `Failed to submit order: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -251,13 +232,68 @@ export class CowSwapClient {
       );
     }
   }
-}
 
-/**
- * Create a configured CowSwap client
- */
-export const createCowSwapClient = (config?: CowSwapClientConfig): CowSwapClient =>
-  new CowSwapClient(config);
+  /**
+   * Get the current CowProtocol allowance for a token
+   * @param tokenAddress - Address of the token to check allowance for
+   * @param owner - Address of the token owner
+   * @param chainId - Chain to check on (defaults to mainnet)
+   * @returns Current allowance as bigint (0n if undefined)
+   */
+  async getCowProtocolAllowance(params: {
+    tokenAddress: Address;
+    owner: Address;
+    chainId?: CowSwapSupportedChain;
+  }): Promise<bigint> {
+    try {
+      const sdk = this.getSdk(params.chainId ?? SupportedChainId.MAINNET);
+      const allowance = await sdk.getCowProtocolAllowance({
+        tokenAddress: params.tokenAddress,
+        owner: params.owner,
+      });
+      // Return 0n if allowance is undefined (e.g., token not yet approved)
+      if (allowance === undefined) {
+        return 0n;
+      }
+      return allowance;
+    } catch (error) {
+      throw new CowSwapError(
+        `Failed to get allowance: ${error instanceof Error ? error.message : "Unknown error"}`,
+        "ALLOWANCE_ERROR",
+        error
+      );
+    }
+  }
+
+  /**
+   * Approve CowProtocol to spend tokens
+   * @param tokenAddress - Address of the token to approve
+   * @param amount - Amount to approve (defaults to max uint256 for unlimited approval)
+   * @param chainId - Chain to approve on (defaults to mainnet)
+   * @returns Transaction hash
+   */
+  async approveCowProtocol(params: {
+    tokenAddress: Address;
+    amount?: bigint;
+    chainId?: CowSwapSupportedChain;
+  }): Promise<`0x${string}`> {
+    try {
+      const sdk = this.getSdk(params.chainId ?? SupportedChainId.MAINNET);
+
+      const txHash = await sdk.approveCowProtocol({
+        tokenAddress: params.tokenAddress,
+        amount: params.amount ?? maxUint256,
+      });
+      return txHash as `0x${string}`;
+    } catch (error) {
+      throw new CowSwapError(
+        `Failed to approve: ${error instanceof Error ? error.message : "Unknown error"}`,
+        "APPROVAL_ERROR",
+        error
+      );
+    }
+  }
+}
 
 /**
  * Helper to check if an order is expired

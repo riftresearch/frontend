@@ -92,8 +92,12 @@ export async function GET(req: NextRequest) {
     const baseFee = BigInt(baseFeePerGas);
     const priorityFee = BigInt(maxPriorityFeePerGas);
 
-    // Calculate maxFeePerGas = (baseFee * 1.35) + priorityFee
-    const maxFeePerGas = (baseFee * BigInt(135)) / BigInt(100) + priorityFee;
+    // Calculate maxFeePerGas with different multipliers based on chainId
+    // Ethereum mainnet (chainId 1): 1.5x base fee
+    // Other chains: 2x base fee
+    // const baseMultiplier = chainId === 1 ? BigInt(150) : BigInt(200);
+    // const maxFeePerGas = (baseFee * baseMultiplier) / BigInt(100) + priorityFee;
+    const maxFeePerGas = baseFee + priorityFee;
 
     // Return as hex strings
     return NextResponse.json({

@@ -3,7 +3,6 @@ import { createAppKit } from "@reown/appkit";
 import { mainnet, arbitrum, base, type AppKitNetwork } from "@reown/appkit/networks";
 import { createStorage, cookieStorage, http, fallback } from "wagmi";
 import { QueryClient } from "@tanstack/react-query";
-import { GLOBAL_CONFIG } from "./constants";
 
 // Define a custom Anvil network for local development
 export const anvilNetwork: AppKitNetwork = {
@@ -39,8 +38,8 @@ export const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID;
 // TODO: Disable anvilNetwork in production
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   //anvilNetwork,
-  // base,
   mainnet,
+  base,
 ];
 
 // Create the Wagmi Adapter
@@ -53,21 +52,16 @@ export const wagmiAdapter = new WagmiAdapter({
   projectId: projectId || "",
   chains: [
     mainnet,
-    // base,
+    base,
     // anvilNetwork
   ],
   transports: {
     [mainnet.id]: fallback([
-      http("https://eth.llamarpc.com"),
       http("https://rpc.mevblocker.io"),
       http("https://rpc.flashbots.net"),
       http("https://eth.drpc.org"),
     ]),
-    // [base.id]: fallback([
-    //   http("https://mainnet.base.org"),
-    //   http("https://base.llamarpc.com"),
-    //   http("https://base.drpc.org"),
-    // ]),
+    [base.id]: fallback([http("https://mainnet.base.org"), http("https://base.drpc.org")]),
     //[anvilNetwork.id]: http(CHAIN_SCOPED_CONFIGS[anvilNetwork.id].rpcUrl),
   },
 });
