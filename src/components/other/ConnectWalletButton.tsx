@@ -29,7 +29,13 @@ const getCustomChainName = (chainId: number): string => {
 
 export const ConnectWalletButton: React.FC = () => {
   const { address, isConnected } = useAccount();
-  const { evmConnectWalletChainId: chainId, setUserTokensForChain, setSearchResults } = useStore();
+  const {
+    evmConnectWalletChainId: chainId,
+    setUserTokensForChain,
+    setSearchResults,
+    selectedInputToken,
+    setSelectedInputToken,
+  } = useStore();
   const chains = useChains();
   const { isMobile } = useWindowSize();
 
@@ -162,10 +168,33 @@ export const ConnectWalletButton: React.FC = () => {
       });
 
       setSearchResults(combinedSorted);
+
+      // If selectedInputToken has 0 balance, update it from fetched data if available
+      if (selectedInputToken.balance === "0") {
+        const userTokensForChain =
+          useStore.getState().userTokensByChain[selectedInputToken.chainId] || [];
+        const matchingToken = userTokensForChain.find(
+          (t) => t.address.toLowerCase() === selectedInputToken.address.toLowerCase()
+        );
+        if (matchingToken) {
+          setSelectedInputToken({
+            ...selectedInputToken,
+            balance: matchingToken.balance,
+            usdValue: matchingToken.usdValue,
+          });
+        }
+      }
     };
 
     fetchAllUserTokens();
-  }, [isConnected, address, setUserTokensForChain, setSearchResults]);
+  }, [
+    isConnected,
+    address,
+    setUserTokensForChain,
+    setSearchResults,
+    selectedInputToken,
+    setSelectedInputToken,
+  ]);
 
   // Format the user's address for display
   const displayAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
