@@ -1,12 +1,7 @@
 import React from "react";
 import { Text } from "@chakra-ui/react";
 import { useStore } from "@/utils/store";
-import {
-  BASE_LOGO,
-  ARBITRUM_LOGO,
-  ETH_Icon,
-  WRENCH_LOGO,
-} from "@/components/other/SVGs";
+import { BASE_LOGO, ARBITRUM_LOGO, ETH_Icon, WRENCH_LOGO } from "@/components/other/SVGs";
 
 interface NetworkIconProps {
   chainId?: number; // Optional - will use the current chain if not provided
@@ -16,16 +11,16 @@ interface NetworkIconProps {
 }
 
 // Network icon function that returns the appropriate icon with width/height applied
-const getNetworkIcon = (
-  chainId: number,
-  width: string = "20",
-  height: string = "20"
-) => {
+const getNetworkIcon = (chainId: number, width: string = "20", height: string = "20") => {
   switch (chainId) {
     case 1337:
       return <WRENCH_LOGO width={width} height={height} />;
     case 8453:
-      return <BASE_LOGO width={width} height={height} />;
+      return (
+        <span style={{ borderRadius: "50%", overflow: "hidden", display: "inline-flex" }}>
+          <BASE_LOGO width={width} height={height} />
+        </span>
+      );
     case 42161:
       return <ARBITRUM_LOGO width={width} height={height} />;
     case 1:
@@ -47,9 +42,7 @@ export const NetworkIcon: React.FC<NetworkIconProps> = ({
   mr,
 }) => {
   // Use provided chainId or get from context
-  const evmConnectWalletChainId = useStore(
-    (state) => state.evmConnectWalletChainId
-  );
+  const evmConnectWalletChainId = useStore((state) => state.evmConnectWalletChainId);
   const chainId = providedChainId || evmConnectWalletChainId;
 
   // Get the icon with width/height applied
@@ -57,9 +50,7 @@ export const NetworkIcon: React.FC<NetworkIconProps> = ({
 
   // Apply margin-right if provided
   if (mr) {
-    return (
-      <span style={{ marginRight: mr, display: "inline-flex" }}>{icon}</span>
-    );
+    return <span style={{ marginRight: mr, display: "inline-flex" }}>{icon}</span>;
   }
 
   return icon;
