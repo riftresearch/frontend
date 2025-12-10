@@ -27,8 +27,8 @@ export { PriceQuality };
 export function getSlippageBpsForNotional(usdValue: number): number {
   if (usdValue < 10) return 200; // 2%
   if (usdValue < 25) return 100; // 1%
-  if (usdValue < 100) return 25; // 0.25%
-  if (usdValue < 250) return 10; // 0.1%
+  if (usdValue < 250) return 50; // 0.5%
+  if (usdValue < 1000) return 10; // 0.1%
   return 5; // 0.05%
 }
 
