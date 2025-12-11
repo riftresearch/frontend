@@ -98,19 +98,26 @@ export const otcClient = createOTCClient({
 // Popular tokens list
 const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC", "USDe", "DAI", "UNI"];
 
+export const ETH_TOKEN = {
+  name: "Ethereum",
+  ticker: "ETH",
+  address: "0x0000000000000000000000000000000000000000",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: ETH_ICON,
+  decimals: 18,
+  chainId: 1,
+};
+
+export const ETH_TOKEN_BASE = {
+  ...ETH_TOKEN,
+  chainId: 8453,
+};
+
 // Create network-specific popular tokens
 export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
   if (ticker === "ETH") {
-    return {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: "0x0000000000000000000000000000000000000000",
-      balance: "0",
-      usdValue: "$0.00",
-      icon: ETH_ICON,
-      decimals: 18,
-      chainId: 8453,
-    };
+    return ETH_TOKEN_BASE;
   }
   const address = BASE_TICKERS_TO_ADDRESS[ticker as keyof typeof BASE_TICKERS_TO_ADDRESS];
   const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA] as any;
@@ -128,16 +135,7 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
 
 export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
   if (ticker === "ETH") {
-    return {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: "0x0000000000000000000000000000000000000000",
-      balance: "0",
-      usdValue: "$0.00",
-      icon: ETH_ICON,
-      decimals: 18,
-      chainId: 1,
-    };
+    return ETH_TOKEN;
   }
   const address = ETHEREUM_TICKERS_TO_ADDRESS[ticker as keyof typeof ETHEREUM_TICKERS_TO_ADDRESS];
   const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA] as any;
@@ -172,22 +170,6 @@ export const BASE_POPULAR_ADDRESSES = new Set<string>([
 
 // Combined popular tokens for "All Networks" view (ETH, USDC, cbBTC from both chains)
 const ALL_POPULAR_TICKERS = ["ETH", "USDC", "cbBTC", "USDT"];
-
-export const ETH_TOKEN = {
-  name: "Ethereum",
-  ticker: "ETH",
-  address: "0x0000000000000000000000000000000000000000",
-  balance: "0",
-  usdValue: "$0.00",
-  icon: ETH_ICON,
-  decimals: 18,
-  chainId: 1,
-};
-
-export const ETH_TOKEN_BASE = {
-  ...ETH_TOKEN,
-  chainId: 8453,
-};
 
 export const ALL_POPULAR_TOKENS: TokenData[] = [
   // Ethereum tokens

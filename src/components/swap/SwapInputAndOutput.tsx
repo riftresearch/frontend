@@ -11,6 +11,8 @@ import {
   BASE_POPULAR_TOKENS,
   BITCOIN_DECIMALS,
   MIN_SWAP_SATS,
+  ETH_TOKEN_BASE,
+  ETH_TOKEN,
 } from "@/utils/constants";
 import { SupportedChainId } from "@cowprotocol/cow-sdk";
 import WebAssetTag from "@/components/other/WebAssetTag";
@@ -1392,8 +1394,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // 1. We've checked for cookies (isInitialMountRef is false)
     // 2. We haven't loaded from cookie
     if (!isInitialMountRef.current && !hasLoadedFromCookieRef.current) {
-      const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
-      setSelectedInputToken(ETH_TOKEN);
+      const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+      setSelectedInputToken(defaultToken);
     }
   }, [selectedInputToken, setSelectedInputToken]);
 
@@ -1403,6 +1405,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     if (isInitialMountRef.current) return;
 
     if (isSwappingForBTC) {
+      const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+      setSelectedInputToken(defaultToken);
       setSelectedOutputToken(null);
     } else {
       // Use chain-specific cbBTC token based on user's connected chain
@@ -1411,7 +1415,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       const cbBTC = popularTokens.find((token) => token.ticker === "cbBTC");
       setSelectedOutputToken(cbBTC || null);
     }
-  }, [isSwappingForBTC, setSelectedOutputToken, evmConnectWalletChainId]);
+  }, [isSwappingForBTC, setSelectedInputToken, setSelectedOutputToken, evmConnectWalletChainId]);
 
   // Fetch ERC20 token price when selected token changes
   useEffect(() => {
