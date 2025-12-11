@@ -461,8 +461,22 @@ export const SwapButton = () => {
         usdValue
       );
 
-      // Get chainId from selected token (default to mainnet)
-      const tokenChainId = selectedInputToken.chainId ?? 1;
+      // Derive chainId from RFQ quote (source of truth for the swap chain)
+      const quoteChain = rfqQuote!.from.currency.chain;
+      const quoteChainId = quoteChain === "ethereum" ? 1 : quoteChain === "base" ? 8453 : null;
+
+      // Validate quote chain is supported and matches connected wallet
+      if (quoteChainId === null || quoteChainId !== evmConnectWalletChainId) {
+        toastError(new Error("Wrong chain connected"), {
+          title: "Wrong chain connected",
+          description: "Please connect your wallet to the correct chain",
+        });
+        setSwapButtonPressed(false);
+        setIsApprovingToken(false);
+        setIsCbBTCTransferPending(false);
+        setCowswapOrderStatus(CowswapOrderStatus.NO_ORDER);
+        return;
+      }
 
       const orderId = await cowswapClient.submitOrder({
         sellToken,
@@ -471,7 +485,7 @@ export const SwapButton = () => {
         slippageBps: dynamicSlippageBps,
         userAddress: userEvmAccountAddress,
         receiver: depositAddress, // Send cbBTC to OTC deposit address
-        chainId: tokenChainId as any,
+        chainId: quoteChainId as any,
       });
 
       console.log("CowSwap order submitted:", orderId);
