@@ -469,7 +469,6 @@ export const SwapButton = () => {
         buyAmount,
         decimals,
         slippageBps: dynamicSlippageBps,
-        validFor: 600, // 10 minutes
         userAddress: userEvmAccountAddress,
         receiver: depositAddress, // Send cbBTC to OTC deposit address
         chainId: tokenChainId as any,

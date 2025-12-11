@@ -214,7 +214,7 @@ export function UnifiedTransactionWidget({
       const now = new Date();
       const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
 
-      if (minutesSinceCreated >= 5) {
+      if (minutesSinceCreated >= 60) {
         setCowSwapFailed(true);
       }
     };
