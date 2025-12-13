@@ -7,7 +7,7 @@ import { colors } from "@/utils/colors";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { ANALYTICS_API_URL } from "@/utils/analyticsClient";
-import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
@@ -334,8 +334,22 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   onInitialLoadComplete,
   simulatedAddress,
 }) => {
-  const { address: walletAddress, isConnected } = useAccount();
+  const { address: wagmiAddress, isConnected: isWagmiConnected } = useAccount();
   const { setShowAuthFlow } = useDynamicContext();
+  const userWallets = useUserWallets();
+
+  // Find EVM wallet from Dynamic (MetaMask, etc.)
+  const evmWallet = userWallets.find(
+    (w) =>
+      w.chain === "EVM" ||
+      w.chain === "evm" ||
+      w.connector?.name?.toLowerCase()?.includes("metamask") ||
+      w.connector?.name?.toLowerCase()?.includes("coinbase")
+  );
+
+  // Check for EVM connection from either wagmi or Dynamic
+  const walletAddress = wagmiAddress || evmWallet?.address;
+  const isConnected = isWagmiConnected || !!evmWallet;
 
   // Use simulated address if provided, otherwise use wallet address
   const address = simulatedAddress || walletAddress;

@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Flex, Text, Box, Image, Spinner } from "@chakra-ui/react";
 import { useAccount } from "wagmi";
-import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
+import { useDynamicContext, useUserWallets, useDynamicModals } from "@dynamic-labs/sdk-react-core";
+import { FiCopy, FiCheck } from "react-icons/fi";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
+import { toastSuccess } from "@/utils/toast";
 import type { TokenData } from "@/utils/types";
 
 // Chain ID to network name mapping
@@ -34,11 +36,18 @@ const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite
 interface WalletPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  onConnectNewWallet?: () => void;
 }
 
-export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => {
+export const WalletPanel: React.FC<WalletPanelProps> = ({
+  isOpen,
+  onClose,
+  onConnectNewWallet,
+}) => {
   const { address: evmAddress } = useAccount();
   const { handleLogOut, setShowAuthFlow, primaryWallet } = useDynamicContext();
+  // setShowLinkNewWalletModal is from useDynamicModals hook (for adding wallets when already connected)
+  const { setShowLinkNewWalletModal } = useDynamicModals();
   const userWallets = useUserWallets();
   const { userTokensByChain } = useStore();
   const [activeTab, setActiveTab] = useState<"tokens" | "activity">("tokens");
@@ -84,6 +93,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
     try {
       await navigator.clipboard.writeText(address);
       setCopiedAddress(address);
+      toastSuccess({ title: "Address Copied", description: address });
       setTimeout(() => setCopiedAddress(null), 2000);
     } catch (err) {
       console.error("Failed to copy address:", err);
@@ -136,9 +146,52 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
               justify="space-between"
               borderBottom={`1px solid ${colors.borderGray}`}
             >
-              <Text color={colors.offWhite} fontSize="18px" fontWeight="600">
-                All Wallets
-              </Text>
+              {/* Wallets Dropdown (clickable to close) */}
+              <Flex
+                bg={colors.offBlackLighter}
+                borderRadius="20px"
+                px="12px"
+                py="6px"
+                align="center"
+                gap="8px"
+                cursor="pointer"
+                onClick={() => setShowWalletsOverlay(false)}
+                _hover={{ bg: "#2b2b2b" }}
+              >
+                {/* Wallet Icons */}
+                <Flex>
+                  {userWallets.slice(0, 3).map((wallet, idx) => (
+                    <Box
+                      key={wallet.id}
+                      w="20px"
+                      h="20px"
+                      borderRadius="full"
+                      ml={idx > 0 ? "-6px" : "0"}
+                      border={`2px solid ${colors.offBlack}`}
+                      bg={colors.offBlackLighter}
+                      overflow="hidden"
+                    >
+                      <Image
+                        src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                        alt="wallet"
+                        w="20px"
+                        h="20px"
+                      />
+                    </Box>
+                  ))}
+                </Flex>
+                <Text
+                  color={colors.offWhite}
+                  fontSize="14px"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  letterSpacing="-0.5px"
+                >
+                  {userWallets.length} Wallet{userWallets.length !== 1 ? "s" : ""}
+                </Text>
+                <Text color={colors.textGray} fontSize="12px">
+                  ▲
+                </Text>
+              </Flex>
               <Box
                 cursor="pointer"
                 onClick={() => setShowWalletsOverlay(false)}
@@ -158,7 +211,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
             </Flex>
 
             {/* Wallet List */}
-            <Box p="12px" maxH="400px" overflowY="auto">
+            <Box p="12px" maxH="400px" overflowY="auto" bg="rgba(0, 0, 0, 0.25)">
               {userWallets.map((wallet) => (
                 <Box
                   key={wallet.id}
@@ -166,11 +219,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
                   mb="8px"
                   borderRadius="12px"
                   border={`1px solid ${colors.borderGray}`}
-                  bg={
-                    primaryWallet?.address === wallet.address
-                      ? colors.offBlackLighter
-                      : "transparent"
-                  }
+                  bg={primaryWallet?.address === wallet.address ? "#202020" : colors.offBlack}
                 >
                   {/* Wallet Info Row */}
                   <Flex align="center" justify="space-between" mb="12px">
@@ -183,33 +232,33 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
                         borderRadius="full"
                       />
                       <Flex direction="column">
-                        <Flex align="center" gap="6px">
+                        {/* Address as clickable copy button */}
+                        <Flex
+                          align="center"
+                          gap="6px"
+                          cursor="pointer"
+                          onClick={() => copyAddress(wallet.address)}
+                          bg={colors.offBlackLighter}
+                          px="10px"
+                          py="6px"
+                          borderRadius="8px"
+                          _hover={{ bg: colors.offBlackLighter2 }}
+                        >
                           <Text
                             color={colors.offWhite}
                             fontSize="14px"
                             fontFamily={FONT_FAMILIES.AUX_MONO}
+                            letterSpacing="-0.5px"
                           >
                             {formatAddress(wallet.address)}
                           </Text>
-                          <Box
-                            cursor="pointer"
-                            onClick={() => copyAddress(wallet.address)}
-                            opacity={0.6}
-                            _hover={{ opacity: 1 }}
-                          >
-                            <Text
-                              fontSize="12px"
-                              color={
-                                copiedAddress === wallet.address
-                                  ? colors.greenOutline
-                                  : colors.textGray
-                              }
-                            >
-                              {copiedAddress === wallet.address ? "✓" : "📋"}
-                            </Text>
-                          </Box>
+                          {copiedAddress === wallet.address ? (
+                            <FiCheck size={14} color={colors.greenOutline} />
+                          ) : (
+                            <FiCopy size={14} color={colors.textGray} />
+                          )}
                         </Flex>
-                        <Flex align="center" gap="6px" mt="4px">
+                        <Flex align="center" gap="6px" mt="6px">
                           <Box px="6px" py="2px" borderRadius="4px" bg={colors.offBlackLighter2}>
                             <Text color={colors.textGray} fontSize="10px" fontWeight="500">
                               {getWalletChainType(wallet)}
@@ -226,50 +275,28 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
                         </Flex>
                       </Flex>
                     </Flex>
-                    {/* Wallet Balance (if available) */}
-                    <Text
-                      color={colors.textGray}
-                      fontSize="14px"
-                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                    >
-                      {getWalletChainType(wallet) === "EVM"
-                        ? `$${totalUsdValue.toFixed(2)}`
-                        : "$0.00"}
-                    </Text>
-                  </Flex>
-
-                  {/* Action Buttons */}
-                  <Flex gap="8px">
-                    <Flex
-                      flex="1"
-                      justify="center"
-                      align="center"
-                      py="8px"
-                      borderRadius="8px"
-                      border={`1px solid ${colors.borderGray}`}
-                      cursor="pointer"
-                      _hover={{ bg: colors.offBlackLighter }}
-                      onClick={() => {
-                        // Select wallet logic - for now just close overlay
-                        setShowWalletsOverlay(false);
-                      }}
-                    >
-                      <Text color={colors.RiftBlue} fontSize="12px" fontWeight="500">
-                        Select Wallet
+                    {/* Right side: Balance + Disconnect */}
+                    <Flex direction="column" align="flex-end" gap="4px">
+                      {/* Wallet Balance */}
+                      <Text
+                        color={colors.textGray}
+                        fontSize="14px"
+                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        letterSpacing="-0.5px"
+                      >
+                        {getWalletChainType(wallet) === "EVM"
+                          ? `$${totalUsdValue.toFixed(2)}`
+                          : "$0.00"}
                       </Text>
-                    </Flex>
-                    <Flex
-                      flex="1"
-                      justify="center"
-                      align="center"
-                      py="8px"
-                      borderRadius="8px"
-                      border={`1px solid ${colors.borderGray}`}
-                      cursor="pointer"
-                      _hover={{ bg: colors.offBlackLighter }}
-                      onClick={() => disconnectWallet(wallet)}
-                    >
-                      <Text color={colors.red} fontSize="12px" fontWeight="500">
+                      {/* Disconnect text link */}
+                      <Text
+                        color="#F87171"
+                        fontSize="12px"
+                        fontWeight="500"
+                        cursor="pointer"
+                        _hover={{ color: "#FCA5A5" }}
+                        onClick={() => disconnectWallet(wallet)}
+                      >
                         Disconnect
                       </Text>
                     </Flex>
@@ -284,16 +311,23 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
                 justify="center"
                 align="center"
                 py="12px"
-                borderRadius="12px"
-                border={`1px solid ${colors.borderGray}`}
+                borderRadius="14px"
+                bg="rgba(28, 97, 253, 0.06)"
+                border={`2px solid rgb(76, 126, 201)`}
                 cursor="pointer"
-                _hover={{ bg: colors.offBlackLighter }}
-                onClick={() => {
+                _hover={{ bg: "rgba(28, 97, 253, 0.2)" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  console.log(
+                    "[WalletPanel] Connect New Wallet clicked - using setShowLinkNewWalletModal"
+                  );
                   setShowWalletsOverlay(false);
-                  setShowAuthFlow(true);
+                  // Use setShowLinkNewWalletModal from useDynamicModals hook
+                  setShowLinkNewWalletModal(true);
                 }}
               >
-                <Text color={colors.RiftBlue} fontSize="14px" fontWeight="500">
+                <Text color="rgb(76, 126, 201)" fontSize="14px" fontWeight="600">
                   Connect a New Wallet
                 </Text>
               </Flex>
@@ -343,7 +377,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
               </Box>
             ))}
           </Flex>
-          <Text color={colors.offWhite} fontSize="14px" fontFamily={FONT_FAMILIES.AUX_MONO}>
+          <Text
+            color={colors.offWhite}
+            fontSize="14px"
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            letterSpacing="-0.5px"
+          >
             {userWallets.length} Wallet{userWallets.length !== 1 ? "s" : ""}
           </Text>
           <Text color={colors.textGray} fontSize="12px">
@@ -378,6 +417,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
             fontSize="32px"
             fontWeight="bold"
             fontFamily={FONT_FAMILIES.AUX_MONO}
+            letterSpacing="-4px"
           >
             $
             {totalUsdValue.toLocaleString(undefined, {
@@ -399,6 +439,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
           color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
           fontSize="14px"
           fontFamily={FONT_FAMILIES.AUX_MONO}
+          letterSpacing="-0.5px"
           pb="12px"
           borderBottom={activeTab === "tokens" ? `2px solid ${colors.offWhite}` : "none"}
           cursor="pointer"
@@ -410,6 +451,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
           color={activeTab === "activity" ? colors.offWhite : colors.textGray}
           fontSize="14px"
           fontFamily={FONT_FAMILIES.AUX_MONO}
+          letterSpacing="-0.5px"
           pb="12px"
           borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
           cursor="pointer"
@@ -473,10 +515,16 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
                         fontSize="16px"
                         fontWeight="500"
                         fontFamily={FONT_FAMILIES.AUX_MONO}
+                        letterSpacing="-0.5px"
                       >
                         {token.ticker}
                       </Text>
-                      <Text color={colors.textGray} fontSize="12px">
+                      <Text
+                        color={colors.textGray}
+                        fontSize="12px"
+                        fontFamily={FONT_FAMILIES.AUX_MONO}
+                        letterSpacing="-0.5px"
+                      >
                         {CHAIN_NAMES[token.chainId] || "Unknown"}
                       </Text>
                     </Flex>
@@ -489,10 +537,16 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
                       fontSize="16px"
                       fontWeight="500"
                       fontFamily={FONT_FAMILIES.AUX_MONO}
+                      letterSpacing="-0.5px"
                     >
                       {token.usdValue}
                     </Text>
-                    <Text color={colors.textGray} fontSize="12px">
+                    <Text
+                      color={colors.textGray}
+                      fontSize="12px"
+                      fontFamily={FONT_FAMILIES.AUX_MONO}
+                      letterSpacing="-0.5px"
+                    >
                       {parseFloat(token.balance).toFixed(4)} {token.ticker}
                     </Text>
                   </Flex>
@@ -511,25 +565,6 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({ isOpen, onClose }) => 
           </Text>
         </Flex>
       )}
-
-      {/* Disconnect All Button */}
-      <Flex p="20px" borderTop={`1px solid ${colors.borderGray}`} mt="auto">
-        <Flex
-          w="100%"
-          justify="center"
-          align="center"
-          py="12px"
-          borderRadius="12px"
-          bg={colors.offBlackLighter}
-          cursor="pointer"
-          _hover={{ bg: "#2b2b2b" }}
-          onClick={() => handleLogOut()}
-        >
-          <Text color={colors.red} fontSize="14px" fontFamily={FONT_FAMILIES.AUX_MONO}>
-            Disconnect All
-          </Text>
-        </Flex>
-      </Flex>
     </Box>
   );
 };

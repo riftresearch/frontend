@@ -85,3 +85,16 @@ body[data-admin-page="true"] [data-testid="w3m-connect-button"] {
 .powered-by-dynamic {
   display: none !important;
 }
+
+/* Ensure Dynamic modal always appears on top */
+.dynamic-shadow-dom,
+.dynamic-shadow-dom-content,
+[data-testid="dynamic-modal"],
+[data-testid="dynamic-modal-card"],
+.dynamic-modal,
+.dynamic-modal-card,
+.dynamic-widget-modal,
+div[class*="dynamic"][class*="modal"],
+div[class*="DynamicModal"] {
+  z-index: 999999 !important;
+}

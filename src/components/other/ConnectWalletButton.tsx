@@ -296,7 +296,11 @@ export const ConnectWalletButton: React.FC = () => {
       )}
 
       {/* Wallet Panel Slide-out */}
-      <WalletPanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)} />
+      <WalletPanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        onConnectNewWallet={() => setShowAuthFlow(true)}
+      />
     </>
   );
 };

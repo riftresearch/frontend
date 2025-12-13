@@ -31,7 +31,14 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
       settings={{
         environmentId: dynamicEnvironmentId,
         walletConnectors: [EthereumWalletConnectors, BitcoinWalletConnectors],
-        cssOverrides: `.powered-by-dynamic { display: none !important; }`,
+        cssOverrides: `
+          .powered-by-dynamic { display: none !important; }
+          .dynamic-modal { z-index: 999999 !important; }
+          .dynamic-modal-card { z-index: 999999 !important; }
+          .modal-card { z-index: 999999 !important; }
+          [data-testid="dynamic-modal"] { z-index: 999999 !important; }
+          [data-testid="dynamic-modal-card"] { z-index: 999999 !important; }
+        `,
       }}
     >
       <WagmiProvider config={wagmiConfig}>

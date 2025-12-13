@@ -477,7 +477,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         justifyContent="center"
         onClick={onClose}
       >
-        <Flex gap="20px" align="stretch">
+        <Flex gap="18px" align="stretch">
           {/* Chain Selector Panel - only show when swapping FOR BTC */}
           {isSwappingForBTC && !isMobile && (
             <Box
@@ -492,9 +492,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               {/* Chain Selector Header */}
               <Box mx="20px" mb="16px">
                 <Text
-                  fontSize="14px"
+                  fontSize="16px"
                   fontFamily={FONT_FAMILIES.NOSTROMO}
-                  color={colors.textGray}
+                  color={colors.offWhite}
                   fontWeight="bold"
                   textTransform="uppercase"
                   letterSpacing="0.5px"
