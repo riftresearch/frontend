@@ -15,7 +15,7 @@ import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { useStore, CowswapOrderStatus } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { reownModal } from "@/utils/wallet";
+import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { Address, erc20Abi, parseUnits } from "viem";
 import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
@@ -31,6 +31,7 @@ export const SwapButton = () => {
   const { isMobile } = useWindowSize();
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
+  const { setShowAuthFlow } = useDynamicContext();
 
   // CowSwap client
   const cowswapClient = useCowSwapClient();
@@ -636,7 +637,7 @@ export const SwapButton = () => {
     }
 
     if (!isWalletConnected) {
-      await reownModal.open();
+      setShowAuthFlow(true);
       return;
     }
 

@@ -2,31 +2,43 @@ import React from "react";
 import { WagmiProvider } from "wagmi";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useRouter } from "next/router";
-import { queryClient, wagmiAdapter } from "@/utils/wallet";
+import { DynamicContextProvider } from "@dynamic-labs/sdk-react-core";
+import { DynamicWagmiConnector } from "@dynamic-labs/wagmi-connector";
+import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
+import { BitcoinWalletConnectors } from "@dynamic-labs/bitcoin";
+import { queryClient, wagmiConfig, dynamicEnvironmentId } from "@/utils/wallet";
 
 interface ConditionalWagmiProviderProps {
   children: React.ReactNode;
 }
 
-export const ConditionalWagmiProvider: React.FC<
-  ConditionalWagmiProviderProps
-> = ({ children }) => {
+export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> = ({ children }) => {
   const router = useRouter();
 
-  // Disable Wagmi on admin page to prevent wallet connection prompts
+  // Disable wallet providers on admin page to prevent wallet connection prompts
   const isAdminPage = router.pathname === "/admin";
 
   if (isAdminPage) {
-    // Return children without Wagmi provider for admin page
-    return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
+    // Return children without wallet providers for admin page
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
 
-  // Normal Wagmi setup for all other pages
+  // Full Dynamic + Wagmi setup for all other pages
+  // Provider order is critical: DynamicContextProvider > WagmiProvider > QueryClientProvider > DynamicWagmiConnector
   return (
-    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </WagmiProvider>
+    <DynamicContextProvider
+      theme="dark"
+      settings={{
+        environmentId: dynamicEnvironmentId,
+        walletConnectors: [EthereumWalletConnectors, BitcoinWalletConnectors],
+        cssOverrides: `.powered-by-dynamic { display: none !important; }`,
+      }}
+    >
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <DynamicWagmiConnector>{children}</DynamicWagmiConnector>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </DynamicContextProvider>
   );
 };

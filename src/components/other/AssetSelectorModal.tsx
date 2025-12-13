@@ -5,8 +5,9 @@ import { BASE_LOGO } from "./SVGs";
 import { NetworkBadge } from "./NetworkBadge";
 import { useState, useEffect, useRef } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { useStore } from "@/utils/store";
-import { mainnet, base } from "@reown/appkit/networks";
+import { mainnet, base } from "viem/chains";
 import { TokenData, Network } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
@@ -43,8 +44,25 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Wagmi hooks for chain switching
-  const { isConnected, address } = useAccount();
+  const { isConnected: isWagmiConnected, address: wagmiAddress } = useAccount();
   const { switchChain } = useSwitchChain();
+
+  // Dynamic hooks for wallet detection
+  const { primaryWallet } = useDynamicContext();
+  const userWallets = useUserWallets();
+
+  // Find any EVM wallet from Dynamic's connected wallets
+  const evmWallet = userWallets.find(
+    (w) =>
+      w.chain === "EVM" ||
+      w.chain === "evm" ||
+      w.connector?.name?.toLowerCase()?.includes("metamask") ||
+      w.connector?.name?.toLowerCase()?.includes("coinbase")
+  );
+
+  // Use wagmi address if available, otherwise try Dynamic's EVM wallet
+  const address = wagmiAddress || evmWallet?.address;
+  const isConnected = isWagmiConnected || !!evmWallet;
 
   // Zustand store
   const {

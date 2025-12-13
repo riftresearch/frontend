@@ -79,3 +79,9 @@ body[data-admin-page="true"] [data-testid="w3m-connect-button"] {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* Hide Dynamic "Powered by" footer */
+.dynamic-footer,
+.powered-by-dynamic {
+  display: none !important;
+}

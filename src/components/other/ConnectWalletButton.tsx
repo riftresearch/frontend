@@ -1,17 +1,17 @@
-import React, { useEffect } from "react";
-import { Button, Flex } from "@chakra-ui/react";
-import { useAccount, useChains } from "wagmi";
+import React, { useEffect, useState } from "react";
+import { Button, Flex, Image, Box } from "@chakra-ui/react";
+import { useAccount } from "wagmi";
 import { useStore } from "@/utils/store";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
-import { reownModal } from "@/utils/wallet";
-import { NetworkIcon } from "@/components/other/NetworkIcon";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { formatUnits } from "viem";
 import type { TokenData } from "@/utils/types";
 import { Network } from "@/utils/types";
 import { preloadImages } from "@/utils/imagePreload";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
 import useWindowSize from "@/hooks/useWindowSize";
+import { WalletPanel } from "./WalletPanel";
 import {
   fetchWalletTokens,
   fetchAllTokenPrices,
@@ -22,34 +22,56 @@ import {
   SUPPORTED_CHAIN_NETWORKS,
 } from "@/utils/userTokensClient";
 
-const getCustomChainName = (chainId: number): string => {
-  if (chainId === 1337) return "Rift Devnet";
-  return `Chain ${chainId}`;
-};
+// Dynamic's icon sprite URL
+const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
 
 export const ConnectWalletButton: React.FC = () => {
-  const { address, isConnected } = useAccount();
-  const {
-    evmConnectWalletChainId: chainId,
-    setUserTokensForChain,
-    setSearchResults,
-    selectedInputToken,
-    setSelectedInputToken,
-  } = useStore();
-  const chains = useChains();
+  const { address: wagmiAddress, isConnected: isWagmiConnected } = useAccount();
+  const { setUserTokensForChain, setSearchResults, selectedInputToken, setSelectedInputToken } =
+    useStore();
   const { isMobile } = useWindowSize();
+  const { setShowAuthFlow, primaryWallet } = useDynamicContext();
+  const userWallets = useUserWallets();
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
-  // Fetch user tokens and populate global store when wallet connects
+  // Check if ANY wallet is connected (EVM or Bitcoin)
+  const isConnected = !!primaryWallet;
+
+  // Find any EVM wallet from Dynamic's connected wallets
+  const evmWallet = userWallets.find(
+    (w) =>
+      w.chain === "EVM" ||
+      w.chain === "evm" ||
+      w.connector?.name?.toLowerCase()?.includes("metamask") ||
+      w.connector?.name?.toLowerCase()?.includes("coinbase")
+  );
+
+  // Use wagmi address if available, otherwise try to get from Dynamic's EVM wallet
+  const evmAddress = wagmiAddress || evmWallet?.address;
+  const isEvmConnected = isWagmiConnected || !!evmWallet;
+
+  // Get wallet icon key for Dynamic sprite - use connector name directly
+  const getWalletIconKey = (wallet: any): string => {
+    return wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+  };
+
+  // Format address for display
+  const formatAddress = (addr: string) => {
+    if (!addr) return "";
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  // Fetch user tokens and populate global store when EVM wallet connects
   useEffect(() => {
     const fetchAllUserTokens = async () => {
-      if (!isConnected || !address) return;
+      if (!isEvmConnected || !evmAddress) return;
 
-      console.log("[UserTokens] Fetching tokens for all chains...");
+      console.log("[UserTokens] Fetching tokens for all chains...", evmAddress);
 
       // Fetch all ERC20 tokens and ETH balances across all chains in parallel
       const [walletTokensByChain, ethByChain] = await Promise.all([
-        fetchWalletTokens(address),
-        fetchUserEth(address),
+        fetchWalletTokens(evmAddress),
+        fetchUserEth(evmAddress),
       ]);
 
       // Build addresses by chain for price fetching
@@ -188,44 +210,21 @@ export const ConnectWalletButton: React.FC = () => {
 
     fetchAllUserTokens();
   }, [
-    isConnected,
-    address,
+    isEvmConnected,
+    evmAddress,
     setUserTokensForChain,
     setSearchResults,
     selectedInputToken,
     setSelectedInputToken,
   ]);
 
-  // Format the user's address for display
-  const displayAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
-
-  // Handler for opening the Reown AppKit modal
-  const handleOpen = async (): Promise<void> => {
-    await reownModal.open();
-  };
-
-  // Function to open the account modal
-  const openAccountModal = async (): Promise<void> => {
-    await reownModal.open({
-      view: "Account",
-    });
-  };
-
-  // Function to open the chain modal
-  const openChainModal = async (): Promise<void> => {
-    await reownModal.open({
-      view: "Networks",
-    });
-  };
-
-  // Get the chain name from wagmi if available, otherwise use custom name
-  const getChainName = (): string => {
-    const currentChain = chains.find((chain) => chain.id === chainId);
-    return currentChain?.name || getCustomChainName(chainId);
+  // Handler for opening the Dynamic wallet modal (used as fallback)
+  const handleOpen = (): void => {
+    setShowAuthFlow(true);
   };
 
   return (
-    <div>
+    <>
       {!isConnected ? (
         <Button
           onClick={handleOpen}
@@ -248,48 +247,56 @@ export const ConnectWalletButton: React.FC = () => {
           Connect Wallet
         </Button>
       ) : (
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button
-            onClick={openChainModal}
-            type="button"
-            _hover={{ bg: colors.swapHoverColor }}
-            _active={{ bg: colors.swapBgColor }}
-            bg={colors.swapBgColor}
-            borderRadius="30px"
-            fontFamily={"aux"}
-            fontSize={isMobile ? "14px" : "17px"}
-            paddingLeft={isMobile ? "10px" : "16px"}
-            paddingRight={isMobile ? "10px" : "22px"}
-            color={colors.offWhite}
-            letterSpacing="-1px"
-            h={isMobile ? "36px" : "42px"}
-            border={`2px solid ${colors.swapBorderColor}`}
-            style={{ display: "flex", alignItems: "center" }}
-          >
-            <Flex alignItems="center" gap="8px">
-              <NetworkIcon />
-              {!isMobile && getChainName()}
+        <Flex
+          onClick={() => setIsPanelOpen(true)}
+          cursor="pointer"
+          align="center"
+          gap="8px"
+          bg={colors.swapBgColor}
+          borderRadius="30px"
+          border={`2px solid ${colors.swapBorderColor}`}
+          px={isMobile ? "12px" : "16px"}
+          h={isMobile ? "36px" : "42px"}
+          _hover={{ bg: colors.swapHoverColor }}
+        >
+          {/* Wallet Icons Stack */}
+          <Flex>
+            {userWallets.slice(0, 2).map((wallet, idx) => (
+              <Box
+                key={wallet.id}
+                w={isMobile ? "18px" : "22px"}
+                h={isMobile ? "18px" : "22px"}
+                borderRadius="full"
+                ml={idx > 0 ? "-8px" : "0"}
+                border={`2px solid ${colors.swapBgColor}`}
+                bg={colors.offBlackLighter}
+                overflow="hidden"
+              >
+                <Image
+                  src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                  alt="wallet"
+                  w="100%"
+                  h="100%"
+                />
+              </Box>
+            ))}
+          </Flex>
+          {/* Address or Wallet Count */}
+          {!isMobile && primaryWallet && (
+            <Flex
+              color={colors.offWhite}
+              fontSize="15px"
+              fontFamily={FONT_FAMILIES.AUX_MONO}
+              letterSpacing="-0.5px"
+            >
+              {formatAddress(primaryWallet.address)}
             </Flex>
-          </Button>
-          <Button
-            onClick={openAccountModal}
-            type="button"
-            _hover={{ bg: colors.swapHoverColor }}
-            _active={{ bg: colors.swapBgColor }}
-            bg={colors.swapBgColor}
-            borderRadius="30px"
-            fontFamily="aux"
-            fontSize={isMobile ? "14px" : "17px"}
-            letterSpacing="-1px"
-            px={isMobile ? "10px" : "18px"}
-            color={colors.offWhite}
-            h={isMobile ? "36px" : "42px"}
-            border={`2px solid ${colors.swapBorderColor}`}
-          >
-            {displayAddress}
-          </Button>
-        </div>
+          )}
+        </Flex>
       )}
-    </div>
+
+      {/* Wallet Panel Slide-out */}
+      <WalletPanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)} />
+    </>
   );
 };

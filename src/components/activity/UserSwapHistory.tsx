@@ -7,7 +7,7 @@ import { colors } from "@/utils/colors";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { ANALYTICS_API_URL } from "@/utils/analyticsClient";
-import { reownModal } from "@/utils/wallet";
+import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
@@ -335,6 +335,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   simulatedAddress,
 }) => {
   const { address: walletAddress, isConnected } = useAccount();
+  const { setShowAuthFlow } = useDynamicContext();
 
   // Use simulated address if provided, otherwise use wallet address
   const address = simulatedAddress || walletAddress;
@@ -520,8 +521,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     [loadingMore, hasMore, fetchNextPage]
   );
 
-  const handleConnectWallet = async () => {
-    await reownModal.open();
+  const handleConnectWallet = () => {
+    setShowAuthFlow(true);
   };
 
   // Show loading spinner during initial mount
