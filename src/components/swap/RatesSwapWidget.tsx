@@ -61,6 +61,153 @@ const CHAINFLIP_ASSET_MAP: Record<string, (typeof Assets)[keyof typeof Assets]> 
   FLIP: Assets.FLIP,
 };
 
+// Thorchain API - proxied through our API route to avoid CORS
+const THORCHAIN_API_URL = "/api/thorchain-quote";
+
+// ThorSwap API - proxied through our API route to avoid CORS
+const THORSWAP_API_URL = "/api/thorswap-quote";
+
+// Thorchain asset mapping - maps ticker + chainId to Thorchain asset format
+function getThorchainAsset(ticker: string, address: string, chainId: number): string | null {
+  // ETH native
+  if (ticker === "ETH" && chainId === 1) return "ETH.ETH";
+
+  // Base native ETH
+  if (ticker === "ETH" && chainId === 8453) return null; // Base ETH not supported
+
+  // ERC20 tokens on Ethereum
+  if (chainId === 1 && address && address !== "0x0000000000000000000000000000000000000000") {
+    return `ETH.${ticker}-${address.toLowerCase()}`;
+  }
+
+  // Tokens on Base
+  if (chainId === 8453 && address && address !== "0x0000000000000000000000000000000000000000") {
+    return `BASE.${ticker}-${address.toLowerCase()}`;
+  }
+
+  return null;
+}
+
+// Thorchain API quote function (proxied through Next.js API route)
+async function fetchThorchainQuote(
+  sellAsset: string,
+  sellAmount: string,
+  slippage: number = 1
+): Promise<{ amount: string; usdValue: string; expectedBuyAmountMaxSlippage: string } | null> {
+  try {
+    const response = await fetch(THORCHAIN_API_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        buyAsset: "BTC.BTC",
+        sellAsset: sellAsset,
+        sellAmount: sellAmount,
+        slippage: slippage,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Thorchain API error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Response has routes array - get the first route
+    const route = data.routes?.[0];
+    if (route?.expectedBuyAmountMaxSlippage) {
+      return {
+        amount: route.expectedBuyAmountMaxSlippage,
+        usdValue: "$0.00", // Will be calculated using btcPrice in the caller
+        expectedBuyAmountMaxSlippage: route.expectedBuyAmountMaxSlippage,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to fetch Thorchain quote:", error);
+    return null;
+  }
+}
+
+// ThorSwap asset mapping - same format as Thorchain
+function getThorswapAsset(ticker: string, address: string, chainId: number): string | null {
+  // ETH native
+  if (ticker === "ETH" && chainId === 1) return "ETH.ETH";
+
+  // Base native ETH
+  if (ticker === "ETH" && chainId === 8453) return null; // Base ETH not directly supported
+
+  // ERC20 tokens on Ethereum
+  if (chainId === 1 && address && address !== "0x0000000000000000000000000000000000000000") {
+    return `ETH.${ticker}-${address}`;
+  }
+
+  // Tokens on Base
+  if (chainId === 8453 && address && address !== "0x0000000000000000000000000000000000000000") {
+    return `BASE.${ticker}-${address}`;
+  }
+
+  return null;
+}
+
+// ThorSwap API quote function (proxied through Next.js API route)
+async function fetchThorswapQuote(
+  sellAsset: string,
+  sellAmount: string,
+  slippage: number = 3
+): Promise<{ amount: string; usdValue: string } | null> {
+  try {
+    const response = await fetch(THORSWAP_API_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sellAsset: sellAsset,
+        buyAsset: "BTC.BTC",
+        sellAmount: sellAmount,
+        sourceAddress: "",
+        destinationAddress: "",
+        affiliateFee: 50,
+        providers: [
+          "MAYACHAIN",
+          "MAYACHAIN_STREAMING",
+          "CHAINFLIP",
+          "CHAINFLIP_STREAMING",
+          "THORCHAIN",
+          "THORCHAIN_STREAMING",
+        ],
+        slippage: slippage,
+        cfBoost: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("ThorSwap API error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Response has routes array - get the first route
+    const route = data.routes?.[0];
+    if (route?.expectedBuyAmountMaxSlippage) {
+      return {
+        amount: route.expectedBuyAmountMaxSlippage,
+        usdValue: "$0.00", // Will be calculated using btcPrice in the caller
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to fetch ThorSwap quote:", error);
+    return null;
+  }
+}
+
 // Relay API quote function
 async function fetchRelayQuote(
   originChainId: number,
@@ -118,13 +265,23 @@ export const RatesSwapWidget = () => {
   const [isLoadingRiftQuote, setIsLoadingRiftQuote] = useState(false);
   const [isLoadingRelayQuote, setIsLoadingRelayQuote] = useState(false);
   const [isLoadingChainflipQuote, setIsLoadingChainflipQuote] = useState(false);
+  const [isLoadingThorchainQuote, setIsLoadingThorchainQuote] = useState(false);
+  const [isLoadingThorswapQuote, setIsLoadingThorswapQuote] = useState(false);
   const [riftQuote, setRiftQuote] = useState<{ amount: string; usdValue: string } | null>(null);
   const [relayQuote, setRelayQuote] = useState<{ amount: string; usdValue: string } | null>(null);
   const [chainflipQuote, setChainflipQuote] = useState<{ amount: string; usdValue: string } | null>(
     null
   );
+  const [thorchainQuote, setThorchainQuote] = useState<{ amount: string; usdValue: string } | null>(
+    null
+  );
+  const [thorswapQuote, setThorswapQuote] = useState<{ amount: string; usdValue: string } | null>(
+    null
+  );
   const [relayError, setRelayError] = useState<string | null>(null);
   const [chainflipError, setChainflipError] = useState<string | null>(null);
+  const [thorchainError, setThorchainError] = useState<string | null>(null);
+  const [thorswapError, setThorswapError] = useState<string | null>(null);
   const getQuoteForInputRef = useRef(true);
 
   // Refs
@@ -285,20 +442,30 @@ export const RatesSwapWidget = () => {
         const decimals = selectedInputToken.decimals;
         const amountInBaseUnits = parseUnits(inputAmount, decimals).toString();
 
-        const response = await sdk.getQuoteV2({
-          srcChain: Chains.Ethereum,
-          srcAsset: chainflipAsset,
-          destChain: Chains.Bitcoin,
-          destAsset: Assets.BTC,
-          amount: amountInBaseUnits,
-        });
+        let response;
+        try {
+          response = await sdk.getQuoteV2({
+            srcChain: Chains.Ethereum,
+            srcAsset: chainflipAsset,
+            destChain: Chains.Bitcoin,
+            destAsset: Assets.BTC,
+            amount: amountInBaseUnits,
+          });
+        } catch (sdkError: any) {
+          // Handle SDK/API errors gracefully
+          console.error("Chainflip SDK error:", sdkError?.message || sdkError);
+          setChainflipQuote(null);
+          setChainflipError("No route");
+          setIsLoadingChainflipQuote(false);
+          return;
+        }
 
         // Check if this is still the latest request
         if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
           return;
         }
 
-        if (response.quotes && response.quotes.length > 0) {
+        if (response?.quotes && response.quotes.length > 0) {
           // Find the REGULAR quote (not DCA)
           const regularQuote =
             response.quotes.find((q) => q.type === "REGULAR") || response.quotes[0];
@@ -327,6 +494,130 @@ export const RatesSwapWidget = () => {
         setChainflipError("Quote failed");
       } finally {
         setIsLoadingChainflipQuote(false);
+      }
+    },
+    [isSwappingForBTC, selectedInputToken, btcPrice]
+  );
+
+  // Fetch Thorchain quote for comparison
+  const fetchThorchainQuoteForComparison = useCallback(
+    async (inputAmount: string, requestId?: number) => {
+      if (!isSwappingForBTC) {
+        setThorchainQuote(null);
+        setThorchainError(null);
+        return;
+      }
+
+      const tokenChainId = selectedInputToken.chainId ?? 1;
+      const tokenAddress = selectedInputToken.address;
+      const ticker = selectedInputToken.ticker;
+
+      // Get Thorchain asset format
+      const thorchainAsset = getThorchainAsset(ticker, tokenAddress, tokenChainId);
+      if (!thorchainAsset) {
+        setThorchainQuote(null);
+        setThorchainError("Asset not supported");
+        setIsLoadingThorchainQuote(false);
+        return;
+      }
+
+      setIsLoadingThorchainQuote(true);
+      setThorchainError(null);
+
+      try {
+        const quote = await fetchThorchainQuote(thorchainAsset, inputAmount, 1);
+
+        // Check if this is still the latest request
+        if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+          return;
+        }
+
+        if (quote) {
+          // Calculate USD value using BTC price if not provided
+          const btcAmount = parseFloat(quote.amount);
+          const usdValue = btcPrice
+            ? `$${(btcAmount * btcPrice).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`
+            : quote.usdValue;
+
+          setThorchainQuote({
+            amount: quote.amount,
+            usdValue,
+          });
+        } else {
+          setThorchainQuote(null);
+          setThorchainError("No quote available");
+        }
+      } catch (error) {
+        console.error("Failed to fetch Thorchain quote:", error);
+        setThorchainQuote(null);
+        setThorchainError("Quote failed");
+      } finally {
+        setIsLoadingThorchainQuote(false);
+      }
+    },
+    [isSwappingForBTC, selectedInputToken, btcPrice]
+  );
+
+  // Fetch ThorSwap quote for comparison
+  const fetchThorswapQuoteForComparison = useCallback(
+    async (inputAmount: string, requestId?: number) => {
+      if (!isSwappingForBTC) {
+        setThorswapQuote(null);
+        setThorswapError(null);
+        return;
+      }
+
+      const tokenChainId = selectedInputToken.chainId ?? 1;
+      const tokenAddress = selectedInputToken.address;
+      const ticker = selectedInputToken.ticker;
+
+      // Get ThorSwap asset format
+      const thorswapAsset = getThorswapAsset(ticker, tokenAddress, tokenChainId);
+      if (!thorswapAsset) {
+        setThorswapQuote(null);
+        setThorswapError("Asset not supported");
+        setIsLoadingThorswapQuote(false);
+        return;
+      }
+
+      setIsLoadingThorswapQuote(true);
+      setThorswapError(null);
+
+      try {
+        const quote = await fetchThorswapQuote(thorswapAsset, inputAmount, 3);
+
+        // Check if this is still the latest request
+        if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+          return;
+        }
+
+        if (quote) {
+          // Calculate USD value using BTC price
+          const btcAmount = parseFloat(quote.amount);
+          const usdValue = btcPrice
+            ? `$${(btcAmount * btcPrice).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`
+            : quote.usdValue;
+
+          setThorswapQuote({
+            amount: quote.amount,
+            usdValue,
+          });
+        } else {
+          setThorswapQuote(null);
+          setThorswapError("No quote available");
+        }
+      } catch (error) {
+        console.error("Failed to fetch ThorSwap quote:", error);
+        setThorswapQuote(null);
+        setThorswapError("Quote failed");
+      } finally {
+        setIsLoadingThorswapQuote(false);
       }
     },
     [isSwappingForBTC, selectedInputToken, btcPrice]
@@ -373,9 +664,11 @@ export const RatesSwapWidget = () => {
         const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
         const tokenChainId = selectedInputToken.chainId ?? 1;
 
-        // Also fetch Relay and Chainflip quotes in parallel
+        // Also fetch Relay, Chainflip, Thorchain, and ThorSwap quotes in parallel
         fetchRelayQuoteForComparison(amountToQuote, requestId);
         fetchChainflipQuoteForComparison(amountToQuote, requestId);
+        fetchThorchainQuoteForComparison(amountToQuote, requestId);
+        fetchThorswapQuoteForComparison(amountToQuote, requestId);
 
         try {
           const quoteResponse = await getERC20ToBTCQuote(
@@ -447,6 +740,8 @@ export const RatesSwapWidget = () => {
       setIsAwaitingOptimalQuote,
       fetchRelayQuoteForComparison,
       fetchChainflipQuoteForComparison,
+      fetchThorchainQuoteForComparison,
+      fetchThorswapQuoteForComparison,
     ]
   );
 
@@ -587,6 +882,10 @@ export const RatesSwapWidget = () => {
     setRelayError(null);
     setChainflipQuote(null);
     setChainflipError(null);
+    setThorchainQuote(null);
+    setThorchainError(null);
+    setThorswapQuote(null);
+    setThorswapError(null);
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -610,6 +909,10 @@ export const RatesSwapWidget = () => {
       setRelayError(null);
       setChainflipQuote(null);
       setChainflipError(null);
+      setThorchainQuote(null);
+      setThorchainError(null);
+      setThorswapQuote(null);
+      setThorswapError(null);
 
       if (!value || parseFloat(value) <= 0) {
         setOutputAmount("");
@@ -617,9 +920,13 @@ export const RatesSwapWidget = () => {
         setIsLoadingRiftQuote(false);
         setIsLoadingRelayQuote(false);
         setIsLoadingChainflipQuote(false);
+        setIsLoadingThorchainQuote(false);
+        setIsLoadingThorswapQuote(false);
         setRiftQuote(null);
         setRelayQuote(null);
         setChainflipQuote(null);
+        setThorchainQuote(null);
+        setThorswapQuote(null);
       }
 
       if (quoteDebounceTimerRef.current) {
@@ -630,6 +937,8 @@ export const RatesSwapWidget = () => {
         setIsLoadingRiftQuote(true);
         setIsLoadingRelayQuote(true);
         setIsLoadingChainflipQuote(true);
+        setIsLoadingThorchainQuote(true);
+        setIsLoadingThorswapQuote(true);
         quoteRequestIdRef.current += 1;
         const currentRequestId = quoteRequestIdRef.current;
 
@@ -666,6 +975,10 @@ export const RatesSwapWidget = () => {
     setRelayError(null);
     setChainflipQuote(null);
     setChainflipError(null);
+    setThorchainQuote(null);
+    setThorchainError(null);
+    setThorswapQuote(null);
+    setThorswapError(null);
 
     return () => {
       if (quoteDebounceTimerRef.current) {
@@ -941,9 +1254,17 @@ export const RatesSwapWidget = () => {
             const riftUsdValue = riftQuote ? parseUsdValue(riftQuote.usdValue) : 0;
             const relayUsdValue = relayQuote ? parseUsdValue(relayQuote.usdValue) : 0;
             const chainflipUsdValue = chainflipQuote ? parseUsdValue(chainflipQuote.usdValue) : 0;
+            const thorchainUsdValue = thorchainQuote ? parseUsdValue(thorchainQuote.usdValue) : 0;
+            const thorswapUsdValue = thorswapQuote ? parseUsdValue(thorswapQuote.usdValue) : 0;
 
             // Determine best rate
-            const bestUsdValue = Math.max(riftUsdValue, relayUsdValue, chainflipUsdValue);
+            const bestUsdValue = Math.max(
+              riftUsdValue,
+              relayUsdValue,
+              chainflipUsdValue,
+              thorchainUsdValue,
+              thorswapUsdValue
+            );
 
             // Calculate percentage difference
             const calcPercentDiff = (value: number) => {
@@ -970,6 +1291,18 @@ export const RatesSwapWidget = () => {
                 usdValue: chainflipUsdValue,
                 isBest: chainflipUsdValue > 0 && chainflipUsdValue >= bestUsdValue,
                 percentDiff: calcPercentDiff(chainflipUsdValue),
+              },
+              {
+                id: "thorchain",
+                usdValue: thorchainUsdValue,
+                isBest: thorchainUsdValue > 0 && thorchainUsdValue >= bestUsdValue,
+                percentDiff: calcPercentDiff(thorchainUsdValue),
+              },
+              {
+                id: "thorswap",
+                usdValue: thorswapUsdValue,
+                isBest: thorswapUsdValue > 0 && thorswapUsdValue >= bestUsdValue,
+                percentDiff: calcPercentDiff(thorswapUsdValue),
               },
             ].sort((a, b) => b.usdValue - a.usdValue);
 
@@ -1291,6 +1624,238 @@ export const RatesSwapWidget = () => {
                           letterSpacing="-1px"
                         >
                           {chainflipError}
+                        </Text>
+                      ) : (
+                        <Text
+                          color={colors.textGray}
+                          fontSize={isMobile ? "24px" : "32px"}
+                          fontFamily="Aux"
+                          letterSpacing="-3px"
+                          fontWeight="normal"
+                        >
+                          ...
+                        </Text>
+                      )}
+                    </Flex>
+
+                    {/* Right: Asset Tag */}
+                    <Flex flex="1" justify="flex-end">
+                      <WebAssetTag cursor="default" asset={outputAssetIdentifier} isOutput={true} />
+                    </Flex>
+                  </Flex>
+                );
+              } else if (quote.id === "thorchain" && isSwappingForBTC) {
+                return (
+                  <Flex
+                    key="thorchain"
+                    w="100%"
+                    bg="rgba(20, 20, 20, 0.8)"
+                    border="2px solid #323232"
+                    borderRadius="16px"
+                    px="20px"
+                    py="16px"
+                    align="center"
+                  >
+                    {/* Left: Thorchain Logo + Tag */}
+                    <Flex flex="1" justify="flex-start" align="center" gap="10px">
+                      <Image
+                        src="/images/thorchain.png"
+                        alt="THORChain"
+                        h="30px"
+                        objectFit="contain"
+                      />
+                      {thorchainQuote &&
+                        !isLoadingThorchainQuote &&
+                        (quote.isBest ? (
+                          <Flex
+                            bg={colorsAnalytics.greenBackground}
+                            border={`1px solid ${colorsAnalytics.greenOutline}`}
+                            borderRadius="6px"
+                            px="8px"
+                            py="2px"
+                          >
+                            <Text
+                              color="#22c55e"
+                              fontSize="11px"
+                              fontFamily="Aux"
+                              fontWeight="bold"
+                              letterSpacing="-0.5px"
+                            >
+                              BEST RATE
+                            </Text>
+                          </Flex>
+                        ) : (
+                          bestUsdValue > 0 && (
+                            <Flex
+                              bg={colorsAnalytics.redBackground}
+                              border={`1px solid ${colorsAnalytics.red}`}
+                              borderRadius="6px"
+                              px="8px"
+                              py="2px"
+                            >
+                              <Text
+                                color={colorsAnalytics.redHover}
+                                fontSize="11px"
+                                fontFamily="Aux"
+                                fontWeight="bold"
+                                letterSpacing="-0.5px"
+                              >
+                                {quote.percentDiff.toFixed(1)}%
+                              </Text>
+                            </Flex>
+                          )
+                        ))}
+                    </Flex>
+
+                    {/* Center: Amount and USD */}
+                    <Flex direction="column" align="center" flex="1" justify="center">
+                      {isLoadingThorchainQuote ? (
+                        <Spinner size="md" color={colors.textGray} />
+                      ) : thorchainQuote ? (
+                        <>
+                          <Text
+                            color={quote.isBest ? "#22c55e" : colors.offWhite}
+                            fontSize={isMobile ? "24px" : "32px"}
+                            fontFamily="Aux"
+                            letterSpacing="-5px"
+                            fontWeight="normal"
+                          >
+                            {thorchainQuote.usdValue}
+                          </Text>
+                          <Text
+                            color={quote.isBest ? "#22c55e" : colors.textGray}
+                            fontSize="14px"
+                            fontFamily="Aux"
+                            letterSpacing="-1px"
+                            mt="-2px"
+                          >
+                            {parseFloat(thorchainQuote.amount).toFixed(8)}
+                          </Text>
+                        </>
+                      ) : thorchainError ? (
+                        <Text
+                          color={colors.textGray}
+                          fontSize="14px"
+                          fontFamily="Aux"
+                          letterSpacing="-1px"
+                        >
+                          {thorchainError}
+                        </Text>
+                      ) : (
+                        <Text
+                          color={colors.textGray}
+                          fontSize={isMobile ? "24px" : "32px"}
+                          fontFamily="Aux"
+                          letterSpacing="-3px"
+                          fontWeight="normal"
+                        >
+                          ...
+                        </Text>
+                      )}
+                    </Flex>
+
+                    {/* Right: Asset Tag */}
+                    <Flex flex="1" justify="flex-end">
+                      <WebAssetTag cursor="default" asset={outputAssetIdentifier} isOutput={true} />
+                    </Flex>
+                  </Flex>
+                );
+              } else if (quote.id === "thorswap" && isSwappingForBTC) {
+                return (
+                  <Flex
+                    key="thorswap"
+                    w="100%"
+                    bg="rgba(20, 20, 20, 0.8)"
+                    border="2px solid #323232"
+                    borderRadius="16px"
+                    px="20px"
+                    py="16px"
+                    align="center"
+                  >
+                    {/* Left: ThorSwap Logo + Tag */}
+                    <Flex flex="1" justify="flex-start" align="center" gap="10px">
+                      <Image
+                        src="/images/thorswap.png"
+                        alt="THORSwap"
+                        h="26px"
+                        objectFit="contain"
+                      />
+                      {thorswapQuote &&
+                        !isLoadingThorswapQuote &&
+                        (quote.isBest ? (
+                          <Flex
+                            bg={colorsAnalytics.greenBackground}
+                            border={`1px solid ${colorsAnalytics.greenOutline}`}
+                            borderRadius="6px"
+                            px="8px"
+                            py="2px"
+                          >
+                            <Text
+                              color="#22c55e"
+                              fontSize="11px"
+                              fontFamily="Aux"
+                              fontWeight="bold"
+                              letterSpacing="-0.5px"
+                            >
+                              BEST RATE
+                            </Text>
+                          </Flex>
+                        ) : (
+                          bestUsdValue > 0 && (
+                            <Flex
+                              bg={colorsAnalytics.redBackground}
+                              border={`1px solid ${colorsAnalytics.red}`}
+                              borderRadius="6px"
+                              px="8px"
+                              py="2px"
+                            >
+                              <Text
+                                color={colorsAnalytics.redHover}
+                                fontSize="11px"
+                                fontFamily="Aux"
+                                fontWeight="bold"
+                                letterSpacing="-0.5px"
+                              >
+                                {quote.percentDiff.toFixed(1)}%
+                              </Text>
+                            </Flex>
+                          )
+                        ))}
+                    </Flex>
+
+                    {/* Center: Amount and USD */}
+                    <Flex direction="column" align="center" flex="1" justify="center">
+                      {isLoadingThorswapQuote ? (
+                        <Spinner size="md" color={colors.textGray} />
+                      ) : thorswapQuote ? (
+                        <>
+                          <Text
+                            color={quote.isBest ? "#22c55e" : colors.offWhite}
+                            fontSize={isMobile ? "24px" : "32px"}
+                            fontFamily="Aux"
+                            letterSpacing="-5px"
+                            fontWeight="normal"
+                          >
+                            {thorswapQuote.usdValue}
+                          </Text>
+                          <Text
+                            color={quote.isBest ? "#22c55e" : colors.textGray}
+                            fontSize="14px"
+                            fontFamily="Aux"
+                            letterSpacing="-1px"
+                            mt="-2px"
+                          >
+                            {parseFloat(thorswapQuote.amount).toFixed(8)}
+                          </Text>
+                        </>
+                      ) : thorswapError ? (
+                        <Text
+                          color={colors.textGray}
+                          fontSize="14px"
+                          fontFamily="Aux"
+                          letterSpacing="-1px"
+                        >
+                          {thorswapError}
                         </Text>
                       ) : (
                         <Text
