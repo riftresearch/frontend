@@ -61,6 +61,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     userTokensByChain,
     setErc20Price,
     setInputUsdValue,
+    setSwitchingToInputTokenChain,
   } = useStore();
 
   // Auto-focus search input when modal opens
@@ -403,8 +404,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         // Switch wallet chain if needed
         try {
           const targetChainId = tokenData.chainId === 1 ? mainnet.id : base.id;
-          await switchChain({ chainId: targetChainId });
-          setEvmConnectWalletChainId(targetChainId);
+          // Set flag to indicate chain is being switched from asset selector
+          if (targetChainId !== evmConnectWalletChainId) {
+            setSwitchingToInputTokenChain(true);
+            await switchChain({ chainId: targetChainId });
+            setEvmConnectWalletChainId(targetChainId);
+          } else {
+            setSwitchingToInputTokenChain(false);
+          }
         } catch (error) {
           console.error("Failed to switch chain:", error);
         }

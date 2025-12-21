@@ -134,6 +134,8 @@ export const useStore = create<{
   setCowswapOrderStatus: (status: CowswapOrderStatus) => void;
   cowswapOrderData: CowswapOrderData | null;
   setCowswapOrderData: (data: CowswapOrderData | null) => void;
+  switchingToInputTokenChain: boolean;
+  setSwitchingToInputTokenChain: (value: boolean) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -226,4 +228,6 @@ export const useStore = create<{
   setCowswapOrderStatus: (status: CowswapOrderStatus) => set({ cowswapOrderStatus: status }),
   cowswapOrderData: null,
   setCowswapOrderData: (data: CowswapOrderData | null) => set({ cowswapOrderData: data }),
+  switchingToInputTokenChain: false,
+  setSwitchingToInputTokenChain: (value: boolean) => set({ switchingToInputTokenChain: value }),
 }));

@@ -184,6 +184,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setRefetchQuote,
     setIsAwaitingOptimalQuote,
     hasNoRoutesError,
+    switchingToInputTokenChain,
+    setSwitchingToInputTokenChain,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -1405,8 +1407,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     if (isInitialMountRef.current) return;
 
     if (isSwappingForBTC) {
-      const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
-      setSelectedInputToken(defaultToken);
       setSelectedOutputToken(null);
     } else {
       // Use chain-specific cbBTC token based on user's connected chain
@@ -1416,6 +1416,21 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       setSelectedOutputToken(cbBTC || null);
     }
   }, [isSwappingForBTC, setSelectedInputToken, setSelectedOutputToken, evmConnectWalletChainId]);
+
+  useEffect(() => {
+    // If chain switch was triggered from asset selector, just clear the flag and keep the selected token
+    // Otherwise, reset to default token for the new chain
+    if (!switchingToInputTokenChain && selectedInputToken.chainId !== evmConnectWalletChainId) {
+      const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+      setSelectedInputToken(defaultToken);
+    }
+  }, [
+    setSelectedInputToken,
+    evmConnectWalletChainId,
+    selectedInputToken,
+    switchingToInputTokenChain,
+    setSwitchingToInputTokenChain,
+  ]);
 
   // Fetch ERC20 token price when selected token changes
   useEffect(() => {
