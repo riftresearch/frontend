@@ -60,7 +60,7 @@ export function UnifiedTransactionWidget({
   const previousDepositFlowStateRef = useRef<string | null>(null);
 
   // Use provided swapId prop, fallback to store value
-  const currentSwapId = swapId || swapResponse?.swap_id;
+  const currentSwapId = swapId || swapResponse?.id;
   const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
 
   // Handle navigation to new swap with state reset
@@ -73,11 +73,11 @@ export function UnifiedTransactionWidget({
 
   // Determine swap type based on props and swap data
   const swapType: SwapType = React.useMemo(() => {
-    if (bitcoinAddress || swapStatusInfo?.quote?.from_chain === "bitcoin") {
+    if (bitcoinAddress || swapStatusInfo?.quote?.from.currency.chain === "bitcoin") {
       return "bitcoin-deposit";
     }
     return "evm-deposit";
-  }, [bitcoinAddress, swapStatusInfo?.quote?.from_chain]);
+  }, [bitcoinAddress, swapStatusInfo?.quote?.from.currency.chain]);
 
   const isSettled =
     depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
@@ -103,7 +103,7 @@ export function UnifiedTransactionWidget({
 
   // Track EVM confirmations for user deposit (for EVM deposits)
   const userDepositTxHash = swapStatusInfo?.user_deposit_status?.tx_hash;
-  const userDepositChain = swapStatusInfo?.quote?.from_chain;
+  const userDepositChain = swapStatusInfo?.quote?.from.currency.chain;
   const userChainId =
     userDepositChain === "ethereum" ? 1 : userDepositChain === "base" ? 8453 : undefined;
   const evmConfirmations = useEvmConfirmations(
@@ -233,7 +233,7 @@ export function UnifiedTransactionWidget({
       (swapType === "bitcoin-deposit" && depositFlowState === "2-WaitingUserDepositConfirmed") ||
       (swapType === "evm-deposit" &&
         (depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled") &&
-        swapStatusInfo?.quote?.to_chain === "bitcoin");
+        swapStatusInfo?.quote?.to.currency.chain === "bitcoin");
 
     if (!shouldTrackBtc) {
       setBtcConfirmations(0);
@@ -277,7 +277,7 @@ export function UnifiedTransactionWidget({
     userDepositTxHash,
     bitcoinDepositTx,
     swapStatusInfo?.mm_deposit_status?.tx_hash,
-    swapStatusInfo?.quote?.to_chain,
+    swapStatusInfo?.quote?.to.currency.chain,
   ]);
 
   // Use refund modal hook
@@ -352,13 +352,13 @@ export function UnifiedTransactionWidget({
   // Note: inputAmountFromMetadata is calculated after getInputAssetFromMetadata() below
   // This variable will be reassigned after metadata parsing
   let inputAmount = formatAmount(
-    swapStatusInfo?.quote?.from_amount
-      ? parseInt(swapStatusInfo.quote.from_amount) /
-          Math.pow(10, swapStatusInfo.quote.from_decimals)
+    swapStatusInfo?.quote?.from.amount
+      ? parseInt(swapStatusInfo.quote.from.amount) /
+          Math.pow(10, swapStatusInfo.quote.from.currency.decimals)
       : swapType === "bitcoin-deposit"
         ? bitcoinAmount
         : undefined,
-    swapStatusInfo?.quote?.from_decimals || (swapType === "bitcoin-deposit" ? 8 : 18)
+    swapStatusInfo?.quote?.from.currency.decimals || (swapType === "bitcoin-deposit" ? 8 : 18)
   );
 
   const getAssetSymbol = (tokenAddress: string | undefined, defaultSymbol: string): string => {
@@ -417,15 +417,23 @@ export function UnifiedTransactionWidget({
 
   const inputAssetMetadata = getInputAssetFromMetadata();
 
+  // Helper to extract token address from the currency token structure
+  const getTokenAddress = (
+    token: { type: "Native" } | { type: "Address"; data: string } | undefined
+  ): string | undefined => {
+    if (token?.type === "Address") {
+      return token.data;
+    }
+    return undefined;
+  };
+
   // For EVM deposits, prioritize metadata, then fallback to token address lookup
   // Don't use "ETH" as default to avoid showing wrong icon while loading
+  const fromTokenAddress = getTokenAddress(swapStatusInfo?.quote?.from.currency.token);
   const inputAsset =
     swapType === "bitcoin-deposit"
       ? "BTC"
-      : inputAssetMetadata.ticker ||
-        (swapStatusInfo?.quote?.from_token?.address
-          ? getAssetSymbol(swapStatusInfo.quote.from_token.address, "")
-          : "");
+      : inputAssetMetadata.ticker || (fromTokenAddress ? getAssetSymbol(fromTokenAddress, "") : "");
 
   // For icon URL, use metadata if available, otherwise don't provide one
   // This prevents showing wrong icon while data loads
@@ -438,20 +446,20 @@ export function UnifiedTransactionWidget({
   }
 
   const outputAmount = formatAmount(
-    swapStatusInfo?.quote?.to_amount
-      ? parseInt(swapStatusInfo.quote.to_amount) / Math.pow(10, swapStatusInfo.quote.to_decimals)
+    swapStatusInfo?.quote?.to.amount
+      ? parseInt(swapStatusInfo.quote.to.amount) /
+          Math.pow(10, swapStatusInfo.quote.to.currency.decimals)
       : undefined,
-    swapStatusInfo?.quote?.to_decimals || (swapType === "bitcoin-deposit" ? 18 : 8)
+    swapStatusInfo?.quote?.to.currency.decimals || (swapType === "bitcoin-deposit" ? 18 : 8)
   );
 
+  const toTokenAddress = getTokenAddress(swapStatusInfo?.quote?.to.currency.token);
   const outputAsset =
-    swapType === "bitcoin-deposit"
-      ? getAssetSymbol(swapStatusInfo?.quote?.to_token?.address, "cbBTC")
-      : "BTC";
+    swapType === "bitcoin-deposit" ? getAssetSymbol(toTokenAddress, "cbBTC") : "BTC";
 
   const handleViewUserTransaction = () => {
     const txnId = swapStatusInfo?.user_deposit_status?.tx_hash;
-    const chain = swapStatusInfo?.quote?.from_chain;
+    const chain = swapStatusInfo?.quote?.from.currency.chain;
 
     if (txnId) {
       if (chain === "bitcoin") {
@@ -1821,7 +1829,7 @@ export function UnifiedTransactionWidget({
             paddingTopCustom={isMobile ? "4px" : "6px"}
             evmConfirmations={evmConfirmations}
             btcConfirmations={btcConfirmations}
-            mmDepositChain={swapStatusInfo?.quote?.to_chain}
+            mmDepositChain={swapStatusInfo?.quote?.to.currency.chain}
             userDepositTx={bitcoinDepositTx || userDepositTxHash}
             showFillingOrderWarning={showFillingOrderWarning}
             onNewSwap={handleNewSwap}

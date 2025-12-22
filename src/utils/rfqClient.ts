@@ -250,28 +250,11 @@ export class RfqClient {
   }
 
   /**
-   * Request quotes from connected market makers
-   */
-  async requestQuotes(request: QuoteRequest): Promise<QuoteResponse> {
-    return this.fetchWithTimeout<QuoteResponse>("/api/v1/quotes/request", {
-      method: "POST",
-      body: request,
-    });
-  }
-
-  /**
-   * Get list of connected market makers
-   */
-  async getConnectedMarketMakers(): Promise<ConnectedMarketMakersResponse> {
-    return this.fetchWithTimeout<ConnectedMarketMakersResponse>("/api/v1/market-makers/connected");
-  }
-
-  /**
    * Get liquidity information from all market makers
    * Returns available trading pairs and maximum amounts
    */
   async getLiquidity(): Promise<LiquidityResponse> {
-    return this.fetchWithTimeout<LiquidityResponse>("/api/v1/liquidity");
+    return this.fetchWithTimeout<LiquidityResponse>("/api/v2/liquidity");
   }
 
   /**
@@ -300,21 +283,6 @@ export const createRfqClient = (config: RfqClientConfig): RfqClient => new RfqCl
  * Get server status (functional style)
  */
 export const getStatus = (client: RfqClient) => (): Promise<Status> => client.getStatus();
-
-/**
- * Request quotes (functional style)
- */
-export const requestQuotes =
-  (client: RfqClient) =>
-  (request: QuoteRequest): Promise<QuoteResponse> =>
-    client.requestQuotes(request);
-
-/**
- * Get connected market makers (functional style)
- */
-export const getConnectedMarketMakers =
-  (client: RfqClient) => (): Promise<ConnectedMarketMakersResponse> =>
-    client.getConnectedMarketMakers();
 
 /**
  * Get liquidity information (functional style)

@@ -12,6 +12,7 @@ import { useStore } from "@/utils/store";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
+import { hasData } from "@/utils/riftApiClient";
 
 // Map API status to deposit flow state
 const mapStatusToDepositFlowState = (status: string) => {
@@ -59,7 +60,7 @@ export default function SwapPage() {
   useBtcEthPrices(); // Fetch BTC/ETH prices on this page
 
   // Use the swapId from URL params, fallback to store if available
-  const currentSwapId = (swapId as string) || swapResponse?.swap_id;
+  const currentSwapId = (swapId as string) || swapResponse?.id;
 
   // Give backend 3 seconds to sync the swap before showing error
   React.useEffect(() => {
@@ -130,7 +131,7 @@ export default function SwapPage() {
     if (swapStatusInfo) {
       console.log("New Swap status", {
         ...swapStatusInfo,
-        mm_deposit_status: swapStatusInfo.mm_deposit_status
+        mm_deposit_status: hasData(swapStatusInfo.mm_deposit_status)
           ? {
               ...swapStatusInfo.mm_deposit_status,
               amount: swapStatusInfo.mm_deposit_status.amount
@@ -138,7 +139,7 @@ export default function SwapPage() {
                 : null,
             }
           : null,
-        user_deposit_status: swapStatusInfo.user_deposit_status
+        user_deposit_status: hasData(swapStatusInfo.user_deposit_status)
           ? {
               ...swapStatusInfo.user_deposit_status,
               amount: swapStatusInfo.user_deposit_status.amount
@@ -149,8 +150,8 @@ export default function SwapPage() {
         quote: swapStatusInfo.quote
           ? {
               ...swapStatusInfo.quote,
-              from_amount: parseInt(swapStatusInfo.quote.from_amount),
-              to_amount: parseInt(swapStatusInfo.quote.to_amount),
+              from_amount: parseInt(swapStatusInfo.quote.from.amount),
+              to_amount: parseInt(swapStatusInfo.quote.to.amount),
             }
           : null,
       });
@@ -251,10 +252,10 @@ export default function SwapPage() {
   }
 
   // Check if this is a Bitcoin deposit (BTC -> cbBTC swap)
-  const isBitcoinDeposit = swapStatusInfo?.quote?.from_chain === "bitcoin";
-  const bitcoinDepositAddress = swapStatusInfo?.user_deposit_address;
-  const bitcoinExpectedAmount = swapStatusInfo?.quote?.from_amount;
-  const bitcoinDecimals = swapStatusInfo?.quote?.from_decimals || 8;
+  const isBitcoinDeposit = swapStatusInfo?.quote?.from.currency.chain === "bitcoin";
+  const bitcoinDepositAddress = swapStatusInfo?.deposit_vault_address;
+  const bitcoinExpectedAmount = swapStatusInfo?.quote?.from.amount;
+  const bitcoinDecimals = swapStatusInfo?.quote?.from.currency.decimals || 8;
 
   // Generate Bitcoin URI and amount for QR code
   let bitcoinUri = "";

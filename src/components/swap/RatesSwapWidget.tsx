@@ -17,7 +17,6 @@ import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
 import { useStore } from "@/utils/store";
 import { TokenData } from "@/utils/types";
-import { formatLotAmount } from "@/utils/rfqClient";
 import {
   getERC20ToBTCQuote,
   callRFQ,
@@ -25,6 +24,7 @@ import {
   calculateUsdValue,
   satsToBtc,
   getSlippageBpsForNotional,
+  formatCurrencyAmount,
 } from "@/utils/swapHelpers";
 import { PriceQuality } from "@cowprotocol/cow-sdk";
 import { formatUnits, parseUnits } from "viem";
@@ -802,7 +802,7 @@ export const RatesSwapWidget = () => {
             quoteType: "indicative",
           });
 
-          const outputAmount = formatLotAmount(rfqQuoteResponse.to);
+          const outputAmount = formatCurrencyAmount(rfqQuoteResponse.to);
           const truncatedOutput = (() => {
             const parts = outputAmount.split(".");
             if (parts.length === 2 && parts[1].length > 8) {

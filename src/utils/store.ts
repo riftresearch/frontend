@@ -1,7 +1,6 @@
 import { create } from "zustand";
-import { CreateSwapResponse } from "./otcClient";
+import { Swap, QuoteResponse } from "./riftApiClient";
 import { TokenData, ApprovalState } from "./types";
-import { Quote } from "./rfqClient";
 import { FeeOverview } from "./swapHelpers";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
 
@@ -69,8 +68,8 @@ export const useStore = create<{
   setDepositFlowState: (s: DepositFlowState) => void;
   countdownValue: number;
   setCountdownValue: (value: number) => void;
-  swapResponse: CreateSwapResponse | null;
-  setSwapResponse: (response: CreateSwapResponse | null) => void;
+  swapResponse: Swap | null;
+  setSwapResponse: (response: Swap | null) => void;
   transactionConfirmed: boolean;
   setTransactionConfirmed: (confirmed: boolean) => void;
   btcPrice: number | null;
@@ -84,12 +83,12 @@ export const useStore = create<{
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
   cowswapQuote: QuoteResults | null;
-  rfqQuote: Quote | null;
+  rfqQuote: QuoteResponse | null;
   quoteType: QuoteType | null;
   /** Atomically update quotes and quote type together. Pass null to clear all. */
   setQuotes: (params: {
     cowswapQuote: QuoteResults | null;
-    rfqQuote: Quote | null;
+    rfqQuote: QuoteResponse | null;
     quoteType: QuoteType | null;
   }) => void;
   /** Clear all quotes atomically (sets cowswapQuote, rfqQuote, and quoteType to null) */
@@ -102,6 +101,18 @@ export const useStore = create<{
   setPayoutAddress: (address: string) => void;
   addressValidation: { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string };
   setAddressValidation: (validation: {
+    isValid: boolean;
+    networkMismatch?: boolean;
+    detectedNetwork?: string;
+  }) => void;
+  btcRefundAddress: string;
+  setBtcRefundAddress: (address: string) => void;
+  btcRefundAddressValidation: {
+    isValid: boolean;
+    networkMismatch?: boolean;
+    detectedNetwork?: string;
+  };
+  setBtcRefundAddressValidation: (validation: {
     isValid: boolean;
     networkMismatch?: boolean;
     detectedNetwork?: string;
@@ -163,7 +174,7 @@ export const useStore = create<{
   countdownValue: 99,
   setCountdownValue: (value: number) => set({ countdownValue: value }),
   swapResponse: null,
-  setSwapResponse: (response: CreateSwapResponse | null) => set({ swapResponse: response }),
+  setSwapResponse: (response: Swap | null) => set({ swapResponse: response }),
   transactionConfirmed: false,
   setTransactionConfirmed: (confirmed: boolean) => set({ transactionConfirmed: confirmed }),
   btcPrice: null,
@@ -199,6 +210,14 @@ export const useStore = create<{
     networkMismatch?: boolean;
     detectedNetwork?: string;
   }) => set({ addressValidation: validation }),
+  btcRefundAddress: "",
+  setBtcRefundAddress: (address: string) => set({ btcRefundAddress: address }),
+  btcRefundAddressValidation: { isValid: false },
+  setBtcRefundAddressValidation: (validation: {
+    isValid: boolean;
+    networkMismatch?: boolean;
+    detectedNetwork?: string;
+  }) => set({ btcRefundAddressValidation: validation }),
   approvalState: ApprovalState.UNKNOWN,
   setApprovalState: (state: ApprovalState) => set({ approvalState: state }),
   feeOverview: null,

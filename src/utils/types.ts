@@ -1,5 +1,5 @@
 import { Address } from "viem";
-import { Currency } from "./rfqClient";
+import { Currency } from "./riftApiClient";
 
 export type TokenStyle = {
   name: string;
@@ -92,8 +92,8 @@ export type Config = {
   etherscanUrl: string;
   mainnetRpcUrl: string;
   esploraUrl: string;
-  rfqServerUrl: string;
-  otcServerUrl: string;
+  riftApiUrl: string;
+  rfqUrl: string;
   underlyingSwappingAssets: Asset[];
 };
 

@@ -94,7 +94,7 @@ export function StepCarousel({
   const { isMobile } = useWindowSize();
 
   // Use provided swapId prop, fallback to store value
-  const currentSwapId = swapId || swapResponse?.swap_id;
+  const currentSwapId = swapId || swapResponse?.id;
   const { data: swapStatusInfo } = useSwapStatus(currentSwapId);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [slideOffset, setSlideOffset] = useState(0);
@@ -193,7 +193,7 @@ export function StepCarousel({
 
   const handleViewTransaction = () => {
     const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
-    const chain = swapStatusInfo?.quote?.to_chain;
+    const chain = swapStatusInfo?.quote?.to.currency.chain;
 
     if (txnId) {
       if (chain === "bitcoin") {

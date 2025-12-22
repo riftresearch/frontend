@@ -9,15 +9,14 @@ import {
   useSendTransaction,
 } from "wagmi";
 import { colors } from "@/utils/colors";
-import { GLOBAL_CONFIG, otcClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
-import { OTCServerError } from "@/utils/otcClient";
+import { GLOBAL_CONFIG, riftApiClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
+import { QuoteResponse } from "@/utils/riftApiClient";
 import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { useStore, CowswapOrderStatus } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { reownModal } from "@/utils/wallet";
 import { Address, erc20Abi, parseUnits } from "viem";
-import { Quote } from "@/utils/rfqClient";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
@@ -81,6 +80,8 @@ export const SwapButton = () => {
     quoteType,
     payoutAddress,
     addressValidation,
+    btcRefundAddress,
+    btcRefundAddressValidation,
     setBitcoinDepositInfo,
     bitcoinDepositInfo,
     approvalState,
@@ -107,10 +108,10 @@ export const SwapButton = () => {
   // Ref to track previous refetchQuote value for retry detection
   const prevRefetchQuoteRef = useRef(refetchQuote);
 
-  // Helper function to handle OTC errors with specific messaging
+  // Helper function to handle swap errors with specific messaging
   // Defined inside component to access state setters for loading cancellation
-  const handleOTCError = (error: unknown) => {
-    console.error("OTC Error:", error);
+  const handleSwapError = (error: unknown) => {
+    console.error("Swap Error:", error);
 
     // Cancel all loading states on the button
     setSwapButtonPressed(false);
@@ -121,8 +122,12 @@ export const SwapButton = () => {
     clearQuotes();
     setRefetchQuote(true);
 
-    // Check if it's an OFAC-related error
-    if (error instanceof OTCServerError && error.isOFACSanctioned()) {
+    // Check if it's an OFAC-related error by examining the error message
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errorMessage.toLowerCase().includes("ofac") ||
+      errorMessage.toLowerCase().includes("sanction")
+    ) {
       toastError(error, {
         title: "Address Blocked",
         description:
@@ -252,21 +257,20 @@ export const SwapButton = () => {
       console.log("🔵 [METADATA] Creating cbBTC->BTC swap with metadata:");
       console.log("  - Amount in metadata:", amountToTransfer);
 
-      console.log("Creating OTC swap for cbBTC...");
-      const otcSwap = await otcClient.createSwap({
-        quote: rfqQuote,
-        user_destination_address: payoutAddress,
-        user_evm_account_address: userEvmAccountAddress,
-        metadata: selectedInputToken
-          ? {
-              affiliate: "app.rift.trade",
-              start_asset: JSON.stringify(startAssetMetadata),
-            }
-          : undefined,
+      console.log("Creating swap order for cbBTC...");
+      const orderResult = await riftApiClient.createOrder({
+        id: rfqQuote.id,
+        userDestinationAddress: payoutAddress,
+        refundAddress: userEvmAccountAddress,
       });
 
-      const depositAddress = otcSwap.deposit_address;
-      console.log("OTC deposit address:", depositAddress);
+      if (!orderResult.ok) {
+        throw new Error(orderResult.error?.error ?? "Failed to create swap order");
+      }
+
+      const otcSwap = orderResult.data;
+      const depositAddress = otcSwap.deposit_vault_address;
+      console.log("Swap deposit address:", depositAddress);
 
       // Store swap response in state
       setSwapResponse(otcSwap);
@@ -316,7 +320,7 @@ export const SwapButton = () => {
       console.error("cbBTC->BTC swap failed:", error);
       setSwapResponse(null);
       setIsCbBTCTransferPending(false);
-      handleOTCError(error);
+      handleSwapError(error);
     }
   }, [
     rfqQuote,
@@ -403,19 +407,18 @@ export const SwapButton = () => {
         console.log("🟠 [METADATA] Creating ERC20->BTC swap with metadata:");
         console.log("  - Amount in metadata:", amountForMetadata);
 
-        otcSwap = await otcClient.createSwap({
-          quote: rfqQuote!,
-          user_destination_address: payoutAddress,
-          user_evm_account_address: userEvmAccountAddress,
-          metadata: selectedInputToken
-            ? {
-                affiliate: "app.rift.trade",
-                start_asset: JSON.stringify(startAssetMetadata),
-              }
-            : undefined,
+        const orderResult = await riftApiClient.createOrder({
+          id: rfqQuote!.id,
+          userDestinationAddress: payoutAddress,
+          refundAddress: userEvmAccountAddress,
         });
 
-        depositAddress = otcSwap.deposit_address;
+        if (!orderResult.ok) {
+          throw new Error(orderResult.error?.error ?? "Failed to create swap order");
+        }
+
+        otcSwap = orderResult.data;
+        depositAddress = otcSwap.deposit_vault_address;
 
         // Store swap response in state
         setSwapResponse(otcSwap);
@@ -463,7 +466,7 @@ export const SwapButton = () => {
 
       // Derive chainId from RFQ quote (source of truth for the swap chain)
       const quoteChain = rfqQuote!.from.currency.chain;
-      const quoteChainId = quoteChain === "ethereum" ? 1 : quoteChain === "base" ? 8453 : null;
+      const quoteChainId = quoteChain.kind === "EVM" ? quoteChain.chainId : null;
 
       // Validate quote chain is supported and matches connected wallet
       if (quoteChainId === null || quoteChainId !== evmConnectWalletChainId) {
@@ -495,9 +498,9 @@ export const SwapButton = () => {
       setCowswapOrderStatus(CowswapOrderStatus.SIGNED);
 
       // Store CowSwap order ID in swap metadata
-      if (otcSwap?.swap_id) {
+      if (otcSwap?.id) {
         try {
-          await fetch(`/api/swap/${otcSwap.swap_id}/metadata`, {
+          await fetch(`/api/swap/${otcSwap.id}/metadata`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -514,14 +517,14 @@ export const SwapButton = () => {
       }
 
       // Redirect to swap tracking page
-      if (otcSwap?.swap_id) {
-        console.log("Redirecting to swap page with ID:", otcSwap.swap_id);
-        router.push(`/swap/${otcSwap.swap_id}`);
+      if (otcSwap?.id) {
+        console.log("Redirecting to swap page with ID:", otcSwap.id);
+        router.push(`/swap/${otcSwap.id}`);
       }
     } catch (error) {
       console.error("ERC20->BTC swap failed:", error);
       setSwapResponse(null);
-      handleOTCError(error);
+      handleSwapError(error);
     }
   }, [
     cowswapQuote,
@@ -550,46 +553,62 @@ export const SwapButton = () => {
       return;
     }
 
+    if (!btcRefundAddress || !btcRefundAddressValidation.isValid) {
+      toastError(new Error("Invalid refund address"), {
+        title: "Swap Failed",
+        description: "Please enter a valid Bitcoin refund address.",
+      });
+      return;
+    }
+
     try {
-      // Step 1: Create OTC swap to get Bitcoin deposit address
-      console.log("Creating OTC swap for BTC->cbBTC...");
-      const otcSwap = await otcClient.createSwap({
-        quote: rfqQuote,
-        user_destination_address: userEvmAccountAddress,
-        user_evm_account_address: userEvmAccountAddress,
-        metadata: {
-          affiliate: "app.rift.trade",
-          start_asset: "native:BTC",
-        },
+      // Step 1: Create swap order to get Bitcoin deposit address
+      console.log("Creating swap order for BTC->cbBTC...");
+      const orderResult = await riftApiClient.createOrder({
+        id: rfqQuote.id,
+        userDestinationAddress: userEvmAccountAddress,
+        refundAddress: btcRefundAddress,
       });
 
-      console.log("OTC swap created:", otcSwap);
+      if (!orderResult.ok) {
+        throw new Error(orderResult.error?.error ?? "Failed to create swap order");
+      }
+
+      const otcSwap = orderResult.data;
+      console.log("Swap order created:", otcSwap);
 
       // Store swap response in state
       setSwapResponse(otcSwap);
 
       // Step 2: Generate Bitcoin URI and show QR code
-      const amount = BigInt(otcSwap.expected_amount);
-      const amountInBTC = Number(amount) / Math.pow(10, otcSwap.decimals);
-      const bitcoinUri = generateBitcoinURI(otcSwap.deposit_address, amountInBTC, "Rift Swap");
+      const amount = BigInt(otcSwap.quote.from.amount);
+      const decimals = otcSwap.quote.from.currency.decimals;
+      const amountInBTC = Number(amount) / Math.pow(10, decimals);
+      const bitcoinUri = generateBitcoinURI(
+        otcSwap.deposit_vault_address,
+        amountInBTC,
+        "Rift Swap"
+      );
 
       setBitcoinDepositInfo({
-        address: otcSwap.deposit_address,
+        address: otcSwap.deposit_vault_address,
         amount: amountInBTC,
         uri: bitcoinUri,
       });
 
       // Step 3: Redirect to swap tracking page
-      console.log("Redirecting to swap page with ID:", otcSwap.swap_id);
-      router.push(`/swap/${otcSwap.swap_id}`);
+      console.log("Redirecting to swap page with ID:", otcSwap.id);
+      router.push(`/swap/${otcSwap.id}`);
     } catch (error) {
       console.error("BTC->cbBTC swap failed:", error);
       setSwapResponse(null);
-      handleOTCError(error);
+      handleSwapError(error);
     }
   }, [
     rfqQuote,
     userEvmAccountAddress,
+    btcRefundAddress,
+    btcRefundAddressValidation.isValid,
     selectedInputToken,
     payoutAddress,
     setSwapResponse,
@@ -796,12 +815,12 @@ export const SwapButton = () => {
 
   // Handle cbBTC transfer: redirect to swap monitoring page when transaction is signed
   useEffect(() => {
-    if (hash && isCbBTCTransferPending && swapResponse?.swap_id) {
-      console.log("cbBTC transfer signed, redirecting to swap page:", swapResponse.swap_id);
+    if (hash && isCbBTCTransferPending && swapResponse?.id) {
+      console.log("cbBTC transfer signed, redirecting to swap page:", swapResponse.id);
       setIsCbBTCTransferPending(false);
-      router.push(`/swap/${swapResponse.swap_id}`);
+      router.push(`/swap/${swapResponse.id}`);
     }
-  }, [hash, isCbBTCTransferPending, swapResponse?.swap_id, router]);
+  }, [hash, isCbBTCTransferPending, swapResponse?.id, router]);
 
   // Handle approval confirmation and errors
   useEffect(() => {

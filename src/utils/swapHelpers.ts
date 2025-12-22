@@ -4,8 +4,7 @@
  */
 
 import { TokenData } from "./types";
-import { rfqClient, ZERO_USD_DISPLAY, BITCOIN_DECIMALS, MIN_SWAP_SATS } from "./constants";
-import { Quote, formatLotAmount, RfqClientError, Currency } from "./rfqClient";
+import { riftApiClient, ZERO_USD_DISPLAY, BITCOIN_DECIMALS, MIN_SWAP_SATS } from "./constants";
 import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
 import { validateBitcoinPayoutAddressWithNetwork } from "./bitcoinUtils";
@@ -13,6 +12,14 @@ import { useStore } from "./store";
 import { CowSwapClient } from "./cowswapClient";
 import type { QuoteResults } from "@cowprotocol/sdk-trading";
 import { PriceQuality } from "@cowprotocol/cow-sdk";
+import {
+  Currency,
+  QuoteResponse,
+  CurrencyAmount,
+  QuoteRequest,
+  QuoteType,
+  FeesUsd,
+} from "./riftApiClient";
 
 // Re-export PriceQuality for convenience
 export { PriceQuality };
@@ -96,7 +103,7 @@ export interface ERC20ToBTCQuoteResponse {
   /** Required ERC20/ETH input amount (formatted string) - for exact output mode */
   erc20InputAmount?: string;
   /** RFQ quote for cbBTC -> BTC (needed for OTC swap creation) */
-  rfqQuote: Quote;
+  rfqQuote: QuoteResponse;
   /** Earliest expiration timestamp */
   expiresAt: Date;
 }
@@ -140,44 +147,64 @@ export function applySlippage(amount: bigint | string, slippageBps?: number): st
 }
 
 /**
- * Calculate fee breakdown for a swap
+ * Format a CurrencyAmount to a human-readable decimal string.
+ * Uses the token's decimals from the currency definition.
  *
- * @param rfqNetworkFee - Network fee in satoshis from RFQ
- * @param rfqProtocolFee - Protocol fee in satoshis from RFQ
- * @param cbBTCOut - cbBTC output amount (in base units)
- * @param erc20In - ERC20 input amount (in base units)
- * @param erc20Price - Price of ERC20 token in USD
- * @param bitcoinPrice - Price of Bitcoin in USD
+ * @param currencyAmount - The CurrencyAmount object from the API
+ * @returns Formatted amount as a decimal string
+ */
+export function formatCurrencyAmount(currencyAmount: CurrencyAmount): string {
+  const decimals = currencyAmount.currency.token.decimals;
+  return formatUnits(BigInt(currencyAmount.amount), decimals);
+}
+
+/**
+ * Calculate fee breakdown for a swap using the new fees.usd structure.
+ * When CowSwap is involved, calculates the swap fee as the difference between
+ * input value (ERC20) and output value (cbBTC).
+ *
+ * @param rfqFeesUsd - Fee breakdown in USD from the RFQ quote (protocol, network, marketMaker)
+ * @param cowswapQuote - Optional CowSwap quote (when ERC20 -> cbBTC step is involved)
+ * @param sellTokenPrice - Price of the sell token in USD (needed to convert CowSwap fee)
+ * @param sellTokenDecimals - Decimals of the sell token
+ * @param bitcoinPrice - Price of Bitcoin in USD (needed to calculate cbBTC output value)
  * @returns Fee breakdown with USD values
  */
 export function calculateFees(
-  rfqNetworkFee: number,
-  rfqProtocolFee: number,
-  cbBTCOut: string,
-  erc20In: string,
-  erc20Price: number,
-  bitcoinPrice: number,
-  decimals: number
+  rfqFeesUsd: FeesUsd,
+  cowswapQuote?: QuoteResults | null,
+  sellTokenPrice?: number,
+  sellTokenDecimals?: number,
+  bitcoinPrice?: number
 ): FeeOverview {
-  // Convert network fee from satoshis to BTC and then to USD
-  const networkFeeBTC = parseFloat(formatUnits(BigInt(rfqNetworkFee), BITCOIN_DECIMALS));
-  const networkFeeUSD = networkFeeBTC * bitcoinPrice;
+  const networkFeeUSD = rfqFeesUsd.network;
+  const protocolFeeUSD = rfqFeesUsd.protocol;
+  const marketMakerFeeUSD = rfqFeesUsd.marketMaker;
 
-  // Convert protocol fee from satoshis to BTC and then to USD
-  const protocolFeeBTC = parseFloat(formatUnits(BigInt(rfqProtocolFee), BITCOIN_DECIMALS));
-  const protocolFeeUSD = protocolFeeBTC * bitcoinPrice;
+  // Calculate CowSwap fee as the difference between input value and output value
+  // This represents the cost of routing through CowSwap (slippage + DEX fees)
+  let swapFeeUSD = 0;
+  if (cowswapQuote && sellTokenPrice && sellTokenDecimals !== undefined && bitcoinPrice) {
+    const sellAmount = cowswapQuote.amountsAndCosts.afterSlippage.sellAmount;
+    const buyAmount = cowswapQuote.amountsAndCosts.afterSlippage.buyAmount;
 
-  // Calculate ERC20 fee: erc20In * erc20Price - cbBTCOut * bitcoinPrice
-  const erc20InValue = parseFloat(formatUnits(BigInt(erc20In), decimals)) * erc20Price;
-  const cbBTCOutValue = parseFloat(formatUnits(BigInt(cbBTCOut), BITCOIN_DECIMALS)) * bitcoinPrice;
-  const erc20FeeUSD = erc20InValue - cbBTCOutValue;
+    // Calculate USD values
+    const erc20InValue = parseFloat(formatUnits(sellAmount, sellTokenDecimals)) * sellTokenPrice;
+    const cbBTCOutValue = parseFloat(formatUnits(buyAmount, BITCOIN_DECIMALS)) * bitcoinPrice;
+
+    // The swap fee is the difference (what you lose in the swap)
+    swapFeeUSD = Math.max(0, erc20InValue - cbBTCOutValue);
+  }
+
+  // Total swap fee includes CowSwap routing fee + market maker fee
+  const erc20FeeUSD = swapFeeUSD + marketMakerFeeUSD;
 
   // Calculate total fees
   const totalFeesUSD = networkFeeUSD + protocolFeeUSD + erc20FeeUSD;
   const feeOverview: FeeOverview = {
     erc20Fee: {
       fee: formatUsdValue(erc20FeeUSD),
-      description: "cbBTC Fee",
+      description: "Swap Fee",
     },
     networkFee: {
       fee: formatUsdValue(networkFeeUSD),
@@ -227,121 +254,119 @@ export function getMinSwapValueUsd(bitcoinPrice: number): number {
 }
 
 /**
- * Get quote for cbBTC -> BTC using RFQ server
- * This is the original getQuote function from SwapWidget, renamed
+ * Build the Currency object for cbBTC on a given chain.
+ */
+function buildCbBTCCurrency(chainId: number): Currency {
+  return {
+    chain: { kind: "EVM", chainId },
+    token: {
+      kind: "TOKEN",
+      address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      decimals: 8,
+    },
+  };
+}
+
+/**
+ * Build the Currency object for native Bitcoin.
+ */
+function buildBTCCurrency(): Currency {
+  return {
+    chain: { kind: "BITCOIN" },
+    token: {
+      kind: "NATIVE",
+      decimals: 8,
+    },
+  };
+}
+
+/**
+ * Get quote for cbBTC <-> BTC using the Rift API.
  *
  * @param amount - The amount (either input cbBTC or output BTC depending on mode)
  * @param mode - "ExactInput" for specifying cbBTC input, "ExactOutput" for specifying BTC output
  * @param isSwappingForBTC - Whether swapping ERC20 for BTC (true) or BTC for ERC20 (false)
  * @param chainId - Chain ID (1 for Ethereum mainnet, 8453 for Base) - defaults to mainnet
- * @returns Quote object or null if failed
+ * @returns QuoteResponse object or null if failed
  */
 export async function callRFQ(
   amount: string,
   mode: "ExactInput" | "ExactOutput" = "ExactInput",
   isSwappingForBTC: boolean,
   chainId: number = 1
-): Promise<Quote | null> {
+): Promise<QuoteResponse | null> {
   // Check if FAKE_RFQ mode is enabled
   const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
 
-  // Determine the EVM chain based on chainId
-  const evmChain = chainId === 8453 ? "base" : "ethereum";
+  const cbBTCCurrency = buildCbBTCCurrency(chainId);
+  const btcCurrency = buildBTCCurrency();
 
-  const CBBTC_CURRENCY = {
-    chain: evmChain,
-    decimals: 8,
-    token: {
-      type: "Address",
-      data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-    },
-  } as Currency;
-
-  const BTC_CURRENCY = {
-    chain: "bitcoin",
-    decimals: 8,
-    token: {
-      type: "Native",
-    },
-  } as Currency;
-
-  const fromCurrency = isSwappingForBTC ? CBBTC_CURRENCY : BTC_CURRENCY;
-  const toCurrency = isSwappingForBTC ? BTC_CURRENCY : CBBTC_CURRENCY;
+  const fromCurrency = isSwappingForBTC ? cbBTCCurrency : btcCurrency;
+  const toCurrency = isSwappingForBTC ? btcCurrency : cbBTCCurrency;
 
   if (FAKE_RFQ) {
-    // console.log(`FAKE_RFQ mode enabled - returning dummy quote (${mode})`);
-    const dummyQuote: Quote = {
+    // Return a dummy quote for testing
+    const dummyQuote: QuoteResponse = {
       id: "123e4567-e89b-12d3-a456-426614174000",
-      market_maker_id: "987f6543-e21c-43d2-b654-426614174111",
       from: {
         currency: fromCurrency,
-        amount: amount, // 1:1 for testing
+        amount: amount,
       },
       to: {
         currency: toCurrency,
-        amount: amount, // 1:1 for testing
+        amount: amount,
       },
-      fee_schedule: {
-        protocol_fee_sats: 100,
-        liquidity_fee_sats: 50,
-        network_fee_sats: 200,
+      fees: {
+        usd: {
+          marketMaker: 0.5,
+          protocol: 0.1,
+          network: 0.2,
+        },
+        raw: {
+          liquidityFeeBps: 10,
+          protocolFeeBps: 5,
+          networkFeeSats: "200",
+        },
       },
-      expires_at: new Date(Date.now() + 60000).toISOString(), // Expires in 1 minute
-      created_at: new Date().toISOString(),
+      bitcoinMarkPriceUsd: 100000,
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
     };
-
     return dummyQuote;
   }
 
   try {
-    const currentTime = new Date().getTime();
+    const currentTime = Date.now();
 
-    let quoteResponse: any;
-    try {
-      quoteResponse = await rfqClient.requestQuotes({
-        mode,
-        amount,
-        from: fromCurrency,
-        to: toCurrency,
-      });
-    } catch (error) {
-      console.error("RFQ request failed:", error);
+    const quoteType: QuoteType = mode === "ExactInput" ? "EXACT_INPUT" : "EXACT_OUTPUT";
+
+    const request: QuoteRequest = {
+      type: quoteType,
+      from: fromCurrency,
+      to: toCurrency,
+      amount,
+    };
+
+    const result = await riftApiClient.getQuote(request);
+
+    const timeTaken = Date.now() - currentTime;
+
+    if (!result.ok) {
+      console.error("RFQ request failed:", result.error);
 
       // Set OTC server dead flag on error
       const { setIsOtcServerDead } = useStore.getState();
       setIsOtcServerDead(true);
 
-      toastInfo({
+      const description = result.error?.error ?? "Service temporarily unavailable";
+      toastError(new Error(description), {
         title: "Quote Request Failed",
+        description,
       });
       return null;
     }
 
-    const timeTaken = new Date().getTime() - currentTime;
-    const quoteType = (quoteResponse as any)?.quote?.type;
-
-    // if (quoteType !== "success") {
-    //   if (amount < 2500n) {
-    //     // this is probably just too small so no one quoted
-    //     toastInfo({
-    //       title: "Amount too little",
-    //       description: "The amount is too little to be quoted",
-    //     });
-    //     return null;
-    //   } else {
-    //     toastInfo({
-    //       title: "Insufficient liquidity",
-    //       description: "No market makers have sufficient liquidity to quote this swap",
-    //     });
-    //     return null;
-    //   }
-    // }
-
-    // if we're here, we have a success quote
-    const quote = (quoteResponse as any).quote.data;
-    console.log("got quote from RFQ", quoteResponse, "in", timeTaken, "ms");
-
-    return quote;
+    console.log("got quote from RFQ", result.data, "in", timeTaken, "ms");
+    return result.data;
   } catch (error: unknown) {
     console.error("RFQ request failed:", error);
 
@@ -349,19 +374,7 @@ export async function callRFQ(
     const { setIsOtcServerDead } = useStore.getState();
     setIsOtcServerDead(true);
 
-    // Normalize error message
-    const description = (() => {
-      if (error instanceof RfqClientError) {
-        return error.response?.error ?? error.message;
-      }
-      if (typeof error === "object" && error !== null) {
-        const maybeMsg = (error as { message?: unknown }).message;
-        if (typeof maybeMsg === "string" && maybeMsg.length > 0) {
-          return maybeMsg;
-        }
-      }
-      return "Service temporarily unavailable";
-    })();
+    const description = error instanceof Error ? error.message : "Service temporarily unavailable";
 
     toastError(error, {
       title: "Quote Request Failed",
@@ -404,14 +417,9 @@ export async function getERC20ToBTCQuote(
         throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
       }
 
-      if (rfqQuote.toString() === "Insufficient balance to fulfill quote") {
-        console.log("rfqQuote", rfqQuote);
-        throw new Error("Insufficient balance to fulfill quote");
-      }
-
-      // Format BTC output amount
-      const btcOutputAmount = formatLotAmount(rfqQuote.to);
-      const expiresAt = new Date(rfqQuote.expires_at);
+      // Format BTC output amount using the new helper
+      const btcOutputAmount = formatCurrencyAmount(rfqQuote.to);
+      const expiresAt = new Date(rfqQuote.expiresAt);
 
       console.log("Input is cbBTC, returning direct quote:", btcOutputAmount);
 
@@ -459,16 +467,11 @@ export async function getERC20ToBTCQuote(
       throw new Error("Failed to get RFQ quote for cbBTC -> BTC");
     }
 
-    if (rfqQuote.toString() === "Insufficient balance to fulfill quote") {
-      console.log("rfqQuote", rfqQuote);
-      throw new Error("Insufficient balance to fulfill quote");
-    }
-
-    // Step 3: Format BTC output amount
-    const btcOutputAmount = formatLotAmount(rfqQuote.to);
+    // Step 3: Format BTC output amount using the new helper
+    const btcOutputAmount = formatCurrencyAmount(rfqQuote.to);
 
     // Step 4: Determine earliest expiration
-    const rfqExpiration = new Date(rfqQuote.expires_at);
+    const rfqExpiration = new Date(rfqQuote.expiresAt);
     const expiresAt = routerExpiration < rfqExpiration ? routerExpiration : rfqExpiration;
 
     // Clear "no routes" error on successful quote
@@ -484,21 +487,15 @@ export async function getERC20ToBTCQuote(
   } catch (error: unknown) {
     console.error("Failed to get ERC20 to BTC quote:", error);
 
-    // Handle specific error types
-    if (error instanceof RfqClientError) {
-      toastError(error, {
-        title: "RFQ Quote Failed",
-        description: error.message,
-      });
-    } else if ((error as Error).message === "Insufficient balance to fulfill quote") {
+    if ((error as Error).message === "Insufficient balance to fulfill quote") {
       throw new Error("Insufficient balance to fulfill quote");
-    } else {
-      const description = error instanceof Error ? error.message : "Unknown error occurred";
-      toastError(error, {
-        title: "Quote Failed",
-        description,
-      });
     }
+
+    const description = error instanceof Error ? error.message : "Unknown error occurred";
+    toastError(error, {
+      title: "Quote Failed",
+      description,
+    });
 
     return null;
   }
@@ -624,7 +621,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     const cbBTCFormatted = formatUnits(BigInt(cbBTCAmountNeeded), 8);
     if (isCbBTC) {
       // For cbBTC, we already have the answer - just format it
-      const expiresAt = new Date(rfqQuoteData.expires_at);
+      const expiresAt = new Date(rfqQuoteData.expiresAt);
 
       console.log("Input is cbBTC, returning direct quote:", cbBTCFormatted);
 
@@ -683,7 +680,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     const routerExpiration = new Date(Date.now() + validForSeconds * 1000);
 
     // Determine earliest expiration
-    const rfqExpiration = new Date(rfqQuoteData.expires_at);
+    const rfqExpiration = new Date(rfqQuoteData.expiresAt);
     const expiresAt = routerExpiration < rfqExpiration ? routerExpiration : rfqExpiration;
 
     console.log("Combined exact output quote complete:", {
@@ -705,19 +702,11 @@ export async function getERC20ToBTCQuoteExactOutput(
   } catch (error: unknown) {
     console.error("Failed to get ERC20 to BTC quote (exact output):", error);
 
-    // Handle specific error types
-    if (error instanceof RfqClientError) {
-      toastError(error, {
-        title: "RFQ Quote Failed",
-        description: error.message,
-      });
-    } else {
-      const description = error instanceof Error ? error.message : "Unknown error occurred";
-      toastError(error, {
-        title: "Quote Failed",
-        description,
-      });
-    }
+    const description = error instanceof Error ? error.message : "Unknown error occurred";
+    toastError(error, {
+      title: "Quote Failed",
+      description,
+    });
 
     return null;
   }
