@@ -53,6 +53,7 @@ export function UnifiedTransactionWidget({
     depositFlowState,
     countdownValue,
     swapResponse,
+    btcPrice,
   } = useStore();
 
   // Sound effect for swap completion
@@ -307,7 +308,7 @@ export function UnifiedTransactionWidget({
 
       try {
         // Map to admin swap format and check refund status
-        const mappedSwap = mapDbRowToAdminSwap(swapStatusInfo);
+        const mappedSwap = mapDbRowToAdminSwap(swapStatusInfo, btcPrice);
         const {
           isRefundAvailable: refundAvailable,
           shouldMarkAsRefunded,

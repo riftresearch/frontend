@@ -17,9 +17,11 @@ import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
 import { mapDbRowToAdminSwap, ANALYTICS_API_URL } from "@/utils/analyticsClient";
 import { AssetIcon } from "@/components/other/AssetIcon";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 
 export const AdminChats: React.FC = () => {
   const { isMobile } = useWindowSize();
+  const { btcPrice } = useBtcEthPrices(); // Fetch current BTC price as fallback
   const [chats, setChats] = useState<ChatThread[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [selectedThread, setSelectedThread] = useState<ChatThread | null>(null);
@@ -160,7 +162,7 @@ export const AdminChats: React.FC = () => {
         return;
       }
 
-      const swaps = data.swaps.map((row: any) => mapDbRowToAdminSwap(row));
+      const swaps = data.swaps.map((row: any) => mapDbRowToAdminSwap(row, btcPrice));
       setUserSwaps(swaps);
     } catch (error) {
       console.error("Error loading user swaps:", error);

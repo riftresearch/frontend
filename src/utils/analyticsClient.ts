@@ -177,10 +177,11 @@ export function formatDuration(startMs: number, endMs: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
+export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null): AdminSwapItem {
   // [0] Parse created_at timestamp and BTC price at swap time
   const createdAtMs = new Date(row.created_at).getTime();
-  const btcPriceUsd = row.bitcoin_usd_at_swap_time || 0;
+  // Use stored price if available, otherwise fall back to current price
+  const btcPriceUsd = row.bitcoin_usd_at_swap_time || fallbackBtcPrice || 0;
 
   // [1] Determine swap direction from quote.from_chain (defaults to EVM_TO_BTC)
   let direction: SwapDirection = "EVM_TO_BTC";
@@ -417,10 +418,8 @@ export function mapDbRowToAdminSwap(row: any): AdminSwapItem {
   }
 
   // [14] Determine EVM chain (ETH or BASE) - use from_chain for EVM_TO_BTC, to_chain for BTC_TO_EVM
-  const evmChainSource =
-    direction === "EVM_TO_BTC" ? row.quote?.from_chain : row.quote?.to_chain;
-  const evmChain: "ETH" | "BASE" =
-    evmChainSource?.toLowerCase() === "base" ? "BASE" : "ETH";
+  const evmChainSource = direction === "EVM_TO_BTC" ? row.quote?.from_chain : row.quote?.to_chain;
+  const evmChain: "ETH" | "BASE" = evmChainSource?.toLowerCase() === "base" ? "BASE" : "ETH";
 
   // [15] Return complete AdminSwapItem with all calculated data
   return {
