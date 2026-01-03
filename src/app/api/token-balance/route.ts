@@ -1,17 +1,15 @@
 // src/app/api/token-balance/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-// Network configuration mapping chainId to RPC URL
-const NETWORKS: Record<number, { rpcUrl: string; name: string; useQuickNode: boolean }> = {
+// Network configuration mapping chainId to Alchemy RPC URL
+const NETWORKS: Record<number, { rpcUrl: string; name: string }> = {
   1: {
-    rpcUrl: process.env.QUICKNODE_ETHEREUM_URL!,
+    rpcUrl: `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
     name: "ethereum",
-    useQuickNode: true,
   },
   8453: {
     rpcUrl: `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
     name: "base",
-    useQuickNode: false,
   },
 };
 
@@ -30,50 +28,14 @@ interface AlchemyResponse {
   };
 }
 
-// QuickNode response token type
-interface QuickNodeToken {
+// Normalized token type returned by this endpoint
+interface TokenBalance {
   address: string;
   totalBalance: string;
   decimals: number;
   name: string;
   symbol: string;
   chainId: number;
-}
-
-// Fetch token balances from QuickNode (for Ethereum mainnet)
-async function fetchFromQuickNode(
-  wallet: string,
-  chainId: number,
-  page: number
-): Promise<{ result: QuickNodeToken[] } | null> {
-  const network = NETWORKS[chainId];
-  if (!network || !network.useQuickNode) {
-    console.error(`QuickNode not configured for chainId ${chainId}`);
-    return null;
-  }
-
-  const res = await fetch(network.rpcUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      id: 67,
-      jsonrpc: "2.0",
-      method: "qn_getWalletTokenBalance",
-      params: [{ wallet, perPage: 100, page }],
-    }),
-  });
-
-  const data = await res.json();
-
-  // Add chainId to each token
-  if (data.result?.result && Array.isArray(data.result.result)) {
-    data.result.result = data.result.result.map((token: Omit<QuickNodeToken, "chainId">) => ({
-      ...token,
-      chainId,
-    }));
-  }
-
-  return data.result;
 }
 
 // Convert hex string to decimal string
@@ -88,11 +50,11 @@ function hexToDecimalString(hex: string): string {
   }
 }
 
-// Fetch token balances from Alchemy (for non-Ethereum chains like Base)
-async function fetchFromAlchemy(wallet: string, chainId: number): Promise<QuickNodeToken[]> {
+// Fetch token balances from Alchemy
+async function fetchTokenBalances(wallet: string, chainId: number): Promise<TokenBalance[]> {
   const network = NETWORKS[chainId];
-  if (!network || network.useQuickNode) {
-    console.error(`Alchemy not configured for chainId ${chainId}`);
+  if (!network) {
+    console.error(`Network not configured for chainId ${chainId}`);
     return [];
   }
 
@@ -120,43 +82,22 @@ async function fetchFromAlchemy(wallet: string, chainId: number): Promise<QuickN
       return [];
     }
 
-    // Filter out zero balances and transform to QuickNode format
+    // Filter out zero balances and transform to normalized format
     const nonZeroBalances = data.result.tokenBalances.filter(
       (token) => token.tokenBalance !== "0x0" && token.tokenBalance !== "0x"
     );
 
-    // Transform Alchemy response to match QuickNode format
-    // Convert hex balance to decimal string
     return nonZeroBalances.map((token) => ({
       address: token.contractAddress,
       totalBalance: hexToDecimalString(token.tokenBalance),
-      decimals: 0, // Default, will be enriched with actual metadata
-      name: "", // Will be enriched
-      symbol: "", // Will be enriched
+      decimals: 0, // Will be enriched with metadata on client
+      name: "", // Will be enriched with metadata on client
+      symbol: "", // Will be enriched with metadata on client
       chainId,
     }));
   } catch (error) {
-    console.error("Failed to fetch from Alchemy:", error);
+    console.error(`Failed to fetch token balances for chain ${chainId}:`, error);
     return [];
-  }
-}
-
-// Fetch tokens for a single chain
-async function fetchTokensForChain(
-  wallet: string,
-  chainId: number,
-  page: number
-): Promise<QuickNodeToken[]> {
-  const network = NETWORKS[chainId];
-  if (!network) {
-    return [];
-  }
-
-  if (network.useQuickNode) {
-    const result = await fetchFromQuickNode(wallet, chainId, page);
-    return result?.result || [];
-  } else {
-    return fetchFromAlchemy(wallet, chainId);
   }
 }
 
@@ -164,31 +105,20 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const wallet = searchParams.get("wallet") ?? undefined;
   const chainIdStr = searchParams.get("chainId");
-  const pageStr = searchParams.get("page");
-  const method = searchParams.get("method") ?? "qn_getWalletTokenBalance";
 
   if (!wallet) {
     return NextResponse.json({ error: "missing_wallet" }, { status: 400 });
-  }
-
-  const page = pageStr ? Number(pageStr) : 1;
-  if (!Number.isInteger(page) || page < 1) {
-    return NextResponse.json({ error: "invalid_page" }, { status: 400 });
-  }
-
-  if (method !== "qn_getWalletTokenBalance") {
-    return NextResponse.json({ error: "method_not_allowed" }, { status: 400 });
   }
 
   // If chainId not provided or is 0, fetch from all networks
   if (!chainIdStr || chainIdStr === "0") {
     const chainIds = Object.keys(NETWORKS).map(Number);
     const results = await Promise.all(
-      chainIds.map((cid) => fetchTokensForChain(wallet, cid, page))
+      chainIds.map((chainId) => fetchTokenBalances(wallet, chainId))
     );
 
     const mergedTokens = results.flat();
-    console.log("data (merged)", { result: { result: mergedTokens } });
+    console.log("[token-balance] Fetched", mergedTokens.length, "tokens across all chains");
     return NextResponse.json({ result: { result: mergedTokens } });
   }
 
@@ -203,7 +133,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unsupported chain ID" }, { status: 400 });
   }
 
-  const tokens = await fetchTokensForChain(wallet, chainId, page);
-  console.log(`data (${network.name})`, { result: { result: tokens } });
+  const tokens = await fetchTokenBalances(wallet, chainId);
+  console.log(`[token-balance] Fetched ${tokens.length} tokens for ${network.name}`);
   return NextResponse.json({ result: { result: tokens } });
 }
