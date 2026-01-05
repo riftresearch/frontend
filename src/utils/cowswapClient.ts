@@ -16,7 +16,7 @@ import { maxUint256 } from "viem";
 const CBBTC_ADDRESS = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 const NATIVE_ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const DEFAULT_SLIPPAGE_BPS = 5; // 0.05% = 5 basis points
-const DEFAULT_VALID_FOR_SECONDS = 300; // 5 minutes
+const DEFAULT_VALID_FOR_SECONDS = 3600; // 1 hour
 
 /** Chains supported by this client */
 export type CowSwapSupportedChain = SupportedChainId.MAINNET | SupportedChainId.BASE;

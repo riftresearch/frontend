@@ -148,32 +148,18 @@ export async function fetchWalletTokens(
   };
 
   try {
-    const allTokens: TokenBalance[] = [];
-    let page = 1;
-    let hasMorePages = true;
+    // Fetch all tokens across all chains (Alchemy returns all tokens in one call)
+    const response = await fetch(`/api/token-balance?wallet=${walletAddress}`, {
+      method: "GET",
+    });
+    const data = await response.json();
 
-    // Fetch all pages of tokens (no chainId = fetch all chains)
-    while (hasMorePages) {
-      const response = await fetch(`/api/token-balance?wallet=${walletAddress}&page=${page}`, {
-        method: "GET",
-      });
-      const data = await response.json();
-
-      if (data.result?.result && Array.isArray(data.result.result)) {
-        const tokens = data.result.result as TokenBalance[];
-        allTokens.push(...tokens);
-
-        console.log(
-          `[Balance Check] Fetched page ${page}: ${tokens.length} tokens (total: ${allTokens.length})`
-        );
-
-        hasMorePages = tokens.length >= 50;
-        page++;
-      } else {
-        hasMorePages = false;
-      }
+    if (!data.result?.result || !Array.isArray(data.result.result)) {
+      console.log("[Balance Check] No tokens found");
+      return result;
     }
 
+    const allTokens = data.result.result as TokenBalance[];
     console.log("[Balance Check] Total tokens fetched:", allTokens.length);
 
     // Group tokens by chainId and enrich with metadata
@@ -183,7 +169,7 @@ export async function fetchWalletTokens(
 
       const config = NETWORK_CONFIG[network];
 
-      // Enrich tokens with empty names using metadata
+      // Enrich tokens with empty names using local metadata
       let enrichedToken = token;
       if (token.name === "") {
         const addressLower = token.address.toLowerCase();

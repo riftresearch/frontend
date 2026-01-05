@@ -1,11 +1,11 @@
 import { Config, TokenStyle, TokenData } from "./types";
-import { createRfqClient, Currency } from "./rfqClient";
-import { createOTCClient } from "./otcClient";
 
 import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.json";
 import ETHEREUM_ADDRESS_METADATA from "@/utils/tokenData/1/address_to_metadata.json";
 import BASE_TICKERS_TO_ADDRESS from "@/utils/tokenData/8453/tickers_to_address.json";
 import ETHEREUM_TICKERS_TO_ADDRESS from "@/utils/tokenData/1/tickers_to_address.json";
+import { createRiftApiClient } from "./riftApiClient";
+import { createRfqClient } from "./rfqClient";
 
 export const IS_FRONTEND_PAUSED = process.env.NEXT_PUBLIC_IS_FRONTEND_PAUSED === "true";
 
@@ -56,28 +56,27 @@ export const GLOBAL_CONFIG: Config = {
   etherscanUrl: "https://etherscan.io",
   mainnetRpcUrl: "https://eth0.riftnodes.com",
   esploraUrl: "https://blockstream.info/api",
-  rfqServerUrl: "https://rfq-server-production.up.railway.app",
-  otcServerUrl:
-    "https://97c189391e051abc6e372aecad1d54bb34c39fde-4422.dstack-pha-prod9.phala.network/",
+  riftApiUrl: "https://api.rift.trade",
+  rfqUrl: "https://rfq-server-v2-production.up.railway.app",
   underlyingSwappingAssets: [
     {
       currency: {
-        chain: "bitcoin",
-        decimals: 8,
+        chain: { kind: "BITCOIN" },
         token: {
-          type: "Native",
+          kind: "NATIVE",
+          decimals: 8,
         },
       },
       style: bitcoinStyle,
     },
     {
       currency: {
-        chain: "ethereum",
-        decimals: 8,
+        chain: { kind: "EVM", chainId: 1 },
         token: {
-          type: "Address",
+          kind: "TOKEN",
           // NOTE: Addresses right now need to be checksummed
-          data: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+          address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+          decimals: 8,
         },
       },
       style: cbBTCStyle,
@@ -85,32 +84,37 @@ export const GLOBAL_CONFIG: Config = {
   ],
 };
 
-export const rfqClient = createRfqClient({
-  baseUrl: GLOBAL_CONFIG.rfqServerUrl,
-  timeout: 10000,
+export const riftApiClient = createRiftApiClient({
+  baseUrl: GLOBAL_CONFIG.riftApiUrl,
 });
 
-export const otcClient = createOTCClient({
-  baseUrl: GLOBAL_CONFIG.otcServerUrl,
-  timeout: 10000,
+export const rfqClient = createRfqClient({
+  baseUrl: GLOBAL_CONFIG.rfqUrl,
 });
 
 // Popular tokens list
 const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC", "USDe", "DAI", "UNI"];
 
+export const ETH_TOKEN = {
+  name: "Ethereum",
+  ticker: "ETH",
+  address: "0x0000000000000000000000000000000000000000",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: ETH_ICON,
+  decimals: 18,
+  chainId: 1,
+};
+
+export const ETH_TOKEN_BASE = {
+  ...ETH_TOKEN,
+  chainId: 8453,
+};
+
 // Create network-specific popular tokens
 export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
   if (ticker === "ETH") {
-    return {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: "0x0000000000000000000000000000000000000000",
-      balance: "0",
-      usdValue: "$0.00",
-      icon: ETH_ICON,
-      decimals: 18,
-      chainId: 8453,
-    };
+    return ETH_TOKEN_BASE;
   }
   const address = BASE_TICKERS_TO_ADDRESS[ticker as keyof typeof BASE_TICKERS_TO_ADDRESS];
   const token = BASE_ADDRESS_METADATA[address as keyof typeof BASE_ADDRESS_METADATA] as any;
@@ -128,16 +132,7 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
 
 export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
   if (ticker === "ETH") {
-    return {
-      name: "Ethereum",
-      ticker: "ETH",
-      address: "0x0000000000000000000000000000000000000000",
-      balance: "0",
-      usdValue: "$0.00",
-      icon: ETH_ICON,
-      decimals: 18,
-      chainId: 1,
-    };
+    return ETH_TOKEN;
   }
   const address = ETHEREUM_TICKERS_TO_ADDRESS[ticker as keyof typeof ETHEREUM_TICKERS_TO_ADDRESS];
   const token = ETHEREUM_ADDRESS_METADATA[address as keyof typeof ETHEREUM_ADDRESS_METADATA] as any;
@@ -172,22 +167,6 @@ export const BASE_POPULAR_ADDRESSES = new Set<string>([
 
 // Combined popular tokens for "All Networks" view (ETH, USDC, cbBTC from both chains)
 const ALL_POPULAR_TICKERS = ["ETH", "USDC", "cbBTC", "USDT"];
-
-export const ETH_TOKEN = {
-  name: "Ethereum",
-  ticker: "ETH",
-  address: "0x0000000000000000000000000000000000000000",
-  balance: "0",
-  usdValue: "$0.00",
-  icon: ETH_ICON,
-  decimals: 18,
-  chainId: 1,
-};
-
-export const ETH_TOKEN_BASE = {
-  ...ETH_TOKEN,
-  chainId: 8453,
-};
 
 export const ALL_POPULAR_TOKENS: TokenData[] = [
   // Ethereum tokens

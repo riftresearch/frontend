@@ -1,19 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { rfqClient } from "@/utils/constants";
 import { useStore } from "@/utils/store";
-import {
-  LiquidityResponse,
-  RfqClientError,
-  ChainType,
-  TradingPair,
-  hexToDecimal,
-} from "@/utils/rfqClient";
+import { formatUnits } from "viem";
+import { BITCOIN_DECIMALS, rfqClient } from "@/utils/constants";
+import type { LiquidityResponse, MarketMaker, ChainType } from "@/utils/rfqClient";
 
 /**
  * Extended liquidity response with calculated max liquidity values per chain
  */
-interface ExtendedLiquidityResponse extends LiquidityResponse {
+interface ExtendedLiquidityResponse {
+  market_makers: MarketMaker[];
+  timestamp: string;
   maxCbBTCLiquidity: string;
   maxCbBTCLiquidityEthereum: string;
   maxCbBTCLiquidityBase: string;
@@ -23,21 +20,58 @@ interface ExtendedLiquidityResponse extends LiquidityResponse {
 }
 
 /**
- * Map chainId to the RFQ chain type
+ * Convert a satoshi amount to a decimal string
+ */
+function satoshisToDecimal(sats: string): string {
+  try {
+    return formatUnits(BigInt(sats), BITCOIN_DECIMALS);
+  } catch {
+    return "0";
+  }
+}
+
+/**
+ * Map chainId to the chain type used by RFQ client
  */
 function chainIdToChainType(chainId: number | undefined): ChainType {
   return chainId === 8453 ? "base" : "ethereum";
 }
 
 /**
+ * Calculate max liquidity from market maker trading pairs
+ * Aggregates max amounts across all market makers for a given direction and chain
+ */
+function calculateMaxLiquidity(
+  marketMakers: MarketMaker[],
+  fromChain: ChainType,
+  toChain: ChainType
+): string {
+  let maxAmount = BigInt(0);
+
+  for (const mm of marketMakers) {
+    for (const pair of mm.trading_pairs) {
+      // Match trading pairs by chain
+      if (pair.from.chain === fromChain && pair.to.chain === toChain) {
+        try {
+          const pairMax = BigInt(pair.max_amount);
+          if (pairMax > maxAmount) {
+            maxAmount = pairMax;
+          }
+        } catch {
+          // Skip invalid amounts
+        }
+      }
+    }
+  }
+
+  return maxAmount.toString();
+}
+
+/**
  * Hook to fetch and cache liquidity information from market makers
  *
- * Automatically refetches every minute to keep liquidity data fresh.
- * Uses TanStack Query for efficient caching and background updates.
- *
- * Liquidity is filtered based on swap direction:
- * - EVM → BTC: Uses the input token's chain
- * - BTC → EVM: Uses the output token's chain
+ * Fetches liquidity data from the RFQ server and calculates max available
+ * liquidity for each direction (BTC→cbBTC, cbBTC→BTC) and chain (Ethereum, Base).
  *
  * @returns Query result with liquidity data, loading states, and error handling
  */
@@ -66,110 +100,62 @@ export function useMaxLiquidity() {
     return `${chainName} (${direction})`;
   }, [relevantChainType, isSwappingForBTC]);
 
-  const query = useQuery<ExtendedLiquidityResponse, RfqClientError>({
+  const query = useQuery<ExtendedLiquidityResponse, Error>({
     queryKey: ["liquidity"],
     queryFn: async () => {
-      try {
-        if (process.env.NEXT_PUBLIC_FAKE_RFQ === "true") {
-          return {
-            market_makers: [],
-            timestamp: new Date().toISOString(),
-            maxCbBTCLiquidity: "0",
-            maxCbBTCLiquidityEthereum: "0",
-            maxCbBTCLiquidityBase: "0",
-            maxBTCLiquidity: "0",
-            maxBTCLiquidityEthereum: "0",
-            maxBTCLiquidityBase: "0",
-          };
-        }
+      console.log("[useLiquidity] Fetching liquidity from RFQ server...");
 
-        const liquidity = await rfqClient.getLiquidity();
-        console.log(`Fetched liquidity from ${liquidity.market_makers.length} market makers`);
+      const response: LiquidityResponse = await rfqClient.getLiquidity();
 
-        // Store liquidity per chain for cbBTC (BTC → EVM direction)
-        let maxCbBTCLiquidityEthereum = BigInt(0);
-        let maxCbBTCLiquidityBase = BigInt(0);
-        // Store liquidity per chain for BTC (EVM → BTC direction)
-        let maxBTCLiquidityEthereum = BigInt(0);
-        let maxBTCLiquidityBase = BigInt(0);
+      // Calculate max liquidity for each direction and chain
+      // BTC → cbBTC (user sends BTC, receives cbBTC on EVM chain)
+      const maxCbBTCLiquidityEthereum = calculateMaxLiquidity(
+        response.market_makers,
+        "bitcoin",
+        "ethereum"
+      );
+      const maxCbBTCLiquidityBase = calculateMaxLiquidity(
+        response.market_makers,
+        "bitcoin",
+        "base"
+      );
 
-        for (const marketMaker of liquidity.market_makers) {
-          for (const pair of marketMaker.trading_pairs) {
-            const amount = BigInt(pair.max_amount);
+      // cbBTC → BTC (user sends cbBTC from EVM chain, receives BTC)
+      const maxBTCLiquidityEthereum = calculateMaxLiquidity(
+        response.market_makers,
+        "ethereum",
+        "bitcoin"
+      );
+      const maxBTCLiquidityBase = calculateMaxLiquidity(response.market_makers, "base", "bitcoin");
 
-            // Check if "to" is cbBTC on Ethereum mainnet (for BTC → cbBTC on Ethereum)
-            if (
-              pair.to.chain === "ethereum" &&
-              pair.to.token.type === "Address" &&
-              pair.to.token.data?.toLowerCase() === "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf"
-            ) {
-              if (amount > maxCbBTCLiquidityEthereum) {
-                maxCbBTCLiquidityEthereum = amount;
-              }
-            }
+      // Calculate overall max for each direction (max across both chains)
+      const maxCbBTCLiquidity =
+        BigInt(maxCbBTCLiquidityEthereum) > BigInt(maxCbBTCLiquidityBase)
+          ? maxCbBTCLiquidityEthereum
+          : maxCbBTCLiquidityBase;
 
-            // Check if "to" is cbBTC on Base (for BTC → cbBTC on Base)
-            if (
-              pair.to.chain === "base" &&
-              pair.to.token.type === "Address" &&
-              pair.to.token.data?.toLowerCase() === "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf"
-            ) {
-              if (amount > maxCbBTCLiquidityBase) {
-                maxCbBTCLiquidityBase = amount;
-              }
-            }
+      const maxBTCLiquidity =
+        BigInt(maxBTCLiquidityEthereum) > BigInt(maxBTCLiquidityBase)
+          ? maxBTCLiquidityEthereum
+          : maxBTCLiquidityBase;
 
-            // Check if "to" is Bitcoin and "from" is cbBTC on Ethereum (for EVM → BTC from Ethereum)
-            if (
-              pair.to.chain === "bitcoin" &&
-              pair.to.token.type === "Native" &&
-              pair.from.chain === "ethereum"
-            ) {
-              if (amount > maxBTCLiquidityEthereum) {
-                maxBTCLiquidityEthereum = amount;
-              }
-            }
+      console.log("[useLiquidity] Liquidity calculated:", {
+        maxCbBTCLiquidityEthereum,
+        maxCbBTCLiquidityBase,
+        maxBTCLiquidityEthereum,
+        maxBTCLiquidityBase,
+      });
 
-            // Check if "to" is Bitcoin and "from" is cbBTC on Base (for EVM → BTC from Base)
-            if (
-              pair.to.chain === "bitcoin" &&
-              pair.to.token.type === "Native" &&
-              pair.from.chain === "base"
-            ) {
-              if (amount > maxBTCLiquidityBase) {
-                maxBTCLiquidityBase = amount;
-              }
-            }
-          }
-        }
-
-        console.log(
-          `Max cbBTC liquidity (Ethereum): ${hexToDecimal(maxCbBTCLiquidityEthereum.toString())}`
-        );
-        console.log(
-          `Max cbBTC liquidity (Base): ${hexToDecimal(maxCbBTCLiquidityBase.toString())}`
-        );
-        console.log(
-          `Max BTC liquidity (from Ethereum): ${hexToDecimal(maxBTCLiquidityEthereum.toString())}`
-        );
-        console.log(
-          `Max BTC liquidity (from Base): ${hexToDecimal(maxBTCLiquidityBase.toString())}`
-        );
-
-        return {
-          ...liquidity,
-          maxCbBTCLiquidityEthereum: maxCbBTCLiquidityEthereum.toString(),
-          maxCbBTCLiquidityBase: maxCbBTCLiquidityBase.toString(),
-          maxBTCLiquidityEthereum: maxBTCLiquidityEthereum.toString(),
-          maxBTCLiquidityBase: maxBTCLiquidityBase.toString(),
-          // For backwards compatibility
-          maxCbBTCLiquidity: maxCbBTCLiquidityEthereum.toString(),
-          maxBTCLiquidity: maxBTCLiquidityEthereum.toString(),
-        };
-      } catch (error) {
-        console.error("Failed to fetch liquidity:", error);
-        throw error;
-      }
+      return {
+        market_makers: response.market_makers,
+        timestamp: response.timestamp,
+        maxCbBTCLiquidity,
+        maxCbBTCLiquidityEthereum,
+        maxCbBTCLiquidityBase,
+        maxBTCLiquidity,
+        maxBTCLiquidityEthereum,
+        maxBTCLiquidityBase,
+      };
     },
     enabled: true,
     refetchInterval: 60 * 1000, // Refetch every 60 seconds (1 minute)
@@ -200,22 +186,16 @@ export function useMaxLiquidity() {
     const satoshis = Number(maxCbBTCLiquidity);
     const btcAmount = satoshis / 100_000_000; // Convert satoshis to BTC
     const usdValue = btcAmount * btcPrice;
-    console.log(
-      `Calculating cbBTC USD (${relevantChainType}): ${satoshis} sats = ${btcAmount} BTC * $${btcPrice} = $${usdValue}`
-    );
     return usdValue.toString();
-  }, [maxCbBTCLiquidity, btcPrice, relevantChainType]);
+  }, [maxCbBTCLiquidity, btcPrice]);
 
   const maxBTCLiquidityInUsd = useMemo(() => {
     if (!maxBTCLiquidity || !btcPrice) return "0";
     const satoshis = Number(maxBTCLiquidity);
     const btcAmount = satoshis / 100_000_000; // Convert satoshis to BTC
     const usdValue = btcAmount * btcPrice;
-    console.log(
-      `Calculating BTC USD (${relevantChainType}): ${satoshis} sats = ${btcAmount} BTC * $${btcPrice} = $${usdValue}`
-    );
     return usdValue.toString();
-  }, [maxBTCLiquidity, btcPrice, relevantChainType]);
+  }, [maxBTCLiquidity, btcPrice]);
 
   return {
     /** Liquidity data from all market makers */
@@ -231,9 +211,9 @@ export function useMaxLiquidity() {
     /** Maximum liquidity available for Bitcoin as destination (for current chain) */
     maxBTCLiquidity,
     /** Maximum liquidity available for cbBTC as destination (decimal string) */
-    maxCbBTCLiquidityDecimal: hexToDecimal(maxCbBTCLiquidity),
+    maxCbBTCLiquidityDecimal: satoshisToDecimal(maxCbBTCLiquidity),
     /** Maximum liquidity available for Bitcoin as destination (decimal string) */
-    maxBTCLiquidityDecimal: hexToDecimal(maxBTCLiquidity),
+    maxBTCLiquidityDecimal: satoshisToDecimal(maxBTCLiquidity),
     /** Maximum liquidity available for cbBTC as destination in USD */
     maxCbBTCLiquidityInUsd,
     /** Maximum liquidity available for Bitcoin as destination in USD */

@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Flex, Text, Spinner, Tooltip, Button, Dialog, Portal, Image } from "@chakra-ui/react";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useAnalyticsStore } from "@/utils/analyticsStore";
+import { useStore } from "@/utils/store";
 import { AdminSwapItem, AdminSwapFlowStep, SwapDirection } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
@@ -13,6 +14,7 @@ import { useSwapAverages } from "@/hooks/useSwapAverages";
 import { filterRefunds } from "@/utils/refundHelpers";
 import { AssetIcon } from "@/components/other/AssetIcon";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 
 function displayShortAddress(addr: string): string {
   if (!addr || addr.length < 8) return addr;
@@ -447,7 +449,7 @@ const Card: React.FC<{
               navigator.clipboard.writeText(swap.id);
               toastSuccess({
                 title: "Copied to clipboard",
-                description: `Swap ID: ${swap.id.slice(0, 7)}...`,
+                description: `Swap ID: ...${swap.id.slice(-7)}`,
               });
             }}
             bg="#1D1D1D"
@@ -464,8 +466,7 @@ const Card: React.FC<{
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
-              {swap.id.slice(0, 2)}
-              {swap.id.slice(2, 7)}...
+              ...{swap.id.slice(-7)}
             </Text>
           </Flex>
         </Flex>
@@ -553,22 +554,41 @@ const Card: React.FC<{
             SWAP
           </Text>
           <Flex align="center" gap={isMobile ? "4px" : "8px"} flexWrap="wrap">
-            {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+            {swap.direction === "EVM_TO_BTC" ? (
+              // EVM → BTC: Show input token → BTC output
               <>
-                <Text
-                  fontSize={isMobile ? "11px" : "13px"}
-                  color={colorsAnalytics.offWhite}
-                  fontFamily={FONT_FAMILIES.SF_PRO}
-                >
-                  {parseFloat(swap.startAssetMetadata.amount)
-                    .toFixed(Math.min(swap.startAssetMetadata.decimals, 4))
-                    .replace(/\.?0+$/, "")}
-                </Text>
-                <AssetIcon
-                  asset={swap.startAssetMetadata.ticker}
-                  iconUrl={swap.startAssetMetadata.icon}
-                  size={isMobile ? 14 : 18}
-                />
+                {swap.startAssetMetadata ? (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {parseFloat(swap.startAssetMetadata.amount)
+                        .toFixed(Math.min(swap.startAssetMetadata.decimals, 4))
+                        .replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon
+                      asset={swap.startAssetMetadata.ticker}
+                      iconUrl={swap.startAssetMetadata.icon}
+                      size={isMobile ? 14 : 18}
+                    />
+                  </>
+                ) : (
+                  // Fallback: show cbBTC if no metadata
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {isMobile
+                        ? swap.swapInitialAmountBtc.toFixed(6)
+                        : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
+                  </>
+                )}
                 <Text
                   fontSize={isMobile ? "11px" : "13px"}
                   color={colorsAnalytics.textGray}
@@ -588,6 +608,7 @@ const Card: React.FC<{
                 <AssetIcon asset="BTC" size={isMobile ? 14 : 18} />
               </>
             ) : (
+              // BTC → EVM: Show BTC input → cbBTC output
               <>
                 <Text
                   fontSize={isMobile ? "11px" : "13px"}
@@ -606,37 +627,16 @@ const Card: React.FC<{
                 >
                   →
                 </Text>
-                {swap.startAssetMetadata ? (
-                  <>
-                    <Text
-                      fontSize={isMobile ? "11px" : "13px"}
-                      color={colorsAnalytics.offWhite}
-                      fontFamily={FONT_FAMILIES.SF_PRO}
-                    >
-                      {parseFloat(swap.startAssetMetadata.amount)
-                        .toFixed(Math.min(swap.startAssetMetadata.decimals, 4))
-                        .replace(/\.?0+$/, "")}
-                    </Text>
-                    <AssetIcon
-                      asset={swap.startAssetMetadata.ticker}
-                      iconUrl={swap.startAssetMetadata.icon}
-                      size={isMobile ? 14 : 18}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <Text
-                      fontSize={isMobile ? "11px" : "13px"}
-                      color={colorsAnalytics.offWhite}
-                      fontFamily={FONT_FAMILIES.SF_PRO}
-                    >
-                      {isMobile
-                        ? swap.swapInitialAmountBtc.toFixed(6)
-                        : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                    </Text>
-                    <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
-                  </>
-                )}
+                <Text
+                  fontSize={isMobile ? "11px" : "13px"}
+                  color={colorsAnalytics.offWhite}
+                  fontFamily={FONT_FAMILIES.SF_PRO}
+                >
+                  {isMobile
+                    ? swap.swapInitialAmountBtc.toFixed(6)
+                    : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                </Text>
+                <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
               </>
             )}
           </Flex>
@@ -842,7 +842,7 @@ const Row: React.FC<{
               navigator.clipboard.writeText(swap.id);
               toastSuccess({
                 title: "Copied to clipboard",
-                description: `Swap ID: ${swap.id.slice(0, 7)}...`,
+                description: `Swap ID: ...${swap.id.slice(-7)}`,
               });
             }}
             bg="#1D1D1D"
@@ -859,8 +859,7 @@ const Row: React.FC<{
               color={colorsAnalytics.offWhite}
               fontFamily={FONT_FAMILIES.SF_PRO}
             >
-              {swap.id.slice(0, 2)}
-              {swap.id.slice(2, 7)}...
+              ...{swap.id.slice(-7)}
             </Text>
           </Flex>
         </Box>
@@ -911,32 +910,56 @@ const Row: React.FC<{
               {/* Input section */}
               <Flex direction="column" gap="1px">
                 <Flex align="center" gap="4px">
-                  {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
-                    // ERC20 -> BTC: Show amount + token first
-                    <>
-                      <Text
-                        fontSize="13px"
-                        color={colorsAnalytics.offWhite}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {parseFloat(swap.startAssetMetadata.amount).toLocaleString(undefined, {
-                          minimumFractionDigits: 0,
-                          maximumFractionDigits: Math.min(swap.startAssetMetadata.decimals, 6),
-                        })}
-                      </Text>
-                      <AssetIcon
-                        asset={swap.startAssetMetadata.ticker}
-                        iconUrl={swap.startAssetMetadata.icon}
-                        size={16}
-                      />
-                      <Text
-                        fontSize="13px"
-                        color={colorsAnalytics.offWhite}
-                        fontFamily={FONT_FAMILIES.SF_PRO}
-                      >
-                        {swap.startAssetMetadata.ticker}
-                      </Text>
-                    </>
+                  {swap.direction === "EVM_TO_BTC" ? (
+                    // EVM -> BTC: Show input token
+                    swap.startAssetMetadata ? (
+                      <>
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {parseFloat(swap.startAssetMetadata.amount).toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: Math.min(swap.startAssetMetadata.decimals, 6),
+                          })}
+                        </Text>
+                        <AssetIcon
+                          asset={swap.startAssetMetadata.ticker}
+                          iconUrl={swap.startAssetMetadata.icon}
+                          size={16}
+                        />
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {swap.startAssetMetadata.ticker}
+                        </Text>
+                      </>
+                    ) : (
+                      // Fallback: show cbBTC if no metadata
+                      <>
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          {swap.swapInitialAmountBtc.toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 8,
+                          })}
+                        </Text>
+                        <AssetIcon asset="cbBTC" size={16} />
+                        <Text
+                          fontSize="13px"
+                          color={colorsAnalytics.offWhite}
+                          fontFamily={FONT_FAMILIES.SF_PRO}
+                        >
+                          cbBTC
+                        </Text>
+                      </>
+                    )
                   ) : (
                     // BTC -> EVM: Show BTC amount
                     <>
@@ -1247,6 +1270,7 @@ export const SwapHistory: React.FC<{
   const { isMobile } = useWindowSize();
   const viewMode = isMobile ? "cards" : "table";
   const storeSwaps = useAnalyticsStore((s) => s.adminSwaps);
+  const { btcPrice } = useBtcEthPrices(); // Fetch current BTC price as fallback
   const [allSwaps, setAllSwaps] = React.useState<AdminSwapItem[]>([]);
   const [page, setPage] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(true);
@@ -1445,7 +1469,7 @@ export const SwapHistory: React.FC<{
       // Map swaps and check for refunds
       const mapped = await Promise.all(
         (data?.swaps || []).map(async (row: any) => {
-          const mappedSwap = mapDbRowToAdminSwap(row);
+          const mappedSwap = mapDbRowToAdminSwap(row, btcPrice);
 
           // Check if refund is available based on server flag and balance check
           const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(row, mappedSwap);
@@ -1540,7 +1564,7 @@ export const SwapHistory: React.FC<{
     latestSwapRef.current = latestSwap;
 
     async function processNewSwap() {
-      const mappedSwap = mapDbRowToAdminSwap(latestSwap);
+      const mappedSwap = mapDbRowToAdminSwap(latestSwap, btcPrice);
 
       // Check if we've already processed this swap ID
       if (processedSwapIds.current.has(mappedSwap.id)) {
@@ -1646,7 +1670,7 @@ export const SwapHistory: React.FC<{
     updatedSwapRef.current = updatedSwap;
 
     async function processUpdatedSwap() {
-      const mappedSwap = mapDbRowToAdminSwap(updatedSwap);
+      const mappedSwap = mapDbRowToAdminSwap(updatedSwap, btcPrice);
 
       // Check if refund is available and update status accordingly
       const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(

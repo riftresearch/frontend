@@ -22,6 +22,7 @@ import {
 import { FaDollarSign, FaBitcoin } from "react-icons/fa";
 import { toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { useRouter } from "next/router";
 import { getSwap, mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { AdminSwapItem } from "@/utils/types";
@@ -33,6 +34,7 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { isMobile } = useWindowSize();
+  const { btcPrice } = useBtcEthPrices(); // Fetch current BTC price as fallback
   const router = useRouter();
 
   // Get WebSocket data with new fields - use these directly for real-time updates
@@ -93,7 +95,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       const swapData = await getSwap(trimmedId);
 
       // Map it to AdminSwapItem format (same as UserSwapHistory)
-      const mappedSwap = mapDbRowToAdminSwap(swapData);
+      const mappedSwap = mapDbRowToAdminSwap(swapData, btcPrice);
 
       // Show the modal with the swap details
       setSelectedSwap(mappedSwap);

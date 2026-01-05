@@ -17,6 +17,7 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { RefundModal } from "@/components/other/RefundModal";
 import { useRefundModal } from "@/hooks/useRefundModal";
 import { AssetIcon } from "@/components/other/AssetIcon";
+import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 
 function displayShortTxHash(hash: string, isMobile: boolean = false): string {
   if (!hash || hash.length < 12) return hash;
@@ -215,7 +216,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
 async function fetchUserSwaps(
   account: string,
   limit: number,
-  offset: number
+  offset: number,
+  btcPrice?: number | null
 ): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> {
   try {
     const url = `${ANALYTICS_API_URL}/api/swaps?account=${account}&limit=${limit}&offset=${offset}`;
@@ -238,7 +240,7 @@ async function fetchUserSwaps(
           metadata: row.metadata,
           start_asset: row.metadata?.start_asset,
         });
-        const mappedSwap = mapDbRowToAdminSwap(row);
+        const mappedSwap = mapDbRowToAdminSwap(row, btcPrice);
 
         // Check if refund is available based on server flag and balance check
         const { isRefundAvailable, shouldMarkAsRefunded } = await filterRefunds(row, mappedSwap);
@@ -356,6 +358,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   const isSimulating = !!simulatedAddress;
   const router = useRouter();
   const { isMobile } = useWindowSize();
+  const { btcPrice } = useBtcEthPrices(); // Fetch current BTC price as fallback
   const [swaps, setSwaps] = useState<AdminSwapItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -381,7 +384,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     onSuccess: () => {
       // Refresh the swaps list to update the status after successful refund
       if (address) {
-        fetchUserSwaps(address, pageSize, 0).then(({ swaps: newSwaps }) => {
+        fetchUserSwaps(address, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
           setSwaps(newSwaps);
         });
       }
@@ -416,16 +419,16 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       setLoading(true);
 
       // First attempt
-      let result = await fetchUserSwaps(address, pageSize, 0);
+      let result = await fetchUserSwaps(address, pageSize, 0, btcPrice);
 
       // If no swaps found, retry 2 more times with 100ms delay
       if (result.swaps.length === 0) {
         await new Promise((resolve) => setTimeout(resolve, 100));
-        result = await fetchUserSwaps(address, pageSize, 0);
+        result = await fetchUserSwaps(address, pageSize, 0, btcPrice);
 
         if (result.swaps.length === 0) {
           await new Promise((resolve) => setTimeout(resolve, 100));
-          result = await fetchUserSwaps(address, pageSize, 0);
+          result = await fetchUserSwaps(address, pageSize, 0, btcPrice);
         }
       }
 
@@ -438,7 +441,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
     // Set up polling every 3 seconds - refresh and merge intelligently
     const pollInterval = setInterval(() => {
-      fetchUserSwaps(address, pageSize, 0).then(({ swaps: newSwaps }) => {
+      fetchUserSwaps(address, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
         setSwaps((prev) => {
           if (prev.length === 0) return newSwaps;
 
@@ -492,7 +495,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       const { swaps: newSwaps, hasMore: more } = await fetchUserSwaps(
         address,
         pageSize,
-        currentSwapsCount
+        currentSwapsCount,
+        btcPrice
       );
 
       if (newSwaps.length === 0) {

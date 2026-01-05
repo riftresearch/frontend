@@ -38,10 +38,10 @@ export default function Home() {
   React.useEffect(() => {
     console.log("swapResponse", swapResponse);
     console.log("transactionConfirmed", transactionConfirmed);
-    if (swapResponse?.swap_id && transactionConfirmed) {
-      router.push(`/swap/${swapResponse.swap_id}`);
+    if (swapResponse?.id && transactionConfirmed) {
+      router.push(`/swap/${swapResponse.id}`);
     }
-  }, [swapResponse?.swap_id, transactionConfirmed, router]);
+  }, [swapResponse?.id, transactionConfirmed, router]);
 
   // Show loading spinner while determining window size to prevent flash
   if (!isWindowValid) {

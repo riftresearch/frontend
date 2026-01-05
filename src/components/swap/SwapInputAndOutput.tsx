@@ -11,6 +11,8 @@ import {
   BASE_POPULAR_TOKENS,
   BITCOIN_DECIMALS,
   MIN_SWAP_SATS,
+  ETH_TOKEN_BASE,
+  ETH_TOKEN,
 } from "@/utils/constants";
 import { SupportedChainId } from "@cowprotocol/cow-sdk";
 import WebAssetTag from "@/components/other/WebAssetTag";
@@ -25,7 +27,7 @@ import {
   EVMAccountWarningModal,
   hasAcknowledgedEVMWarning,
 } from "@/components/other/EVMAccountWarningModal";
-import { Quote, formatLotAmount } from "@/utils/rfqClient";
+import { QuoteResponse } from "@/utils/riftApiClient";
 import {
   getERC20ToBTCQuote,
   getERC20ToBTCQuoteExactOutput,
@@ -39,6 +41,7 @@ import {
   satsToBtc,
   truncateAmount,
   getSlippageBpsForNotional,
+  formatCurrencyAmount,
 } from "@/utils/swapHelpers";
 import { PriceQuality } from "@cowprotocol/cow-sdk";
 import { formatUnits, parseUnits } from "viem";
@@ -112,6 +115,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
   const [showFeeTooltip, setShowFeeTooltip] = useState(false);
   const [showAddressTooltip, setShowAddressTooltip] = useState(false);
+  const [showRefundAddressTooltip, setShowRefundAddressTooltip] = useState(false);
   const [showMaxTooltip, setShowMaxTooltip] = useState(false);
   const [showEVMWarningModal, setShowEVMWarningModal] = useState(false);
   const [isAtAdjustedMax, setIsAtAdjustedMax] = useState(false);
@@ -163,6 +167,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setPayoutAddress,
     addressValidation,
     setAddressValidation,
+    btcRefundAddress,
+    setBtcRefundAddress,
+    btcRefundAddressValidation,
+    setBtcRefundAddressValidation,
     setApprovalState,
     setSelectedInputToken,
     setSelectedOutputToken,
@@ -182,6 +190,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setRefetchQuote,
     setIsAwaitingOptimalQuote,
     hasNoRoutesError,
+    switchingToInputTokenChain,
+    setSwitchingToInputTokenChain,
   } = useStore();
 
   // Define the styles based on swap direction
@@ -253,18 +263,24 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
       if (quoteResponse) {
         // input token was just changed, old quote
-        if (
-          (selectedInputToken.ticker !== "ETH" &&
-            selectedInputToken.address !== quoteResponse.cowswapQuote?.tradeParameters.sellToken) ||
-          (selectedInputToken.ticker === "ETH" &&
-            quoteResponse.cowswapQuote?.tradeParameters.sellToken !==
-              "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE")
-        ) {
-          console.log("input token was just changed, old quote");
-          setIsLoadingQuote(false);
-          clearQuotes();
-          setRefetchQuote(false);
-          return;
+        // Only check this for quotes that went through CowSwap (non-cbBTC tokens)
+        // For cbBTC direct swaps, cowswapQuote is undefined, so skip this check
+        if (quoteResponse.cowswapQuote) {
+          const isMismatch =
+            (selectedInputToken.ticker !== "ETH" &&
+              selectedInputToken.address !==
+                quoteResponse.cowswapQuote.tradeParameters.sellToken) ||
+            (selectedInputToken.ticker === "ETH" &&
+              quoteResponse.cowswapQuote.tradeParameters.sellToken !==
+                "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
+
+          if (isMismatch) {
+            console.log("input token was just changed, old quote");
+            setIsLoadingQuote(false);
+            clearQuotes();
+            setRefetchQuote(false);
+            return;
+          }
         }
 
         console.log(`Processing ${priceQuality} quote response`);
@@ -283,37 +299,26 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           setIsAwaitingOptimalQuote(false);
         }
 
-        // Calculate and set fee overview
+        // Calculate and set fee overview using the new fees.usd structure
         if (btcPrice) {
-          const cbBTCOut = quoteResponse.cowswapQuote
-            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
-            : "0";
-          const erc20In = quoteResponse.cowswapQuote
-            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
-            : "0";
-
-          // Get price for fee calculation
-          let price: number | null = null;
+          // Get price for CowSwap fee calculation
+          let sellTokenPrice: number | null = null;
           if (selectedInputToken.ticker === "ETH") {
-            price = ethPrice;
+            sellTokenPrice = ethPrice;
           } else if (selectedInputToken.ticker === "cbBTC") {
-            price = btcPrice;
+            sellTokenPrice = btcPrice;
           } else {
-            price = erc20Price;
+            sellTokenPrice = erc20Price;
           }
 
-          if (price) {
-            const fees = calculateFees(
-              quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
-              quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
-              cbBTCOut,
-              erc20In,
-              price,
-              btcPrice,
-              selectedInputToken.decimals
-            );
-            setFeeOverview(fees);
-          }
+          const fees = calculateFees(
+            quoteResponse.rfqQuote.fees.usd,
+            quoteResponse.cowswapQuote,
+            sellTokenPrice ?? undefined,
+            selectedInputToken.decimals,
+            btcPrice ?? undefined
+          );
+          setFeeOverview(fees);
         }
       }
     },
@@ -511,37 +516,26 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           setIsAwaitingOptimalQuote(false);
         }
 
-        // Calculate and set fee overview
+        // Calculate and set fee overview using the new fees.usd structure
         if (btcPrice) {
-          const cbBTCOut = quoteResponse.cowswapQuote
-            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString()
-            : "0";
-          const erc20In = quoteResponse.cowswapQuote
-            ? quoteResponse.cowswapQuote.amountsAndCosts.afterSlippage.sellAmount.toString()
-            : "0";
-
-          // Get price for fee calculation
-          let price: number | null = null;
+          // Get price for CowSwap fee calculation
+          let sellTokenPrice: number | null = null;
           if (selectedInputToken.ticker === "ETH") {
-            price = ethPrice;
+            sellTokenPrice = ethPrice;
           } else if (selectedInputToken.ticker === "cbBTC") {
-            price = btcPrice;
+            sellTokenPrice = btcPrice;
           } else {
-            price = erc20Price;
+            sellTokenPrice = erc20Price;
           }
 
-          if (price) {
-            const fees = calculateFees(
-              quoteResponse.rfqQuote.fee_schedule.network_fee_sats,
-              quoteResponse.rfqQuote.fee_schedule.protocol_fee_sats,
-              cbBTCOut,
-              erc20In,
-              price,
-              btcPrice,
-              selectedInputToken.decimals
-            );
-            setFeeOverview(fees);
-          }
+          const fees = calculateFees(
+            quoteResponse.rfqQuote.fees.usd,
+            quoteResponse.cowswapQuote,
+            sellTokenPrice ?? undefined,
+            selectedInputToken.decimals,
+            btcPrice ?? undefined
+          );
+          setFeeOverview(fees);
         }
       }
     },
@@ -795,7 +789,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
           if (mode === "ExactInput") {
             // Set output amount (ERC20/ETH) - truncate to 8 decimals
-            const outputAmount = formatLotAmount(rfqQuoteResponse.to);
+            const outputAmount = formatCurrencyAmount(rfqQuoteResponse.to);
             const truncatedOutput = (() => {
               const parts = outputAmount.split(".");
               if (parts.length === 2 && parts[1].length > 8) {
@@ -807,7 +801,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           } else {
             // Set input amount (BTC) - truncate to 8 decimals
             console.log("rfqQuoteResponse.from", rfqQuoteResponse);
-            const inputAmount = formatLotAmount(rfqQuoteResponse.from);
+            const inputAmount = formatCurrencyAmount(rfqQuoteResponse.from);
             const truncatedInput = (() => {
               const parts = inputAmount.split(".");
               if (parts.length === 2 && parts[1].length > 8) {
@@ -818,16 +812,14 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             setDisplayedInputAmount(truncatedInput);
           }
 
-          // Calculate and set fee overview (erc20Fee will be $0.00)
+          // Calculate and set fee overview (no CowSwap for BTC->cbBTC)
           if (btcPrice && price) {
             const fees = calculateFees(
-              rfqQuoteResponse.fee_schedule.network_fee_sats,
-              rfqQuoteResponse.fee_schedule.protocol_fee_sats,
-              "0",
-              "0",
+              rfqQuoteResponse.fees.usd,
+              null, // No CowSwap quote for BTC->cbBTC
               price,
-              btcPrice,
-              selectedOutputToken?.decimals || BITCOIN_DECIMALS
+              selectedOutputToken?.decimals || BITCOIN_DECIMALS,
+              btcPrice
             );
             setFeeOverview(fees);
           }
@@ -1392,8 +1384,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // 1. We've checked for cookies (isInitialMountRef is false)
     // 2. We haven't loaded from cookie
     if (!isInitialMountRef.current && !hasLoadedFromCookieRef.current) {
-      const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
-      setSelectedInputToken(ETH_TOKEN);
+      const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+      setSelectedInputToken(defaultToken);
     }
   }, [selectedInputToken, setSelectedInputToken]);
 
@@ -1411,7 +1403,22 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       const cbBTC = popularTokens.find((token) => token.ticker === "cbBTC");
       setSelectedOutputToken(cbBTC || null);
     }
-  }, [isSwappingForBTC, setSelectedOutputToken, evmConnectWalletChainId]);
+  }, [isSwappingForBTC, setSelectedInputToken, setSelectedOutputToken, evmConnectWalletChainId]);
+
+  useEffect(() => {
+    // If chain switch was triggered from asset selector, just clear the flag and keep the selected token
+    // Otherwise, reset to default token for the new chain
+    if (!switchingToInputTokenChain && selectedInputToken.chainId !== evmConnectWalletChainId) {
+      const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+      setSelectedInputToken(defaultToken);
+    }
+  }, [
+    setSelectedInputToken,
+    evmConnectWalletChainId,
+    selectedInputToken,
+    switchingToInputTokenChain,
+    setSwitchingToInputTokenChain,
+  ]);
 
   // Fetch ERC20 token price when selected token changes
   useEffect(() => {
@@ -1455,6 +1462,17 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       setAddressValidation({ isValid: false });
     }
   }, [payoutAddress, isSwappingForBTC, setAddressValidation]);
+
+  // Validate BTC refund address for BTC -> cbBTC swaps
+  useEffect(() => {
+    if (btcRefundAddress) {
+      // Always validate as Bitcoin address (isSwappingForBTC = true triggers Bitcoin validation)
+      const validation = validatePayoutAddress(btcRefundAddress, true);
+      setBtcRefundAddressValidation(validation);
+    } else {
+      setBtcRefundAddressValidation({ isValid: false });
+    }
+  }, [btcRefundAddress, setBtcRefundAddressValidation]);
 
   // Auto-refresh quote every 15 seconds when user has entered an amount
   useEffect(() => {
@@ -2854,6 +2872,100 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     <BitcoinAddressValidation
                       address={payoutAddress}
                       validation={addressValidation}
+                    />
+                  </Flex>
+                )}
+              </Flex>
+            </Flex>
+          </Flex>
+        )}
+
+        {/* Bitcoin Refund Address - For BTC -> cbBTC swaps */}
+        {!isSwappingForBTC && !hidePayoutAddress && (
+          <Flex
+            direction="column"
+            w="100%"
+            opacity={hasStartedTyping ? 1 : 0}
+            transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
+            transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
+            transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
+            pointerEvents={hasStartedTyping ? "auto" : "none"}
+            overflow="visible"
+            maxHeight={hasStartedTyping ? "200px" : "0px"}
+          >
+            {/* Bitcoin Refund Address Label */}
+            <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
+              <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
+                Bitcoin Refund Address
+              </Text>
+              <Flex pl="5px" mt="-2px">
+                <Tooltip
+                  show={showRefundAddressTooltip}
+                  onMouseEnter={() => setShowRefundAddressTooltip(true)}
+                  onMouseLeave={() => setShowRefundAddressTooltip(false)}
+                  hoverText={
+                    <Text>
+                      If the swap fails, your BTC will be refunded to this address. Only P2WPKH,
+                      P2PKH, or P2SH Bitcoin addresses are supported.
+                    </Text>
+                  }
+                  iconWidth="12px"
+                />
+              </Flex>
+            </Flex>
+            <Flex
+              mt="-4px"
+              mb="10px"
+              px="10px"
+              bg={inputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
+              border={`2px solid ${inputStyle?.bg_color || "#78491F"}`}
+              w="100%"
+              h="60px"
+              borderRadius="16px"
+            >
+              <Flex direction="row" py="6px" px="8px" w="100%">
+                <Input
+                  value={btcRefundAddress}
+                  onChange={(e) => setBtcRefundAddress(e.target.value)}
+                  fontFamily="Aux"
+                  border="none"
+                  bg="transparent"
+                  outline="none"
+                  mt="3.5px"
+                  mr="15px"
+                  ml="-4px"
+                  p="0px"
+                  w={isMobile ? "100%" : "500px"}
+                  letterSpacing={isMobile ? "-2px" : "-5px"}
+                  color={colors.offWhite}
+                  _active={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                  _focus={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                  _selected={{
+                    border: "none",
+                    boxShadow: "none",
+                    outline: "none",
+                  }}
+                  fontSize={isMobile ? "18px" : "28px"}
+                  placeholder="bc1q5d7rjq7g6rd2d..."
+                  _placeholder={{
+                    color: inputStyle?.light_text_color || "#856549",
+                  }}
+                  spellCheck={false}
+                />
+
+                {btcRefundAddress.length > 0 && (
+                  <Flex ml="0px">
+                    <BitcoinAddressValidation
+                      address={btcRefundAddress}
+                      validation={btcRefundAddressValidation}
                     />
                   </Flex>
                 )}

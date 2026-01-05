@@ -2,13 +2,8 @@ import { useState, useEffect } from "react";
 import { useWalletClient } from "wagmi";
 import { useRouter } from "next/router";
 import { AdminSwapItem } from "@/utils/types";
-import {
-  validateRefundAddress,
-  executeCompleteRefund,
-  formatRefundError,
-} from "@/utils/refundHelpers";
+import { validateRefundAddress, formatRefundError } from "@/utils/refundHelpers";
 import { toastSuccess, toastError } from "@/utils/toast";
-import { otcClient } from "@/utils/constants";
 import { esploraClient, estimateRefundTxSize } from "@/utils/esploraClient";
 
 interface UseRefundModalOptions {
@@ -131,17 +126,9 @@ export const useRefundModal = (options: UseRefundModalOptions = {}) => {
         isBitcoinRefund,
       });
 
-      // Create signed refund request
-      const { refundResponse, transactionHash } = await executeCompleteRefund(
-        otcClient,
-        walletClient,
-        selectedFailedSwap.id,
-        refundAddress,
-        feeToUse
-      );
-
-      console.log("[CLAIM REFUND] Refund processed, response:", refundResponse);
-      console.log("[CLAIM REFUND] Transaction hash:", transactionHash);
+      // TODO: Replace with actual riftApiClient refund when endpoint is available
+      // Currently stubbed - throw error to indicate refunds not yet supported
+      throw new Error("Refund functionality is temporarily unavailable. Please try again later.");
 
       setRefundStatus("success");
       toastSuccess({
