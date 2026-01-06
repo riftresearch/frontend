@@ -252,12 +252,13 @@ export const ConnectWalletButton: React.FC = () => {
           cursor="pointer"
           align="center"
           gap="8px"
-          bg={colors.swapBgColor}
-          borderRadius="30px"
-          border={`2px solid ${colors.swapBorderColor}`}
+          bg={"#101010"}
+          borderRadius="15px"
+          transition="all 0.2s ease-in-out"
+          border={`2px solid #404040`}
           px={isMobile ? "12px" : "16px"}
           h={isMobile ? "36px" : "42px"}
-          _hover={{ bg: colors.swapHoverColor }}
+          _hover={{ bg: "#202020" }}
         >
           {/* Wallet Icons Stack */}
           <Flex>

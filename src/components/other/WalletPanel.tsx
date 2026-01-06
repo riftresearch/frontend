@@ -1,11 +1,22 @@
 import React, { useState } from "react";
 import { Flex, Text, Box, Image, Spinner } from "@chakra-ui/react";
 import { useAccount } from "wagmi";
-import { useDynamicContext, useUserWallets, useDynamicModals } from "@dynamic-labs/sdk-react-core";
-import { FiCopy, FiCheck } from "react-icons/fi";
+import {
+  useDynamicContext,
+  useUserWallets,
+  useDynamicModals,
+  useSwitchWallet,
+} from "@dynamic-labs/sdk-react-core";
+import {
+  FiCopy,
+  FiCheck,
+  FiChevronsRight,
+  FiRefreshCw,
+  FiChevronDown,
+  FiChevronUp,
+} from "react-icons/fi";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
-import { FONT_FAMILIES } from "@/utils/font";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
 import { toastSuccess } from "@/utils/toast";
 import type { TokenData } from "@/utils/types";
@@ -22,12 +33,18 @@ const CHAIN_NAMES: Record<number, string> = {
 
 // Chain ID to logo mapping
 const CHAIN_LOGOS: Record<number, string> = {
-  1: "/images/eth_logo.png",
+  1: "/images/icons/Ethereum.svg",
   8453: "/images/base_logo.svg",
   42161: "/images/arbitrum_logo.svg",
   10: "/images/optimism_logo.svg",
   137: "/images/polygon_logo.svg",
   56: "/images/bnb_logo.svg",
+};
+
+// Chain type to logo mapping (for wallet badges)
+const CHAIN_TYPE_LOGOS: Record<string, string> = {
+  EVM: "/images/icons/Ethereum.svg",
+  BVM: "/images/assets/icons/BTC.svg",
 };
 
 // Dynamic's icon sprite URL
@@ -45,10 +62,11 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   onConnectNewWallet,
 }) => {
   const { address: evmAddress } = useAccount();
-  const { handleLogOut, setShowAuthFlow, primaryWallet } = useDynamicContext();
+  const { handleLogOut, setShowAuthFlow, primaryWallet, removeWallet } = useDynamicContext();
   // setShowLinkNewWalletModal is from useDynamicModals hook (for adding wallets when already connected)
   const { setShowLinkNewWalletModal } = useDynamicModals();
   const userWallets = useUserWallets();
+  const switchWallet = useSwitchWallet();
   const { userTokensByChain } = useStore();
   const [activeTab, setActiveTab] = useState<"tokens" | "activity">("tokens");
   const [showWalletsOverlay, setShowWalletsOverlay] = useState(false);
@@ -103,468 +121,623 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   // Disconnect a specific wallet
   const disconnectWallet = async (wallet: any) => {
     try {
-      await wallet.disconnect();
+      // If this is the only wallet, log out entirely
+      if (userWallets.length <= 1) {
+        await handleLogOut();
+      } else {
+        await removeWallet(wallet.id);
+      }
     } catch (err) {
       console.error("Failed to disconnect wallet:", err);
     }
   };
 
-  if (!isOpen) return null;
-
   return (
     <Box
       position="fixed"
-      top="0"
-      right="0"
-      bottom="0"
-      width={{ base: "100%", md: "380px" }}
-      bg={colors.offBlack}
-      borderLeft={`1px solid ${colors.borderGray}`}
+      top="6px"
+      right="6px"
+      bottom="6px"
+      width={{ base: "calc(100% - 12px)", md: "418px" }}
       zIndex={1000}
-      overflowY="auto"
+      transform={isOpen ? "translateX(0)" : "translateX(calc(100% + 70px))"}
+      transition="transform 0.3s ease-in-out"
+      display="flex"
+      pointerEvents={isOpen ? "auto" : "none"}
     >
-      {/* Wallets Overlay */}
-      {showWalletsOverlay && (
-        <>
-          {/* Overlay Backdrop */}
-          <Box
-            position="absolute"
-            top="0"
-            left="0"
-            right="0"
-            bottom="0"
-            bg="rgba(0,0,0,0.7)"
-            zIndex={1001}
-            onClick={() => setShowWalletsOverlay(false)}
-          />
-          {/* Wallets Modal */}
-          <Box position="absolute" w="100%" bg={colors.offBlack} zIndex={1002} overflow="hidden">
-            {/* Modal Header */}
-            <Flex
-              p="16px"
-              align="center"
-              justify="space-between"
-              borderBottom={`1px solid ${colors.borderGray}`}
-            >
-              {/* Wallets Dropdown (clickable to close) */}
-              <Flex
-                bg={colors.offBlackLighter}
-                borderRadius="20px"
-                px="12px"
-                py="6px"
-                align="center"
-                gap="8px"
-                cursor="pointer"
-                onClick={() => setShowWalletsOverlay(false)}
-                _hover={{ bg: "#2b2b2b" }}
-              >
-                {/* Wallet Icons */}
-                <Flex>
-                  {userWallets.slice(0, 3).map((wallet, idx) => (
-                    <Box
-                      key={wallet.id}
-                      w="20px"
-                      h="20px"
-                      borderRadius="full"
-                      ml={idx > 0 ? "-6px" : "0"}
-                      border={`2px solid ${colors.offBlack}`}
-                      bg={colors.offBlackLighter}
-                      overflow="hidden"
-                    >
-                      <Image
-                        src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
-                        alt="wallet"
-                        w="20px"
-                        h="20px"
-                      />
-                    </Box>
-                  ))}
-                </Flex>
-                <Text
-                  color={colors.offWhite}
-                  fontSize="14px"
-                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                  letterSpacing="-0.5px"
-                >
-                  {userWallets.length} Wallet{userWallets.length !== 1 ? "s" : ""}
-                </Text>
-                <Text color={colors.textGray} fontSize="12px">
-                  ▲
-                </Text>
-              </Flex>
-              <Box
-                cursor="pointer"
-                onClick={() => setShowWalletsOverlay(false)}
-                p="8px"
-                w="40px"
-                h="40px"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                borderRadius="8px"
-                _hover={{ bg: "#2b2b2b" }}
-              >
-                <Text color={colors.offWhite} fontSize="20px">
-                  ✕
-                </Text>
-              </Box>
-            </Flex>
+      {/* Left Edge Close Panel - positioned outside the main panel, overlaps behind it */}
+      <Box
+        position="absolute"
+        left="-58px"
+        top="0"
+        bottom="0"
+        width="74px"
+        bg="transparent"
+        cursor="pointer"
+        display="flex"
+        alignItems="flex-start"
+        justifyContent="center"
+        pr="16px"
+        pt="18px"
+        borderLeftRadius="16px"
+        _hover={{ bg: "rgba(255, 255, 255, 0.08)" }}
+        onClick={onClose}
+        transition="background 0.15s ease"
+        zIndex={999}
+        pointerEvents={isOpen ? "auto" : "none"}
+      >
+        <FiChevronsRight size={26} color={colors.textGray} />
+      </Box>
 
-            {/* Wallet List */}
-            <Box p="12px" maxH="400px" overflowY="auto" bg="rgba(0, 0, 0, 0.25)">
-              {userWallets.map((wallet) => (
-                <Box
-                  key={wallet.id}
-                  p="16px"
-                  mb="8px"
+      {/* Main Panel Content */}
+      <Box
+        flex="1"
+        bg={colors.offBlack}
+        border={`1px solid ${colors.borderGray}`}
+        borderRadius="16px"
+        overflowY="auto"
+        position="relative"
+        zIndex={1001}
+      >
+        {/* Wallets Overlay */}
+        {showWalletsOverlay && (
+          <>
+            {/* Overlay Backdrop - blurs underlying content */}
+            <Box
+              position="absolute"
+              top="0"
+              left="0"
+              right="0"
+              bottom="0"
+              bg="rgba(0,0,0,0.5)"
+              backdropFilter="blur(8px)"
+              zIndex={1001}
+              borderRadius="16px"
+              onClick={() => setShowWalletsOverlay(false)}
+            />
+            {/* Wallets Modal - slides down from top */}
+            <Box
+              position="absolute"
+              top="0"
+              left="0"
+              right="0"
+              bg={colors.offBlack}
+              zIndex={1002}
+              overflow="hidden"
+              borderBottomRadius="16px"
+            >
+              {/* Modal Header */}
+              <Flex
+                p="16px"
+                align="center"
+                justify="space-between"
+                borderBottom={`1px solid ${colors.borderGray}`}
+              >
+                {/* Wallets Dropdown (clickable to close) */}
+                <Flex
+                  bg="#242424"
                   borderRadius="12px"
-                  border={`1px solid ${colors.borderGray}`}
-                  bg={primaryWallet?.address === wallet.address ? "#202020" : colors.offBlack}
+                  px="12px"
+                  py="8px"
+                  align="center"
+                  gap="8px"
+                  transition="all 0.2s ease-in-out"
+                  cursor="pointer"
+                  onClick={() => setShowWalletsOverlay(false)}
+                  _hover={{ bg: "#2b2b2b" }}
                 >
-                  {/* Wallet Info Row */}
-                  <Flex align="center" justify="space-between" mb="12px">
-                    <Flex align="center" gap="10px">
-                      <Image
-                        src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
-                        alt="wallet"
-                        w="28px"
-                        h="28px"
-                        borderRadius="full"
-                      />
-                      <Flex direction="column">
-                        {/* Address as clickable copy button */}
+                  {/* Wallet Icons */}
+                  <Flex>
+                    {userWallets.slice(0, 3).map((wallet, idx) => (
+                      <Box
+                        key={wallet.id}
+                        w="22px"
+                        h="22px"
+                        borderRadius="4px"
+                        ml={idx > 0 ? "-2px" : "0"}
+                        border={`2px solid ${colors.offBlack}`}
+                        bg={colors.offBlackLighter}
+                        overflow="hidden"
+                      >
+                        <Image
+                          src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                          alt="wallet"
+                          w="100%"
+                          h="100%"
+                          objectFit="cover"
+                        />
+                      </Box>
+                    ))}
+                  </Flex>
+                  <Text color={colors.offWhite} fontSize="15px" fontWeight={500} fontFamily="Inter">
+                    {userWallets.length} Wallet{userWallets.length !== 1 ? "s" : ""}
+                  </Text>
+                  <FiChevronUp size={16} color={colors.textGray} />
+                </Flex>
+                <Box
+                  cursor="pointer"
+                  onClick={() => setShowWalletsOverlay(false)}
+                  p="8px"
+                  w="40px"
+                  h="40px"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  transition="all 0.2s ease-in-out"
+                  borderRadius="8px"
+                  _hover={{ bg: "#202020" }}
+                >
+                  <Text color={colors.offWhite} fontSize="20px">
+                    ✕
+                  </Text>
+                </Box>
+              </Flex>
+
+              {/* Wallet List */}
+              <Box p="12px" maxH="400px" overflowY="auto">
+                {userWallets.map((wallet) => (
+                  <Box
+                    key={wallet.id}
+                    p="16px"
+                    mb="8px"
+                    borderRadius="12px"
+                    border={`2px solid ${colors.borderGray}`}
+                    bg={primaryWallet?.address === wallet.address ? "#202020" : colors.offBlack}
+                  >
+                    {/* Top Row: Icon, Address, Balance */}
+                    <Flex align="center" justify="space-between" mb="12px">
+                      <Flex align="center" gap="12px">
+                        {/* Wallet Icon - larger and not clipped */}
+                        <Box w="40px" h="40px" borderRadius="8px" overflow="hidden" flexShrink={0}>
+                          <Image
+                            src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                            alt="wallet"
+                            w="100%"
+                            h="100%"
+                            objectFit="contain"
+                          />
+                        </Box>
+                        {/* Address with copy button */}
                         <Flex
                           align="center"
-                          gap="6px"
+                          gap="8px"
                           cursor="pointer"
                           onClick={() => copyAddress(wallet.address)}
-                          bg={colors.offBlackLighter}
-                          px="10px"
-                          py="6px"
-                          borderRadius="8px"
-                          _hover={{ bg: colors.offBlackLighter2 }}
+                          _hover={{ opacity: 0.8 }}
                         >
                           <Text
                             color={colors.offWhite}
-                            fontSize="14px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            letterSpacing="-0.5px"
+                            fontSize="18px"
+                            fontWeight="600"
+                            fontFamily="Inter"
                           >
                             {formatAddress(wallet.address)}
                           </Text>
                           {copiedAddress === wallet.address ? (
-                            <FiCheck size={14} color={colors.greenOutline} />
+                            <FiCheck size={16} color={colors.greenOutline} />
                           ) : (
-                            <FiCopy size={14} color={colors.textGray} />
-                          )}
-                        </Flex>
-                        <Flex align="center" gap="6px" mt="6px">
-                          <Box px="6px" py="2px" borderRadius="4px" bg={colors.offBlackLighter2}>
-                            <Text color={colors.textGray} fontSize="10px" fontWeight="500">
-                              {getWalletChainType(wallet)}
-                            </Text>
-                          </Box>
-                          {primaryWallet?.address === wallet.address && (
-                            <Flex align="center" gap="4px">
-                              <Box w="6px" h="6px" borderRadius="full" bg={colors.greenOutline} />
-                              <Text color={colors.greenOutline} fontSize="10px">
-                                Active
-                              </Text>
-                            </Flex>
+                            <FiCopy size={16} color={colors.textGray} />
                           )}
                         </Flex>
                       </Flex>
-                    </Flex>
-                    {/* Right side: Balance + Disconnect */}
-                    <Flex direction="column" align="flex-end" gap="4px">
-                      {/* Wallet Balance */}
+                      {/* Balance */}
                       <Text
-                        color={colors.textGray}
-                        fontSize="14px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        letterSpacing="-0.5px"
+                        color={colors.offWhite}
+                        fontSize="18px"
+                        fontWeight="600"
+                        fontFamily="Inter"
                       >
                         {getWalletChainType(wallet) === "EVM"
-                          ? `$${totalUsdValue.toFixed(2)}`
+                          ? `$${totalUsdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : "$0.00"}
                       </Text>
-                      {/* Disconnect text link */}
-                      <Text
-                        color="#F87171"
-                        fontSize="12px"
-                        fontWeight="500"
-                        cursor="pointer"
-                        _hover={{ color: "#FCA5A5" }}
-                        onClick={() => disconnectWallet(wallet)}
-                      >
-                        Disconnect
-                      </Text>
                     </Flex>
-                  </Flex>
+
+                    {/* Bottom Row: Chain Badge, Select Wallet, Disconnect */}
+                    <Flex align="center" justify="space-between">
+                      <Flex align="center" gap="8px">
+                        {/* Chain Badge with Icon */}
+                        <Flex
+                          align="center"
+                          gap="6px"
+                          px="8px"
+                          py="4px"
+                          borderRadius="6px"
+                          bg={
+                            getWalletChainType(wallet) === "EVM"
+                              ? "rgba(57, 74, 255, 0.15)"
+                              : "rgba(247, 147, 26, 0.15)"
+                          }
+                        >
+                          {CHAIN_TYPE_LOGOS[getWalletChainType(wallet)] && (
+                            <Box
+                              w="14px"
+                              h="14px"
+                              borderRadius="full"
+                              overflow="hidden"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              bg={
+                                getWalletChainType(wallet) === "EVM" ? colors.RiftBlue : "#F7931A"
+                              }
+                              p="2px"
+                            >
+                              <Image
+                                src={CHAIN_TYPE_LOGOS[getWalletChainType(wallet)]}
+                                alt="chain"
+                                w="100%"
+                                h="100%"
+                                objectFit="contain"
+                              />
+                            </Box>
+                          )}
+                          <Text
+                            color={
+                              getWalletChainType(wallet) === "EVM"
+                                ? "rgba(120, 140, 255, 1)"
+                                : "rgba(247, 170, 80, 1)"
+                            }
+                            fontSize="12px"
+                            fontWeight="600"
+                            fontFamily="Inter"
+                          >
+                            {getWalletChainType(wallet)}
+                          </Text>
+                        </Flex>
+                        {/* Active indicator or Select Wallet */}
+                        {primaryWallet?.address === wallet.address ? (
+                          <Flex align="center" gap="4px">
+                            <Box w="6px" h="6px" borderRadius="full" bg={colors.greenOutline} />
+                            <Text
+                              color={colors.greenOutline}
+                              fontSize="12px"
+                              fontWeight="500"
+                              fontFamily="Inter"
+                            >
+                              Active
+                            </Text>
+                          </Flex>
+                        ) : (
+                          <Text
+                            color="#A78BFA"
+                            fontSize="14px"
+                            fontWeight="500"
+                            cursor="pointer"
+                            fontFamily="Inter"
+                            _hover={{ color: "#C4B5FD" }}
+                            onClick={() => switchWallet(wallet.id)}
+                          >
+                            Select Wallet
+                          </Text>
+                        )}
+                      </Flex>
+                      {/* Action Buttons */}
+                      <Flex align="center" gap="16px">
+                        {/* Disconnect */}
+                        <Text
+                          color="#F87171"
+                          fontSize="14px"
+                          fontWeight="500"
+                          cursor="pointer"
+                          fontFamily="Inter"
+                          _hover={{ color: "#FCA5A5" }}
+                          onClick={() => disconnectWallet(wallet)}
+                        >
+                          Disconnect
+                        </Text>
+                      </Flex>
+                    </Flex>
+                  </Box>
+                ))}
+              </Box>
+
+              {/* Connect New Wallet Button */}
+              <Box px="12px" pt="0px" pb="21px">
+                <Flex
+                  justify="center"
+                  align="center"
+                  py="12px"
+                  borderRadius="12px"
+                  bg="rgba(167, 139, 250, 0.06)"
+                  transition="all 0.2s ease-in-out"
+                  border="2px solid #A78BFA"
+                  cursor="pointer"
+                  _hover={{ bg: "rgba(167, 139, 250, 0.10)" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log(
+                      "[WalletPanel] Connect New Wallet clicked - using setShowLinkNewWalletModal"
+                    );
+                    setShowWalletsOverlay(false);
+                    // Use setShowLinkNewWalletModal from useDynamicModals hook
+                    setShowLinkNewWalletModal(true);
+                  }}
+                >
+                  <Text color="#A78BFA" fontSize="16px" fontWeight="600" fontFamily="Inter">
+                    Connect New Wallet
+                  </Text>
+                </Flex>
+              </Box>
+            </Box>
+          </>
+        )}
+
+        {/* Header */}
+        <Flex
+          p="16px"
+          // borderBottom={`1px solid ${colors.borderGray}`}
+          align="center"
+          justify="space-between"
+        >
+          {/* Connected Wallets Dropdown */}
+          <Flex
+            bg={"#242424"}
+            borderRadius="12px"
+            px="12px"
+            py="8px"
+            align="center"
+            gap="8px"
+            cursor="pointer"
+            transition="all 0.2s ease-in-out"
+            onClick={() => setShowWalletsOverlay(true)}
+            _hover={{ bg: "#2b2b2b" }}
+          >
+            {/* Wallet Icons */}
+            <Flex>
+              {userWallets.slice(0, 3).map((wallet, idx) => (
+                <Box
+                  key={wallet.id}
+                  w="22px"
+                  h="22px"
+                  borderRadius="4px"
+                  ml={idx > 0 ? "-2px" : "0"}
+                  border={`2px solid ${colors.offBlack}`}
+                  bg={colors.offBlackLighter}
+                  overflow="hidden"
+                >
+                  <Image
+                    src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                    alt="wallet"
+                    w="100%"
+                    h="100%"
+                    objectFit="cover"
+                  />
                 </Box>
               ))}
-            </Box>
-
-            {/* Connect New Wallet Button */}
-            <Box p="12px" borderTop={`1px solid ${colors.borderGray}`}>
-              <Flex
-                justify="center"
-                align="center"
-                py="12px"
-                borderRadius="14px"
-                bg="rgba(28, 97, 253, 0.06)"
-                border={`2px solid rgb(76, 126, 201)`}
-                cursor="pointer"
-                _hover={{ bg: "rgba(28, 97, 253, 0.2)" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  console.log(
-                    "[WalletPanel] Connect New Wallet clicked - using setShowLinkNewWalletModal"
-                  );
-                  setShowWalletsOverlay(false);
-                  // Use setShowLinkNewWalletModal from useDynamicModals hook
-                  setShowLinkNewWalletModal(true);
-                }}
-              >
-                <Text color="rgb(76, 126, 201)" fontSize="14px" fontWeight="600">
-                  Connect a New Wallet
-                </Text>
-              </Flex>
-            </Box>
-          </Box>
-        </>
-      )}
-
-      {/* Header */}
-      <Flex
-        p="16px"
-        borderBottom={`1px solid ${colors.borderGray}`}
-        align="center"
-        justify="space-between"
-      >
-        {/* Connected Wallets Dropdown */}
-        <Flex
-          bg={colors.offBlackLighter}
-          borderRadius="20px"
-          px="12px"
-          py="6px"
-          align="center"
-          gap="8px"
-          cursor="pointer"
-          onClick={() => setShowWalletsOverlay(true)}
-          _hover={{ bg: "#2b2b2b" }}
-        >
-          {/* Wallet Icons */}
-          <Flex>
-            {userWallets.slice(0, 3).map((wallet, idx) => (
-              <Box
-                key={wallet.id}
-                w="20px"
-                h="20px"
-                borderRadius="full"
-                ml={idx > 0 ? "-6px" : "0"}
-                border={`2px solid ${colors.offBlack}`}
-                bg={colors.offBlackLighter}
-                overflow="hidden"
-              >
-                <Image
-                  src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
-                  alt="wallet"
-                  w="20px"
-                  h="20px"
-                />
-              </Box>
-            ))}
+            </Flex>
+            <Text color={colors.offWhite} fontSize="15px" fontWeight={500} fontFamily="Inter">
+              {userWallets.length} Wallet{userWallets.length !== 1 ? "s" : ""}
+            </Text>
+            <FiChevronDown size={16} color={colors.textGray} />
           </Flex>
-          <Text
-            color={colors.offWhite}
-            fontSize="14px"
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            letterSpacing="-0.5px"
-          >
-            {userWallets.length} Wallet{userWallets.length !== 1 ? "s" : ""}
-          </Text>
-          <Text color={colors.textGray} fontSize="12px">
-            ▼
-          </Text>
-        </Flex>
 
-        {/* Close Button */}
-        <Box
-          cursor="pointer"
-          onClick={onClose}
-          p="8px"
-          w="40px"
-          h="40px"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          borderRadius="8px"
-          _hover={{ bg: "#2b2b2b" }}
-        >
-          <Text color={colors.offWhite} fontSize="20px">
-            ✕
-          </Text>
-        </Box>
-      </Flex>
-
-      {/* Total Value */}
-      <Flex p="20px" direction="column" gap="4px">
-        <Flex align="center" gap="8px">
-          <Text
-            color={colors.offWhite}
-            fontSize="32px"
-            fontWeight="bold"
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            letterSpacing="-4px"
+          {/* Close Button */}
+          <Box
+            cursor="pointer"
+            onClick={onClose}
+            p="8px"
+            w="40px"
+            h="40px"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            transition="all 0.2s ease-in-out"
+            borderRadius="8px"
+            _hover={{ bg: "#242424" }}
           >
-            $
-            {totalUsdValue.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </Text>
-          <Box cursor="pointer" p="4px" borderRadius="full" _hover={{ bg: "#2b2b2b" }}>
-            <Text color={colors.textGray} fontSize="16px">
-              ↻
+            <Text color={colors.offerWhite} fontSize="20px">
+              ✕
             </Text>
           </Box>
         </Flex>
-      </Flex>
 
-      {/* Tabs */}
-      <Flex px="20px" gap="24px" borderBottom={`1px solid ${colors.borderGray}`}>
-        <Text
-          color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
-          fontSize="14px"
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          letterSpacing="-0.5px"
-          pb="12px"
-          borderBottom={activeTab === "tokens" ? `2px solid ${colors.offWhite}` : "none"}
-          cursor="pointer"
-          onClick={() => setActiveTab("tokens")}
-        >
-          Tokens
-        </Text>
-        <Text
-          color={activeTab === "activity" ? colors.offWhite : colors.textGray}
-          fontSize="14px"
-          fontFamily={FONT_FAMILIES.AUX_MONO}
-          letterSpacing="-0.5px"
-          pb="12px"
-          borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
-          cursor="pointer"
-          onClick={() => setActiveTab("activity")}
-        >
-          Activity
-        </Text>
-      </Flex>
+        {/* Total Value */}
+        <Flex px="20px" pb="16px" direction="column" gap="4px">
+          <Flex align="center" gap="8px">
+            <Text
+              color={colors.offWhite}
+              fontSize="34px"
+              fontWeight="600"
+              fontFamily="Inter"
+              letterSpacing="-1px"
+            >
+              $
+              {totalUsdValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </Text>
+            <Box
+              cursor="pointer"
+              w="32px"
+              h="32px"
+              borderRadius="full"
+              bg={colors.offBlackLighter}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              _hover={{ bg: colors.offBlackLighter2 }}
+            >
+              <FiRefreshCw size={16} color={colors.textGray} />
+            </Box>
+          </Flex>
+        </Flex>
 
-      {/* Token List */}
-      {activeTab === "tokens" && (
-        <Box p="12px">
-          {sortedTokens.length === 0 ? (
-            <Flex justify="center" align="center" py="40px">
-              <Spinner color={colors.offWhite} size="lg" />
-            </Flex>
-          ) : (
-            <Flex direction="column" gap="4px">
-              {sortedTokens.map((token, idx) => (
+        {/* Tabs */}
+        <Flex px="20px" gap="24px" borderBottom={`1px solid ${colors.borderGray}`}>
+          <Text
+            color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
+            fontSize="15px"
+            fontWeight={600}
+            fontFamily="Inter"
+            pb="12px"
+            borderBottom={activeTab === "tokens" ? `2px solid ${colors.offWhite}` : "none"}
+            cursor="pointer"
+            onClick={() => setActiveTab("tokens")}
+          >
+            Tokens
+          </Text>
+          <Text
+            color={activeTab === "activity" ? colors.offWhite : colors.textGray}
+            fontSize="15px"
+            fontWeight={600}
+            fontFamily="Inter"
+            pb="12px"
+            borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
+            cursor="pointer"
+            onClick={() => setActiveTab("activity")}
+          >
+            Activity
+          </Text>
+        </Flex>
+
+        {/* Token List */}
+        {activeTab === "tokens" && (
+          <Box p="12px">
+            {userWallets.length === 0 ? (
+              <Flex direction="column" align="center" justify="center" py="40px" gap="20px">
+                <Text color={colors.textGray} fontSize="15px" fontFamily="Inter" textAlign="center">
+                  You don't have any wallets connected yet
+                </Text>
                 <Flex
-                  key={`${token.address}-${token.chainId}-${idx}`}
-                  p="12px"
-                  borderRadius="12px"
+                  justify="center"
                   align="center"
-                  justify="space-between"
+                  py="12px"
+                  px="24px"
+                  borderRadius="12px"
+                  bg="rgba(167, 139, 250, 0.08)"
+                  border="2px solid #A78BFA"
                   cursor="pointer"
-                  _hover={{ bg: colors.offBlackLighter }}
+                  _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
+                  onClick={() => setShowAuthFlow(true)}
                 >
-                  {/* Token Icon & Info */}
-                  <Flex align="center" gap="12px">
-                    <Box position="relative">
-                      <Image
-                        src={token.icon || FALLBACK_TOKEN_ICON}
-                        alt={token.ticker}
-                        w="40px"
-                        h="40px"
-                        borderRadius="full"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = FALLBACK_TOKEN_ICON;
-                        }}
-                      />
-                      {/* Chain Badge */}
-                      {token.chainId && CHAIN_LOGOS[token.chainId] && (
+                  <Text color="#A78BFA" fontSize="15px" fontWeight="600" fontFamily="Inter">
+                    Connect Wallet
+                  </Text>
+                </Flex>
+              </Flex>
+            ) : sortedTokens.length === 0 ? (
+              <Flex direction="column" justify="center" align="center" py="40px" gap="8px">
+                <Text color={colors.textGray} fontSize="15px" fontFamily="Inter">
+                  No tokens found
+                </Text>
+                <Text color={colors.textGray} fontSize="13px" fontFamily="Inter" opacity={0.7}>
+                  This wallet doesn't have any token balances
+                </Text>
+              </Flex>
+            ) : (
+              <Flex direction="column" gap="4px">
+                {sortedTokens.map((token, idx) => (
+                  <Flex
+                    key={`${token.address}-${token.chainId}-${idx}`}
+                    p="12px"
+                    borderRadius="12px"
+                    align="center"
+                    justify="space-between"
+                    cursor="pointer"
+                    _hover={{ bg: colors.offBlackLighter }}
+                  >
+                    {/* Token Icon & Info */}
+                    <Flex align="center" gap="12px">
+                      <Box position="relative">
                         <Image
-                          src={CHAIN_LOGOS[token.chainId]}
-                          alt={CHAIN_NAMES[token.chainId]}
-                          w="16px"
-                          h="16px"
-                          position="absolute"
-                          bottom="-2px"
-                          right="-2px"
+                          src={token.icon || FALLBACK_TOKEN_ICON}
+                          alt={token.ticker}
+                          w="40px"
+                          h="40px"
                           borderRadius="full"
-                          border={`2px solid ${colors.offBlack}`}
-                          bg={colors.offBlack}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = FALLBACK_TOKEN_ICON;
+                          }}
                         />
-                      )}
-                    </Box>
-                    <Flex direction="column">
+                        {/* Chain Badge */}
+                        {token.chainId && CHAIN_LOGOS[token.chainId] && (
+                          <Image
+                            src={CHAIN_LOGOS[token.chainId]}
+                            alt={CHAIN_NAMES[token.chainId]}
+                            w="16px"
+                            h="16px"
+                            position="absolute"
+                            bottom="-2px"
+                            right="-2px"
+                            borderRadius="full"
+                            border={`2px solid ${colors.offBlack}`}
+                            bg={colors.offBlack}
+                          />
+                        )}
+                      </Box>
+                      <Flex direction="column">
+                        <Text
+                          color={colors.offWhite}
+                          fontSize="16px"
+                          fontWeight="500"
+                          fontFamily="Inter"
+                        >
+                          {token.ticker}
+                        </Text>
+                        <Text color={colors.textGray} fontSize="12px" fontFamily="Inter">
+                          {CHAIN_NAMES[token.chainId] || "Unknown"}
+                        </Text>
+                      </Flex>
+                    </Flex>
+
+                    {/* Token Value */}
+                    <Flex direction="column" align="flex-end">
                       <Text
                         color={colors.offWhite}
                         fontSize="16px"
                         fontWeight="500"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        letterSpacing="-0.5px"
+                        fontFamily="Inter"
+                        letterSpacing="0.5px"
                       >
-                        {token.ticker}
+                        {token.usdValue}
                       </Text>
-                      <Text
-                        color={colors.textGray}
-                        fontSize="12px"
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        letterSpacing="-0.5px"
-                      >
-                        {CHAIN_NAMES[token.chainId] || "Unknown"}
+                      <Text color={colors.textGray} fontSize="12px" fontFamily="Inter">
+                        {parseFloat(token.balance).toFixed(4)} {token.ticker}
                       </Text>
                     </Flex>
                   </Flex>
+                ))}
+              </Flex>
+            )}
+          </Box>
+        )}
 
-                  {/* Token Value */}
-                  <Flex direction="column" align="flex-end">
-                    <Text
-                      color={colors.offWhite}
-                      fontSize="16px"
-                      fontWeight="500"
-                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                      letterSpacing="-0.5px"
-                    >
-                      {token.usdValue}
-                    </Text>
-                    <Text
-                      color={colors.textGray}
-                      fontSize="12px"
-                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                      letterSpacing="-0.5px"
-                    >
-                      {parseFloat(token.balance).toFixed(4)} {token.ticker}
-                    </Text>
-                  </Flex>
+        {/* Activity Tab */}
+        {activeTab === "activity" && (
+          <Flex direction="column" justify="center" align="center" py="60px" gap="20px">
+            {userWallets.length === 0 ? (
+              <>
+                <Text color={colors.textGray} fontSize="15px" fontFamily="Inter" textAlign="center">
+                  You don't have any wallets connected yet
+                </Text>
+                <Flex
+                  justify="center"
+                  align="center"
+                  py="12px"
+                  px="24px"
+                  borderRadius="12px"
+                  bg="rgba(167, 139, 250, 0.08)"
+                  border="2px solid #A78BFA"
+                  cursor="pointer"
+                  _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
+                  onClick={() => setShowAuthFlow(true)}
+                >
+                  <Text color="#A78BFA" fontSize="15px" fontWeight="600" fontFamily="Inter">
+                    Connect Wallet
+                  </Text>
                 </Flex>
-              ))}
-            </Flex>
-          )}
-        </Box>
-      )}
-
-      {/* Activity Tab */}
-      {activeTab === "activity" && (
-        <Flex justify="center" align="center" py="60px">
-          <Text color={colors.textGray} fontSize="14px">
-            No recent activity
-          </Text>
-        </Flex>
-      )}
+              </>
+            ) : (
+              <Text color={colors.textGray} fontSize="15px" fontFamily="Inter">
+                No recent activity
+              </Text>
+            )}
+          </Flex>
+        )}
+      </Box>
     </Box>
   );
 };

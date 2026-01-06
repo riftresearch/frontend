@@ -1,6 +1,7 @@
 import { Flex, Text, Input, Spacer, Spinner, Image } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
@@ -15,6 +16,8 @@ import {
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
+import { AddressSelector } from "@/components/other/AddressSelector";
+import { PasteAddressModal } from "@/components/other/PasteAddressModal";
 import { useStore } from "@/utils/store";
 import { TokenData } from "@/utils/types";
 import {
@@ -260,6 +263,10 @@ export const RatesSwapWidget = () => {
   useBtcEthPrices();
   const { isMobile } = useWindowSize();
 
+  // Dynamic wallet context
+  const { primaryWallet } = useDynamicContext();
+  const userWallets = useUserWallets();
+
   // Local state
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
   const [isLoadingRiftQuote, setIsLoadingRiftQuote] = useState(false);
@@ -318,7 +325,51 @@ export const RatesSwapWidget = () => {
     setHasNoRoutesError,
     setExceedsAvailableBTCLiquidity,
     setIsAwaitingOptimalQuote,
+    selectedInputAddress,
+    setSelectedInputAddress,
+    selectedOutputAddress,
+    setSelectedOutputAddress,
   } = useStore();
+
+  // State for paste address modal
+  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
+  const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
+
+  // Auto-select primary wallet address based on swap direction
+  useEffect(() => {
+    if (!primaryWallet) return;
+
+    const walletChain = primaryWallet.chain?.toUpperCase();
+    const isEvmWallet = walletChain === "EVM";
+    const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
+
+    // For input address
+    if (isSwappingForBTC && isEvmWallet && !selectedInputAddress) {
+      // EVM → BTC: Auto-select EVM wallet for input
+      setSelectedInputAddress(primaryWallet.address);
+    } else if (!isSwappingForBTC && isBtcWallet && !selectedInputAddress) {
+      // BTC → EVM: Auto-select BTC wallet for input
+      setSelectedInputAddress(primaryWallet.address);
+    }
+
+    // For output address (only for EVM → BTC direction, BTC wallet)
+    if (isSwappingForBTC && isBtcWallet && !selectedOutputAddress) {
+      setSelectedOutputAddress(primaryWallet.address);
+    }
+  }, [
+    primaryWallet,
+    isSwappingForBTC,
+    selectedInputAddress,
+    selectedOutputAddress,
+    setSelectedInputAddress,
+    setSelectedOutputAddress,
+  ]);
+
+  // Clear addresses when swap direction changes
+  useEffect(() => {
+    setSelectedInputAddress(null);
+    setSelectedOutputAddress(null);
+  }, [isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
 
   // Define styles based on swap direction
   const inputStyle = isSwappingForBTC
@@ -1137,7 +1188,14 @@ export const RatesSwapWidget = () => {
               </Text>
             </Flex>
 
-            <Flex py="12px" direction="column" align="flex-end" justify="center">
+            <Flex py="12px" direction="column" align="flex-end" justify="center" gap="8px">
+              {/* Address Selector - above token selector */}
+              <AddressSelector
+                chainType={isSwappingForBTC ? "EVM" : "BTC"}
+                selectedAddress={selectedInputAddress}
+                onSelect={setSelectedInputAddress}
+                showPasteOption={false}
+              />
               <WebAssetTag
                 cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
                 asset={inputAssetIdentifier}
@@ -1208,6 +1266,57 @@ export const RatesSwapWidget = () => {
             >
               You Receive
             </Text>
+
+            {/* Address Selector for output - different behavior based on direction */}
+            <Flex mt="6px">
+              {isSwappingForBTC ? (
+                // EVM → BTC: Show BTC address selector with paste option
+                <AddressSelector
+                  chainType="BTC"
+                  selectedAddress={selectedOutputAddress}
+                  onSelect={setSelectedOutputAddress}
+                  onPasteAddress={() => {
+                    setPasteModalType("BTC");
+                    setIsPasteModalOpen(true);
+                  }}
+                  showPasteOption={true}
+                />
+              ) : (
+                // BTC → EVM: Show paste-only button for EVM address
+                <Flex
+                  align="center"
+                  gap="6px"
+                  px="10px"
+                  py="6px"
+                  bg="#1f1f1f"
+                  borderRadius="10px"
+                  cursor="pointer"
+                  border="1px solid #333"
+                  transition="all 0.15s ease"
+                  _hover={{ bg: "#282828", borderColor: "#444" }}
+                  onClick={() => {
+                    setPasteModalType("EVM");
+                    setIsPasteModalOpen(true);
+                  }}
+                >
+                  {selectedOutputAddress ? (
+                    <Text color="#788CFF" fontSize="13px" fontWeight="500" fontFamily="Inter">
+                      {`${selectedOutputAddress.slice(0, 6)}...${selectedOutputAddress.slice(-4)}`}
+                    </Text>
+                  ) : (
+                    <Text
+                      color={colors.textGray}
+                      fontSize="13px"
+                      fontWeight="500"
+                      fontFamily="Inter"
+                    >
+                      Paste EVM address
+                    </Text>
+                  )}
+                </Flex>
+              )}
+            </Flex>
+
             <Flex mt="6px">
               <WebAssetTag
                 cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
@@ -1229,6 +1338,16 @@ export const RatesSwapWidget = () => {
             </Text>
           </Flex>
         </Flex>
+
+        {/* Paste Address Modal */}
+        <PasteAddressModal
+          isOpen={isPasteModalOpen}
+          onClose={() => setIsPasteModalOpen(false)}
+          addressType={pasteModalType}
+          onConfirm={(address) => {
+            setSelectedOutputAddress(address);
+          }}
+        />
 
         {/* Exchange Quotes List - Always visible */}
         <Flex direction="column" mt="20px" gap="10px">

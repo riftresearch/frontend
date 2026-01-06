@@ -1,6 +1,8 @@
 import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
+import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { FiEdit3, FiChevronDown } from "react-icons/fi";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useCowSwapContext } from "@/components/providers/CowSwapProvider";
@@ -17,6 +19,8 @@ import {
 import { SupportedChainId } from "@cowprotocol/cow-sdk";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
+import { AddressSelector } from "@/components/other/AddressSelector";
+import { PasteAddressModal } from "@/components/other/PasteAddressModal";
 import { InfoSVG } from "../other/SVGs";
 import { Tooltip } from "@/components/other/Tooltip";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -94,6 +98,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // ============================================================================
 
   const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
+
+  // Dynamic wallet context
+  const { primaryWallet } = useDynamicContext();
 
   // CowSwap context - provides client and indicative status
   const cowswapContext = useCowSwapContext();
@@ -192,7 +199,51 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     hasNoRoutesError,
     switchingToInputTokenChain,
     setSwitchingToInputTokenChain,
+    selectedInputAddress,
+    setSelectedInputAddress,
+    selectedOutputAddress,
+    setSelectedOutputAddress,
   } = useStore();
+
+  // State for paste address modal
+  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
+  const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
+
+  // Auto-select primary wallet address based on swap direction
+  useEffect(() => {
+    if (!primaryWallet) return;
+
+    const walletChain = primaryWallet.chain?.toUpperCase();
+    const isEvmWallet = walletChain === "EVM";
+    const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
+
+    // For input address
+    if (isSwappingForBTC && isEvmWallet && !selectedInputAddress) {
+      // EVM → BTC: Auto-select EVM wallet for input
+      setSelectedInputAddress(primaryWallet.address);
+    } else if (!isSwappingForBTC && isBtcWallet && !selectedInputAddress) {
+      // BTC → EVM: Auto-select BTC wallet for input
+      setSelectedInputAddress(primaryWallet.address);
+    }
+
+    // For output address (only for EVM → BTC direction, BTC wallet)
+    if (isSwappingForBTC && isBtcWallet && !selectedOutputAddress) {
+      setSelectedOutputAddress(primaryWallet.address);
+    }
+  }, [
+    primaryWallet,
+    isSwappingForBTC,
+    selectedInputAddress,
+    selectedOutputAddress,
+    setSelectedInputAddress,
+    setSelectedOutputAddress,
+  ]);
+
+  // Clear addresses when swap direction changes
+  useEffect(() => {
+    setSelectedInputAddress(null);
+    setSelectedOutputAddress(null);
+  }, [isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
 
   // Define the styles based on swap direction
   const inputStyle = isSwappingForBTC
@@ -2212,27 +2263,27 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           px="10px"
           bg={inputStyle?.dark_bg_color || "rgba(37, 82, 131, 0.66)"}
           w="100%"
-          h="121px"
+          h="150px"
           border="2px solid"
           borderColor={inputStyle?.bg_color || "#255283"}
           borderRadius="16px"
         >
-          <Flex direction="column" py="12px" px="8px">
-            <Flex align="center" justify="space-between">
-              <Text
-                color={!displayedInputAmount ? colors.offWhite : colors.textGray}
-                fontSize="14px"
-                letterSpacing="-1px"
-                fontWeight="normal"
-                fontFamily="Aux"
-                userSelect="none"
-              >
-                You Send
-              </Text>
-            </Flex>
+          <Flex direction="column" py="12px" px="8px" justify="space-between" h="100%">
+            {/* Label at top */}
+            <Text
+              color={!displayedInputAmount ? colors.offWhite : colors.textGray}
+              fontSize="14px"
+              letterSpacing="-1px"
+              fontWeight="normal"
+              fontFamily="Aux"
+              userSelect="none"
+            >
+              You Send
+            </Text>
 
+            {/* Amount input centered */}
             {isLoadingQuote && !getQuoteForInputRef.current ? (
-              <Flex align="center" mt="6px" ml="-5px">
+              <Flex align="center" ml="-5px">
                 <Spinner size="lg" color={inputStyle?.border_color_light || colors.textGray} />
               </Flex>
             ) : (
@@ -2244,7 +2295,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 border="none"
                 bg="transparent"
                 outline="none"
-                mt="6px"
                 mr="-150px"
                 ml="-5px"
                 p="0px"
@@ -2275,6 +2325,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
               />
             )}
 
+            {/* USD value / errors at bottom */}
             <Flex>
               {exceedsUserBalance &&
               selectedInputToken.ticker === "ETH" &&
@@ -2464,66 +2515,75 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           </Flex>
 
           <Spacer />
-          <Flex mr="8px" py="12px" direction="column" align="flex-end" justify="center" h="100%">
-            <Flex direction="row" justify="flex-end" h="21px" align="center">
-              {currentInputBalance && parseFloat(currentInputBalance) > 0 && (
-                <Tooltip
-                  show={showMaxTooltip && selectedInputToken.ticker === "ETH" && isAtAdjustedMax}
-                  onMouseEnter={() => setShowMaxTooltip(true)}
-                  onMouseLeave={() => setShowMaxTooltip(false)}
-                  hoverText="Max excludes ETH for gas"
-                  body={
-                    <Button
-                      onClick={handleMaxClick}
-                      size="xs"
-                      h="21px"
-                      px="8px"
-                      bg={colors.swapBgColor}
-                      color={colors.textGray}
-                      fontSize="12px"
-                      fontWeight="bold"
-                      fontFamily="Aux"
-                      letterSpacing="-0.5px"
-                      border="1px solid"
-                      borderColor={colors.swapBorderColor}
-                      borderRadius="8px"
-                      cursor="pointer"
-                      transition="all 0.2s"
-                      _hover={{
-                        bg: colors.swapBorderColor,
-                      }}
-                      _active={{
-                        transform: "scale(0.95)",
-                      }}
-                    >
-                      MAX
-                    </Button>
-                  }
-                />
-              )}
-            </Flex>
-            {/* <Spacer /> */}
-            <Flex align="center" justify="center" direction="column" mt="6px">
-              <WebAssetTag
-                cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
-                asset={inputAssetIdentifier}
-                onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
-              />
-            </Flex>
-            <Spacer />
-            <Flex direction="row" justify="flex-end">
+          <Flex
+            mr="8px"
+            py="12px"
+            direction="column"
+            align="flex-end"
+            justify="space-between"
+            h="100%"
+          >
+            {/* Address Selector at top */}
+            <AddressSelector
+              chainType={isSwappingForBTC ? "EVM" : "BTC"}
+              selectedAddress={selectedInputAddress}
+              onSelect={setSelectedInputAddress}
+              showPasteOption={false}
+            />
+            {/* Token Selector centered */}
+            <WebAssetTag
+              cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+              asset={inputAssetIdentifier}
+              onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+            />
+            {/* Balance + MAX button at bottom */}
+            <Flex direction="row" justify="flex-end" align="center" gap="8px" h="21px">
               {currentInputBalance && currentInputTicker && parseFloat(currentInputBalance) > 0 && (
-                <Text
-                  mt="6px"
-                  color={exceedsUserBalance ? colors.redHover : colors.textGray}
-                  fontSize="14px"
-                  letterSpacing="-1px"
-                  fontWeight="normal"
-                  fontFamily="Aux"
-                  userSelect="none"
-                >
-                  {currentInputBalance.slice(0, 8)} {currentInputTicker}
-                </Text>
+                <>
+                  <Text
+                    color={exceedsUserBalance ? colors.redHover : colors.textGray}
+                    fontSize="14px"
+                    letterSpacing="-1px"
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                    userSelect="none"
+                  >
+                    {currentInputBalance.slice(0, 8)} {currentInputTicker}
+                  </Text>
+                  <Tooltip
+                    show={showMaxTooltip && selectedInputToken.ticker === "ETH" && isAtAdjustedMax}
+                    onMouseEnter={() => setShowMaxTooltip(true)}
+                    onMouseLeave={() => setShowMaxTooltip(false)}
+                    hoverText="Max excludes ETH for gas"
+                    body={
+                      <Button
+                        onClick={handleMaxClick}
+                        size="xs"
+                        h="21px"
+                        px="8px"
+                        bg={colors.swapBgColor}
+                        color={colors.textGray}
+                        fontSize="12px"
+                        fontWeight="bold"
+                        fontFamily="Aux"
+                        letterSpacing="-0.5px"
+                        border="1px solid"
+                        borderColor={colors.swapBorderColor}
+                        borderRadius="8px"
+                        cursor="pointer"
+                        transition="all 0.2s"
+                        _hover={{
+                          bg: colors.swapBorderColor,
+                        }}
+                        _active={{
+                          transform: "scale(0.95)",
+                        }}
+                      >
+                        MAX
+                      </Button>
+                    }
+                  />
+                </>
               )}
             </Flex>
           </Flex>
@@ -2564,12 +2624,13 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           px="10px"
           bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
           w="100%"
-          h="121px"
+          h="150px"
           border="2px solid"
           borderColor={outputStyle?.bg_color || "#78491F"}
           borderRadius="16px"
         >
-          <Flex direction="column" py="12px" px="8px">
+          <Flex direction="column" py="12px" px="8px" justify="space-between" h="100%">
+            {/* Label at top */}
             <Text
               color={!outputAmount ? colors.offWhite : colors.textGray}
               fontSize="14px"
@@ -2581,8 +2642,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
               You Receive
             </Text>
 
+            {/* Amount input centered */}
             {isLoadingQuote && getQuoteForInputRef.current ? (
-              <Flex align="center" mt="6px" ml="-5px">
+              <Flex align="center" ml="-5px">
                 <Spinner size="lg" color={outputStyle?.border_color_light || colors.textGray} />
               </Flex>
             ) : (
@@ -2594,7 +2656,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 border="none"
                 bg="transparent"
                 outline="none"
-                mt="6px"
                 mr="-150px"
                 ml="-5px"
                 p="0px"
@@ -2623,6 +2684,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
               />
             )}
 
+            {/* USD value / errors at bottom */}
             <Flex>
               {exceedsAvailableBTCLiquidity && lastEditedField === "output" ? (
                 <>
@@ -2704,15 +2766,88 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           </Flex>
 
           <Spacer />
-          <Flex mr="8px">
+          <Flex
+            mr="8px"
+            py="12px"
+            direction="column"
+            align="flex-end"
+            justify="space-between"
+            h="100%"
+          >
+            {/* Address Selector at top */}
+            {isSwappingForBTC ? (
+              // EVM → BTC: Show BTC address selector with paste option
+              <AddressSelector
+                chainType="BTC"
+                selectedAddress={selectedOutputAddress}
+                onSelect={setSelectedOutputAddress}
+                onPasteAddress={() => {
+                  setPasteModalType("BTC");
+                  setIsPasteModalOpen(true);
+                }}
+                showPasteOption={true}
+              />
+            ) : (
+              // BTC → EVM: Show paste-only text with icon and caret
+              <Flex
+                align="center"
+                gap="5px"
+                cursor="pointer"
+                transition="opacity 0.15s ease"
+                _hover={{ opacity: 0.8 }}
+                onClick={() => {
+                  setPasteModalType("EVM");
+                  setIsPasteModalOpen(true);
+                }}
+              >
+                {selectedOutputAddress ? (
+                  <>
+                    <FiEdit3 size={12} color="#788CFF" />
+                    <Text
+                      color="#788CFF"
+                      fontSize="14px"
+                      fontWeight="500"
+                      fontFamily="Aux"
+                      letterSpacing="-1px"
+                    >
+                      {`${selectedOutputAddress.slice(0, 6)}...${selectedOutputAddress.slice(-4)}`}
+                    </Text>
+                  </>
+                ) : (
+                  <Text
+                    color={colors.textGray}
+                    fontSize="14px"
+                    fontWeight="500"
+                    fontFamily="Aux"
+                    letterSpacing="-1px"
+                  >
+                    Paste address
+                  </Text>
+                )}
+                <FiChevronDown size={12} color="#788CFF" />
+              </Flex>
+            )}
+            {/* Asset tag centered */}
             <WebAssetTag
               cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
               asset={outputAssetIdentifier}
               onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
               isOutput={true}
             />
+            {/* Empty spacer to balance the layout */}
+            <Flex h="21px" />
           </Flex>
         </Flex>
+
+        {/* Paste Address Modal */}
+        <PasteAddressModal
+          isOpen={isPasteModalOpen}
+          onClose={() => setIsPasteModalOpen(false)}
+          addressType={pasteModalType}
+          onConfirm={(address) => {
+            setSelectedOutputAddress(address);
+          }}
+        />
 
         {/* Exchange Rate */}
         <Flex mt="12px">

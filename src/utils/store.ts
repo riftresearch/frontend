@@ -147,6 +147,10 @@ export const useStore = create<{
   setCowswapOrderData: (data: CowswapOrderData | null) => void;
   switchingToInputTokenChain: boolean;
   setSwitchingToInputTokenChain: (value: boolean) => void;
+  selectedInputAddress: string | null;
+  setSelectedInputAddress: (address: string | null) => void;
+  selectedOutputAddress: string | null;
+  setSelectedOutputAddress: (address: string | null) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -249,4 +253,8 @@ export const useStore = create<{
   setCowswapOrderData: (data: CowswapOrderData | null) => set({ cowswapOrderData: data }),
   switchingToInputTokenChain: false,
   setSwitchingToInputTokenChain: (value: boolean) => set({ switchingToInputTokenChain: value }),
+  selectedInputAddress: null,
+  setSelectedInputAddress: (address: string | null) => set({ selectedInputAddress: address }),
+  selectedOutputAddress: null,
+  setSelectedOutputAddress: (address: string | null) => set({ selectedOutputAddress: address }),
 }));
