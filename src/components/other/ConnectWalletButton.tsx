@@ -29,6 +29,7 @@ const getCustomChainName = (chainId: number): string => {
 
 export const ConnectWalletButton: React.FC = () => {
   const { address, isConnected } = useAccount();
+
   const {
     evmConnectWalletChainId: chainId,
     setUserTokensForChain,
@@ -51,6 +52,7 @@ export const ConnectWalletButton: React.FC = () => {
         fetchWalletTokens(address),
         fetchUserEth(address),
       ]);
+      console.log("[UserTokens] walletTokensByChain", walletTokensByChain);
 
       // Build addresses by chain for price fetching
       const addressesByChain: Partial<Record<Network, string[]>> = {};
@@ -149,6 +151,8 @@ export const ConnectWalletButton: React.FC = () => {
           const usdValueB = parseFloat(b.usdValue.replace("$", ""));
           return usdValueB - usdValueA;
         });
+
+        console.log("[UserTokens] sorted", sorted);
 
         // Preload token icons
         preloadImages(sorted.map((t) => t.icon));

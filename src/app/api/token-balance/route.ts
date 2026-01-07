@@ -25,16 +25,17 @@ interface AlchemyResponse {
   result: {
     address: string;
     tokenBalances: AlchemyTokenBalance[];
+    pageKey?: string;
   };
 }
 
 // Normalized token type returned by this endpoint
-interface TokenBalance {
+interface TokenBalanceResponse {
   address: string;
   totalBalance: string;
-  decimals: number;
-  name: string;
-  symbol: string;
+  // decimals: number;
+  // name: string;
+  // symbol: string;
   chainId: number;
 }
 
@@ -51,7 +52,11 @@ function hexToDecimalString(hex: string): string {
 }
 
 // Fetch token balances from Alchemy
-async function fetchTokenBalances(wallet: string, chainId: number): Promise<TokenBalance[]> {
+async function fetchTokenBalances(
+  wallet: string,
+  chainId: number,
+  pageKey?: string
+): Promise<TokenBalanceResponse[]> {
   const network = NETWORKS[chainId];
   if (!network) {
     console.error(`Network not configured for chainId ${chainId}`);
@@ -72,7 +77,7 @@ async function fetchTokenBalances(wallet: string, chainId: number): Promise<Toke
         jsonrpc: "2.0",
         id: 1,
         method: "alchemy_getTokenBalances",
-        params: [wallet, "erc20"],
+        params: pageKey ? [wallet, "erc20", { pageKey }] : [wallet, "erc20"],
       }),
     });
 
@@ -87,14 +92,19 @@ async function fetchTokenBalances(wallet: string, chainId: number): Promise<Toke
       (token) => token.tokenBalance !== "0x0" && token.tokenBalance !== "0x"
     );
 
-    return nonZeroBalances.map((token) => ({
+    const currentPageTokens = nonZeroBalances.map((token) => ({
       address: token.contractAddress,
       totalBalance: hexToDecimalString(token.tokenBalance),
-      decimals: 0, // Will be enriched with metadata on client
-      name: "", // Will be enriched with metadata on client
-      symbol: "", // Will be enriched with metadata on client
       chainId,
     }));
+
+    // Recursively fetch next page if pageKey exists
+    if (data.result.pageKey) {
+      const nextPageTokens = await fetchTokenBalances(wallet, chainId, data.result.pageKey);
+      return [...currentPageTokens, ...nextPageTokens];
+    }
+
+    return currentPageTokens;
   } catch (error) {
     console.error(`Failed to fetch token balances for chain ${chainId}:`, error);
     return [];
