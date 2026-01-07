@@ -158,7 +158,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         height={isMobile ? "100vh" : "auto"}
         width={{ base: "100%", md: "418px" }}
         zIndex={1000}
-        transform={isOpen ? "translateX(0)" : "translateX(100%)"}
+        transform={
+          isOpen ? "translateX(0)" : isMobile ? "translateX(100%)" : "translateX(calc(100% + 70px))"
+        }
         transition="transform 0.3s ease-in-out"
         display="flex"
         flexDirection="column"
