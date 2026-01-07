@@ -73,6 +73,7 @@ export const ConnectWalletButton: React.FC = () => {
         fetchWalletTokens(evmAddress),
         fetchUserEth(evmAddress),
       ]);
+      console.log("[UserTokens] walletTokensByChain", walletTokensByChain);
 
       // Build addresses by chain for price fetching
       const addressesByChain: Partial<Record<Network, string[]>> = {};
@@ -171,6 +172,8 @@ export const ConnectWalletButton: React.FC = () => {
           const usdValueB = parseFloat(b.usdValue.replace("$", ""));
           return usdValueB - usdValueA;
         });
+
+        console.log("[UserTokens] sorted", sorted);
 
         // Preload token icons
         preloadImages(sorted.map((t) => t.icon));

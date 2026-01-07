@@ -6,6 +6,13 @@ import BASE_ADDRESS_METADATA from "./tokenData/8453/address_to_metadata.json";
 
 const DEFILLAMA_BASE_URL = "https://coins.llama.fi/prices/current";
 
+// Type matching API response from /api/token-balance (no name/symbol/decimals)
+type TokenBalanceResponse = {
+  address: string;
+  totalBalance: string;
+  chainId: number;
+};
+
 // Metadata type that matches the JSON files (icon can be null)
 type TokenMetadataEntry = { name: string; ticker: string; decimals?: number; icon?: string | null };
 
@@ -159,7 +166,7 @@ export async function fetchWalletTokens(
       return result;
     }
 
-    const allTokens = data.result.result as TokenBalance[];
+    const allTokens = data.result.result as TokenBalanceResponse[];
     console.log("[Balance Check] Total tokens fetched:", allTokens.length);
 
     // Group tokens by chainId and enrich with metadata
@@ -169,22 +176,18 @@ export async function fetchWalletTokens(
 
       const config = NETWORK_CONFIG[network];
 
-      // Enrich tokens with empty names using local metadata
-      let enrichedToken = token;
-      if (token.name === "") {
-        const addressLower = token.address.toLowerCase();
-        const metadata = config.metadata[addressLower];
-        if (metadata) {
-          enrichedToken = {
-            ...token,
-            name: metadata.name || token.name,
-            symbol: metadata.ticker || token.symbol,
-            decimals: metadata.decimals ?? token.decimals,
-          };
-        }
-      }
+      // Always enrich since API doesn't return metadata
+      const addressLower = token.address.toLowerCase();
+      const metadata = config.metadata[addressLower];
 
-      result[network].push(enrichedToken);
+      const tokenWithMetadata: TokenBalance = {
+        ...token,
+        name: metadata?.name || "",
+        symbol: metadata?.ticker || "",
+        decimals: metadata?.decimals ?? 18,
+      };
+
+      result[network].push(tokenWithMetadata);
     }
 
     return result;
@@ -208,7 +211,7 @@ export async function fetchAllTokenPrices(
     [Network.BASE]: {},
   };
 
-  const BATCH_SIZE = 30;
+  const BATCH_SIZE = 100;
 
   // Process each chain
   const chainPromises = SUPPORTED_CHAINS.map(async (network) => {

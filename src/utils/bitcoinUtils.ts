@@ -15,6 +15,22 @@ export const validateP2WPKH = (
   }
 };
 
+export const validateP2TR = (
+  address: string,
+  network: bitcoin.Network = bitcoin.networks.bitcoin
+) => {
+  try {
+    const decoded = bitcoin.address.fromBech32(address);
+    // Taproot uses witness version 1 with a 32-byte program
+    // Mainnet/testnet: 62 characters (bc1p.../tb1p...)
+    // Regtest: 64 characters (bcrt1p...)
+    const expectedLength = network === bitcoin.networks.regtest ? 64 : 62;
+    return decoded.version === 1 && decoded.data.length === 32 && address.length === expectedLength;
+  } catch (error) {
+    return false;
+  }
+};
+
 export const validateP2SH = (
   address: string,
   network: bitcoin.Network = bitcoin.networks.bitcoin
@@ -41,14 +57,14 @@ export const validateP2PKH = (
 
 /* 
 Test cases:
-1Q6hWEbKDqg2rTQeNYGJBQJkMTyYHSWsVi => pass
-3ABE84ndJVq8DPikrHRaqn4GRgm65NRJEn => pass
-bc1q30vayz8nnq9rzq2km3ag0zplatts6vhq4m6gqc => pass
-bc1qzvgz7jp6aylxyy4q39gw3q0ydyd44xhyk35djf7xlkur37hzv73syy45f9 => fail
-bc1pqurpm7u6tu69e2859nhhv4r473uqp4zgn90d9d2p7kf4tkjsj39qstkfyd => fail
+1Q6hWEbKDqg2rTQeNYGJBQJkMTyYHSWsVi => pass (P2PKH)
+3ABE84ndJVq8DPikrHRaqn4GRgm65NRJEn => pass (P2SH)
+bc1q30vayz8nnq9rzq2km3ag0zplatts6vhq4m6gqc => pass (P2WPKH)
+bc1qzvgz7jp6aylxyy4q39gw3q0ydyd44xhyk35djf7xlkur37hzv73syy45f9 => fail (P2WSH - not supported)
+bc1pqurpm7u6tu69e2859nhhv4r473uqp4zgn90d9d2p7kf4tkjsj39qstkfyd => pass (P2TR/Taproot)
 */
 
-// the circuits accept P2WPKH, P2PKH, P2SH
+// Supported address types: P2WPKH, P2PKH, P2SH, P2TR (Taproot)
 export const validateBitcoinPayoutAddress = (
   address: string,
   network?: bitcoin.Network
@@ -72,11 +88,22 @@ export const validateBitcoinPayoutAddress = (
     }
 
     // address type => prefix
-    // p2wpkh => bc1 (mainnet), bcrt1 (regtest), tb1 (testnet)
-    // p2pkh => 1 (mainnet), m/n (testnet), similar for regtest
-    // p2sh => 3 (mainnet), 2 (testnet), similar for regtest
+    // p2wpkh => bc1q (mainnet), bcrt1q (regtest), tb1q (testnet)
+    // p2tr   => bc1p (mainnet), bcrt1p (regtest), tb1p (testnet)
+    // p2pkh  => 1 (mainnet), m/n (testnet), similar for regtest
+    // p2sh   => 3 (mainnet), 2 (testnet), similar for regtest
 
+    // Handle bech32/bech32m addresses (P2WPKH and P2TR)
     if (address.startsWith("bc1") || address.startsWith("bcrt1") || address.startsWith("tb1")) {
+      // Taproot addresses use bc1p/tb1p/bcrt1p prefix
+      if (
+        address.startsWith("bc1p") ||
+        address.startsWith("bcrt1p") ||
+        address.startsWith("tb1p")
+      ) {
+        return validateP2TR(address, detectedNetwork);
+      }
+      // SegWit v0 addresses use bc1q/tb1q/bcrt1q prefix
       return validateP2WPKH(address, detectedNetwork);
     } else if (address.startsWith("1") || address.startsWith("m") || address.startsWith("n")) {
       return validateP2PKH(address, detectedNetwork);
@@ -142,7 +169,17 @@ export const validateBitcoinPayoutAddressWithNetwork = (
     // Validate the address format
     let isValidFormat = false;
     if (address.startsWith("bc1") || address.startsWith("bcrt1") || address.startsWith("tb1")) {
-      isValidFormat = validateP2WPKH(address, detectedNetwork);
+      // Taproot addresses use bc1p/tb1p/bcrt1p prefix
+      if (
+        address.startsWith("bc1p") ||
+        address.startsWith("bcrt1p") ||
+        address.startsWith("tb1p")
+      ) {
+        isValidFormat = validateP2TR(address, detectedNetwork);
+      } else {
+        // SegWit v0 addresses use bc1q/tb1q/bcrt1q prefix
+        isValidFormat = validateP2WPKH(address, detectedNetwork);
+      }
     } else if (address.startsWith("1") || address.startsWith("m") || address.startsWith("n")) {
       isValidFormat = validateP2PKH(address, detectedNetwork);
     } else if (address.startsWith("3") || address.startsWith("2")) {
