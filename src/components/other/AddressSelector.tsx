@@ -10,7 +10,7 @@ const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite
 interface AddressSelectorProps {
   chainType: "EVM" | "BTC";
   selectedAddress: string | null;
-  onSelect: (address: string) => void;
+  onSelect: (address: string | null) => void;
   onPasteAddress?: () => void;
   showPasteOption?: boolean;
 }
@@ -54,6 +54,9 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   // Find the selected wallet
   const selectedWallet = filteredWallets.find((w) => w.address === selectedAddress);
 
+  // Determine if this is a pasted address (not from a connected wallet)
+  const isPastedAddress = selectedAddress && !selectedWallet;
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -76,12 +79,52 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     };
   }, [isOpen]);
 
-  // Auto-select first wallet if none selected
+  // Track previous wallet count to detect disconnections
+  const prevWalletCountRef = useRef(filteredWallets.length);
+  const prevSelectedAddressRef = useRef(selectedAddress);
+
+  // Track if this address was manually pasted (vs from connected wallet)
+  const wasPastedRef = useRef(false);
+
+  // Handle wallet selection and disconnection
   useEffect(() => {
+    const walletsDecreased = filteredWallets.length < prevWalletCountRef.current;
+    const addressChanged = selectedAddress !== prevSelectedAddressRef.current;
+
+    // Update refs
+    prevWalletCountRef.current = filteredWallets.length;
+    prevSelectedAddressRef.current = selectedAddress;
+
+    // Track if new address was pasted (address changed but not to a connected wallet)
+    if (addressChanged && selectedAddress) {
+      const isFromWallet = filteredWallets.some((w) => w.address === selectedAddress);
+      wasPastedRef.current = !isFromWallet;
+    } else if (!selectedAddress) {
+      wasPastedRef.current = false;
+    }
+
+    // If address was just changed externally, don't interfere
+    if (addressChanged) return;
+
+    // Auto-select first wallet if none selected and wallets available
     if (!selectedAddress && filteredWallets.length > 0) {
       onSelect(filteredWallets[0].address);
+      return;
     }
-  }, [filteredWallets, selectedAddress, onSelect]);
+
+    // Handle disconnection - only if wallets decreased and address is not manually pasted
+    if (walletsDecreased && selectedAddress && !wasPastedRef.current) {
+      const stillConnected = filteredWallets.some((w) => w.address === selectedAddress);
+      if (!stillConnected) {
+        // Wallet was disconnected - select first available or clear
+        if (filteredWallets.length > 0) {
+          onSelect(filteredWallets[0].address);
+        } else {
+          onSelect(null);
+        }
+      }
+    }
+  }, [filteredWallets.length, selectedAddress, onSelect, filteredWallets]);
 
   const handleConnectNewWallet = () => {
     setIsOpen(false);
@@ -120,7 +163,6 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
   // Determine what to show in the button
   const hasWallets = filteredWallets.length > 0;
-  const isPastedAddress = selectedAddress && !selectedWallet;
 
   return (
     <Box position="relative">
@@ -149,6 +191,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
               fontWeight="500"
               fontFamily="Aux"
               letterSpacing="-1px"
+              whiteSpace="nowrap"
             >
               {formatAddress(selectedWallet.address)}
             </Text>
@@ -162,6 +205,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
               fontWeight="500"
               fontFamily="Aux"
               letterSpacing="-1px"
+              whiteSpace="nowrap"
             >
               {formatAddress(selectedAddress!)}
             </Text>
@@ -173,6 +217,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             fontWeight="500"
             fontFamily="Aux"
             letterSpacing="-1px"
+            whiteSpace="nowrap"
           >
             Select address
           </Text>
@@ -200,8 +245,9 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             minW={`${dropdownPosition.width}px`}
             bg="#1a1a1a"
             borderRadius="12px"
+            overflow="hidden"
             border="1px solid #333"
-            py="6px"
+            py="0px"
             zIndex={2000}
             boxShadow="0 8px 32px rgba(0,0,0,0.4)"
           >
@@ -291,4 +337,3 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     </Box>
   );
 };
-

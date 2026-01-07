@@ -335,40 +335,41 @@ export const RatesSwapWidget = () => {
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
 
-  // Auto-select primary wallet address based on swap direction
+  // Note: Auto-selection is now handled by AddressSelector component
+  // This effect only runs once on mount to set initial primary wallet if available
+  const hasInitializedRef = useRef(false);
+
   useEffect(() => {
-    if (!primaryWallet) return;
+    if (hasInitializedRef.current || !primaryWallet) return;
+    hasInitializedRef.current = true;
 
     const walletChain = primaryWallet.chain?.toUpperCase();
     const isEvmWallet = walletChain === "EVM";
     const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
 
-    // For input address
-    if (isSwappingForBTC && isEvmWallet && !selectedInputAddress) {
-      // EVM → BTC: Auto-select EVM wallet for input
+    // For input address - only set on mount if matches swap direction
+    if (isSwappingForBTC && isEvmWallet) {
       setSelectedInputAddress(primaryWallet.address);
-    } else if (!isSwappingForBTC && isBtcWallet && !selectedInputAddress) {
-      // BTC → EVM: Auto-select BTC wallet for input
+    } else if (!isSwappingForBTC && isBtcWallet) {
       setSelectedInputAddress(primaryWallet.address);
     }
 
     // For output address (only for EVM → BTC direction, BTC wallet)
-    if (isSwappingForBTC && isBtcWallet && !selectedOutputAddress) {
+    if (isSwappingForBTC && isBtcWallet) {
       setSelectedOutputAddress(primaryWallet.address);
     }
-  }, [
-    primaryWallet,
-    isSwappingForBTC,
-    selectedInputAddress,
-    selectedOutputAddress,
-    setSelectedInputAddress,
-    setSelectedOutputAddress,
-  ]);
+  }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
 
-  // Clear addresses when swap direction changes
+  // Track previous swap direction to detect actual changes
+  const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
+
+  // Clear addresses when swap direction changes (not on mount)
   useEffect(() => {
-    setSelectedInputAddress(null);
-    setSelectedOutputAddress(null);
+    if (prevIsSwappingForBTCRef.current !== isSwappingForBTC) {
+      setSelectedInputAddress(null);
+      setSelectedOutputAddress(null);
+      prevIsSwappingForBTCRef.current = isSwappingForBTC;
+    }
   }, [isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
 
   // Define styles based on swap direction

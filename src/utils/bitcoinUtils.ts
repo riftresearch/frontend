@@ -76,17 +76,9 @@ export const validateBitcoinPayoutAddress = (
     // p2pkh => 1 (mainnet), m/n (testnet), similar for regtest
     // p2sh => 3 (mainnet), 2 (testnet), similar for regtest
 
-    if (
-      address.startsWith("bc1") ||
-      address.startsWith("bcrt1") ||
-      address.startsWith("tb1")
-    ) {
+    if (address.startsWith("bc1") || address.startsWith("bcrt1") || address.startsWith("tb1")) {
       return validateP2WPKH(address, detectedNetwork);
-    } else if (
-      address.startsWith("1") ||
-      address.startsWith("m") ||
-      address.startsWith("n")
-    ) {
+    } else if (address.startsWith("1") || address.startsWith("m") || address.startsWith("n")) {
       return validateP2PKH(address, detectedNetwork);
     } else if (address.startsWith("3") || address.startsWith("2")) {
       return validateP2SH(address, detectedNetwork);
@@ -149,17 +141,9 @@ export const validateBitcoinPayoutAddressWithNetwork = (
 
     // Validate the address format
     let isValidFormat = false;
-    if (
-      address.startsWith("bc1") ||
-      address.startsWith("bcrt1") ||
-      address.startsWith("tb1")
-    ) {
+    if (address.startsWith("bc1") || address.startsWith("bcrt1") || address.startsWith("tb1")) {
       isValidFormat = validateP2WPKH(address, detectedNetwork);
-    } else if (
-      address.startsWith("1") ||
-      address.startsWith("m") ||
-      address.startsWith("n")
-    ) {
+    } else if (address.startsWith("1") || address.startsWith("m") || address.startsWith("n")) {
       isValidFormat = validateP2PKH(address, detectedNetwork);
     } else if (address.startsWith("3") || address.startsWith("2")) {
       isValidFormat = validateP2SH(address, detectedNetwork);
@@ -189,13 +173,9 @@ export const validateBitcoinPayoutAddressWithNetwork = (
   }
 };
 
-export function convertLockingScriptToBitcoinAddress(
-  lockingScript: string
-): string {
+export function convertLockingScriptToBitcoinAddress(lockingScript: string): string {
   // Remove '0x' prefix if present
-  const script = lockingScript.startsWith("0x")
-    ? lockingScript.slice(2)
-    : lockingScript;
+  const script = lockingScript.startsWith("0x") ? lockingScript.slice(2) : lockingScript;
   const scriptBuffer = Buffer.from(script, "hex");
 
   try {
@@ -209,10 +189,7 @@ export function convertLockingScriptToBitcoinAddress(
       scriptBuffer[24] === bitcoin.opcodes.OP_CHECKSIG
     ) {
       const pubKeyHash = scriptBuffer.slice(3, 23);
-      return bitcoin.address.toBase58Check(
-        pubKeyHash,
-        bitcoin.networks.bitcoin.pubKeyHash
-      );
+      return bitcoin.address.toBase58Check(pubKeyHash, bitcoin.networks.bitcoin.pubKeyHash);
     }
 
     // P2SH
@@ -223,10 +200,7 @@ export function convertLockingScriptToBitcoinAddress(
       scriptBuffer[22] === bitcoin.opcodes.OP_EQUAL
     ) {
       const scriptHash = scriptBuffer.slice(2, 22);
-      return bitcoin.address.toBase58Check(
-        scriptHash,
-        bitcoin.networks.bitcoin.scriptHash
-      );
+      return bitcoin.address.toBase58Check(scriptHash, bitcoin.networks.bitcoin.scriptHash);
     }
 
     // P2WPKH
@@ -236,11 +210,7 @@ export function convertLockingScriptToBitcoinAddress(
       scriptBuffer[1] === 0x14
     ) {
       const witnessProgram = scriptBuffer.slice(2);
-      return bitcoin.address.toBech32(
-        witnessProgram,
-        0,
-        bitcoin.networks.bitcoin.bech32
-      );
+      return bitcoin.address.toBech32(witnessProgram, 0, bitcoin.networks.bitcoin.bech32);
     }
 
     // P2WSH
@@ -250,11 +220,7 @@ export function convertLockingScriptToBitcoinAddress(
       scriptBuffer[1] === 0x20
     ) {
       const witnessProgram = scriptBuffer.slice(2);
-      return bitcoin.address.toBech32(
-        witnessProgram,
-        0,
-        bitcoin.networks.bitcoin.bech32
-      );
+      return bitcoin.address.toBech32(witnessProgram, 0, bitcoin.networks.bitcoin.bech32);
     }
 
     // P2TR (Taproot)
@@ -264,11 +230,7 @@ export function convertLockingScriptToBitcoinAddress(
       scriptBuffer[1] === 0x20
     ) {
       const witnessProgram = scriptBuffer.slice(2);
-      return bitcoin.address.toBech32(
-        witnessProgram,
-        1,
-        bitcoin.networks.bitcoin.bech32
-      );
+      return bitcoin.address.toBech32(witnessProgram, 1, bitcoin.networks.bitcoin.bech32);
     }
 
     throw new Error("Unsupported locking script type");
@@ -285,11 +247,7 @@ export function convertLockingScriptToBitcoinAddress(
  * @param label - Optional label for the payment
  * @returns Bitcoin URI string
  */
-export function generateBitcoinURI(
-  address: string,
-  amount: number,
-  label?: string
-): string {
+export function generateBitcoinURI(address: string, amount: number, label?: string): string {
   let uri = `bitcoin:${address}`;
   const params = new URLSearchParams();
 
@@ -362,7 +320,7 @@ export function convertToBitcoinLockingScript(address: string): string {
         ]);
       }
 
-      // P2SH (check for mainnet, testnet, and regtest)
+      // P2SH (check for mainnet, testnet, and regtest) test
       else if (version === network.scriptHash) {
         script = bitcoin.script.compile([
           bitcoin.opcodes.OP_HASH160,

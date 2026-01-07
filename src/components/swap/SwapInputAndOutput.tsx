@@ -121,7 +121,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
   const [showFeeTooltip, setShowFeeTooltip] = useState(false);
-  const [showAddressTooltip, setShowAddressTooltip] = useState(false);
   const [showRefundAddressTooltip, setShowRefundAddressTooltip] = useState(false);
   const [showMaxTooltip, setShowMaxTooltip] = useState(false);
   const [showEVMWarningModal, setShowEVMWarningModal] = useState(false);
@@ -209,41 +208,55 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
 
-  // Auto-select primary wallet address based on swap direction
+  // Note: Auto-selection is now handled by AddressSelector component
+  // This effect only runs once on mount to set initial primary wallet if available
+  const hasInitializedRef = useRef(false);
+
   useEffect(() => {
-    if (!primaryWallet) return;
+    if (hasInitializedRef.current || !primaryWallet) return;
+    hasInitializedRef.current = true;
 
     const walletChain = primaryWallet.chain?.toUpperCase();
     const isEvmWallet = walletChain === "EVM";
     const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
 
-    // For input address
-    if (isSwappingForBTC && isEvmWallet && !selectedInputAddress) {
-      // EVM → BTC: Auto-select EVM wallet for input
+    // For input address - only set on mount if matches swap direction
+    if (isSwappingForBTC && isEvmWallet) {
       setSelectedInputAddress(primaryWallet.address);
-    } else if (!isSwappingForBTC && isBtcWallet && !selectedInputAddress) {
-      // BTC → EVM: Auto-select BTC wallet for input
+    } else if (!isSwappingForBTC && isBtcWallet) {
       setSelectedInputAddress(primaryWallet.address);
     }
 
     // For output address (only for EVM → BTC direction, BTC wallet)
-    if (isSwappingForBTC && isBtcWallet && !selectedOutputAddress) {
+    if (isSwappingForBTC && isBtcWallet) {
       setSelectedOutputAddress(primaryWallet.address);
     }
-  }, [
-    primaryWallet,
-    isSwappingForBTC,
-    selectedInputAddress,
-    selectedOutputAddress,
-    setSelectedInputAddress,
-    setSelectedOutputAddress,
-  ]);
+  }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
 
-  // Clear addresses when swap direction changes
+  // Track previous swap direction to detect actual changes
+  const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
+
+  // Clear addresses when swap direction changes (not on mount)
   useEffect(() => {
-    setSelectedInputAddress(null);
-    setSelectedOutputAddress(null);
+    if (prevIsSwappingForBTCRef.current !== isSwappingForBTC) {
+      setSelectedInputAddress(null);
+      setSelectedOutputAddress(null);
+      prevIsSwappingForBTCRef.current = isSwappingForBTC;
+    }
   }, [isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
+
+  // Sync selectedOutputAddress to payoutAddress when swapping for BTC
+  useEffect(() => {
+    if (isSwappingForBTC && selectedOutputAddress) {
+      setPayoutAddress(selectedOutputAddress);
+      // Also validate immediately to avoid timing issues
+      const validation = validatePayoutAddress(selectedOutputAddress, true);
+      setAddressValidation(validation);
+    } else if (isSwappingForBTC && !selectedOutputAddress) {
+      setPayoutAddress("");
+      setAddressValidation({ isValid: false });
+    }
+  }, [isSwappingForBTC, selectedOutputAddress, setPayoutAddress, setAddressValidation]);
 
   // Define the styles based on swap direction
   const inputStyle = isSwappingForBTC
@@ -2522,6 +2535,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             align="flex-end"
             justify="space-between"
             h="100%"
+            flexShrink={0}
           >
             {/* Address Selector at top */}
             <AddressSelector
@@ -2537,7 +2551,14 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
               onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
             />
             {/* Balance + MAX button at bottom */}
-            <Flex direction="row" justify="flex-end" align="center" gap="8px" h="21px">
+            <Flex
+              direction="row"
+              justify="flex-end"
+              align="center"
+              gap="8px"
+              h="21px"
+              whiteSpace="nowrap"
+            >
               {currentInputBalance && currentInputTicker && parseFloat(currentInputBalance) > 0 && (
                 <>
                   <Text
@@ -2547,6 +2568,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     fontWeight="normal"
                     fontFamily="Aux"
                     userSelect="none"
+                    whiteSpace="nowrap"
                   >
                     {currentInputBalance.slice(0, 8)} {currentInputTicker}
                   </Text>
@@ -2773,6 +2795,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             align="flex-end"
             justify="space-between"
             h="100%"
+            flexShrink={0}
           >
             {/* Address Selector at top */}
             {isSwappingForBTC ? (
@@ -2809,6 +2832,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                       fontWeight="500"
                       fontFamily="Aux"
                       letterSpacing="-1px"
+                      whiteSpace="nowrap"
                     >
                       {`${selectedOutputAddress.slice(0, 6)}...${selectedOutputAddress.slice(-4)}`}
                     </Text>
@@ -2820,6 +2844,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     fontWeight="500"
                     fontFamily="Aux"
                     letterSpacing="-1px"
+                    whiteSpace="nowrap"
                   >
                     Paste address
                   </Text>
@@ -2922,98 +2947,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             />
           </Flex>
         </Flex>
-
-        {/* Recipient Address - Animated (appears second) */}
-        {isSwappingForBTC && !hidePayoutAddress && (
-          <Flex
-            direction="column"
-            w="100%"
-            // mb="5px"
-            opacity={hasStartedTyping ? 1 : 0}
-            transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
-            transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-            transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
-            pointerEvents={hasStartedTyping ? "auto" : "none"}
-            overflow="visible"
-            maxHeight={hasStartedTyping ? "200px" : "0px"}
-          >
-            {/* Payout Recipient Address */}
-            <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
-              <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
-                Bitcoin Recipient Address
-              </Text>
-              <Flex pl="5px" mt="-2px">
-                <Tooltip
-                  show={showAddressTooltip}
-                  onMouseEnter={() => setShowAddressTooltip(true)}
-                  onMouseLeave={() => setShowAddressTooltip(false)}
-                  hoverText={
-                    <Text>Only P2WPKH, P2PKH, or P2SH Bitcoin addresses are supported.</Text>
-                  }
-                  iconWidth="12px"
-                />
-              </Flex>
-            </Flex>
-            <Flex
-              mt="-4px"
-              mb="10px"
-              px="10px"
-              bg={outputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
-              border={`2px solid ${outputStyle?.bg_color || "#78491F"}`}
-              w="100%"
-              h="60px"
-              borderRadius="16px"
-            >
-              <Flex direction="row" py="6px" px="8px" w="100%">
-                <Input
-                  value={payoutAddress}
-                  onChange={(e) => setPayoutAddress(e.target.value)}
-                  fontFamily="Aux"
-                  border="none"
-                  bg="transparent"
-                  outline="none"
-                  mt="3.5px"
-                  mr="15px"
-                  ml="-4px"
-                  p="0px"
-                  w={isMobile ? "100%" : "500px"}
-                  letterSpacing={isMobile ? "-2px" : "-5px"}
-                  color={colors.offWhite}
-                  _active={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  _focus={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  _selected={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  fontSize={isMobile ? "18px" : "28px"}
-                  placeholder="bc1q5d7rjq7g6rd2d..."
-                  _placeholder={{
-                    color: outputStyle?.light_text_color || "#856549",
-                  }}
-                  spellCheck={false}
-                />
-
-                {payoutAddress.length > 0 && (
-                  <Flex ml="0px">
-                    <BitcoinAddressValidation
-                      address={payoutAddress}
-                      validation={addressValidation}
-                    />
-                  </Flex>
-                )}
-              </Flex>
-            </Flex>
-          </Flex>
-        )}
 
         {/* Bitcoin Refund Address - For BTC -> cbBTC swaps */}
         {!isSwappingForBTC && !hidePayoutAddress && (
