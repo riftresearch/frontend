@@ -95,8 +95,6 @@ export const useStore = create<{
   clearQuotes: () => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
-  bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
-  setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) => void;
   payoutAddress: string;
   setPayoutAddress: (address: string) => void;
   addressValidation: { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string };
@@ -151,6 +149,8 @@ export const useStore = create<{
   setSelectedInputAddress: (address: string | null) => void;
   selectedOutputAddress: string | null;
   setSelectedOutputAddress: (address: string | null) => void;
+  skipAddressClearOnDirectionChange: boolean;
+  setSkipAddressClearOnDirectionChange: (value: boolean) => void;
 }>((set) => ({
   evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
   setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
@@ -203,9 +203,6 @@ export const useStore = create<{
   clearQuotes: () => set({ cowswapQuote: null, rfqQuote: null, quoteType: null }),
   slippageBips: 5,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
-  bitcoinDepositInfo: null,
-  setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) =>
-    set({ bitcoinDepositInfo: info }),
   payoutAddress: "",
   setPayoutAddress: (address: string) => set({ payoutAddress: address }),
   addressValidation: { isValid: false },
@@ -257,4 +254,7 @@ export const useStore = create<{
   setSelectedInputAddress: (address: string | null) => set({ selectedInputAddress: address }),
   selectedOutputAddress: null,
   setSelectedOutputAddress: (address: string | null) => set({ selectedOutputAddress: address }),
+  skipAddressClearOnDirectionChange: false,
+  setSkipAddressClearOnDirectionChange: (value: boolean) =>
+    set({ skipAddressClearOnDirectionChange: value }),
 }));

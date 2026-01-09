@@ -5,7 +5,6 @@ import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { RiftLogo } from "@/components/other/RiftLogo";
 import { TEEStatusFooter } from "@/components/other/TEEStatusFooter";
-import { UnifiedTransactionWidget } from "@/components/other/UnifiedTransactionWidget";
 import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import useWindowSize from "@/hooks/useWindowSize";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -19,7 +18,7 @@ import { FeedbackChat } from "@/components/other/FeedbackChat";
 export default function Home() {
   const { isTablet, isMobile, isWindowValid } = useWindowSize();
   const { isOtcServerDead } = useStore();
-  const { swapResponse, transactionConfirmed, bitcoinDepositInfo } = useStore();
+  const { swapResponse, transactionConfirmed } = useStore();
   const router = useRouter();
   const [isLocalhost, setIsLocalhost] = React.useState(false);
 
@@ -118,55 +117,39 @@ export default function Home() {
         >
           <Flex mt="15px"></Flex>
 
-          {/* Only show logo and subheader when NOT on Bitcoin deposit page */}
-          {!bitcoinDepositInfo && (
-            <>
-              <RiftLogo width={isTablet ? "120" : "390"} height={isTablet ? "30" : "70"} />
+          <RiftLogo width={isTablet ? "120" : "390"} height={isTablet ? "30" : "70"} />
 
-              <Flex
-                flexDir={"column"}
-                textAlign={"center"}
-                userSelect={"none"}
-                fontSize={isTablet ? "14px" : "15px"}
-                mt={"18px"}
-                fontFamily={FONT_FAMILIES.AUX_MONO}
-                color={"#c3c3c3"}
-                cursor={"default"}
-                fontWeight={"normal"}
-                gap={"0px"}
+          <Flex
+            flexDir={"column"}
+            textAlign={"center"}
+            userSelect={"none"}
+            fontSize={isTablet ? "14px" : "15px"}
+            mt={"18px"}
+            fontFamily={FONT_FAMILIES.AUX_MONO}
+            color={"#c3c3c3"}
+            cursor={"default"}
+            fontWeight={"normal"}
+            gap={"0px"}
+          >
+            <Text mt="15px" mb="25px">
+              The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
+              <Box
+                as="span"
+                onClick={() =>
+                  (window.location.href = "https://x.com/riftdex/status/1986909188778565772?s=20")
+                }
+                style={{
+                  textDecoration: "underline",
+                  cursor: "pointer !important",
+                }}
+                fontWeight={"bold"}
               >
-                <Text mt="15px" mb="25px">
-                  The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
-                  <Box
-                    as="span"
-                    onClick={() =>
-                      (window.location.href =
-                        "https://x.com/riftdex/status/1986909188778565772?s=20")
-                    }
-                    style={{
-                      textDecoration: "underline",
-                      cursor: "pointer !important",
-                    }}
-                    fontWeight={"bold"}
-                  >
-                    how it works
-                  </Box>
-                </Text>
-              </Flex>
-            </>
-          )}
+                how it works
+              </Box>
+            </Text>
+          </Flex>
 
-          {/* Show Unified Transaction Widget when deposit info is available, otherwise show Swap Widget */}
-          {bitcoinDepositInfo ? (
-            <UnifiedTransactionWidget
-              bitcoinAddress={bitcoinDepositInfo.address}
-              bitcoinAmount={bitcoinDepositInfo.amount}
-              bitcoinUri={bitcoinDepositInfo.uri}
-              bitcoinDepositAddress={bitcoinDepositInfo.address}
-            />
-          ) : (
-            <SwapWidget />
-          )}
+          <SwapWidget />
         </Flex>
         {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
         process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (

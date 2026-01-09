@@ -9,7 +9,6 @@ import { useSyncChainIdToStore } from "@/hooks/useSyncChainIdToStore";
 import { useSwapStatus } from "@/hooks/useSwapStatus";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { useStore } from "@/utils/store";
-import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
 import { hasData } from "@/utils/riftApiClient";
@@ -101,15 +100,31 @@ export default function SwapPage() {
     isErrorSwapStatus,
   ]);
 
+  // Check if this is a Bitcoin deposit (BTC -> cbBTC swap) for countdown logic
+  const isBitcoinDepositSwap = swapStatusInfo?.quote?.from.currency.chain === "bitcoin";
+
   // Set countdown only on initial load for step 1 or step 2, otherwise set to 0 to show loading dots
+  // Skip countdown entirely for Bitcoin deposits since they take ~20 minutes (not 100 seconds like EVM)
   React.useEffect(() => {
     // Only run on initial load (when previousState is still initial)
     if (previousState === "0-not-started") {
+      // For Bitcoin deposits, always skip countdown and show loading directly
+      if (isBitcoinDepositSwap) {
+        setCountdownValue(0);
+        setPreviousState(depositFlowState);
+        return;
+      }
+
+      // Don't start countdown until we know the swap type (wait for swapStatusInfo to load)
+      if (swapStatusInfo === undefined) {
+        return;
+      }
+
       if (
         depositFlowState === "1-WaitingUserDepositInitiated" ||
         depositFlowState === "2-WaitingUserDepositConfirmed"
       ) {
-        // Start timer on step 1 or step 2
+        // Start timer on step 1 or step 2 (EVM deposits only)
         setCountdownValue(99);
       } else if (depositFlowState !== "0-not-started") {
         // On any other step (3, 4, 5), show loading dots (countdown = 0)
@@ -117,7 +132,7 @@ export default function SwapPage() {
       }
       setPreviousState(depositFlowState);
     }
-  }, [depositFlowState, previousState, setCountdownValue]);
+  }, [depositFlowState, previousState, setCountdownValue, isBitcoinDepositSwap, swapStatusInfo]);
 
   // Reset transaction confirmed state when going back to not-started
   React.useEffect(() => {
@@ -254,17 +269,6 @@ export default function SwapPage() {
   // Check if this is a Bitcoin deposit (BTC -> cbBTC swap)
   const isBitcoinDeposit = swapStatusInfo?.quote?.from.currency.chain === "bitcoin";
   const bitcoinDepositAddress = swapStatusInfo?.deposit_vault_address;
-  const bitcoinExpectedAmount = swapStatusInfo?.quote?.from.amount;
-  const bitcoinDecimals = swapStatusInfo?.quote?.from.currency.decimals || 8;
-
-  // Generate Bitcoin URI and amount for QR code
-  let bitcoinUri = "";
-  let bitcoinAmount = 0;
-  if (isBitcoinDeposit && bitcoinDepositAddress && bitcoinExpectedAmount) {
-    const amount = BigInt(bitcoinExpectedAmount);
-    bitcoinAmount = Number(amount) / Math.pow(10, bitcoinDecimals);
-    bitcoinUri = generateBitcoinURI(bitcoinDepositAddress, bitcoinAmount, "Rift Swap");
-  }
 
   return (
     <>
@@ -283,8 +287,6 @@ export default function SwapPage() {
           <UnifiedTransactionWidget
             swapId={currentSwapId}
             bitcoinAddress={isBitcoinDeposit ? bitcoinDepositAddress : undefined}
-            bitcoinAmount={isBitcoinDeposit ? bitcoinAmount : undefined}
-            bitcoinUri={isBitcoinDeposit ? bitcoinUri : undefined}
             bitcoinDepositTx={swapStatusInfo?.user_deposit_status?.tx_hash}
           />
         </Flex>

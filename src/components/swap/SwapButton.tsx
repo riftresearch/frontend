@@ -11,7 +11,6 @@ import {
 import { colors } from "@/utils/colors";
 import { GLOBAL_CONFIG, riftApiClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
 import { QuoteResponse } from "@/utils/riftApiClient";
-import { generateBitcoinURI } from "@/utils/bitcoinUtils";
 import { useStore, CowswapOrderStatus } from "@/utils/store";
 import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
@@ -21,6 +20,7 @@ import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
 import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 import { SupportedChainId } from "@cowprotocol/cow-sdk";
+import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -34,6 +34,14 @@ export const SwapButton = () => {
 
   // CowSwap client
   const cowswapClient = useCowSwapClient();
+
+  // Bitcoin transaction hook for BTC->cbBTC auto-send
+  const {
+    sendBitcoin,
+    transactionState: btcTransactionState,
+    isLoading: isBtcTxLoading,
+    error: btcTxError,
+  } = useBitcoinTransaction();
 
   // Local state
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
@@ -83,8 +91,7 @@ export const SwapButton = () => {
     addressValidation,
     btcRefundAddress,
     btcRefundAddressValidation,
-    setBitcoinDepositInfo,
-    bitcoinDepositInfo,
+    selectedInputAddress,
     approvalState,
     setApprovalState,
     isOtcServerDead,
@@ -178,7 +185,12 @@ export const SwapButton = () => {
 
   // Button loading state combines pending transaction, approval, and confirmation waiting
   const isButtonLoading =
-    isPending || isSendTxPending || isConfirming || isApprovingToken || isApprovalConfirming;
+    isPending ||
+    isSendTxPending ||
+    isConfirming ||
+    isApprovingToken ||
+    isApprovalConfirming ||
+    isBtcTxLoading;
 
   // Check if all required fields are filled
   const allFieldsFilled =
@@ -547,7 +559,7 @@ export const SwapButton = () => {
     erc20Price,
   ]);
 
-  // Handle BTC->cbBTC swap using OTC
+  // Handle BTC->cbBTC swap using OTC with auto-send
   const executeBTCtoCBBTCSwap = useCallback(async () => {
     if (!rfqQuote || !userEvmAccountAddress) {
       setRefetchQuote(true);
@@ -581,25 +593,86 @@ export const SwapButton = () => {
       // Store swap response in state
       setSwapResponse(otcSwap);
 
-      // Step 2: Generate Bitcoin URI and show QR code
-      const amount = BigInt(otcSwap.quote.from.amount);
-      const decimals = otcSwap.quote.from.currency.decimals;
-      const amountInBTC = Number(amount) / Math.pow(10, decimals);
-      const bitcoinUri = generateBitcoinURI(
-        otcSwap.deposit_vault_address,
-        amountInBTC,
-        "Rift Swap"
-      );
+      // Step 2: Auto-send Bitcoin to the deposit address
+      const amountSats = Number(BigInt(otcSwap.quote.from.amount));
+      const depositAddress = otcSwap.deposit_vault_address;
 
-      setBitcoinDepositInfo({
-        address: otcSwap.deposit_vault_address,
-        amount: amountInBTC,
-        uri: bitcoinUri,
-      });
+      // Get the user's Bitcoin address from the selected input address
+      if (!selectedInputAddress) {
+        throw new Error("No Bitcoin address selected. Please select a Bitcoin wallet.");
+      }
 
-      // Step 3: Redirect to swap tracking page
-      console.log("Redirecting to swap page with ID:", otcSwap.id);
-      router.push(`/swap/${otcSwap.id}`);
+      console.log("Auto-sending BTC to deposit address...");
+      console.log("  User BTC address:", selectedInputAddress);
+      console.log("  Deposit address:", depositAddress);
+      console.log("  Amount (sats):", amountSats);
+
+      try {
+        const txid = await sendBitcoin(selectedInputAddress, depositAddress, amountSats);
+        console.log("Bitcoin transaction broadcast successfully!");
+        console.log("  Transaction ID:", txid);
+
+        toastSuccess({
+          title: "Bitcoin Sent",
+          description: "Your Bitcoin has been sent. Tracking your swap...",
+        });
+
+        // Step 3: Redirect to swap tracking page
+        console.log("Redirecting to swap page with ID:", otcSwap.id);
+        router.push(`/swap/${otcSwap.id}`);
+      } catch (btcError) {
+        // Handle Bitcoin transaction errors specifically
+        console.error("Bitcoin transaction failed:", btcError);
+
+        const errorMessage = btcError instanceof Error ? btcError.message : String(btcError);
+
+        // Check for user rejection
+        if (
+          errorMessage.toLowerCase().includes("rejected") ||
+          errorMessage.toLowerCase().includes("denied") ||
+          errorMessage.toLowerCase().includes("cancelled") ||
+          errorMessage.toLowerCase().includes("canceled")
+        ) {
+          toastInfo({
+            title: "Transaction Cancelled",
+            description: "You cancelled the Bitcoin transaction. You can try again.",
+            customStyle: {
+              background: colors.assetTag.btc.background,
+            },
+          });
+        } else if (errorMessage.toLowerCase().includes("insufficient")) {
+          // Parse the error message to extract sats values
+          // Format: "Insufficient balance. Required: X sats, Available: Y sats"
+          const requiredMatch = errorMessage.match(/Required:\s*([\d,]+)\s*sats/i);
+          const availableMatch = errorMessage.match(/Available:\s*([\d,]+)\s*sats/i);
+
+          const requiredSats = requiredMatch ? parseInt(requiredMatch[1].replace(/,/g, "")) : null;
+          const availableSats = availableMatch
+            ? parseInt(availableMatch[1].replace(/,/g, ""))
+            : null;
+
+          let description = "You don't have enough Bitcoin to complete this swap.";
+          if (requiredSats !== null && availableSats !== null) {
+            const requiredBtc = (requiredSats / 100_000_000).toFixed(8);
+            const availableBtc = (availableSats / 100_000_000).toFixed(8);
+            description = `Required: ${requiredBtc} BTC (${requiredSats.toLocaleString()} sats)\nAvailable: ${availableBtc} BTC (${availableSats.toLocaleString()} sats)`;
+          }
+
+          toastError(btcError, {
+            title: "Insufficient Balance",
+            description,
+          });
+        } else {
+          toastError(btcError, {
+            title: "Transaction Failed",
+            description: "Failed to send Bitcoin. Please try again.",
+          });
+        }
+
+        // Reset button state but keep swap response so user can retry
+        setSwapButtonPressed(false);
+        return;
+      }
     } catch (error) {
       console.error("BTC->cbBTC swap failed:", error);
       setSwapResponse(null);
@@ -610,10 +683,10 @@ export const SwapButton = () => {
     userEvmAccountAddress,
     btcRefundAddress,
     btcRefundAddressValidation.isValid,
-    selectedInputToken,
-    payoutAddress,
+    selectedInputAddress,
     setSwapResponse,
-    setBitcoinDepositInfo,
+    sendBitcoin,
+    router,
   ]);
 
   // Main swap handler - routes to appropriate swap function
@@ -668,7 +741,18 @@ export const SwapButton = () => {
       return;
     }
 
-    if (!isWalletConnected) {
+    // For EVM->BTC swaps, check EVM wallet is connected
+    if (isSwappingForBTC && !isWalletConnected) {
+      setShowAuthFlow(true);
+      return;
+    }
+
+    // For BTC->EVM swaps, check Bitcoin wallet is connected
+    if (!isSwappingForBTC && !selectedInputAddress) {
+      toastInfo({
+        title: "Connect Bitcoin Wallet",
+        description: "Please connect a Bitcoin wallet to send BTC",
+      });
       setShowAuthFlow(true);
       return;
     }
@@ -714,6 +798,7 @@ export const SwapButton = () => {
     addressValidation,
     isSwappingForBTC,
     isWalletConnected,
+    selectedInputAddress,
     displayedInputAmount,
     outputAmount,
     isNativeETH,
@@ -1049,6 +1134,29 @@ export const SwapButton = () => {
     if (cowswapOrderStatus === CowswapOrderStatus.SIGNING) {
       return {
         text: "Signing Order...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    // Bitcoin transaction states (BTC->cbBTC swaps)
+    if (btcTransactionState === "preparing") {
+      return {
+        text: "Preparing...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+    if (btcTransactionState === "signing") {
+      return {
+        text: "Sign in Wallet...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+    if (btcTransactionState === "broadcasting") {
+      return {
+        text: "Sending BTC...",
         handler: undefined,
         showSpinner: true,
       };

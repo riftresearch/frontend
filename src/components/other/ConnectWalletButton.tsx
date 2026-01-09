@@ -25,6 +25,23 @@ import {
 // Dynamic's icon sprite URL
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
 
+// Cookie name for tracking if wallet panel has been shown
+const WALLET_PANEL_SHOWN_COOKIE = "wallet_panel_shown";
+
+// Check if panel has been shown before
+const hasShownPanel = (): boolean => {
+  if (typeof document === "undefined") return true;
+  return document.cookie.includes(`${WALLET_PANEL_SHOWN_COOKIE}=true`);
+};
+
+// Set cookie when panel is shown
+const markPanelShown = (): void => {
+  if (typeof document === "undefined") return;
+  // Set cookie with 1 year expiry
+  const maxAge = 60 * 60 * 24 * 365;
+  document.cookie = `${WALLET_PANEL_SHOWN_COOKIE}=true; path=/; max-age=${maxAge}; SameSite=Strict`;
+};
+
 export const ConnectWalletButton: React.FC = () => {
   const { address: wagmiAddress, isConnected: isWagmiConnected } = useAccount();
   const { setUserTokensForChain, setSearchResults, selectedInputToken, setSelectedInputToken } =
@@ -36,6 +53,17 @@ export const ConnectWalletButton: React.FC = () => {
 
   // Check if ANY wallet is connected (EVM or Bitcoin)
   const isConnected = !!primaryWallet;
+
+  // Auto-open panel on first wallet connection
+  const prevIsConnectedRef = React.useRef(false);
+  useEffect(() => {
+    // Only trigger when going from disconnected to connected
+    if (isConnected && !prevIsConnectedRef.current && !hasShownPanel()) {
+      setIsPanelOpen(true);
+      markPanelShown();
+    }
+    prevIsConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Find any EVM wallet from Dynamic's connected wallets
   const evmWallet = userWallets.find(
@@ -265,22 +293,24 @@ export const ConnectWalletButton: React.FC = () => {
         >
           {/* Wallet Icons Stack */}
           <Flex>
-            {userWallets.slice(0, 2).map((wallet, idx) => (
+            {userWallets.slice(0, 3).map((wallet, idx) => (
               <Box
                 key={wallet.id}
                 w={isMobile ? "18px" : "22px"}
                 h={isMobile ? "18px" : "22px"}
-                borderRadius="full"
-                ml={idx > 0 ? "-8px" : "0"}
-                border={`2px solid ${colors.swapBgColor}`}
+                borderRadius="4px"
+                ml={idx > 0 ? "-6px" : "0"}
+                border={`2px solid #101010`}
                 bg={colors.offBlackLighter}
                 overflow="hidden"
+                zIndex={3 - idx}
               >
                 <Image
                   src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
                   alt="wallet"
                   w="100%"
                   h="100%"
+                  objectFit="cover"
                 />
               </Box>
             ))}

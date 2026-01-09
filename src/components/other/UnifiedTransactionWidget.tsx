@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Text, Flex, Image } from "@chakra-ui/react";
-import { QRCodeSVG } from "qrcode.react";
 import { LuCopy } from "react-icons/lu";
 import { FiExternalLink } from "react-icons/fi";
 import { CountdownTimer } from "./CountdownTimer";
@@ -31,19 +30,13 @@ interface UnifiedTransactionWidgetProps {
   swapId?: string;
   // Bitcoin-specific props (optional, only for BTC->EVM swaps)
   bitcoinAddress?: string;
-  bitcoinAmount?: number;
-  bitcoinUri?: string;
   bitcoinDepositTx?: string;
-  bitcoinDepositAddress?: string;
 }
 
 export function UnifiedTransactionWidget({
   swapId,
   bitcoinAddress,
-  bitcoinAmount,
-  bitcoinUri,
   bitcoinDepositTx,
-  bitcoinDepositAddress,
 }: UnifiedTransactionWidgetProps) {
   const { isMobile } = useWindowSize();
   const {
@@ -115,7 +108,6 @@ export function UnifiedTransactionWidget({
 
   // Track BTC confirmations
   const [btcConfirmations, setBtcConfirmations] = React.useState<number>(0);
-  const [qrCodeMode, setQrCodeMode] = React.useState<"with-amount" | "address-only">("with-amount");
 
   // Set audio volume on mount
   useEffect(() => {
@@ -356,9 +348,7 @@ export function UnifiedTransactionWidget({
     swapStatusInfo?.quote?.from.amount
       ? parseInt(swapStatusInfo.quote.from.amount) /
           Math.pow(10, swapStatusInfo.quote.from.currency.decimals)
-      : swapType === "bitcoin-deposit"
-        ? bitcoinAmount
-        : undefined,
+      : undefined,
     swapStatusInfo?.quote?.from.currency.decimals || (swapType === "bitcoin-deposit" ? 8 : 18)
   );
 
@@ -1253,20 +1243,19 @@ export function UnifiedTransactionWidget({
   return (
     <Flex direction="column" alignItems="center" w="100%">
       {/* Swap Details Pill - mobile: above widget, desktop: inside widget */}
-      {!(swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress && bitcoinUri) &&
-        isMobile && (
-          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
-            <SwapDetailsPill
-              width="100%"
-              inputAmount={inputAmount}
-              inputAsset={inputAsset}
-              inputAssetIconUrl={inputAssetIconUrl}
-              outputAmount={outputAmount}
-              outputAsset={outputAsset}
-              isMobile={isMobile}
-            />
-          </Box>
-        )}
+      {isMobile && (
+        <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+          <SwapDetailsPill
+            width="100%"
+            inputAmount={inputAmount}
+            inputAsset={inputAsset}
+            inputAssetIconUrl={inputAssetIconUrl}
+            outputAmount={outputAmount}
+            outputAsset={outputAsset}
+            isMobile={isMobile}
+          />
+        </Box>
+      )}
 
       <Box
         w={isMobile ? "100%" : "810px"}
@@ -1325,25 +1314,19 @@ export function UnifiedTransactionWidget({
             WebkitMaskComposite: "xor",
           }}
         >
-          {/* Swap Details Pill - hide when showing Bitcoin QR code, show only on desktop (mobile version is above widget) */}
-          {!(
-            swapType === "bitcoin-deposit" &&
-            validStepIndex === 0 &&
-            bitcoinAddress &&
-            bitcoinUri
-          ) &&
-            !isMobile && (
-              <Box position="absolute" top="15px" zIndex={2}>
-                <SwapDetailsPill
-                  inputAmount={inputAmount}
-                  inputAsset={inputAsset}
-                  inputAssetIconUrl={inputAssetIconUrl}
-                  outputAmount={outputAmount}
-                  outputAsset={outputAsset}
-                  isMobile={isMobile}
-                />
-              </Box>
-            )}
+          {/* Swap Details Pill - show only on desktop (mobile version is above widget) */}
+          {!isMobile && (
+            <Box position="absolute" top="15px" zIndex={2}>
+              <SwapDetailsPill
+                inputAmount={inputAmount}
+                inputAsset={inputAsset}
+                inputAssetIconUrl={inputAssetIconUrl}
+                outputAmount={outputAmount}
+                outputAsset={outputAsset}
+                isMobile={isMobile}
+              />
+            </Box>
+          )}
 
           {/* Corner decorations */}
           <img
@@ -1396,186 +1379,60 @@ export function UnifiedTransactionWidget({
           />
 
           {/* Conditional Top Half Content */}
-          {swapType === "bitcoin-deposit" &&
-          validStepIndex === 0 &&
-          bitcoinAddress &&
-          bitcoinUri ? (
-            // Bitcoin QR Code View
+          {swapType === "bitcoin-deposit" && validStepIndex === 0 ? (
+            // Bitcoin deposit waiting for confirmation
             <Flex
-              direction={isMobile ? "column" : "row"}
-              align="center"
-              justify="center"
-              gap={isMobile ? "20px" : "40px"}
+              direction="column"
+              alignItems="center"
+              justifyContent="center"
+              marginTop={isMobile ? "20px" : "100px"}
+              gap="24px"
               zIndex={1}
-              px={isMobile ? "50px" : "100px"}
             >
-              {!isMobile && (
-                <Flex direction="column" align="center" gap="12px">
-                  <Flex
-                    py="10px"
-                    px="12px"
-                    borderRadius="12px"
-                    bg="white"
-                    boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-                    justify="center"
-                    align="center"
-                    flexShrink={0}
-                  >
-                    <QRCodeSVG
-                      value={qrCodeMode === "with-amount" ? bitcoinUri : bitcoinAddress}
-                      size={160}
-                    />
-                  </Flex>
-
-                  {/* QR Code Mode Toggle */}
-                  <Flex
-                    bg="rgba(255, 255, 255, 0.05)"
-                    borderRadius="11px"
-                    padding="3px"
-                    gap="3px"
-                    border="1px solid rgba(255, 255, 255, 0.1)"
-                  >
-                    <Box
-                      as="button"
-                      onClick={() => setQrCodeMode("with-amount")}
-                      px="10px"
-                      py="4px"
-                      borderRadius="8px"
-                      bg={
-                        qrCodeMode === "with-amount" ? "rgba(255, 255, 255, 0.15)" : "transparent"
-                      }
-                      color={
-                        qrCodeMode === "with-amount" ? colors.offWhite : "rgba(255, 255, 255, 0.5)"
-                      }
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      fontSize="9px"
-                      letterSpacing="0.3px"
-                      cursor="pointer"
-                      transition="all 0.2s"
-                      _hover={{
-                        bg:
-                          qrCodeMode === "with-amount"
-                            ? "rgba(255, 255, 255, 0.15)"
-                            : "rgba(255, 255, 255, 0.08)",
-                      }}
-                    >
-                      WITH AMOUNT
-                    </Box>
-                    <Box
-                      as="button"
-                      onClick={() => setQrCodeMode("address-only")}
-                      px="11px"
-                      py="4px"
-                      borderRadius="8px"
-                      bg={
-                        qrCodeMode === "address-only" ? "rgba(255, 255, 255, 0.15)" : "transparent"
-                      }
-                      color={
-                        qrCodeMode === "address-only" ? colors.offWhite : "rgba(255, 255, 255, 0.5)"
-                      }
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      fontSize="9px"
-                      letterSpacing="0.3px"
-                      cursor="pointer"
-                      transition="all 0.2s"
-                      _hover={{
-                        bg:
-                          qrCodeMode === "address-only"
-                            ? "rgba(255, 255, 255, 0.15)"
-                            : "rgba(255, 255, 255, 0.08)",
-                      }}
-                    >
-                      ADDRESS
-                    </Box>
-                  </Flex>
-                </Flex>
-              )}
-
-              <Flex
-                direction="column"
-                gap={isMobile ? "16px" : "24px"}
-                flex="1"
-                maxW={isMobile ? "92%" : "500px"}
+              <motion.div
+                key="waiting"
+                initial={{ y: -30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                }}
               >
-                <Flex direction="column" w="100%">
-                  <Text
-                    fontSize={isMobile ? "10px" : "11px"}
-                    color="rgba(255,255,255,0.5)"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    letterSpacing="1px"
-                    mb="8px"
-                  >
-                    BITCOIN ADDRESS
-                  </Text>
-                  <Flex
-                    alignItems="flex-end"
-                    gap="12px"
-                    position="relative"
-                    role="group"
-                    cursor="pointer"
-                    onClick={() => copyToClipboard(bitcoinAddress, "Bitcoin Address")}
-                  >
-                    <Text
-                      color={colors.offWhite}
-                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                      fontSize={isMobile ? "18px" : "26px"}
-                      letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                      fontWeight="500"
-                      flex="1"
-                      lineHeight="1.3"
-                      wordBreak="break-all"
-                    >
-                      {bitcoinAddress}
-                    </Text>
-                    <Box
-                      opacity={0.6}
-                      _groupHover={{ opacity: 1 }}
-                      transition="opacity 0.2s"
-                      mb="6px"
-                    >
-                      <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
-                    </Box>
-                  </Flex>
-                </Flex>
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{
+                      y: [0, -10, 0],
+                      opacity: [0.4, 1, 0.4],
+                    }}
+                    transition={{
+                      duration: 0.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: i * 0.2,
+                    }}
+                    style={{
+                      width: isMobile ? "16.8px" : "18px",
+                      height: isMobile ? "16.8px" : "18px",
+                      borderRadius: "50%",
+                      backgroundColor: "rgba(255, 143, 40, 0.8)",
+                    }}
+                  />
+                ))}
+              </motion.div>
 
-                {bitcoinAmount !== undefined && (
-                  <Flex direction="column" w="100%">
-                    <Text
-                      fontSize={isMobile ? "10px" : "11px"}
-                      color="rgba(255,255,255,0.5)"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      letterSpacing="1px"
-                      mb="8px"
-                    >
-                      DEPOSIT AMOUNT
-                    </Text>
-                    <Flex
-                      alignItems="center"
-                      gap="12px"
-                      position="relative"
-                      role="group"
-                      cursor="pointer"
-                      onClick={() => copyToClipboard(bitcoinAmount.toFixed(8), "Bitcoin Amount")}
-                    >
-                      <Text
-                        color={colors.offWhite}
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        fontSize={isMobile ? "18px" : "26px"}
-                        letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                        fontWeight="500"
-                      >
-                        {bitcoinAmount.toFixed(8)}
-                      </Text>
-                      <Box opacity={0.6} _groupHover={{ opacity: 1 }} transition="opacity 0.2s">
-                        <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
-                      </Box>
-                      <Box transform="scale(0.7)" transformOrigin="left center">
-                        <WebAssetTag asset="BTC" />
-                      </Box>
-                    </Flex>
-                  </Flex>
-                )}
-              </Flex>
+              <Text
+                color="rgba(255, 255, 255, 0.7)"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                fontSize={isMobile ? "13px" : "14px"}
+                letterSpacing="-0.5px"
+                textAlign="center"
+              >
+                Waiting for Bitcoin transaction...
+              </Text>
             </Flex>
           ) : swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx ? (
             // Bitcoin deposit in progress - show loading or checkmark

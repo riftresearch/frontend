@@ -53,12 +53,6 @@ export const Navbar = ({}) => {
       setTransactionConfirmed(false);
     }
 
-    // If navigating to "/" (swap page), clear Bitcoin deposit info
-    if (route === "/") {
-      const { setBitcoinDepositInfo } = useStore.getState();
-      setBitcoinDepositInfo(null);
-    }
-
     router.push(route);
   };
 

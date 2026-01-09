@@ -1,8 +1,7 @@
 import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useAccount } from "wagmi";
-import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { FiEdit3, FiChevronDown } from "react-icons/fi";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useCowSwapContext } from "@/components/providers/CowSwapProvider";
@@ -24,13 +23,8 @@ import { PasteAddressModal } from "@/components/other/PasteAddressModal";
 import { InfoSVG } from "../other/SVGs";
 import { Tooltip } from "@/components/other/Tooltip";
 import { FONT_FAMILIES } from "@/utils/font";
-import BitcoinAddressValidation from "../other/BitcoinAddressValidation";
 import { useStore } from "@/utils/store";
 import { TokenData, ApprovalState } from "@/utils/types";
-import {
-  EVMAccountWarningModal,
-  hasAcknowledgedEVMWarning,
-} from "@/components/other/EVMAccountWarningModal";
 import { QuoteResponse } from "@/utils/riftApiClient";
 import {
   getERC20ToBTCQuote,
@@ -53,6 +47,7 @@ import { useMaxLiquidity } from "@/hooks/useLiquidity";
 import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { fetchTokenPrice } from "@/utils/userTokensClient";
+import { useBitcoinBalance } from "@/hooks/useBitcoinBalance";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -121,9 +116,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
   const [showFeeTooltip, setShowFeeTooltip] = useState(false);
-  const [showRefundAddressTooltip, setShowRefundAddressTooltip] = useState(false);
   const [showMaxTooltip, setShowMaxTooltip] = useState(false);
-  const [showEVMWarningModal, setShowEVMWarningModal] = useState(false);
   const [isAtAdjustedMax, setIsAtAdjustedMax] = useState(false);
   const getQuoteForInputRef = useRef(true);
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
@@ -202,15 +195,23 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setSelectedInputAddress,
     selectedOutputAddress,
     setSelectedOutputAddress,
+    skipAddressClearOnDirectionChange,
+    setSkipAddressClearOnDirectionChange,
   } = useStore();
 
   // State for paste address modal
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
 
+  // Fetch Bitcoin balance for BTC input (only when not swapping for BTC, i.e., BTC -> EVM)
+  const btcInputAddress = !isSwappingForBTC ? selectedInputAddress : null;
+  const { balanceBtc: btcInputBalanceBtc, isLoading: isBtcBalanceLoading } =
+    useBitcoinBalance(btcInputAddress);
+
   // Note: Auto-selection is now handled by AddressSelector component
   // This effect only runs once on mount to set initial primary wallet if available
   const hasInitializedRef = useRef(false);
+  const userWallets = useUserWallets();
 
   useEffect(() => {
     if (hasInitializedRef.current || !primaryWallet) return;
@@ -227,23 +228,87 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       setSelectedInputAddress(primaryWallet.address);
     }
 
-    // For output address (only for EVM → BTC direction, BTC wallet)
+    // For output address
     if (isSwappingForBTC && isBtcWallet) {
+      // EVM → BTC: Select BTC wallet for output
+      setSelectedOutputAddress(primaryWallet.address);
+    } else if (!isSwappingForBTC && isEvmWallet) {
+      // BTC → EVM: Select EVM wallet for output
       setSelectedOutputAddress(primaryWallet.address);
     }
   }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
+
+  // Sync input address with primary wallet when user selects a different wallet in the panel
+  // This runs after mount when the primary wallet changes
+  const prevPrimaryWalletRef = useRef<string | null>(primaryWallet?.address || null);
+  useEffect(() => {
+    if (!primaryWallet) return;
+
+    // Skip if primary wallet hasn't changed
+    if (prevPrimaryWalletRef.current === primaryWallet.address) return;
+    prevPrimaryWalletRef.current = primaryWallet.address;
+
+    const walletChain = primaryWallet.chain?.toUpperCase();
+    const isEvmWallet = walletChain === "EVM";
+    const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
+
+    // Update input address if wallet type matches swap direction
+    if (isSwappingForBTC && isEvmWallet) {
+      // EVM → BTC: Update input to the selected EVM wallet
+      setSelectedInputAddress(primaryWallet.address);
+    } else if (!isSwappingForBTC && isBtcWallet) {
+      // BTC → EVM: Update input to the selected BTC wallet
+      setSelectedInputAddress(primaryWallet.address);
+    }
+  }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress]);
+
+  // Auto-select output address when swap direction changes
+  useEffect(() => {
+    // Skip if addresses are already set (user selected them)
+    if (selectedOutputAddress) return;
+
+    // Find appropriate wallet for output based on direction
+    if (isSwappingForBTC) {
+      // EVM → BTC: Find a BTC wallet for output
+      const btcWallet = userWallets.find((w) => {
+        const chain = w.chain?.toUpperCase();
+        return chain === "BTC" || chain === "BITCOIN";
+      });
+      if (btcWallet) {
+        setSelectedOutputAddress(btcWallet.address);
+      }
+    } else {
+      // BTC → EVM: Find an EVM wallet for output
+      const evmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
+      if (evmWallet) {
+        setSelectedOutputAddress(evmWallet.address);
+      }
+    }
+  }, [isSwappingForBTC, userWallets, selectedOutputAddress, setSelectedOutputAddress]);
 
   // Track previous swap direction to detect actual changes
   const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
 
   // Clear addresses when swap direction changes (not on mount)
+  // Skip clearing if direction change was triggered by wallet selection in WalletPanel
   useEffect(() => {
     if (prevIsSwappingForBTCRef.current !== isSwappingForBTC) {
-      setSelectedInputAddress(null);
-      setSelectedOutputAddress(null);
+      if (!skipAddressClearOnDirectionChange) {
+        setSelectedInputAddress(null);
+        setSelectedOutputAddress(null);
+      } else {
+        // Reset the flag after skipping
+        setSkipAddressClearOnDirectionChange(false);
+      }
       prevIsSwappingForBTCRef.current = isSwappingForBTC;
     }
-  }, [isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
+  }, [
+    isSwappingForBTC,
+    setSelectedInputAddress,
+    setSelectedOutputAddress,
+    skipAddressClearOnDirectionChange,
+    setSkipAddressClearOnDirectionChange,
+  ]);
 
   // Sync selectedOutputAddress to payoutAddress when swapping for BTC
   useEffect(() => {
@@ -942,13 +1007,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleSwapReverse = () => {
-    // Check if swapping TO BTC and user hasn't acknowledged the warning
-    if (isSwappingForBTC && !hasAcknowledgedEVMWarning()) {
-      setShowEVMWarningModal(true);
-      performSwapReverse(!isSwappingForBTC);
-      return;
-    }
-
     // Proceed with the swap reversal
     performSwapReverse(!isSwappingForBTC);
   };
@@ -1199,6 +1257,20 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       } else {
         setIsAtAdjustedMax(false);
       }
+    } else if (!isSwappingForBTC && balanceInputTicker === "BTC") {
+      // For BTC input, reserve sats for transaction fee (~3000 sats is a safe buffer)
+      const BTC_FEE_RESERVE_SATS = 3000;
+      const BTC_FEE_RESERVE_BTC = BTC_FEE_RESERVE_SATS / 100_000_000;
+      const balanceFloat = parseFloat(currentInputBalance);
+      const adjustedAmount = balanceFloat - BTC_FEE_RESERVE_BTC;
+
+      if (adjustedAmount > 0) {
+        adjustedInputAmount = adjustedAmount.toFixed(8);
+        setIsAtAdjustedMax(true);
+      } else {
+        adjustedInputAmount = currentInputBalance;
+        setIsAtAdjustedMax(false);
+      }
     } else {
       setIsAtAdjustedMax(false);
     }
@@ -1244,9 +1316,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         // Fetch exact input quote for ERC20/ETH -> BTC using full precision
         fetchERC20ToBTCQuote(adjustedInputAmount, currentRequestId);
       } else {
-        // there is no max button for BTC -> ERC20/ETH
         // Fetch exact input quote for BTC -> ERC20/ETH
-        // fetchBTCtoERC20Quote(adjustedInputAmount, "ExactInput", currentRequestId);
+        fetchBTCtoERC20Quote(adjustedInputAmount, "ExactInput", currentRequestId);
       }
     }
   };
@@ -1527,16 +1598,18 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
   }, [payoutAddress, isSwappingForBTC, setAddressValidation]);
 
-  // Validate BTC refund address for BTC -> cbBTC swaps
+  // Sync selectedInputAddress to btcRefundAddress when in BTC -> EVM mode
   useEffect(() => {
-    if (btcRefundAddress) {
-      // Always validate as Bitcoin address (isSwappingForBTC = true triggers Bitcoin validation)
-      const validation = validatePayoutAddress(btcRefundAddress, true);
+    if (!isSwappingForBTC && selectedInputAddress) {
+      setBtcRefundAddress(selectedInputAddress);
+      // Also validate immediately
+      const validation = validatePayoutAddress(selectedInputAddress, true);
       setBtcRefundAddressValidation(validation);
-    } else {
+    } else if (!isSwappingForBTC && !selectedInputAddress) {
+      setBtcRefundAddress("");
       setBtcRefundAddressValidation({ isValid: false });
     }
-  }, [btcRefundAddress, setBtcRefundAddressValidation]);
+  }, [isSwappingForBTC, selectedInputAddress, setBtcRefundAddress, setBtcRefundAddressValidation]);
 
   // Auto-refresh quote every 15 seconds when user has entered an amount
   useEffect(() => {
@@ -1591,7 +1664,20 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
   // Update current input balance when wallet connection or token selection changes
   useEffect(() => {
-    if (!isWalletConnected || inputAssetIdentifier === "BTC") {
+    // Handle BTC input (BTC -> EVM swap direction)
+    if (inputAssetIdentifier === "BTC") {
+      if (selectedInputAddress && btcInputBalanceBtc > 0) {
+        setCurrentInputBalance(btcInputBalanceBtc.toFixed(8));
+        setCurrentInputTicker("BTC");
+      } else {
+        setCurrentInputBalance(null);
+        setCurrentInputTicker(null);
+      }
+      return;
+    }
+
+    // Handle EVM input (EVM -> BTC swap direction)
+    if (!isWalletConnected) {
       setCurrentInputBalance(null);
       setCurrentInputTicker(null);
       return;
@@ -1628,6 +1714,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     userTokensByChain,
     evmConnectWalletChainId,
     inputAssetIdentifier,
+    selectedInputAddress,
+    btcInputBalanceBtc,
   ]);
 
   // Check CowSwap allowance when input amount changes (debounced)
@@ -2583,19 +2671,33 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                         size="xs"
                         h="21px"
                         px="8px"
-                        bg={colors.swapBgColor}
-                        color={colors.textGray}
+                        bg={
+                          !isSwappingForBTC
+                            ? inputStyle?.dark_bg_color || "#291B0D"
+                            : colors.swapBgColor
+                        }
+                        color={
+                          !isSwappingForBTC
+                            ? inputStyle?.border_color || "#FFA04C"
+                            : colors.textGray
+                        }
                         fontSize="12px"
                         fontWeight="bold"
                         fontFamily="Aux"
                         letterSpacing="-0.5px"
                         border="1px solid"
-                        borderColor={colors.swapBorderColor}
+                        borderColor={
+                          !isSwappingForBTC
+                            ? inputStyle?.border_color || "#FFA04C"
+                            : colors.swapBorderColor
+                        }
                         borderRadius="8px"
                         cursor="pointer"
                         transition="all 0.2s"
                         _hover={{
-                          bg: colors.swapBorderColor,
+                          bg: !isSwappingForBTC
+                            ? inputStyle?.bg_color || "#9B602F"
+                            : colors.swapBorderColor,
                         }}
                         _active={{
                           transform: "scale(0.95)",
@@ -2811,46 +2913,17 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 showPasteOption={true}
               />
             ) : (
-              // BTC → EVM: Show paste-only text with icon and caret
-              <Flex
-                align="center"
-                gap="5px"
-                cursor="pointer"
-                transition="opacity 0.15s ease"
-                _hover={{ opacity: 0.8 }}
-                onClick={() => {
+              // BTC → EVM: Show EVM address selector with paste option
+              <AddressSelector
+                chainType="EVM"
+                selectedAddress={selectedOutputAddress}
+                onSelect={setSelectedOutputAddress}
+                onPasteAddress={() => {
                   setPasteModalType("EVM");
                   setIsPasteModalOpen(true);
                 }}
-              >
-                {selectedOutputAddress ? (
-                  <>
-                    <FiEdit3 size={12} color="#788CFF" />
-                    <Text
-                      color="#788CFF"
-                      fontSize="14px"
-                      fontWeight="500"
-                      fontFamily="Aux"
-                      letterSpacing="-1px"
-                      whiteSpace="nowrap"
-                    >
-                      {`${selectedOutputAddress.slice(0, 6)}...${selectedOutputAddress.slice(-4)}`}
-                    </Text>
-                  </>
-                ) : (
-                  <Text
-                    color={colors.textGray}
-                    fontSize="14px"
-                    fontWeight="500"
-                    fontFamily="Aux"
-                    letterSpacing="-1px"
-                    whiteSpace="nowrap"
-                  >
-                    Paste address
-                  </Text>
-                )}
-                <FiChevronDown size={12} color="#788CFF" />
-              </Flex>
+                showPasteOption={true}
+              />
             )}
             {/* Asset tag centered */}
             <WebAssetTag
@@ -2947,100 +3020,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             />
           </Flex>
         </Flex>
-
-        {/* Bitcoin Refund Address - For BTC -> cbBTC swaps */}
-        {!isSwappingForBTC && !hidePayoutAddress && (
-          <Flex
-            direction="column"
-            w="100%"
-            opacity={hasStartedTyping ? 1 : 0}
-            transform={hasStartedTyping ? "translateY(0px)" : "translateY(-20px)"}
-            transition="all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
-            transitionDelay={hasStartedTyping ? "0.2s" : "0s"}
-            pointerEvents={hasStartedTyping ? "auto" : "none"}
-            overflow="visible"
-            maxHeight={hasStartedTyping ? "200px" : "0px"}
-          >
-            {/* Bitcoin Refund Address Label */}
-            <Flex ml="8px" alignItems="center" mt="18px" w="100%" mb="10px">
-              <Text fontSize="15px" fontFamily={FONT_FAMILIES.NOSTROMO} color={colors.offWhite}>
-                Bitcoin Refund Address
-              </Text>
-              <Flex pl="5px" mt="-2px">
-                <Tooltip
-                  show={showRefundAddressTooltip}
-                  onMouseEnter={() => setShowRefundAddressTooltip(true)}
-                  onMouseLeave={() => setShowRefundAddressTooltip(false)}
-                  hoverText={
-                    <Text>
-                      If the swap fails, your BTC will be refunded to this address. Only P2WPKH,
-                      P2PKH, or P2SH Bitcoin addresses are supported.
-                    </Text>
-                  }
-                  iconWidth="12px"
-                />
-              </Flex>
-            </Flex>
-            <Flex
-              mt="-4px"
-              mb="10px"
-              px="10px"
-              bg={inputStyle?.dark_bg_color || "rgba(46, 29, 14, 0.66)"}
-              border={`2px solid ${inputStyle?.bg_color || "#78491F"}`}
-              w="100%"
-              h="60px"
-              borderRadius="16px"
-            >
-              <Flex direction="row" py="6px" px="8px" w="100%">
-                <Input
-                  value={btcRefundAddress}
-                  onChange={(e) => setBtcRefundAddress(e.target.value)}
-                  fontFamily="Aux"
-                  border="none"
-                  bg="transparent"
-                  outline="none"
-                  mt="3.5px"
-                  mr="15px"
-                  ml="-4px"
-                  p="0px"
-                  w={isMobile ? "100%" : "500px"}
-                  letterSpacing={isMobile ? "-2px" : "-5px"}
-                  color={colors.offWhite}
-                  _active={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  _focus={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  _selected={{
-                    border: "none",
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                  fontSize={isMobile ? "18px" : "28px"}
-                  placeholder="bc1q5d7rjq7g6rd2d..."
-                  _placeholder={{
-                    color: inputStyle?.light_text_color || "#856549",
-                  }}
-                  spellCheck={false}
-                />
-
-                {btcRefundAddress.length > 0 && (
-                  <Flex ml="0px">
-                    <BitcoinAddressValidation
-                      address={btcRefundAddress}
-                      validation={btcRefundAddressValidation}
-                    />
-                  </Flex>
-                )}
-              </Flex>
-            </Flex>
-          </Flex>
-        )}
       </Flex>
 
       {/* Asset Selector Modal */}
@@ -3048,14 +3027,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         isOpen={isAssetSelectorOpen}
         onClose={closeAssetSelector}
         currentAsset={inputAssetIdentifier}
-      />
-
-      {/* EVM Account Warning Modal */}
-      <EVMAccountWarningModal
-        isOpen={showEVMWarningModal}
-        onConfirm={() => {
-          setShowEVMWarningModal(false);
-        }}
       />
     </Flex>
   );
