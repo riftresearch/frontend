@@ -162,32 +162,12 @@ export const Navbar = ({}) => {
         zIndex={400}
       >
         {isMobile ? (
-          <Flex>
-            <Button
-              onClick={() => handleNavigation(router.pathname === "/history" ? "/" : "/history")}
-              type="button"
-              bg={colors.swapBgColor}
-              _hover={{ bg: colors.swapHoverColor }}
-              _active={{ bg: colors.swapBgColor }}
-              borderRadius="30px"
-              fontFamily="Nostromo"
-              fontSize="14px"
-              color={colors.offWhite}
-              px="20px"
-              pt="0px"
-              h="36px"
-              border={`2px solid ${colors.swapBorderColor}`}
-              letterSpacing="-1px"
-            >
-              {router.pathname === "/history" ? "Swap" : "History"}
-            </Button>
-          </Flex>
+          <Flex />
         ) : (
           <>
             <Flex gap="12px">
               {navItem("Swap", "/")}
-              {navItem("History", "/history")}
-              {navItem("Stats", "/stats")}
+              {navItem("Analytics", "/analytics")}
               {/* {navItem("Rates", "/rates")} */}
               {/* {navItem('OTC', '/otc')} */}
             </Flex>

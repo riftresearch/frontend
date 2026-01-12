@@ -784,7 +784,7 @@ export function UnifiedTransactionWidget({
               px="40px"
               lineHeight="1.6"
             >
-              This swap has been refunded. You can view details in the swap history page.
+              This swap has been refunded. You can view details in the Activity tab of your wallet.
             </Text>
 
             <Flex
@@ -796,7 +796,7 @@ export function UnifiedTransactionWidget({
             >
               <Box
                 as="button"
-                onClick={() => router.push("/history")}
+                onClick={() => router.push("/")}
                 border="2px solid rgba(255, 255, 255, 0.3)"
                 borderRadius="16px"
                 width={isMobile ? "240px" : "180px"}
@@ -817,7 +817,7 @@ export function UnifiedTransactionWidget({
                   fontWeight="normal"
                   letterSpacing="0.5px"
                 >
-                  SWAP HISTORY
+                  BACK TO SWAP
                 </Text>
               </Box>
 
@@ -980,8 +980,8 @@ export function UnifiedTransactionWidget({
               lineHeight="1.6"
             >
               {isPartialDeposit
-                ? `You sent too little ${inputAsset} to complete the swap. You can initiate a refund in the swap history page or with the button below.`
-                : "The market maker failed to fill your order. You can initiate a refund in the swap history page or with the button below."}
+                ? `You sent too little ${inputAsset} to complete the swap. You can initiate a refund in the Activity tab of your wallet or with the button below.`
+                : "The market maker failed to fill your order. You can initiate a refund in the Activity tab of your wallet or with the button below."}
             </Text>
 
             <Flex

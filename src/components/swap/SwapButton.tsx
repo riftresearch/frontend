@@ -760,8 +760,8 @@ export const SwapButton = () => {
     if (isSwappingForBTC) {
       if (!payoutAddress) {
         toastInfo({
-          title: "Enter Bitcoin Address",
-          description: "Please enter your Bitcoin address to receive BTC",
+          title: "Paste or Connect Bitcoin Wallet",
+          description: "Please connect a Bitocin wallet or paste a Bitcoin address to receive BTC",
         });
         return;
       }

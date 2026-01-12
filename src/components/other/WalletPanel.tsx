@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Flex, Text, Box, Image, Spinner } from "@chakra-ui/react";
+import { Flex, Text, Box, Image, Spinner, Portal } from "@chakra-ui/react";
 import { useAccount } from "wagmi";
 import {
   useDynamicContext,
@@ -15,7 +15,9 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiX,
+  FiMaximize2,
 } from "react-icons/fi";
+import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
@@ -99,6 +101,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   // View mode: "all" for combined view, or wallet.id for specific wallet
   const [viewMode, setViewMode] = useState<"all" | string>("all");
 
+  // Full-screen history modal state (desktop only)
+  const [showFullHistory, setShowFullHistory] = useState(false);
+
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {
     return wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
@@ -114,8 +119,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   // Find EVM wallet for token attribution
   const evmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
 
-  // Get all tokens from all chains (for EVM wallets)
-  const allTokens: TokenData[] = Object.values(userTokensByChain).flat();
+  // Get all tokens from all chains (for EVM wallets) - only if EVM wallet is connected
+  const allTokens: TokenData[] = evmWallet ? Object.values(userTokensByChain).flat() : [];
 
   // Sort EVM tokens by USD value
   const sortedEvmTokens = [...allTokens].sort((a, b) => {
@@ -124,14 +129,24 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     return usdB - usdA;
   });
 
-  // Calculate EVM total USD value
-  const evmTotalUsdValue = sortedEvmTokens.reduce((sum, token) => {
-    const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
-    return sum + (isNaN(usd) ? 0 : usd);
-  }, 0);
+  // Calculate EVM total USD value - only if EVM wallet is connected
+  const evmTotalUsdValue = evmWallet
+    ? sortedEvmTokens.reduce((sum, token) => {
+        const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
+        return sum + (isNaN(usd) ? 0 : usd);
+      }, 0)
+    : 0;
 
-  // Calculate total BTC balance across all BTC wallets
-  const allBtcTotalUsd = btcWalletAddresses.reduce((sum, addr) => {
+  // Get currently connected BTC wallet addresses
+  const connectedBtcAddresses = userWallets
+    .filter((w) => {
+      const chain = w.chain?.toLowerCase();
+      return chain === "btc" || chain === "bitcoin";
+    })
+    .map((w) => w.address);
+
+  // Calculate total BTC balance only for currently connected BTC wallets
+  const allBtcTotalUsd = connectedBtcAddresses.reduce((sum, addr) => {
     const balance = btcBalances[addr];
     if (balance?.balanceBtc) {
       return sum + balance.balanceBtc * (btcPrice || 0);
@@ -192,8 +207,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       });
     }
 
-    // Add BTC tokens for each BTC wallet
-    btcWalletAddresses.forEach((addr) => {
+    // Add BTC tokens for each connected BTC wallet
+    connectedBtcAddresses.forEach((addr) => {
       const balance = btcBalances[addr];
       const wallet = userWallets.find((w) => w.address === addr);
       if (balance?.balanceBtc > 0 && wallet) {
@@ -257,7 +272,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       const usdB = parseFloat(b.usdValue.replace("$", "").replace(",", ""));
       return usdB - usdA;
     });
-  }, [sortedEvmTokens, btcWalletAddresses, btcBalances, btcPrice, userWallets, evmWallet]);
+  }, [sortedEvmTokens, connectedBtcAddresses, btcBalances, btcPrice, userWallets, evmWallet]);
 
   // Get tokens for a specific wallet
   const getTokensForWallet = (walletId: string): TokenWithWallet[] => {
@@ -321,6 +336,11 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
             return balance?.balanceBtc ? balance.balanceBtc * (btcPrice || 0) : 0;
           }
         })();
+
+  // Calculate loading state
+  const isLoadingBtc = connectedBtcAddresses.some((addr) => btcBalances[addr]?.isLoading);
+  const isLoadingEvm = evmWallet && Object.keys(userTokensByChain).length === 0;
+  const isLoadingBalances = isLoadingBtc || isLoadingEvm;
 
   // Format address for display
   const formatAddress = (addr: string) => {
@@ -453,15 +473,16 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         )}
 
         {/* Main Panel Content */}
-        <Box
+        <Flex
           flex="1"
           h={isMobile ? "100%" : "auto"}
           bg={colors.offBlack}
           border={isMobile ? "none" : `1px solid ${colors.borderGray}`}
           borderRadius={isMobile ? "0" : "16px"}
-          overflowY="auto"
+          overflow="hidden"
           position="relative"
           zIndex={1001}
+          direction="column"
         >
           {/* Wallets Overlay */}
           {showWalletsOverlay && (
@@ -1067,36 +1088,78 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
           </Flex>
 
           {/* Tabs */}
-          <Flex px="20px" gap="24px" borderBottom={`1px solid ${colors.borderGray}`}>
-            <Text
-              color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
-              fontSize="15px"
-              fontWeight={600}
-              fontFamily="Inter"
-              pb="12px"
-              borderBottom={activeTab === "tokens" ? `2px solid ${colors.offWhite}` : "none"}
-              cursor="pointer"
-              onClick={() => setActiveTab("tokens")}
-            >
-              Tokens
-            </Text>
-            <Text
-              color={activeTab === "activity" ? colors.offWhite : colors.textGray}
-              fontSize="15px"
-              fontWeight={600}
-              fontFamily="Inter"
-              pb="12px"
-              borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
-              cursor="pointer"
-              onClick={() => setActiveTab("activity")}
-            >
-              Activity
-            </Text>
+          <Flex
+            px="20px"
+            borderBottom={`1px solid ${colors.borderGray}`}
+            justify="space-between"
+            align="center"
+          >
+            <Flex gap="24px">
+              <Text
+                color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
+                fontSize="15px"
+                fontWeight={600}
+                fontFamily="Inter"
+                pb="12px"
+                borderBottom={activeTab === "tokens" ? `2px solid ${colors.offWhite}` : "none"}
+                cursor="pointer"
+                onClick={() => setActiveTab("tokens")}
+              >
+                Tokens
+              </Text>
+              <Text
+                color={activeTab === "activity" ? colors.offWhite : colors.textGray}
+                fontSize="15px"
+                fontWeight={600}
+                fontFamily="Inter"
+                pb="12px"
+                borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
+                cursor="pointer"
+                onClick={() => setActiveTab("activity")}
+              >
+                Swap Activity
+              </Text>
+            </Flex>
+            {/* Expand button - only show on Activity tab, desktop only */}
+            {activeTab === "activity" && !isMobile && (
+              <Box
+                cursor="pointer"
+                p="6px"
+                borderRadius="6px"
+                bg={colors.offBlackLighter}
+                _hover={{ bg: colors.offBlackLighter2 }}
+                onClick={() => setShowFullHistory(true)}
+                mb="8px"
+              >
+                <FiMaximize2 size={14} color={colors.textGray} />
+              </Box>
+            )}
           </Flex>
 
           {/* Token List */}
           {activeTab === "tokens" && (
-            <Box p="12px">
+            <Box
+              p="12px"
+              flex="1"
+              overflow="auto"
+              css={{
+                "&::-webkit-scrollbar": {
+                  width: "6px",
+                },
+                "&::-webkit-scrollbar-track": {
+                  background: "transparent",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: "#333",
+                  borderRadius: "3px",
+                },
+                "&::-webkit-scrollbar-thumb:hover": {
+                  background: "#444",
+                },
+                scrollbarWidth: "thin",
+                scrollbarColor: "#333 transparent",
+              }}
+            >
               {userWallets.length === 0 ? (
                 <Flex direction="column" align="center" justify="center" py="40px" gap="20px">
                   <Text
@@ -1123,6 +1186,13 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                       Connect Wallet
                     </Text>
                   </Flex>
+                </Flex>
+              ) : isLoadingBalances && displayTokens.length === 0 ? (
+                <Flex direction="column" align="center" justify="center" py="40px" gap="16px">
+                  <Spinner size="lg" color="#A78BFA" borderWidth="3px" />
+                  <Text color={colors.textGray} fontSize="14px" fontFamily="Inter">
+                    Loading balances...
+                  </Text>
                 </Flex>
               ) : displayTokens.length === 0 ? (
                 <Flex direction="column" justify="center" align="center" py="40px" gap="8px">
@@ -1262,43 +1332,76 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
 
           {/* Activity Tab */}
           {activeTab === "activity" && (
-            <Flex direction="column" justify="center" align="center" py="60px" gap="20px">
-              {userWallets.length === 0 ? (
-                <>
-                  <Text
-                    color={colors.textGray}
-                    fontSize="15px"
-                    fontFamily="Inter"
-                    textAlign="center"
-                  >
-                    You don't have any wallets connected yet
-                  </Text>
-                  <Flex
-                    justify="center"
-                    align="center"
-                    py="12px"
-                    px="24px"
-                    borderRadius="12px"
-                    bg="rgba(167, 139, 250, 0.08)"
-                    border="2px solid #A78BFA"
-                    cursor="pointer"
-                    _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
-                    onClick={() => setShowAuthFlow(true)}
-                  >
-                    <Text color="#A78BFA" fontSize="15px" fontWeight="600" fontFamily="Inter">
-                      Connect Wallet
-                    </Text>
-                  </Flex>
-                </>
-              ) : (
-                <Text color={colors.textGray} fontSize="15px" fontFamily="Inter">
-                  No recent activity
-                </Text>
-              )}
-            </Flex>
+            <Box
+              flex="1"
+              overflow="auto"
+              pt="12px"
+              css={{
+                "&::-webkit-scrollbar": {
+                  width: "6px",
+                },
+                "&::-webkit-scrollbar-track": {
+                  background: "transparent",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: "#333",
+                  borderRadius: "3px",
+                },
+                "&::-webkit-scrollbar-thumb:hover": {
+                  background: "#444",
+                },
+                scrollbarWidth: "thin",
+                scrollbarColor: "#333 transparent",
+              }}
+            >
+              <UserSwapHistory embedded />
+            </Box>
           )}
-        </Box>
+        </Flex>
       </Box>
+
+      {/* Full-screen history modal (desktop only) */}
+      {showFullHistory && !isMobile && (
+        <Portal>
+          <Box
+            position="fixed"
+            top="0"
+            left="0"
+            right="0"
+            bottom="0"
+            bg="rgba(0, 0, 0, 0.95)"
+            zIndex={9999}
+            overflow="auto"
+          >
+            {/* Close button */}
+            <Flex justify="flex-end" p="20px">
+              <Box
+                cursor="pointer"
+                p="12px"
+                borderRadius="12px"
+                bg={colors.offBlackLighter}
+                _hover={{ bg: colors.offBlackLighter2 }}
+                onClick={() => setShowFullHistory(false)}
+              >
+                <FiX size={24} color={colors.offWhite} />
+              </Box>
+            </Flex>
+            {/* Full history view - not embedded */}
+            <Flex
+              direction="column"
+              align="center"
+              justify="center"
+              w="100%"
+              maxW="1400px"
+              mx="auto"
+              px="20px"
+              pb="40px"
+            >
+              <UserSwapHistory embedded={false} />
+            </Flex>
+          </Box>
+        </Portal>
+      )}
     </>
   );
 };
