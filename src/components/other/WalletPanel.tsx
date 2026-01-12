@@ -139,26 +139,56 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     return sum;
   }, 0);
 
-  // Interface for tokens with wallet attribution
+  // Interface for tokens with wallet attribution (supports multiple wallets for combined view)
   interface TokenWithWallet extends TokenData {
     walletAddress: string;
     walletIconKey: string;
     walletId: string;
+    // For merged tokens in "all" view
+    walletIcons?: { iconKey: string; walletId: string }[];
   }
 
-  // Build combined token list for "all" view
+  // Build combined token list for "all" view (merging same tokens from different wallets)
   const combinedTokens: TokenWithWallet[] = React.useMemo(() => {
-    const tokens: TokenWithWallet[] = [];
+    // Use a map to group tokens by unique key (ticker + chainId)
+    const tokenMap = new Map<
+      string,
+      {
+        token: TokenWithWallet;
+        totalBalance: number;
+        totalUsdValue: number;
+        walletIcons: { iconKey: string; walletId: string }[];
+      }
+    >();
 
     // Add EVM tokens with wallet attribution
     if (evmWallet) {
       sortedEvmTokens.forEach((token) => {
-        tokens.push({
-          ...token,
-          walletAddress: evmWallet.address,
-          walletIconKey: getWalletIconKey(evmWallet),
-          walletId: evmWallet.id,
-        });
+        const key = `${token.ticker}-${token.chainId}`;
+        const balance = parseFloat(token.balance) || 0;
+        const usdValue = parseFloat(token.usdValue.replace("$", "").replace(",", "")) || 0;
+
+        if (tokenMap.has(key)) {
+          const existing = tokenMap.get(key)!;
+          existing.totalBalance += balance;
+          existing.totalUsdValue += usdValue;
+          existing.walletIcons.push({
+            iconKey: getWalletIconKey(evmWallet),
+            walletId: evmWallet.id,
+          });
+        } else {
+          tokenMap.set(key, {
+            token: {
+              ...token,
+              walletAddress: evmWallet.address,
+              walletIconKey: getWalletIconKey(evmWallet),
+              walletId: evmWallet.id,
+            },
+            totalBalance: balance,
+            totalUsdValue: usdValue,
+            walletIcons: [{ iconKey: getWalletIconKey(evmWallet), walletId: evmWallet.id }],
+          });
+        }
       });
     }
 
@@ -168,23 +198,57 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       const wallet = userWallets.find((w) => w.address === addr);
       if (balance?.balanceBtc > 0 && wallet) {
         const btcUsdValue = balance.balanceBtc * (btcPrice || 0);
-        tokens.push({
-          name: "Bitcoin",
-          ticker: "BTC",
-          address: "btc",
-          balance: balance.balanceBtc.toFixed(8),
-          usdValue: `$${btcUsdValue.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
-          icon: "/images/assets/icons/BTC.svg",
-          decimals: 8,
-          chainId: 0,
-          walletAddress: addr,
-          walletIconKey: getWalletIconKey(wallet),
-          walletId: wallet.id,
-        });
+        const key = "BTC-0"; // BTC always has chainId 0
+
+        if (tokenMap.has(key)) {
+          const existing = tokenMap.get(key)!;
+          existing.totalBalance += balance.balanceBtc;
+          existing.totalUsdValue += btcUsdValue;
+          existing.walletIcons.push({
+            iconKey: getWalletIconKey(wallet),
+            walletId: wallet.id,
+          });
+        } else {
+          tokenMap.set(key, {
+            token: {
+              name: "Bitcoin",
+              ticker: "BTC",
+              address: "btc",
+              balance: balance.balanceBtc.toFixed(8),
+              usdValue: `$${btcUsdValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`,
+              icon: "/images/BTC_icon.svg",
+              decimals: 8,
+              chainId: 0,
+              walletAddress: addr,
+              walletIconKey: getWalletIconKey(wallet),
+              walletId: wallet.id,
+            },
+            totalBalance: balance.balanceBtc,
+            totalUsdValue: btcUsdValue,
+            walletIcons: [{ iconKey: getWalletIconKey(wallet), walletId: wallet.id }],
+          });
+        }
       }
+    });
+
+    // Convert map to array with updated balances and wallet icons
+    const tokens: TokenWithWallet[] = [];
+    tokenMap.forEach(({ token, totalBalance, totalUsdValue, walletIcons }) => {
+      tokens.push({
+        ...token,
+        balance:
+          token.chainId === 0
+            ? totalBalance.toFixed(8)
+            : totalBalance.toLocaleString(undefined, { maximumFractionDigits: token.decimals }),
+        usdValue: `$${totalUsdValue.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`,
+        walletIcons: walletIcons,
+      });
     });
 
     // Sort by USD value
@@ -225,7 +289,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}`,
-            icon: "/images/assets/icons/BTC.svg",
+            icon: "/images/BTC_icon.svg",
             decimals: 8,
             chainId: 0,
             walletAddress: wallet.address,
@@ -908,7 +972,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                     {/* All Wallets Option */}
                     <Flex
                       align="center"
-                      gap="10px"
+                      justify="space-between"
                       p="10px"
                       borderRadius="8px"
                       cursor="pointer"
@@ -922,6 +986,14 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                         setShowViewModeDropdown(false);
                       }}
                     >
+                      <Text
+                        color={viewMode === "all" ? "#A78BFA" : colors.offWhite}
+                        fontSize="14px"
+                        fontWeight="500"
+                        fontFamily="Inter"
+                      >
+                        All
+                      </Text>
                       {/* Stacked wallet icons */}
                       <Flex>
                         {userWallets.slice(0, 3).map((wallet, idx) => (
@@ -946,14 +1018,6 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           </Box>
                         ))}
                       </Flex>
-                      <Text
-                        color={viewMode === "all" ? "#A78BFA" : colors.offWhite}
-                        fontSize="14px"
-                        fontWeight="500"
-                        fontFamily="Inter"
-                      >
-                        All
-                      </Text>
                     </Flex>
 
                     {/* Individual Wallet Options */}
@@ -1087,7 +1151,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           <Image
                             src={
                               token.chainId === 0 || token.ticker === "BTC"
-                                ? "/images/assets/icons/BTC.svg"
+                                ? "/images/BTC_icon.svg"
                                 : token.icon || FALLBACK_TOKEN_ICON
                             }
                             alt={token.ticker}
@@ -1098,28 +1162,34 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               (e.target as HTMLImageElement).src = FALLBACK_TOKEN_ICON;
                             }}
                           />
-                          {/* Wallet Badge (only in combined view) */}
-                          {viewMode === "all" && token.walletIconKey && (
-                            <Box
-                              position="absolute"
-                              top="-4px"
-                              left="-4px"
-                              w="18px"
-                              h="18px"
-                              borderRadius="4px"
-                              border={`2px solid ${colors.offBlack}`}
-                              bg={colors.offBlackLighter}
-                              overflow="hidden"
-                            >
-                              <Image
-                                src={`${DYNAMIC_ICON_BASE}#${token.walletIconKey}`}
-                                alt="wallet"
-                                w="100%"
-                                h="100%"
-                                objectFit="cover"
-                              />
-                            </Box>
-                          )}
+                          {/* Wallet Badge(s) (only in combined view) */}
+                          {viewMode === "all" &&
+                            token.walletIcons &&
+                            token.walletIcons.length > 0 && (
+                              <Flex position="absolute" top="-4px" left="-4px">
+                                {token.walletIcons.slice(0, 3).map((walletIcon, iconIdx) => (
+                                  <Box
+                                    key={walletIcon.walletId}
+                                    w="16px"
+                                    h="16px"
+                                    borderRadius="4px"
+                                    ml={iconIdx > 0 ? "-6px" : "0"}
+                                    border={`2px solid ${colors.offBlack}`}
+                                    bg={colors.offBlackLighter}
+                                    overflow="hidden"
+                                    zIndex={3 - iconIdx}
+                                  >
+                                    <Image
+                                      src={`${DYNAMIC_ICON_BASE}#${walletIcon.iconKey}`}
+                                      alt="wallet"
+                                      w="100%"
+                                      h="100%"
+                                      objectFit="cover"
+                                    />
+                                  </Box>
+                                ))}
+                              </Flex>
+                            )}
                           {/* Chain Badge */}
                           {token.chainId === 0 ? (
                             // BTC chain badge
