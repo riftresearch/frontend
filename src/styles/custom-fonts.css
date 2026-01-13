@@ -1,5 +1,8 @@
 /* Font Definitions with Fallbacks */
 
+/* Import Inter from Google Fonts */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
 @font-face {
   font-family: "Klein";
   src: url("/fonts/KleinHeadline-BoldOblique.ttf") format("truetype");
@@ -75,4 +78,14 @@
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+}
+
+/* Inter fallback for systems without Google Fonts access */
+@font-face {
+  font-family: "Inter-fallback";
+  src: local("Helvetica Neue"), local("Arial"), local("sans-serif");
+  size-adjust: 100%;
+  ascent-override: 90%;
+  descent-override: 20%;
+  line-gap-override: 0%;
 }
