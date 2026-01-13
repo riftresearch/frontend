@@ -38,14 +38,7 @@ export const ConnectWalletButton: React.FC = () => {
   // Check if ANY wallet is connected (EVM or Bitcoin)
   const isConnected = !!primaryWallet;
 
-<<<<<<< HEAD
   // Auto-open panel every time user connects from having no wallets
-=======
-  // const { walletOptions } = useWalletOptions();
-  // console.log(walletOptions.map((wallet) => wallet.key));
-
-  // Auto-open panel on first wallet connection
->>>>>>> a53ce48 (btc selector)
   const prevIsConnectedRef = React.useRef(false);
   useEffect(() => {
     // Trigger when going from disconnected to connected
