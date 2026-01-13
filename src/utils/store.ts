@@ -16,6 +16,18 @@ const DEFAULT_INPUT_TOKEN: TokenData = {
   chainId: 1,
 };
 
+// Default output token is BTC (mirrors BTC_TOKEN from constants.ts)
+const DEFAULT_OUTPUT_TOKEN: TokenData = {
+  name: "Bitcoin",
+  ticker: "BTC",
+  address: "native",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1696501400",
+  decimals: 8,
+  chainId: 0,
+};
+
 type DepositFlowState =
   | "0-not-started"
   | "1-WaitingUserDepositInitiated"
@@ -52,8 +64,8 @@ export const useStore = create<{
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
   selectedInputToken: TokenData;
   setSelectedInputToken: (token: TokenData) => void;
-  selectedOutputToken: TokenData | null;
-  setSelectedOutputToken: (token: TokenData | null) => void;
+  selectedOutputToken: TokenData;
+  setSelectedOutputToken: (token: TokenData) => void;
   isSwappingForBTC: boolean;
   setIsSwappingForBTC: (value: boolean) => void;
   displayedInputAmount: string;
@@ -161,8 +173,8 @@ export const useStore = create<{
     })),
   selectedInputToken: DEFAULT_INPUT_TOKEN,
   setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
-  selectedOutputToken: null,
-  setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
+  selectedOutputToken: DEFAULT_OUTPUT_TOKEN,
+  setSelectedOutputToken: (token: TokenData) => set({ selectedOutputToken: token }),
   isSwappingForBTC: true,
   setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
   displayedInputAmount: "",

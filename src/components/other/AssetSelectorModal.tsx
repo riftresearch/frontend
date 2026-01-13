@@ -20,18 +20,24 @@ import {
   ZERO_USD_DISPLAY,
   ETH_TOKEN,
   ETH_TOKEN_BASE,
+  BTC_TOKEN,
+  BTC_ICON,
+  POPULAR_OUTPUT_TOKENS,
+  CBBTC_TOKEN,
 } from "@/utils/constants";
 
 interface AssetSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentAsset: string;
+  direction: "input" | "output";
 }
 
 export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   isOpen,
   onClose,
   currentAsset,
+  direction,
 }) => {
   const { evmConnectWalletChainId } = useStore();
   const { isMobile } = useWindowSize();
@@ -74,6 +80,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     selectedOutputToken,
     setSelectedOutputToken,
     isSwappingForBTC,
+    setIsSwappingForBTC,
     setDisplayedInputAmount,
     setOutputAmount,
     userTokensByChain,
@@ -154,46 +161,10 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     if (!isOpen) return;
     setIsLoading(true);
     try {
-      // When swapping FROM BTC (not for BTC), only show cbBTC options
-      if (!isSwappingForBTC) {
-        // Get cbBTC from both chains with user balances if available
-        const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
-        const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
-        const allUserTokens = [...ethTokens, ...baseTokens];
-
-        // Filter to only cbBTC tokens from user's wallet
-        let cbBTCTokens = filterToCbBTCOnly(allUserTokens);
-
-        // If user doesn't have cbBTC in wallet, show from popular tokens
-        if (cbBTCTokens.length === 0) {
-          cbBTCTokens = filterToCbBTCOnly(ALL_POPULAR_TOKENS);
-        } else {
-          // Merge with popular tokens to ensure both chains are shown
-          const userCbBTCChains = new Set(cbBTCTokens.map((t) => t.chainId));
-          const missingChainCbBTC = filterToCbBTCOnly(ALL_POPULAR_TOKENS).filter(
-            (t) => !userCbBTCChains.has(t.chainId)
-          );
-          cbBTCTokens = [...cbBTCTokens, ...missingChainCbBTC];
-        }
-
-        // Deduplicate by chainId + address (user tokens come first, so they're preserved)
-        const seen = new Set<string>();
-        cbBTCTokens = cbBTCTokens.filter((t) => {
-          const key = `${t.chainId}-${t.address.toLowerCase()}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        // Sort by USD value (descending) so chain with balance appears first
-        cbBTCTokens.sort((a, b) => {
-          const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
-          const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
-          return bValue - aValue;
-        });
-
-        preloadImages(cbBTCTokens.map((t) => t.icon).filter(Boolean));
-        setSearchResults(cbBTCTokens);
+      // When direction is "output", only show POPULAR_OUTPUT_TOKENS (BTC, cbBTC Ethereum, cbBTC Base)
+      if (direction === "output") {
+        preloadImages(POPULAR_OUTPUT_TOKENS.map((t) => t.icon).filter(Boolean));
+        setSearchResults(POPULAR_OUTPUT_TOKENS);
         setPopularTokens([]);
         setIsLoading(false);
         return;
@@ -329,15 +300,20 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           return bValue - aValue;
         });
 
-        // Get popular tokens for the selected network
+        // Get popular tokens for the selected network (BTC only in ALL and BITCOIN)
         let networkPopularTokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          networkPopularTokens = ALL_POPULAR_TOKENS;
+          networkPopularTokens = [BTC_TOKEN, ...ALL_POPULAR_TOKENS];
+        } else if (selectedNetwork === Network.BITCOIN) {
+          networkPopularTokens = [BTC_TOKEN];
         } else {
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           networkPopularTokens = (
             chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
-          ).map((t) => ({ ...t, chainId }));
+          ).map((t) => ({
+            ...t,
+            chainId,
+          }));
         }
 
         // Filter popular tokens to exclude tokens user already has
@@ -357,12 +333,17 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       } else {
         let networkPopularTokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          networkPopularTokens = ALL_POPULAR_TOKENS;
+          networkPopularTokens = [BTC_TOKEN, ...ALL_POPULAR_TOKENS];
+        } else if (selectedNetwork === Network.BITCOIN) {
+          networkPopularTokens = [BTC_TOKEN];
         } else {
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           networkPopularTokens = (
             chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
-          ).map((t) => ({ ...t, chainId }));
+          ).map((t) => ({
+            ...t,
+            chainId,
+          }));
         }
         preloadImages(networkPopularTokens.map((t) => t.icon).filter(Boolean));
         setSearchResults(networkPopularTokens);
@@ -382,6 +363,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     userTokensByChain,
     debouncedQuery,
     isSwappingForBTC,
+    direction,
   ]);
 
   if (!isOpen) return null;
@@ -403,11 +385,76 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     );
   };
 
-  const handleAssetSelect = async (asset: string, tokenData?: TokenData) => {
-    console.log("handleAssetSelect", asset, tokenData);
+  const handleAssetSelect = async (
+    asset: string,
+    tokenData: TokenData | undefined,
+    selectionDirection: "input" | "output"
+  ) => {
+    console.log("handleAssetSelect", asset, tokenData, selectionDirection);
+
+    // Handle BTC selection with direction-aware flip logic
+    if (tokenData?.ticker === "BTC") {
+      if (selectionDirection === "input") {
+        if (isSwappingForBTC) {
+          // Flip: user selected BTC as input while swapping FOR BTC
+          // -> Switch to swapping FROM BTC (BTC -> cbBTC)
+          setIsSwappingForBTC(false);
+          setSelectedInputToken(BTC_TOKEN);
+          setSelectedOutputToken(CBBTC_TOKEN);
+          setDisplayedInputAmount("");
+          setOutputAmount("");
+          setInputUsdValue(ZERO_USD_DISPLAY);
+        }
+        // else: already swapping FROM BTC, no-op
+      } else {
+        // selectionDirection === "output"
+        if (!isSwappingForBTC) {
+          // Flip: user selected BTC as output while swapping FROM BTC
+          // -> Switch to swapping FOR BTC (ETH -> BTC)
+          setIsSwappingForBTC(true);
+          setSelectedInputToken(ETH_TOKEN);
+          setSelectedOutputToken(BTC_TOKEN);
+          setDisplayedInputAmount("");
+          setOutputAmount("");
+          setInputUsdValue(ZERO_USD_DISPLAY);
+        }
+        // else: already swapping FOR BTC, no-op
+      }
+      onClose();
+      return;
+    }
+
+    // Handle cbBTC selection as output when isSwappingForBTC
+    // This flips direction like swap reverse: BTC becomes input, cbBTC becomes output
+    if (tokenData?.ticker === "cbBTC" && selectionDirection === "output" && isSwappingForBTC) {
+      setIsSwappingForBTC(false);
+      setSelectedInputToken(BTC_TOKEN);
+      setSelectedOutputToken(tokenData);
+      setDisplayedInputAmount("");
+      setOutputAmount("");
+      setInputUsdValue(ZERO_USD_DISPLAY);
+      onClose();
+      return;
+    }
+
+    // Non-BTC token selection
     if (tokenData) {
-      // When swapping FOR BTC, set input token; when swapping FROM BTC, set output token
-      if (isSwappingForBTC) {
+      // When BTC is input (!isSwappingForBTC) and user selects a non-BTC token as input,
+      // flip direction like swap reverse: selected token becomes input, BTC becomes output
+      if (selectionDirection === "input" && !isSwappingForBTC) {
+        setIsSwappingForBTC(true);
+        setSelectedInputToken(tokenData);
+        setSelectedOutputToken(BTC_TOKEN);
+        setErc20Price(null);
+        setDisplayedInputAmount("");
+        setOutputAmount("");
+        setInputUsdValue(ZERO_USD_DISPLAY);
+        onClose();
+        return;
+      }
+
+      // Set the token based on selectionDirection
+      if (selectionDirection === "input") {
         setSelectedInputToken(tokenData);
         setErc20Price(null);
       } else {
@@ -435,13 +482,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         }
       }
     }
-    if (isSwappingForBTC) {
-      setDisplayedInputAmount("");
-      setOutputAmount("");
-      setInputUsdValue(ZERO_USD_DISPLAY);
-    } else {
-      // recalculate output based on input btc
-    }
+
+    // Reset amounts when changing tokens
+    setDisplayedInputAmount("");
+    setOutputAmount("");
+    setInputUsdValue(ZERO_USD_DISPLAY);
+
     onClose();
   };
 
@@ -485,8 +531,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         onClick={onClose}
       >
         <Flex gap="18px" align="stretch">
-          {/* Chain Selector Panel - only show when swapping FOR BTC */}
-          {isSwappingForBTC && !isMobile && (
+          {/* Chain Selector Panel - show when selecting input token */}
+          {!isMobile && direction === "input" && (
             <Box
               bg="#131313"
               borderRadius="30px"
@@ -569,7 +615,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     >
                       <BASE_LOGO width="10" height="10" />
                     </Box>
-                    {/* Bottom-left: Placeholder A */}
+                    {/* Bottom-left: Bitcoin */}
                     <Box
                       position="absolute"
                       bottom="0"
@@ -577,16 +623,15 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                       w="16px"
                       h="16px"
                       borderRadius="50%"
-                      bg="#2a2a2a"
+                      bg="#F7931A"
                       border="1.5px solid #131313"
                       display="flex"
                       alignItems="center"
                       justifyContent="center"
+                      overflow="hidden"
                       zIndex={2}
                     >
-                      <Text fontSize="8px" color={colors.textGray} fontWeight="bold">
-                        A
-                      </Text>
+                      <Image src={BTC_ICON} w="16px" h="16px" alt="Bitcoin" objectFit="cover" />
                     </Box>
                     {/* Bottom-right: Placeholder S */}
                     <Box
@@ -615,6 +660,42 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     fontWeight="bold"
                   >
                     All Networks
+                  </Text>
+                </Flex>
+
+                {/* Bitcoin */}
+                <Flex
+                  align="center"
+                  gap="12px"
+                  px="12px"
+                  py="12px"
+                  cursor="pointer"
+                  borderRadius="12px"
+                  bg={selectedNetwork === Network.BITCOIN ? "#1f1f1f" : "transparent"}
+                  _hover={{ bg: "#1f1f1f" }}
+                  onClick={() => handleNetworkSelect(Network.BITCOIN)}
+                  transition="background 0.15s ease"
+                >
+                  <Box
+                    w="24px"
+                    h="24px"
+                    borderRadius="50%"
+                    bg="#F7931A"
+                    border="2px solid #131313"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    overflow="hidden"
+                  >
+                    <Image src={BTC_ICON} w="24px" h="24px" alt="Bitcoin" objectFit="cover" />
+                  </Box>
+                  <Text
+                    fontSize="14px"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    color={colors.offWhite}
+                    fontWeight="bold"
+                  >
+                    Bitcoin
                   </Text>
                 </Flex>
 
@@ -728,7 +809,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   color={colors.offWhite}
                   fontWeight="bold"
                 >
-                  {isSwappingForBTC ? "Select token to send" : "Select token to receive"}
+                  {direction === "input" ? "Select token to send" : "Select token to receive"}
                 </Text>
                 <Box
                   cursor="pointer"
@@ -742,8 +823,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 </Box>
               </Flex>
 
-              {/* Search Bar - only show when swapping FOR BTC */}
-              {isSwappingForBTC && (
+              {/* Search Bar - show when selecting input token */}
+              {direction === "input" && (
                 <Box position="relative" mb="18px" mx="24px">
                   {/* Search Icon */}
                   <Box
@@ -804,7 +885,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               )}
 
               {/* Mobile Network Selector - horizontal scrollable list */}
-              {isSwappingForBTC && isMobile && (
+              {isMobile && direction === "input" && (
                 <Flex
                   mx="24px"
                   mb="16px"
@@ -1089,7 +1170,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                             key={`user-${token.address || token.ticker}-${index}`}
                             mx="12px"
                             cursor="pointer"
-                            onClick={() => handleAssetSelect(token.ticker, token)}
+                            onClick={() => handleAssetSelect(token.ticker, token, direction)}
                           >
                             <Flex
                               align="center"
@@ -1168,7 +1249,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                   >
                                     {token.ticker}
                                   </Text>
-                                  {!isMobile && token.address && (
+                                  {!isMobile && token.address && token.address !== "Native" && (
                                     <Text
                                       fontSize="14px"
                                       fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1226,7 +1307,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                             key={`popular-${token.address || token.ticker}-${index}`}
                             mx="12px"
                             cursor="pointer"
-                            onClick={() => handleAssetSelect(token.ticker, token)}
+                            onClick={() => handleAssetSelect(token.ticker, token, direction)}
                           >
                             <Flex
                               align="center"
@@ -1305,7 +1386,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                   >
                                     {token.ticker}
                                   </Text>
-                                  {!isMobile && token.address && (
+                                  {!isMobile && token.address && token.address !== "Native" && (
                                     <Text
                                       fontSize="14px"
                                       fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -1342,7 +1423,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                             key={`${token.address || token.ticker}-${index}`}
                             mx="12px"
                             cursor="pointer"
-                            onClick={() => handleAssetSelect(token.ticker, token)}
+                            onClick={() => handleAssetSelect(token.ticker, token, direction)}
                           >
                             <Flex
                               align="center"
@@ -1421,7 +1502,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                                   >
                                     {token.ticker}
                                   </Text>
-                                  {!isMobile && token.address && (
+                                  {!isMobile && token.address && token.address !== "Native" && (
                                     <Text
                                       fontSize="14px"
                                       fontFamily={FONT_FAMILIES.AUX_MONO}

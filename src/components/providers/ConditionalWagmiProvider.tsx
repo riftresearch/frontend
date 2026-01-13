@@ -2,7 +2,7 @@ import React from "react";
 import { WagmiProvider } from "wagmi";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useRouter } from "next/router";
-import { DynamicContextProvider } from "@dynamic-labs/sdk-react-core";
+import { DynamicContextProvider, SortWallets } from "@dynamic-labs/sdk-react-core";
 import { DynamicWagmiConnector } from "@dynamic-labs/wagmi-connector";
 import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
 import { BitcoinWalletConnectors } from "@dynamic-labs/bitcoin";
@@ -31,13 +31,37 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
       settings={{
         environmentId: dynamicEnvironmentId,
         walletConnectors: [EthereumWalletConnectors, BitcoinWalletConnectors],
+        walletsFilter: SortWallets([
+          "phantombtc",
+          "metamask",
+          "xverse",
+          "okxwallet",
+          "trust",
+          "coinbase",
+          "unisat",
+          "leather",
+          "magiceden",
+        ]),
         cssOverrides: `
           .powered-by-dynamic { display: none !important; }
           .dynamic-modal { z-index: 999999 !important; }
-          .dynamic-modal-card { z-index: 999999 !important; }
-          .modal-card { z-index: 999999 !important; }
+          .dynamic-modal-card { 
+            z-index: 999999 !important; 
+            min-height: 600px !important;
+            max-height: 80vh !important;
+          }
+          .modal-card { 
+            z-index: 999999 !important;
+            min-height: 600px !important;
+          }
           [data-testid="dynamic-modal"] { z-index: 999999 !important; }
-          [data-testid="dynamic-modal-card"] { z-index: 999999 !important; }
+          [data-testid="dynamic-modal-card"] { 
+            z-index: 999999 !important;
+            min-height: 600px !important;
+          }
+          .wallet-list__scroll-container {
+            max-height: 500px !important;
+          }
         `,
       }}
     >

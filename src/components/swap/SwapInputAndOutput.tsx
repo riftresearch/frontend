@@ -14,6 +14,8 @@ import {
   MIN_SWAP_SATS,
   ETH_TOKEN_BASE,
   ETH_TOKEN,
+  BTC_TOKEN,
+  CBBTC_TOKEN,
 } from "@/utils/constants";
 import { SupportedChainId } from "@cowprotocol/cow-sdk";
 import WebAssetTag from "@/components/other/WebAssetTag";
@@ -115,6 +117,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const [lastEditedField, setLastEditedField] = useState<"input" | "output">("input");
   const [hasStartedTyping, setHasStartedTyping] = useState(false);
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
+  const [assetSelectorDirection, setAssetSelectorDirection] = useState<"input" | "output">("input");
   const [showFeeTooltip, setShowFeeTooltip] = useState(false);
   const [showMaxTooltip, setShowMaxTooltip] = useState(false);
   const [isAtAdjustedMax, setIsAtAdjustedMax] = useState(false);
@@ -346,10 +349,11 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // Fetch ERC20 token price from API
   const fetchErc20TokenPrice = useCallback(
     async (tokenData: TokenData | null) => {
-      // Only fetch if token has an address (ERC20 token, not ETH)
+      // Only fetch if token has an address (ERC20 token, not ETH or BTC)
       if (
         !tokenData?.address ||
-        tokenData.address === "0x0000000000000000000000000000000000000000"
+        tokenData.address === "0x0000000000000000000000000000000000000000" ||
+        tokenData.address === "Native"
       ) {
         setHasNoRoutesError(false);
         setErc20Price(null);
@@ -998,7 +1002,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // EVENT HANDLERS
   // ============================================================================
 
-  const openAssetSelector = () => {
+  const openAssetSelector = (direction: "input" | "output") => {
+    setAssetSelectorDirection(direction);
     setIsAssetSelectorOpen(true);
   };
 
@@ -1017,11 +1022,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // Set selectedOutputToken based on new swap direction
     if (newIsSwappingForBTC) {
       // Swapping TO BTC
-      setSelectedOutputToken(null);
+      setSelectedOutputToken(BTC_TOKEN);
     } else {
-      // Swapping TO ERC20 (cbBTC hardcoded for now)
-      const cbBTC = ETHEREUM_POPULAR_TOKENS.find((token) => token.ticker === "cbBTC");
-      setSelectedOutputToken(cbBTC || null);
+      // Swapping TO ERC20 (cbBTC)
+      setSelectedOutputToken(CBBTC_TOKEN);
     }
 
     // Zero out amounts and USD values
@@ -1530,13 +1534,12 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     if (isInitialMountRef.current) return;
 
     if (isSwappingForBTC) {
-      setSelectedOutputToken(null);
+      setSelectedOutputToken(BTC_TOKEN);
     } else {
       // Use chain-specific cbBTC token based on user's connected chain
-      const popularTokens =
-        evmConnectWalletChainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
-      const cbBTC = popularTokens.find((token) => token.ticker === "cbBTC");
-      setSelectedOutputToken(cbBTC || null);
+      const cbBTC =
+        evmConnectWalletChainId === 8453 ? { ...CBBTC_TOKEN, chainId: 8453 } : CBBTC_TOKEN;
+      setSelectedOutputToken(cbBTC);
     }
   }, [isSwappingForBTC, setSelectedInputToken, setSelectedOutputToken, evmConnectWalletChainId]);
 
@@ -2634,9 +2637,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             />
             {/* Token Selector centered */}
             <WebAssetTag
-              cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+              cursor="pointer"
               asset={inputAssetIdentifier}
-              onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+              onDropDown={() => openAssetSelector("input")}
             />
             {/* Balance + MAX button at bottom */}
             <Flex
@@ -2927,9 +2930,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             )}
             {/* Asset tag centered */}
             <WebAssetTag
-              cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+              cursor="pointer"
               asset={outputAssetIdentifier}
-              onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+              onDropDown={() => openAssetSelector("output")}
               isOutput={true}
             />
             {/* Empty spacer to balance the layout */}
@@ -3027,6 +3030,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         isOpen={isAssetSelectorOpen}
         onClose={closeAssetSelector}
         currentAsset={inputAssetIdentifier}
+        direction={assetSelectorDirection}
       />
     </Flex>
   );

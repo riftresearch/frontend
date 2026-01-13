@@ -129,13 +129,11 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
         >
           {displayTicker}
         </Text>
-        {asset !== "BTC" && (
-          <FaChevronDown
-            size={arrowSize}
-            color="white"
-            style={{ marginTop: "2px", marginRight: "-6px" }}
-          />
-        )}
+        <FaChevronDown
+          size={arrowSize}
+          color="white"
+          style={{ marginTop: "2px", marginRight: "-6px" }}
+        />
       </Flex>
     </Flex>
   );

@@ -76,6 +76,7 @@ export enum Network {
   ALL = "0",
   ETHEREUM = "1",
   BASE = "8453",
+  BITCOIN = "btc",
 }
 
 export type VirtualMachine = EVM | Bitcoin | SVM;

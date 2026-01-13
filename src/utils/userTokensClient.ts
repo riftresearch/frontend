@@ -42,6 +42,11 @@ const NETWORK_CONFIG: Record<Network, NetworkConfig> = {
     chainId: 8453,
     metadata: BASE_ADDRESS_METADATA as unknown as Record<string, TokenMetadataEntry>,
   },
+  [Network.BITCOIN]: {
+    defiLlamaChain: "coingecko",
+    chainId: 0,
+    metadata: {},
+  },
 };
 
 // Derived reverse lookup: chainId -> Network
@@ -152,6 +157,7 @@ export async function fetchWalletTokens(
     [Network.ALL]: [],
     [Network.ETHEREUM]: [],
     [Network.BASE]: [],
+    [Network.BITCOIN]: [],
   };
 
   try {
@@ -209,6 +215,7 @@ export async function fetchAllTokenPrices(
     [Network.ALL]: {},
     [Network.ETHEREUM]: {},
     [Network.BASE]: {},
+    [Network.BITCOIN]: {},
   };
 
   const BATCH_SIZE = 100;
@@ -279,6 +286,7 @@ export async function fetchUserEth(
     [Network.ALL]: null,
     [Network.ETHEREUM]: null,
     [Network.BASE]: null,
+    [Network.BITCOIN]: null,
   };
 
   try {

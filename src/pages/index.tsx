@@ -132,11 +132,11 @@ export default function Home() {
             gap={"0px"}
           >
             <Text mt="15px" mb="25px">
-              The first peer-to-peer <OrangeText>Bitcoin</OrangeText> trading protocol. See{" "}
+              The <OrangeText>Bitcoin</OrangeText> liquidity protocol. Learn{" "}
               <Box
                 as="span"
                 onClick={() =>
-                  (window.location.href = "https://x.com/riftdex/status/1986909188778565772?s=20")
+                  (window.location.href = "https://docs.rift.trade")
                 }
                 style={{
                   textDecoration: "underline",

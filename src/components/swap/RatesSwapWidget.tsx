@@ -13,6 +13,8 @@ import {
   BITCOIN_DECIMALS,
   MIN_SWAP_SATS,
   opaqueBackgroundColor,
+  BTC_TOKEN,
+  CBBTC_TOKEN,
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
@@ -269,6 +271,7 @@ export const RatesSwapWidget = () => {
 
   // Local state
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
+  const [assetSelectorDirection, setAssetSelectorDirection] = useState<"input" | "output">("input");
   const [isLoadingRiftQuote, setIsLoadingRiftQuote] = useState(false);
   const [isLoadingRelayQuote, setIsLoadingRelayQuote] = useState(false);
   const [isLoadingChainflipQuote, setIsLoadingChainflipQuote] = useState(false);
@@ -390,9 +393,11 @@ export const RatesSwapWidget = () => {
   // Fetch ERC20 token price from API
   const fetchErc20TokenPrice = useCallback(
     async (tokenData: TokenData | null) => {
+      // Skip for native tokens (ETH zero address or BTC "Native")
       if (
         !tokenData?.address ||
-        tokenData.address === "0x0000000000000000000000000000000000000000"
+        tokenData.address === "0x0000000000000000000000000000000000000000" ||
+        tokenData.address === "Native"
       ) {
         setErc20Price(null);
         return;
@@ -902,7 +907,8 @@ export const RatesSwapWidget = () => {
   );
 
   // Event handlers
-  const openAssetSelector = () => {
+  const openAssetSelector = (direction: "input" | "output") => {
+    setAssetSelectorDirection(direction);
     setIsAssetSelectorOpen(true);
   };
 
@@ -918,10 +924,9 @@ export const RatesSwapWidget = () => {
     setIsSwappingForBTC(newIsSwappingForBTC);
 
     if (newIsSwappingForBTC) {
-      setSelectedOutputToken(null);
+      setSelectedOutputToken(BTC_TOKEN);
     } else {
-      const cbBTC = ETHEREUM_POPULAR_TOKENS.find((token) => token.ticker === "cbBTC");
-      setSelectedOutputToken(cbBTC || null);
+      setSelectedOutputToken(CBBTC_TOKEN);
     }
 
     setDisplayedInputAmount("");
@@ -1067,12 +1072,10 @@ export const RatesSwapWidget = () => {
     if (isInitialMountRef.current) return;
 
     if (isSwappingForBTC) {
-      setSelectedOutputToken(null);
+      setSelectedOutputToken(BTC_TOKEN);
     } else {
-      const popularTokens =
-        evmConnectWalletChainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
-      const cbBTC = popularTokens.find((token) => token.ticker === "cbBTC");
-      setSelectedOutputToken(cbBTC || null);
+      const cbBTC = evmConnectWalletChainId === 8453 ? { ...CBBTC_TOKEN, chainId: 8453 } : CBBTC_TOKEN;
+      setSelectedOutputToken(cbBTC);
     }
   }, [isSwappingForBTC, setSelectedOutputToken, evmConnectWalletChainId]);
 
@@ -1198,9 +1201,9 @@ export const RatesSwapWidget = () => {
                 showPasteOption={false}
               />
               <WebAssetTag
-                cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                cursor="pointer"
                 asset={inputAssetIdentifier}
-                onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                onDropDown={() => openAssetSelector("input")}
               />
             </Flex>
           </Flex>
@@ -1320,9 +1323,9 @@ export const RatesSwapWidget = () => {
 
             <Flex mt="6px">
               <WebAssetTag
-                cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                cursor="pointer"
                 asset={outputAssetIdentifier}
-                onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                onDropDown={() => openAssetSelector("output")}
                 isOutput={true}
               />
             </Flex>
@@ -2008,6 +2011,7 @@ export const RatesSwapWidget = () => {
         isOpen={isAssetSelectorOpen}
         onClose={closeAssetSelector}
         currentAsset={inputAssetIdentifier}
+        direction={assetSelectorDirection}
       />
     </Flex>
   );

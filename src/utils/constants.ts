@@ -111,6 +111,38 @@ export const ETH_TOKEN_BASE = {
   chainId: 8453,
 };
 
+// Bitcoin token (native BTC, chainId 0 indicates Bitcoin network)
+export const BTC_TOKEN: TokenData = {
+  name: "Bitcoin",
+  ticker: "BTC",
+  address: "Native",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: BTC_ICON,
+  decimals: 8,
+  chainId: 0,
+};
+
+// cbBTC tokens for Ethereum and Base
+export const CBBTC_TOKEN: TokenData = {
+  name: "Coinbase Bitcoin",
+  ticker: "cbBTC",
+  address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: cbBTCStyle.logoURI || FALLBACK_TOKEN_ICON,
+  decimals: 8,
+  chainId: 1,
+};
+
+export const CBBTC_TOKEN_BASE: TokenData = {
+  ...CBBTC_TOKEN,
+  chainId: 8453,
+};
+
+// Popular output tokens (BTC and cbBTC from both chains)
+export const POPULAR_OUTPUT_TOKENS: TokenData[] = [BTC_TOKEN, CBBTC_TOKEN, CBBTC_TOKEN_BASE];
+
 // Create network-specific popular tokens
 export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
   if (ticker === "ETH") {
