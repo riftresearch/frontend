@@ -747,7 +747,7 @@ export const SwapButton = () => {
       return;
     }
 
-    // For BTC->EVM swaps, check Bitcoin wallet is connected
+    // For BTC->EVM swaps, check BTC wallet is connected
     if (!isSwappingForBTC && !selectedInputAddress) {
       toastInfo({
         title: "Connect Bitcoin Wallet",
