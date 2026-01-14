@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Flex, Text, Box, Image, Portal } from "@chakra-ui/react";
 import { useDynamicContext, useUserWallets, useDynamicModals } from "@dynamic-labs/sdk-react-core";
+import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
 import { FiChevronDown, FiPlus, FiEdit3 } from "react-icons/fi";
 import { colors } from "@/utils/colors";
+import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
 
 // Dynamic's icon sprite URL
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
@@ -40,6 +42,35 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     }
   });
 
+  // Map wallets with their addresses (for BTC this will be payment address)
+  const walletsWithAddresses = useMemo(() => {
+    console.log(
+      "[AddressSelector] Building walletsWithAddresses for",
+      filteredWallets.length,
+      "wallets, chainType:",
+      chainType
+    );
+    const result = filteredWallets.map((wallet) => {
+      let address: string;
+      console.log("[AddressSelector] Processing wallet:", wallet.id, "chain:", wallet.chain);
+      console.log("[AddressSelector] isBitcoinWallet check:", isBitcoinWallet(wallet));
+
+      if (chainType === "BTC" && isBitcoinWallet(wallet)) {
+        address = getPaymentAddress(wallet);
+        console.log("[AddressSelector] Using payment address:", address);
+      } else {
+        address = wallet.address;
+        console.log("[AddressSelector] Using default address:", address);
+      }
+      return { wallet, address };
+    });
+    console.log(
+      "[AddressSelector] walletsWithAddresses result:",
+      result.map((w) => ({ id: w.wallet.id, address: w.address }))
+    );
+    return result;
+  }, [filteredWallets, chainType]);
+
   // Get wallet icon key for Dynamic sprite
   const getWalletIconKey = (wallet: any): string => {
     return wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
@@ -51,11 +82,12 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // Find the selected wallet
-  const selectedWallet = filteredWallets.find((w) => w.address === selectedAddress);
+  // Find the selected wallet (checking by correct address type)
+  const selectedWalletData = walletsWithAddresses.find((w) => w.address === selectedAddress);
+  const selectedWallet = selectedWalletData?.wallet;
 
   // Determine if this is a pasted address (not from a connected wallet)
-  const isPastedAddress = selectedAddress && !selectedWallet;
+  const isPastedAddress = selectedAddress && !selectedWalletData;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -97,7 +129,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
     // Track if new address was pasted (address changed but not to a connected wallet)
     if (addressChanged && selectedAddress) {
-      const isFromWallet = filteredWallets.some((w) => w.address === selectedAddress);
+      const isFromWallet = walletsWithAddresses.some((w) => w.address === selectedAddress);
       wasPastedRef.current = !isFromWallet;
     } else if (!selectedAddress) {
       wasPastedRef.current = false;
@@ -107,24 +139,24 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     if (addressChanged) return;
 
     // Auto-select first wallet if none selected and wallets available
-    if (!selectedAddress && filteredWallets.length > 0) {
-      onSelect(filteredWallets[0].address);
+    if (!selectedAddress && walletsWithAddresses.length > 0) {
+      onSelect(walletsWithAddresses[0].address);
       return;
     }
 
     // Handle disconnection - only if wallets decreased and address is not manually pasted
     if (walletsDecreased && selectedAddress && !wasPastedRef.current) {
-      const stillConnected = filteredWallets.some((w) => w.address === selectedAddress);
+      const stillConnected = walletsWithAddresses.some((w) => w.address === selectedAddress);
       if (!stillConnected) {
         // Wallet was disconnected - select first available or clear
-        if (filteredWallets.length > 0) {
-          onSelect(filteredWallets[0].address);
+        if (walletsWithAddresses.length > 0) {
+          onSelect(walletsWithAddresses[0].address);
         } else {
           onSelect(null);
         }
       }
     }
-  }, [filteredWallets.length, selectedAddress, onSelect, filteredWallets]);
+  }, [filteredWallets.length, selectedAddress, onSelect, walletsWithAddresses]);
 
   const handleConnectNewWallet = () => {
     setIsOpen(false);
@@ -176,7 +208,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
         _hover={{ opacity: 0.8 }}
         onClick={() => setIsOpen(!isOpen)}
       >
-        {selectedWallet ? (
+        {selectedWalletData ? (
           <>
             <Image
               src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(selectedWallet)}`}
@@ -193,7 +225,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
               letterSpacing="-1px"
               whiteSpace="nowrap"
             >
-              {formatAddress(selectedWallet.address)}
+              {formatAddress(selectedWalletData.address)}
             </Text>
           </>
         ) : isPastedAddress ? (
@@ -252,7 +284,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             boxShadow="0 8px 32px rgba(0,0,0,0.4)"
           >
             {/* Connected Wallets */}
-            {filteredWallets.map((wallet) => (
+            {walletsWithAddresses.map(({ wallet, address }) => (
               <Flex
                 key={wallet.id}
                 align="center"
@@ -260,9 +292,9 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
                 px="12px"
                 py="10px"
                 cursor="pointer"
-                bg={selectedAddress === wallet.address ? "#252525" : "transparent"}
+                bg={selectedAddress === address ? "#252525" : "transparent"}
                 _hover={{ bg: "#252525" }}
-                onClick={() => handleSelectWallet(wallet.address)}
+                onClick={() => handleSelectWallet(address)}
               >
                 <Image
                   src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
@@ -272,7 +304,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
                   borderRadius="6px"
                 />
                 <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily="Inter">
-                  {formatAddress(wallet.address)}
+                  {formatAddress(address)}
                 </Text>
               </Flex>
             ))}

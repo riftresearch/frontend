@@ -331,12 +331,14 @@ interface UserSwapHistoryProps {
   onInitialLoadComplete?: () => void;
   simulatedAddress?: string; // Optional simulated address for admin view
   embedded?: boolean; // When true, renders in compact mode for WalletPanel
+  onSwapClick?: () => void; // Callback when a swap is clicked (for closing panel etc.)
 }
 
 export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   onInitialLoadComplete,
   simulatedAddress,
   embedded = false,
+  onSwapClick,
 }) => {
   const { address: wagmiAddress, isConnected: isWagmiConnected } = useAccount();
   const { setShowAuthFlow } = useDynamicContext();
@@ -750,7 +752,10 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                   bg="rgba(40, 40, 40, 0.6)"
                   _hover={{ bg: "rgba(50, 50, 50, 0.7)" }}
                   cursor="pointer"
-                  onClick={() => router.push(`/swap/${swap.id}`)}
+                  onClick={() => {
+                    onSwapClick?.();
+                    router.push(`/swap/${swap.id}`);
+                  }}
                   direction="column"
                   gap="14px"
                 >

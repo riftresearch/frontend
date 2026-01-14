@@ -7,6 +7,7 @@ import {
   useDynamicModals,
   useSwitchWallet,
 } from "@dynamic-labs/sdk-react-core";
+import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
 import {
   FiCopy,
   FiCheck,
@@ -21,6 +22,7 @@ import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
+import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
 import { toastSuccess } from "@/utils/toast";
 import type { TokenData } from "@/utils/types";
@@ -83,13 +85,26 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   } = useStore();
   const { isMobile } = useWindowSize();
 
-  // Get all BTC wallet addresses for balance fetching
+  // Get all BTC wallet addresses for balance fetching (using payment addresses)
   const btcWalletAddresses = userWallets
     .filter((wallet) => {
       const chain = wallet.chain?.toLowerCase();
       return chain === "btc" || chain === "bitcoin";
     })
-    .map((wallet) => wallet.address);
+    .map((wallet) => {
+      // Use payment address for Xverse and other wallets with separate ordinal/payment addresses
+      console.log("[WalletPanel] Processing BTC wallet:", wallet.id);
+      console.log("[WalletPanel] isBitcoinWallet check:", isBitcoinWallet(wallet));
+      if (isBitcoinWallet(wallet)) {
+        const paymentAddr = getPaymentAddress(wallet);
+        console.log("[WalletPanel] Using payment address:", paymentAddr);
+        return paymentAddr;
+      }
+      console.log("[WalletPanel] Using default address:", wallet.address);
+      return wallet.address;
+    });
+
+  console.log("[WalletPanel] btcWalletAddresses:", btcWalletAddresses);
 
   // Fetch balances for all BTC wallets
   const btcBalances = useBitcoinBalances(btcWalletAddresses);
@@ -114,6 +129,31 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     if (wallet.chain === "EVM" || wallet.chain === "evm") return "EVM";
     if (wallet.chain === "BTC" || wallet.chain === "bitcoin") return "BVM";
     return wallet.chain || "Unknown";
+  };
+
+  // Get the correct address to use for a wallet (payment address for BTC, default for EVM)
+  const getWalletDisplayAddress = (wallet: any): string => {
+    const chainType = getWalletChainType(wallet);
+    console.log(
+      "[WalletPanel:getWalletDisplayAddress] chainType:",
+      chainType,
+      "isBitcoinWallet:",
+      isBitcoinWallet(wallet)
+    );
+    if (chainType === "BVM" && isBitcoinWallet(wallet)) {
+      const addr = getPaymentAddress(wallet);
+      console.log("[WalletPanel:getWalletDisplayAddress] returning payment address:", addr);
+      return addr;
+    }
+    console.log("[WalletPanel:getWalletDisplayAddress] returning default address:", wallet.address);
+    return wallet.address;
+  };
+
+  // Check if a wallet is the primary/selected wallet
+  const isSelectedWallet = (wallet: any): boolean => {
+    if (!primaryWallet) return false;
+    // Compare using wallet IDs which are stable
+    return primaryWallet.id === wallet.id;
   };
 
   // Find EVM wallet for token attribution
@@ -290,8 +330,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         walletId: wallet.id,
       }));
     } else {
-      // Return BTC token for this wallet
-      const balance = btcBalances[wallet.address];
+      // Return BTC token for this wallet (use payment address for balance lookup)
+      const walletAddr = getWalletDisplayAddress(wallet);
+      const balance = btcBalances[walletAddr];
       if (balance?.balanceBtc > 0) {
         const btcUsdValue = balance.balanceBtc * (btcPrice || 0);
         return [
@@ -307,7 +348,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
             icon: "/images/BTC_icon.svg",
             decimals: 8,
             chainId: 0,
-            walletAddress: wallet.address,
+            walletAddress: walletAddr,
             walletIconKey: getWalletIconKey(wallet),
             walletId: wallet.id,
           },
@@ -332,7 +373,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
           if (chainType === "EVM") {
             return evmTotalUsdValue;
           } else {
-            const balance = btcBalances[wallet.address];
+            const walletAddr = getWalletDisplayAddress(wallet);
+            const balance = btcBalances[walletAddr];
             return balance?.balanceBtc ? balance.balanceBtc * (btcPrice || 0) : 0;
           }
         })();
@@ -372,10 +414,10 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     // Check if we need to flip swap direction
     if (isSwappingForBTC && isBtcWallet) {
       // Currently EVM→BTC, but selected BTC wallet
-      // Flip to BTC→EVM and use BTC address as input
+      // Flip to BTC→EVM and use BTC address as input (use payment address)
       // Set flag to skip address clearing in SwapInputAndOutput effect
       setSkipAddressClearOnDirectionChange(true);
-      setSelectedInputAddress(wallet.address);
+      setSelectedInputAddress(getWalletDisplayAddress(wallet));
       // Find an EVM wallet for output (BTC→EVM needs EVM output)
       const outputEvmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
       setSelectedOutputAddress(outputEvmWallet?.address || null);
@@ -385,7 +427,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       // Flip to EVM→BTC and use EVM address as input
       // Set flag to skip address clearing in SwapInputAndOutput effect
       setSkipAddressClearOnDirectionChange(true);
-      setSelectedInputAddress(wallet.address);
+      setSelectedInputAddress(getWalletDisplayAddress(wallet));
       // Find a BTC wallet for output (EVM→BTC needs BTC output)
       const outputBtcWallet = userWallets.find((w) => {
         const chain = w.chain?.toLowerCase();
@@ -395,7 +437,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       setIsSwappingForBTC(true);
     } else {
       // Chain type matches current input type, just update address
-      setSelectedInputAddress(wallet.address);
+      setSelectedInputAddress(getWalletDisplayAddress(wallet));
     }
 
     setShowWalletsOverlay(false);
@@ -599,28 +641,27 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                       mb="8px"
                       borderRadius="12px"
                       border={`2px solid ${
-                        primaryWallet?.address === wallet.address
+                        isSelectedWallet(wallet)
                           ? getWalletChainType(wallet) === "EVM"
                             ? "rgba(120, 140, 255, 0.6)"
                             : "rgba(247, 170, 80, 0.6)"
                           : colors.borderGray
                       }`}
                       bg={
-                        primaryWallet?.address === wallet.address
+                        isSelectedWallet(wallet)
                           ? getWalletChainType(wallet) === "EVM"
                             ? "rgba(9, 36, 97, 0.3)"
                             : "#291B0D"
                           : colors.offBlack
                       }
-                      cursor={primaryWallet?.address === wallet.address ? "default" : "pointer"}
+                      cursor={isSelectedWallet(wallet) ? "default" : "pointer"}
                       transition="all 0.2s ease-in-out"
                       _hover={{
-                        bg:
-                          primaryWallet?.address === wallet.address
-                            ? getWalletChainType(wallet) === "EVM"
-                              ? "rgba(9, 36, 97, 0.4)"
-                              : "#3a2510"
-                            : "#1a1a1a",
+                        bg: isSelectedWallet(wallet)
+                          ? getWalletChainType(wallet) === "EVM"
+                            ? "rgba(9, 36, 97, 0.4)"
+                            : "#3a2510"
+                          : "#1a1a1a",
                       }}
                       onClick={() => handleWalletSelect(wallet)}
                     >
@@ -650,7 +691,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             cursor="pointer"
                             onClick={(e) => {
                               e.stopPropagation();
-                              copyAddress(wallet.address);
+                              copyAddress(getWalletDisplayAddress(wallet));
                             }}
                             _hover={{ opacity: 0.8 }}
                           >
@@ -660,9 +701,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               fontWeight="600"
                               fontFamily="Inter"
                             >
-                              {formatAddress(wallet.address)}
+                              {formatAddress(getWalletDisplayAddress(wallet))}
                             </Text>
-                            {copiedAddress === wallet.address ? (
+                            {copiedAddress === getWalletDisplayAddress(wallet) ? (
                               <FiCheck size={16} color={colors.greenOutline} />
                             ) : (
                               <FiCopy size={16} color={colors.textGray} />
@@ -679,7 +720,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           {getWalletChainType(wallet) === "EVM"
                             ? `$${totalUsdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : (() => {
-                                const balanceData = btcBalances[wallet.address];
+                                const balanceData = btcBalances[getWalletDisplayAddress(wallet)];
                                 if (!balanceData || balanceData.isLoading) return "...";
                                 if (balanceData.error) return "$0.00";
                                 const usdValue = balanceData.balanceBtc * (btcPrice || 0);
@@ -741,7 +782,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             </Text>
                           </Flex>
                           {/* Active indicator or Select Wallet */}
-                          {primaryWallet?.address === wallet.address ? (
+                          {isSelectedWallet(wallet) ? (
                             <Flex align="center" gap="4px">
                               <Box w="6px" h="6px" borderRadius="full" bg={colors.greenOutline} />
                               <Text
@@ -1077,7 +1118,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           fontWeight="500"
                           fontFamily="Inter"
                         >
-                          {formatAddress(wallet.address)}
+                          {formatAddress(getWalletDisplayAddress(wallet))}
                         </Text>
                       </Flex>
                     ))}
@@ -1354,7 +1395,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 scrollbarColor: "#333 transparent",
               }}
             >
-              <UserSwapHistory embedded />
+              <UserSwapHistory embedded onSwapClick={onClose} />
             </Box>
           )}
         </Flex>

@@ -5,6 +5,39 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchUserUtxos, getUtxoBalance } from "@/utils/bitcoinTransactionHelpers";
 
+/**
+ * Basic validation for Bitcoin address format
+ * Returns true if the address looks like a valid Bitcoin address
+ */
+function isValidBitcoinAddress(address: string): boolean {
+  if (!address || typeof address !== "string") return false;
+
+  // Trim whitespace
+  const trimmed = address.trim();
+  if (trimmed.length === 0) return false;
+
+  // Check for valid Bitcoin address prefixes
+  // P2PKH (legacy): starts with 1, length 25-34
+  // P2SH: starts with 3, length 25-34
+  // Bech32 (native segwit): starts with bc1, length 42-62
+  // Bech32m (taproot): starts with bc1p, length 62
+  if (trimmed.startsWith("1") || trimmed.startsWith("3")) {
+    return trimmed.length >= 25 && trimmed.length <= 34;
+  }
+  if (trimmed.startsWith("bc1")) {
+    return trimmed.length >= 42 && trimmed.length <= 62;
+  }
+  // Testnet addresses (for development)
+  if (trimmed.startsWith("m") || trimmed.startsWith("n") || trimmed.startsWith("2")) {
+    return trimmed.length >= 25 && trimmed.length <= 34;
+  }
+  if (trimmed.startsWith("tb1")) {
+    return trimmed.length >= 42 && trimmed.length <= 62;
+  }
+
+  return false;
+}
+
 export interface UseBitcoinBalanceResult {
   /** Balance in satoshis */
   balanceSats: number;
@@ -38,6 +71,12 @@ export function useBitcoinBalance(address: string | null): UseBitcoinBalanceResu
 
   const fetchBalance = useCallback(async (addr: string) => {
     if (!addr) return;
+
+    // Validate address format before making API call
+    if (!isValidBitcoinAddress(addr)) {
+      console.warn("Invalid Bitcoin address format, skipping fetch:", addr);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -127,17 +166,24 @@ export function useBitcoinBalances(addresses: string[]): Record<string, UseBitco
   const fetchAllBalances = useCallback(async () => {
     if (addresses.length === 0) return;
 
+    // Filter out invalid addresses
+    const validAddresses = addresses.filter((addr) => isValidBitcoinAddress(addr));
+    if (validAddresses.length === 0) {
+      console.warn("No valid Bitcoin addresses to fetch balances for");
+      return;
+    }
+
     // Initialize loading states
     const initialState: Record<string, { sats: number; loading: boolean; error: string | null }> =
       {};
-    addresses.forEach((addr) => {
+    validAddresses.forEach((addr) => {
       initialState[addr] = { sats: balances[addr]?.sats ?? 0, loading: true, error: null };
     });
     setBalances(initialState);
 
     // Fetch all balances in parallel
     const results = await Promise.all(
-      addresses.map(async (addr) => {
+      validAddresses.map(async (addr) => {
         try {
           const utxos = await fetchUserUtxos(addr);
           const balance = getUtxoBalance(utxos);
@@ -187,4 +233,3 @@ export function useBitcoinBalances(addresses: string[]): Record<string, UseBitco
 
   return result;
 }
-

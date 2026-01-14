@@ -13,6 +13,63 @@ import {
   getUtxoBalance,
 } from "@/utils/bitcoinTransactionHelpers";
 
+/**
+ * Get the payment address from a Bitcoin wallet
+ * Xverse and some other wallets have separate payment and ordinal addresses.
+ * The payment address is needed for sending BTC transactions.
+ */
+export function getPaymentAddress(wallet: BitcoinWallet): string {
+  // Debug: Log the entire wallet object to see what's available
+  console.log("[getPaymentAddress] Wallet object:", wallet);
+  console.log("[getPaymentAddress] Wallet address (default):", wallet.address);
+  console.log(
+    "[getPaymentAddress] Wallet additionalAddresses:",
+    (wallet as any).additionalAddresses
+  );
+
+  // Check additionalAddresses for a payment address
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string; publicKey?: string }>
+    | undefined;
+
+  if (additionalAddresses && additionalAddresses.length > 0) {
+    console.log("[getPaymentAddress] Found additionalAddresses:", additionalAddresses);
+    const paymentAddr = additionalAddresses.find((addr) => addr.type === "payment");
+    if (paymentAddr) {
+      console.log("[getPaymentAddress] Found payment address:", paymentAddr.address);
+      return paymentAddr.address;
+    }
+    console.log("[getPaymentAddress] No payment type found in additionalAddresses");
+  } else {
+    console.log("[getPaymentAddress] No additionalAddresses found");
+  }
+
+  // Fallback to the default wallet address
+  console.log("[getPaymentAddress] Falling back to default address:", wallet.address);
+  return wallet.address;
+}
+
+/**
+ * Check if an address belongs to a Bitcoin wallet (either primary or additional)
+ */
+export function walletHasAddress(wallet: BitcoinWallet, address: string): boolean {
+  // Check primary address
+  if (wallet.address === address) {
+    return true;
+  }
+
+  // Check additional addresses
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string }>
+    | undefined;
+
+  if (additionalAddresses) {
+    return additionalAddresses.some((addr) => addr.address === address);
+  }
+
+  return false;
+}
+
 export interface UseBitcoinTransactionResult {
   /**
    * Send Bitcoin to a deposit address
@@ -82,12 +139,12 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
   }, [userWallets]);
 
   /**
-   * Find a Bitcoin wallet by address
+   * Find a Bitcoin wallet by address (checks both primary and additional addresses)
    */
   const findBitcoinWalletByAddress = useCallback(
     (address: string): BitcoinWallet | null => {
       const btcWallets = getBitcoinWallets();
-      return btcWallets.find((wallet) => wallet.address === address) || null;
+      return btcWallets.find((wallet) => walletHasAddress(wallet, address)) || null;
     },
     [getBitcoinWallets]
   );
@@ -165,14 +222,18 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
           );
         }
 
+        // Get the payment address from the wallet (important for Xverse which has separate ordinal/payment addresses)
+        const paymentAddress = getPaymentAddress(btcWallet);
+
         console.log("[BTC TX] Preparing deposit transaction...");
-        console.log("[BTC TX] User address:", userAddress);
+        console.log("[BTC TX] Requested address:", userAddress);
+        console.log("[BTC TX] Payment address:", paymentAddress);
         console.log("[BTC TX] Deposit address:", depositAddress);
         console.log("[BTC TX] Amount (sats):", amountSats);
 
-        // Step 1: Prepare the PSBT
+        // Step 1: Prepare the PSBT using the payment address
         const psbtResult = await prepareDepositTransaction(
-          userAddress,
+          paymentAddress, // Use payment address for UTXO fetching and change
           depositAddress,
           amountSats,
           "medium" // Use medium fee priority
@@ -199,7 +260,7 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
           unsignedPsbtBase64: psbtResult.psbtBase64,
           signature: [
             {
-              address: userAddress,
+              address: paymentAddress, // Use payment address for signing
               signingIndexes,
             },
           ],
