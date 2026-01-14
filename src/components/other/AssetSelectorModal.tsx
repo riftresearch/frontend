@@ -3,6 +3,7 @@ import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { BASE_LOGO } from "./SVGs";
 import { NetworkBadge } from "./NetworkBadge";
+import { TokenDisplay } from "./TokenDisplay";
 import { useState, useEffect, useRef } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
@@ -1166,123 +1167,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           </Text>
                         </Box>
                         {searchResults.map((token, index) => (
-                          <Box
+                          <TokenDisplay
                             key={`user-${token.address || token.ticker}-${index}`}
-                            mx="12px"
-                            cursor="pointer"
+                            token={token}
                             onClick={() => handleAssetSelect(token.ticker, token, direction)}
-                          >
-                            <Flex
-                              align="center"
-                              py="12px"
-                              px="12px"
-                              letterSpacing="-0.6px"
-                              borderRadius="12px"
-                              bg="#131313"
-                              transition="background 0.15s ease"
-                              _hover={{ bg: "#1f1f1f" }}
-                            >
-                              {/* Token Icon with Network Badge */}
-                              <Box position="relative" mr="12px">
-                                <Flex
-                                  w="40px"
-                                  h="40px"
-                                  borderRadius="50%"
-                                  bg="#404040"
-                                  align="center"
-                                  justify="center"
-                                  overflow="hidden"
-                                >
-                                  <Image
-                                    src={token.icon}
-                                    w="100%"
-                                    h="100%"
-                                    alt={`${token.ticker} icon`}
-                                    objectFit="cover"
-                                  />
-                                  <Text
-                                    fontSize="12px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.offWhite}
-                                    display="none"
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                </Flex>
-
-                                {/* Network Badge */}
-                                {token.chainId && (
-                                  <Box
-                                    position="absolute"
-                                    bottom="-2px"
-                                    right="-2px"
-                                    w="20px"
-                                    h="20px"
-                                    borderRadius="50%"
-                                    bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                    border="2px solid #131313"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    overflow="hidden"
-                                  >
-                                    <NetworkBadge chainId={token.chainId} />
-                                  </Box>
-                                )}
-                              </Box>
-
-                              {/* Token Info */}
-                              <Flex direction="column" flex="1">
-                                <Text
-                                  fontSize="16px"
-                                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                                  color={colors.offWhite}
-                                  fontWeight="bold"
-                                >
-                                  {token.name}
-                                </Text>
-                                <Flex align="center" gap="8px">
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                  {!isMobile && token.address && token.address !== "Native" && (
-                                    <Text
-                                      fontSize="14px"
-                                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                                      color={colors.darkerGray}
-                                    >
-                                      {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                                    </Text>
-                                  )}
-                                </Flex>
-                              </Flex>
-
-                              {/* Balance Info - show for wallet tokens with balance > 0 */}
-                              {isConnected && token.balance !== "0" && (
-                                <Flex direction="column" align="flex-end">
-                                  <Text
-                                    fontSize="16px"
-                                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                                    color={colors.offWhite}
-                                    fontWeight="bold"
-                                  >
-                                    {formatUsdValue(token.usdValue)}
-                                  </Text>
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.balance.slice(0, 9)}
-                                  </Text>
-                                </Flex>
-                              )}
-                            </Flex>
-                          </Box>
+                            showBalance={true}
+                            isMobile={isMobile}
+                            formatUsdValue={formatUsdValue}
+                          />
                         ))}
                       </>
                     )}
@@ -1303,102 +1195,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           </Text>
                         </Box>
                         {popularTokens.map((token, index) => (
-                          <Box
+                          <TokenDisplay
                             key={`popular-${token.address || token.ticker}-${index}`}
-                            mx="12px"
-                            cursor="pointer"
+                            token={token}
                             onClick={() => handleAssetSelect(token.ticker, token, direction)}
-                          >
-                            <Flex
-                              align="center"
-                              py="12px"
-                              px="12px"
-                              letterSpacing="-0.6px"
-                              borderRadius="12px"
-                              bg="#131313"
-                              transition="background 0.15s ease"
-                              _hover={{ bg: "#1f1f1f" }}
-                            >
-                              {/* Token Icon with Network Badge */}
-                              <Box position="relative" mr="12px">
-                                <Flex
-                                  w="40px"
-                                  h="40px"
-                                  borderRadius="50%"
-                                  bg="#404040"
-                                  align="center"
-                                  justify="center"
-                                  overflow="hidden"
-                                >
-                                  <Image
-                                    src={token.icon}
-                                    w="100%"
-                                    h="100%"
-                                    alt={`${token.ticker} icon`}
-                                    objectFit="cover"
-                                  />
-                                  <Text
-                                    fontSize="12px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.offWhite}
-                                    display="none"
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                </Flex>
-
-                                {/* Network Badge */}
-                                {token.chainId && (
-                                  <Box
-                                    position="absolute"
-                                    bottom="-2px"
-                                    right="-2px"
-                                    w="20px"
-                                    h="20px"
-                                    borderRadius="50%"
-                                    bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                    border="2px solid #131313"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    overflow="hidden"
-                                  >
-                                    <NetworkBadge chainId={token.chainId} />
-                                  </Box>
-                                )}
-                              </Box>
-
-                              {/* Token Info */}
-                              <Flex direction="column" flex="1">
-                                <Text
-                                  fontSize="16px"
-                                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                                  color={colors.offWhite}
-                                  fontWeight="bold"
-                                >
-                                  {token.name}
-                                </Text>
-                                <Flex align="center" gap="8px">
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                  {!isMobile && token.address && token.address !== "Native" && (
-                                    <Text
-                                      fontSize="14px"
-                                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                                      color={colors.darkerGray}
-                                    >
-                                      {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                                    </Text>
-                                  )}
-                                </Flex>
-                              </Flex>
-                            </Flex>
-                          </Box>
+                            showBalance={false}
+                            isMobile={isMobile}
+                            formatUsdValue={formatUsdValue}
+                          />
                         ))}
                       </>
                     )}
@@ -1419,102 +1223,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           </Text>
                         </Box>
                         {searchResults.map((token, index) => (
-                          <Box
+                          <TokenDisplay
                             key={`${token.address || token.ticker}-${index}`}
-                            mx="12px"
-                            cursor="pointer"
+                            token={token}
                             onClick={() => handleAssetSelect(token.ticker, token, direction)}
-                          >
-                            <Flex
-                              align="center"
-                              py="12px"
-                              px="12px"
-                              letterSpacing="-0.6px"
-                              borderRadius="12px"
-                              bg="#131313"
-                              transition="background 0.15s ease"
-                              _hover={{ bg: "#1f1f1f" }}
-                            >
-                              {/* Token Icon with Network Badge */}
-                              <Box position="relative" mr="12px">
-                                <Flex
-                                  w="40px"
-                                  h="40px"
-                                  borderRadius="50%"
-                                  bg="#404040"
-                                  align="center"
-                                  justify="center"
-                                  overflow="hidden"
-                                >
-                                  <Image
-                                    src={token.icon}
-                                    w="100%"
-                                    h="100%"
-                                    alt={`${token.ticker} icon`}
-                                    objectFit="cover"
-                                  />
-                                  <Text
-                                    fontSize="12px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.offWhite}
-                                    display="none"
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                </Flex>
-
-                                {/* Network Badge */}
-                                {token.chainId && (
-                                  <Box
-                                    position="absolute"
-                                    bottom="-2px"
-                                    right="-2px"
-                                    w="20px"
-                                    h="20px"
-                                    borderRadius="50%"
-                                    bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                    border="2px solid #131313"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    overflow="hidden"
-                                  >
-                                    <NetworkBadge chainId={token.chainId} />
-                                  </Box>
-                                )}
-                              </Box>
-
-                              {/* Token Info */}
-                              <Flex direction="column" flex="1">
-                                <Text
-                                  fontSize="16px"
-                                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                                  color={colors.offWhite}
-                                  fontWeight="bold"
-                                >
-                                  {token.name}
-                                </Text>
-                                <Flex align="center" gap="8px">
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                  {!isMobile && token.address && token.address !== "Native" && (
-                                    <Text
-                                      fontSize="14px"
-                                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                                      color={colors.darkerGray}
-                                    >
-                                      {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                                    </Text>
-                                  )}
-                                </Flex>
-                              </Flex>
-                            </Flex>
-                          </Box>
+                            showBalance={false}
+                            isMobile={isMobile}
+                            formatUsdValue={formatUsdValue}
+                          />
                         ))}
                       </>
                     )}

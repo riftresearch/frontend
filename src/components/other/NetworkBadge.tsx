@@ -8,6 +8,19 @@ interface NetworkBadgeProps {
 
 /** Network badge component displaying chain icon */
 export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ chainId, size = "14px" }) => {
+  // Bitcoin
+  if (chainId === 0) {
+    return (
+      <Image
+        src="/images/assets/icons/BTC.svg"
+        w={size}
+        h={size}
+        alt="Bitcoin"
+        objectFit="contain"
+      />
+    );
+  }
+  // Ethereum
   if (chainId === 1) {
     return (
       <Image
@@ -19,6 +32,7 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ chainId, size = "14p
       />
     );
   }
+  // Base
   if (chainId === 8453) {
     return (
       <Box w={size} h={size} display="flex" alignItems="center" justifyContent="center">
@@ -28,4 +42,3 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ chainId, size = "14p
   }
   return null;
 };
-

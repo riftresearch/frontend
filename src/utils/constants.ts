@@ -24,6 +24,17 @@ export const ZERO_USD_DISPLAY = "$0.00";
 
 export const MIN_SWAP_SATS = 3000;
 
+// Chain ID to network name mapping
+export const CHAIN_NAMES: Record<number, string> = {
+  0: "Bitcoin",
+  1: "Ethereum",
+  8453: "Base",
+  42161: "Arbitrum",
+  10: "Optimism",
+  137: "Polygon",
+  56: "BNB",
+};
+
 export const bitcoinStyle: TokenStyle = {
   name: "Bitcoin",
   display_name: "BTC",

@@ -27,26 +27,7 @@ import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
 import { toastSuccess } from "@/utils/toast";
 import type { TokenData } from "@/utils/types";
 import useWindowSize from "@/hooks/useWindowSize";
-
-// Chain ID to network name mapping
-const CHAIN_NAMES: Record<number, string> = {
-  1: "Ethereum",
-  8453: "Base",
-  42161: "Arbitrum",
-  10: "Optimism",
-  137: "Polygon",
-  56: "BNB",
-};
-
-// Chain ID to logo mapping
-const CHAIN_LOGOS: Record<number, string> = {
-  1: "/images/icons/Ethereum.svg",
-  8453: "/images/base_logo.svg",
-  42161: "/images/arbitrum_logo.svg",
-  10: "/images/optimism_logo.svg",
-  137: "/images/polygon_logo.svg",
-  56: "/images/bnb_logo.svg",
-};
+import { TokenDisplay } from "./TokenDisplay";
 
 // Chain type to logo mapping (for wallet badges)
 const CHAIN_TYPE_LOGOS: Record<string, string> = {
@@ -1247,124 +1228,13 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
               ) : (
                 <Flex direction="column" gap="4px">
                   {displayTokens.map((token, idx) => (
-                    <Flex
+                    <TokenDisplay
                       key={`${token.address}-${token.chainId}-${token.walletAddress}-${idx}`}
-                      p="12px"
-                      borderRadius="12px"
-                      align="center"
-                      justify="space-between"
-                      cursor="pointer"
-                      _hover={{ bg: colors.offBlackLighter }}
-                    >
-                      {/* Token Icon & Info */}
-                      <Flex align="center" gap="12px">
-                        <Box position="relative">
-                          <Image
-                            src={
-                              token.chainId === 0 || token.ticker === "BTC"
-                                ? "/images/BTC_icon.svg"
-                                : token.icon || FALLBACK_TOKEN_ICON
-                            }
-                            alt={token.ticker}
-                            w="40px"
-                            h="40px"
-                            borderRadius="full"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = FALLBACK_TOKEN_ICON;
-                            }}
-                          />
-                          {/* Wallet Badge(s) (only in combined view) */}
-                          {viewMode === "all" &&
-                            token.walletIcons &&
-                            token.walletIcons.length > 0 && (
-                              <Flex position="absolute" top="-4px" left="-4px">
-                                {token.walletIcons.slice(0, 3).map((walletIcon, iconIdx) => (
-                                  <Box
-                                    key={walletIcon.walletId}
-                                    w="16px"
-                                    h="16px"
-                                    borderRadius="4px"
-                                    ml={iconIdx > 0 ? "-6px" : "0"}
-                                    border={`2px solid ${colors.offBlack}`}
-                                    bg={colors.offBlackLighter}
-                                    overflow="hidden"
-                                    zIndex={3 - iconIdx}
-                                  >
-                                    <Image
-                                      src={`${DYNAMIC_ICON_BASE}#${walletIcon.iconKey}`}
-                                      alt="wallet"
-                                      w="100%"
-                                      h="100%"
-                                      objectFit="cover"
-                                    />
-                                  </Box>
-                                ))}
-                              </Flex>
-                            )}
-                          {/* Chain Badge */}
-                          {token.chainId === 0 ? (
-                            // BTC chain badge
-                            <Image
-                              src="/images/assets/icons/BTC.svg"
-                              alt="Bitcoin"
-                              w="16px"
-                              h="16px"
-                              position="absolute"
-                              bottom="-2px"
-                              right="-2px"
-                              borderRadius="full"
-                              border={`2px solid ${colors.offBlack}`}
-                              bg="#F7931A"
-                              p="2px"
-                            />
-                          ) : token.chainId && CHAIN_LOGOS[token.chainId] ? (
-                            <Image
-                              src={CHAIN_LOGOS[token.chainId]}
-                              alt={CHAIN_NAMES[token.chainId]}
-                              w="16px"
-                              h="16px"
-                              position="absolute"
-                              bottom="-2px"
-                              right="-2px"
-                              borderRadius="full"
-                              border={`2px solid ${colors.offBlack}`}
-                              bg={colors.offBlack}
-                            />
-                          ) : null}
-                        </Box>
-                        <Flex direction="column">
-                          <Text
-                            color={colors.offWhite}
-                            fontSize="16px"
-                            fontWeight="500"
-                            fontFamily="Inter"
-                          >
-                            {token.ticker}
-                          </Text>
-                          <Text color={colors.textGray} fontSize="12px" fontFamily="Inter">
-                            {token.chainId === 0
-                              ? "Bitcoin"
-                              : CHAIN_NAMES[token.chainId] || "Unknown"}
-                          </Text>
-                        </Flex>
-                      </Flex>
-
-                      {/* Token Value */}
-                      <Flex direction="column" align="flex-end">
-                        <Text
-                          color={colors.offWhite}
-                          fontSize="16px"
-                          fontWeight="500"
-                          fontFamily="Inter"
-                          letterSpacing="0.5px"
-                        >
-                          {token.usdValue}
-                        </Text>
-                        <Text color={colors.textGray} fontSize="12px" fontFamily="Inter">
-                          {parseFloat(token.balance).toFixed(4)} {token.ticker}
-                        </Text>
-                      </Flex>
-                    </Flex>
+                      token={token}
+                      showBalance
+                      isMobile={isMobile}
+                      walletIcons={viewMode === "all" ? token.walletIcons : undefined}
+                    />
                   ))}
                 </Flex>
               )}
