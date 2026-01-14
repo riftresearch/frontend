@@ -4,7 +4,7 @@ import { FONT_FAMILIES } from "@/utils/font";
 import { BASE_LOGO } from "./SVGs";
 import { NetworkBadge } from "./NetworkBadge";
 import { TokenDisplay } from "./TokenDisplay";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { useStore } from "@/utils/store";
@@ -13,6 +13,7 @@ import { TokenData, Network } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
 import {
   FALLBACK_TOKEN_ICON,
   BASE_POPULAR_TOKENS,
@@ -88,7 +89,32 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setErc20Price,
     setInputUsdValue,
     setSwitchingToInputTokenChain,
+    btcPrice,
   } = useStore();
+
+  // Get BTC wallet addresses from connected wallets (memoized to prevent infinite loops)
+  const btcWalletAddresses = useMemo(
+    () =>
+      userWallets
+        .filter((w) => {
+          const chain = w.chain?.toLowerCase();
+          return chain === "btc" || chain === "bitcoin";
+        })
+        .map((w) => w.address),
+    [userWallets]
+  );
+
+  // Fetch BTC balances for all connected BTC wallets
+  const btcBalances = useBitcoinBalances(btcWalletAddresses);
+
+  // Create a stable string for dependency comparison (prevents infinite loops)
+  const btcBalancesKey = useMemo(
+    () =>
+      btcWalletAddresses
+        .map((addr) => `${addr}:${btcBalances[addr]?.balanceBtc ?? 0}`)
+        .join(","),
+    [btcWalletAddresses, btcBalances]
+  );
 
   // Auto-focus search input when modal opens
   useEffect(() => {
@@ -280,6 +306,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
           const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
           tokens = [...ethTokens, ...baseTokens];
+        } else if (selectedNetwork === Network.BITCOIN) {
+          // Bitcoin network: no EVM tokens, BTC will be added separately
+          tokens = [];
         } else {
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
@@ -300,6 +329,42 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
           return bValue - aValue;
         });
+
+        // Add BTC token with user's balance for Bitcoin and ALL networks
+        if (selectedNetwork === Network.BITCOIN || selectedNetwork === Network.ALL) {
+          // Calculate total BTC balance from all connected BTC wallets
+          let totalBtcBalance = 0;
+          btcWalletAddresses.forEach((addr) => {
+            const balance = btcBalances[addr];
+            if (balance?.balanceBtc > 0) {
+              totalBtcBalance += balance.balanceBtc;
+            }
+          });
+
+          if (totalBtcBalance > 0) {
+            const btcUsdValue = totalBtcBalance * (btcPrice || 0);
+            const btcTokenWithBalance: TokenData = {
+              name: "Bitcoin",
+              ticker: "BTC",
+              address: "Native",
+              balance: totalBtcBalance.toFixed(8),
+              usdValue: `$${btcUsdValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`,
+              icon: BTC_ICON,
+              decimals: 8,
+              chainId: 0,
+            };
+            // Add BTC at the beginning, then re-sort by USD value
+            tokens = [btcTokenWithBalance, ...tokens];
+            tokens.sort((a, b) => {
+              const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
+              const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
+              return bValue - aValue;
+            });
+          }
+        }
 
         // Get popular tokens for the selected network (BTC only in ALL and BITCOIN)
         let networkPopularTokens: TokenData[] = [];
@@ -365,6 +430,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     debouncedQuery,
     isSwappingForBTC,
     direction,
+    btcBalancesKey,
+    btcPrice,
   ]);
 
   if (!isOpen) return null;
