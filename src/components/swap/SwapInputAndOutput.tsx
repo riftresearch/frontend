@@ -50,6 +50,7 @@ import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStat
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { fetchTokenPrice } from "@/utils/userTokensClient";
 import { useBitcoinBalance } from "@/hooks/useBitcoinBalance";
+import { getRecommendedFeeRate, estimateTransactionSize } from "@/utils/bitcoinTransactionHelpers";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -215,6 +216,16 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // This effect only runs once on mount to set initial primary wallet if available
   const hasInitializedRef = useRef(false);
   const userWallets = useUserWallets();
+
+  // Find any EVM wallet from Dynamic's connected wallets (similar to ConnectWalletButton)
+  const evmWallet = userWallets.find(
+    (w) =>
+      w.chain === "EVM" ||
+      w.chain === "evm" ||
+      w.connector?.name?.toLowerCase()?.includes("metamask") ||
+      w.connector?.name?.toLowerCase()?.includes("coinbase")
+  );
+  const isEvmConnected = isWalletConnected || !!evmWallet;
 
   useEffect(() => {
     if (hasInitializedRef.current || !primaryWallet) return;
@@ -1262,11 +1273,15 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         setIsAtAdjustedMax(false);
       }
     } else if (!isSwappingForBTC && balanceInputTicker === "BTC") {
-      // For BTC input, reserve sats for transaction fee (~3000 sats is a safe buffer)
-      const BTC_FEE_RESERVE_SATS = 3000;
-      const BTC_FEE_RESERVE_BTC = BTC_FEE_RESERVE_SATS / 100_000_000;
+      // For BTC input, fetch recommended fee rate from network
+      const feeRate = await getRecommendedFeeRate("medium");
+      // Estimate typical transaction size (1 input, 2 outputs)
+      const estimatedSize = estimateTransactionSize(1, 2);
+      const btcFeeReserveSats = Math.ceil(feeRate * estimatedSize);
+      const btcFeeReserveBtc = btcFeeReserveSats / 100_000_000;
+
       const balanceFloat = parseFloat(currentInputBalance);
-      const adjustedAmount = balanceFloat - BTC_FEE_RESERVE_BTC;
+      const adjustedAmount = balanceFloat - btcFeeReserveBtc;
 
       if (adjustedAmount > 0) {
         adjustedInputAmount = adjustedAmount.toFixed(8);
@@ -1680,7 +1695,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
 
     // Handle EVM input (EVM -> BTC swap direction)
-    if (!isWalletConnected) {
+    if (!isEvmConnected) {
       setCurrentInputBalance(null);
       setCurrentInputTicker(null);
       return;
@@ -1711,7 +1726,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setCurrentInputBalance(balance);
     setCurrentInputTicker(token.ticker || null);
   }, [
-    isWalletConnected,
+    isEvmConnected,
     userEvmAccountAddress,
     selectedInputToken,
     userTokensByChain,
@@ -2432,7 +2447,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             {/* USD value / errors at bottom */}
             <Flex>
               {exceedsUserBalance &&
-              selectedInputToken.ticker === "ETH" &&
+              (selectedInputToken.ticker === "ETH" || !isSwappingForBTC) &&
               currentInputBalance &&
               parseFloat(displayedInputAmount) <= parseFloat(currentInputBalance) ? (
                 <>
@@ -2445,7 +2460,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    Need ETH for gas -
+                    {!isSwappingForBTC ? "Need BTC for fees -" : "Need ETH for gas -"}
                   </Text>
                   <Text
                     fontSize="13px"
@@ -2664,10 +2679,16 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     {currentInputBalance.slice(0, 8)} {currentInputTicker}
                   </Text>
                   <Tooltip
-                    show={showMaxTooltip && selectedInputToken.ticker === "ETH" && isAtAdjustedMax}
+                    show={
+                      showMaxTooltip && (selectedInputToken.ticker === "ETH" || !isSwappingForBTC)
+                    }
                     onMouseEnter={() => setShowMaxTooltip(true)}
                     onMouseLeave={() => setShowMaxTooltip(false)}
-                    hoverText="Max excludes ETH for gas"
+                    hoverText={
+                      !isSwappingForBTC
+                        ? "Max excludes BTC for network fee"
+                        : "Max excludes ETH for gas"
+                    }
                     body={
                       <Button
                         onClick={handleMaxClick}

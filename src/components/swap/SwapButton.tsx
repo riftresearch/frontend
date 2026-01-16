@@ -1091,7 +1091,7 @@ export const SwapButton = () => {
 
     if (exceedsUserBalance) {
       return {
-        text: `Not enough ${selectedInputToken.ticker}`,
+        text: `Not enough ${isSwappingForBTC ? selectedInputToken.ticker : "BTC"}`,
         handler: undefined,
         showSpinner: false,
       };

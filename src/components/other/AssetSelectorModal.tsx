@@ -110,9 +110,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   // Create a stable string for dependency comparison (prevents infinite loops)
   const btcBalancesKey = useMemo(
     () =>
-      btcWalletAddresses
-        .map((addr) => `${addr}:${btcBalances[addr]?.balanceBtc ?? 0}`)
-        .join(","),
+      btcWalletAddresses.map((addr) => `${addr}:${btcBalances[addr]?.balanceBtc ?? 0}`).join(","),
     [btcWalletAddresses, btcBalances]
   );
 
