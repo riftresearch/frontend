@@ -289,6 +289,16 @@ export interface AdminSwapItem {
     address: string;
     icon?: string;
     amount: string;
+    executed_amount?: string;
+    decimals: number;
+  };
+  /** End asset metadata from swap metadata (for chained swaps) */
+  endAssetMetadata?: {
+    ticker: string;
+    address: string;
+    icon?: string;
+    amount: string;
+    executed_amount?: string;
     decimals: number;
   };
   /** Raw swap data from backend */

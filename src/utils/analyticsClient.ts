@@ -1,5 +1,10 @@
 import { satsToBtc } from "./swapHelpers";
+import BASE_ADDRESS_METADATA from "./tokenData/8453/address_to_metadata.json";
+import ETHEREUM_ADDRESS_METADATA from "./tokenData/1/address_to_metadata.json";
+import { ETH_ICON, FALLBACK_TOKEN_ICON } from "./constants";
 import { AdminSwapFlowStep, AdminSwapItem, SwapDirection, AnalyticsSwapData } from "./types";
+
+const CBBTC_ADDRESS = "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf";
 
 export type AnalyticsPagination = {
   total: number;
@@ -305,6 +310,39 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
   const networkFeeBtc = parseFloat(satsToBtc(networkFeeSats));
   const networkFeeUsd = btcPriceUsd !== undefined ? networkFeeBtc * btcPriceUsd : 0;
 
+  const resolveTokenMetadata = (parsed: any) => {
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const address =
+      typeof parsed.address === "string" ? parsed.address.toLowerCase() : "";
+    let ticker = typeof parsed.ticker === "string" ? parsed.ticker : "";
+    let icon = typeof parsed.icon === "string" ? parsed.icon : undefined;
+    let decimals = typeof parsed.decimals === "number" ? parsed.decimals : 18;
+
+    if (ticker === "ETH" && !address) {
+      icon = icon || ETH_ICON;
+    }
+
+    if ((!ticker || ticker.trim() === "") && address) {
+      const baseMeta = (BASE_ADDRESS_METADATA as any)[address];
+      const ethMeta = (ETHEREUM_ADDRESS_METADATA as any)[address];
+      const meta = baseMeta || ethMeta;
+      if (meta) {
+        ticker = meta.ticker || meta.symbol || ticker;
+        icon = meta.icon || icon;
+        decimals = meta.decimals ?? decimals;
+      }
+    }
+
+    return {
+      ticker,
+      address,
+      icon: icon || FALLBACK_TOKEN_ICON,
+      amount: parsed.amount || "0",
+      executed_amount: parsed.executed_amount || undefined,
+      decimals,
+    };
+  };
+
   // [10] Parse start_asset metadata FIRST (for EVM->BTC swaps) so we can use it for asset badges
   let startAssetMetadata = undefined;
   const startAssetString = row.metadata?.start_asset || row.start_asset;
@@ -312,17 +350,27 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
   if (startAssetString && typeof startAssetString === "string") {
     try {
       const parsed = JSON.parse(startAssetString);
-      if (parsed && typeof parsed === "object") {
-        startAssetMetadata = {
-          ticker: parsed.ticker || "",
-          address: parsed.address || "",
-          icon: parsed.icon,
-          amount: parsed.amount || "0",
-          decimals: parsed.decimals || 18,
-        };
+      startAssetMetadata = resolveTokenMetadata(parsed);
+      if (
+        startAssetMetadata?.address &&
+        startAssetMetadata.address.toLowerCase() === CBBTC_ADDRESS
+      ) {
+        startAssetMetadata = undefined;
       }
     } catch (e) {
       console.warn("Failed to parse start_asset metadata:", e);
+    }
+  }
+
+  // [10b] Parse end_asset metadata (for chained swaps)
+  let endAssetMetadata = undefined;
+  const endAssetString = row.metadata?.end_asset || row.end_asset;
+  if (endAssetString && typeof endAssetString === "string") {
+    try {
+      const parsed = JSON.parse(endAssetString);
+      endAssetMetadata = resolveTokenMetadata(parsed);
+    } catch (e) {
+      console.warn("Failed to parse end_asset metadata:", e);
     }
   }
 
@@ -448,6 +496,7 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
       mmPrivateKeySent: mmPrivateKeySentAt || undefined,
     },
     startAssetMetadata,
+    endAssetMetadata,
     rawData: row,
   };
 }

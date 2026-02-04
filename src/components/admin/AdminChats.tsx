@@ -757,7 +757,10 @@ export const AdminChats: React.FC = () => {
                           swap.direction === "BTC_TO_EVM"
                             ? "BTC"
                             : swap.startAssetMetadata?.ticker || "cbBTC";
-                        const endAsset = swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC";
+                        const endAsset =
+                          swap.endAssetMetadata?.ticker ||
+                          swap.endAssetMetadata?.address ||
+                          (swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC");
 
                         return (
                           <Box
@@ -791,7 +794,11 @@ export const AdminChats: React.FC = () => {
                                 >
                                   →
                                 </Text>
-                                <AssetIcon asset={endAsset} size={22} />
+                                <AssetIcon
+                                  asset={endAsset}
+                                  iconUrl={swap.endAssetMetadata?.icon}
+                                  size={22}
+                                />
                                 <Text
                                   fontFamily={FONT_FAMILIES.SF_PRO}
                                   fontSize="13px"
@@ -1217,7 +1224,10 @@ export const AdminChats: React.FC = () => {
                           swap.direction === "BTC_TO_EVM"
                             ? "BTC"
                             : swap.startAssetMetadata?.ticker || "cbBTC";
-                        const endAsset = swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC";
+                        const endAsset =
+                          swap.endAssetMetadata?.ticker ||
+                          swap.endAssetMetadata?.address ||
+                          (swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC");
 
                         return (
                           <Box
@@ -1251,7 +1261,11 @@ export const AdminChats: React.FC = () => {
                                 >
                                   →
                                 </Text>
-                                <AssetIcon asset={endAsset} size={20} />
+                                <AssetIcon
+                                  asset={endAsset}
+                                  iconUrl={swap.endAssetMetadata?.icon}
+                                  size={20}
+                                />
                                 <Text
                                   fontFamily={FONT_FAMILIES.SF_PRO}
                                   fontSize="12px"
