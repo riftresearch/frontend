@@ -2,7 +2,7 @@ import { Flex, Text, Box, Image } from "@chakra-ui/react";
 import { colors } from "@/utils/colors";
 import { CHAIN_NAMES } from "@/utils/constants";
 import { NetworkBadge } from "./NetworkBadge";
-import { TokenData } from "@/utils/types";
+import { TokenData, Chain } from "@/utils/types";
 
 // Dynamic's icon sprite URL for wallet badges
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
@@ -89,7 +89,7 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
           )}
 
           {/* Network Badge */}
-          {token.chainId !== undefined && (
+          {token.chain !== undefined && (
             <Box
               position="absolute"
               bottom="-2px"
@@ -97,15 +97,15 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
               w="20px"
               h="20px"
               borderRadius="50%"
-              bg={token.chainId === 0 ? "#F7931A" : token.chainId === 8453 ? "white" : "#1a1a2e"}
+              bg={token.chain === Chain.Bitcoin ? "#F7931A" : token.chain === Chain.Base ? "white" : "#1a1a2e"}
               border="2px solid #131313"
               display="flex"
               alignItems="center"
               justifyContent="center"
               overflow="hidden"
-              p={token.chainId === 0 ? "2px" : "0"}
+              p={token.chain === Chain.Bitcoin ? "2px" : "0"}
             >
-              <NetworkBadge chainId={token.chainId} />
+              <NetworkBadge chain={token.chain} />
             </Box>
           )}
         </Box>
@@ -117,7 +117,7 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
           </Text>
           <Flex align="center" gap="8px">
             <Text fontSize="12px" fontFamily="Inter" color={colors.textGray}>
-              {CHAIN_NAMES[token.chainId] || "Unknown"}
+              {CHAIN_NAMES[token.chain] || "Unknown"}
             </Text>
             {!isMobile && token.address && token.ticker !== "BTC" && token.ticker !== "ETH" && (
               <Text fontSize="12px" fontFamily="Inter" color={colors.darkerGray}>

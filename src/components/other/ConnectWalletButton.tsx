@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Button, Flex, Image, Box } from "@chakra-ui/react";
-import { useAccount } from "wagmi";
 import { useStore } from "@/utils/store";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
@@ -27,8 +26,11 @@ import {
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
 
 export const ConnectWalletButton: React.FC = () => {
-  const { address: wagmiAddress, isConnected: isWagmiConnected } = useAccount();
-  const { setUserTokensForChain, setSearchResults, selectedInputToken, setSelectedInputToken } =
+  // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
+  const evmAddress = useStore((state) => state.evmAddress);
+  const isEvmConnected = !!evmAddress;
+
+  const { setUserTokensForChain, setSearchResults, inputToken, setInputToken } =
     useStore();
   const { isMobile } = useWindowSize();
   const { setShowAuthFlow, primaryWallet } = useDynamicContext();
@@ -47,19 +49,6 @@ export const ConnectWalletButton: React.FC = () => {
     }
     prevIsConnectedRef.current = isConnected;
   }, [isConnected]);
-
-  // Find any EVM wallet from Dynamic's connected wallets
-  const evmWallet = userWallets.find(
-    (w) =>
-      w.chain === "EVM" ||
-      w.chain === "evm" ||
-      w.connector?.name?.toLowerCase()?.includes("metamask") ||
-      w.connector?.name?.toLowerCase()?.includes("coinbase")
-  );
-
-  // Use wagmi address if available, otherwise try to get from Dynamic's EVM wallet
-  const evmAddress = wagmiAddress || evmWallet?.address;
-  const isEvmConnected = isWagmiConnected || !!evmWallet;
 
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {
@@ -205,16 +194,17 @@ export const ConnectWalletButton: React.FC = () => {
 
       setSearchResults(combinedSorted);
 
-      // If selectedInputToken has 0 balance, update it from fetched data if available
-      if (selectedInputToken.balance === "0") {
+      // If inputToken has 0 balance, update it from fetched data if available
+      if (inputToken.balance === "0") {
+        const inputTokenChain = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
         const userTokensForChain =
-          useStore.getState().userTokensByChain[selectedInputToken.chainId] || [];
+          useStore.getState().userTokensByChain[inputTokenChain] || [];
         const matchingToken = userTokensForChain.find(
-          (t) => t.address.toLowerCase() === selectedInputToken.address.toLowerCase()
+          (t) => t.address.toLowerCase() === inputToken.address.toLowerCase()
         );
         if (matchingToken) {
-          setSelectedInputToken({
-            ...selectedInputToken,
+          setInputToken({
+            ...inputToken,
             balance: matchingToken.balance,
             usdValue: matchingToken.usdValue,
           });
@@ -228,8 +218,8 @@ export const ConnectWalletButton: React.FC = () => {
     evmAddress,
     setUserTokensForChain,
     setSearchResults,
-    selectedInputToken,
-    setSelectedInputToken,
+    inputToken,
+    setInputToken,
   ]);
 
   // Handler for opening the Dynamic wallet modal (used as fallback)

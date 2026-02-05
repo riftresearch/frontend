@@ -5,7 +5,7 @@ import { BASE_LOGO } from "./SVGs";
 import { NetworkBadge } from "./NetworkBadge";
 import { TokenDisplay } from "./TokenDisplay";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useAccount, useSwitchChain } from "wagmi";
+import { useSwitchChain } from "wagmi";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { useStore } from "@/utils/store";
 import { mainnet, base } from "viem/chains";
@@ -24,8 +24,6 @@ import {
   ETH_TOKEN_BASE,
   BTC_TOKEN,
   BTC_ICON,
-  POPULAR_OUTPUT_TOKENS,
-  CBBTC_TOKEN,
 } from "@/utils/constants";
 
 interface AssetSelectorModalProps {
@@ -41,7 +39,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   currentAsset,
   direction,
 }) => {
-  const { evmConnectWalletChainId } = useStore();
   const { isMobile } = useWindowSize();
 
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(Network.ALL);
@@ -51,38 +48,25 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const [popularTokens, setPopularTokens] = useState<TokenData[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
+  const evmAddress = useStore((state) => state.evmAddress);
+  const isEvmConnected = !!evmAddress;
+
   // Wagmi hooks for chain switching
-  const { isConnected: isWagmiConnected, address: wagmiAddress } = useAccount();
   const { switchChain } = useSwitchChain();
 
   // Dynamic hooks for wallet detection
   const { primaryWallet } = useDynamicContext();
   const userWallets = useUserWallets();
 
-  // Find any EVM wallet from Dynamic's connected wallets
-  const evmWallet = userWallets.find(
-    (w) =>
-      w.chain === "EVM" ||
-      w.chain === "evm" ||
-      w.connector?.name?.toLowerCase()?.includes("metamask") ||
-      w.connector?.name?.toLowerCase()?.includes("coinbase")
-  );
-
-  // Use wagmi address if available, otherwise try Dynamic's EVM wallet
-  const address = wagmiAddress || evmWallet?.address;
-  const isConnected = isWagmiConnected || !!evmWallet;
-
   // Zustand store
   const {
     searchResults,
     setSearchResults,
-    setEvmConnectWalletChainId,
-    selectedInputToken,
-    setSelectedInputToken,
-    selectedOutputToken,
-    setSelectedOutputToken,
-    isSwappingForBTC,
-    setIsSwappingForBTC,
+    inputToken,
+    setInputToken,
+    outputToken,
+    setOutputToken,
     setDisplayedInputAmount,
     setOutputAmount,
     userTokensByChain,
@@ -90,6 +74,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setInputUsdValue,
     setSwitchingToInputTokenChain,
     btcPrice,
+    evmWalletClient,
   } = useStore();
 
   // Get BTC wallet addresses from connected wallets (memoized to prevent infinite loops)
@@ -134,26 +119,23 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
   // Auto-switch chain when wallet connects or address changes
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isEvmConnected) return;
 
-    const targetChainId = isSwappingForBTC
-      ? selectedInputToken?.chainId
-      : selectedOutputToken?.chainId;
-
-    if (!targetChainId) return;
+    // Determine target chain from input token if it's an EVM token
+    const targetChain = inputToken?.chain;
+    if (targetChain === "bitcoin" || !targetChain) return;
 
     const switchToChain = async () => {
       try {
-        const chainId = targetChainId === 1 ? mainnet.id : base.id;
+        const chainId = targetChain === 1 ? mainnet.id : base.id;
         await switchChain({ chainId });
-        setEvmConnectWalletChainId(chainId);
       } catch (error) {
         console.error("Failed to auto-switch chain:", error);
       }
     };
 
     switchToChain();
-  }, [isConnected, address]);
+  }, [isEvmConnected, evmAddress, inputToken?.chain, switchChain]);
 
   // Debounce search input
   useEffect(() => {
@@ -186,15 +168,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     if (!isOpen) return;
     setIsLoading(true);
     try {
-      // When direction is "output", only show POPULAR_OUTPUT_TOKENS (BTC, cbBTC Ethereum, cbBTC Base)
-      if (direction === "output") {
-        preloadImages(POPULAR_OUTPUT_TOKENS.map((t) => t.icon).filter(Boolean));
-        setSearchResults(POPULAR_OUTPUT_TOKENS);
-        setPopularTokens([]);
-        setIsLoading(false);
-        return;
-      }
-
       // If there's an active query, use the search index top-10
       if (debouncedQuery.length > 0) {
         // Search tokens using the Network enum directly
@@ -217,10 +190,10 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           // Use canonical ETH token for native ETH (zero address)
           const isNativeEth = t.address === "0x0000000000000000000000000000000000000000";
           if (isNativeEth) {
-            const baseToken = t.chainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+            const baseToken = t.chain === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
             // Still merge wallet balance if available
             const walletToken = userTokens.find(
-              (token) => token.address === t.address && token.chainId === t.chainId
+              (token) => token.address === t.address && token.chain === t.chain
             );
             if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
               return { ...baseToken, balance: walletToken.balance, usdValue: walletToken.usdValue };
@@ -229,7 +202,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           }
 
           const walletToken = userTokens.find(
-            (token) => token.address === t.address && token.chainId === t.chainId
+            (token) => token.address === t.address && token.chain === t.chain
           );
           if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
             // Only populate the balance if its USD value is > 1
@@ -270,7 +243,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   price: number;
                   decimals: number;
                 };
-                const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+                const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
                 const built: TokenData = {
                   name: t.name,
                   ticker: t.ticker,
@@ -279,7 +252,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   usdValue: "$0.00",
                   icon: t.icon || FALLBACK_TOKEN_ICON,
                   decimals: t.decimals,
-                  chainId,
+                  chain,
                 };
                 setSearchResults([built]);
                 setPopularTokens([]);
@@ -297,25 +270,25 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       }
 
       // No query: show wallet tokens if connected and available; otherwise popular tokens
-      if (isConnected && address) {
+      if (isEvmConnected && evmAddress) {
         let tokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
           // Combine tokens from both chains
-          const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
-          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
+          const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chain: 1 as const }));
+          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chain: 8453 as const }));
           tokens = [...ethTokens, ...baseTokens];
         } else if (selectedNetwork === Network.BITCOIN) {
           // Bitcoin network: no EVM tokens, BTC will be added separately
           tokens = [];
         } else {
-          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
-          tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
+          const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          tokens = (userTokensByChain[chain] || []).map((t) => ({ ...t, chain: chain as 1 | 8453 }));
         }
 
-        // Deduplicate by chainId + address (user tokens come first, so they're preserved)
+        // Deduplicate by chain + address (user tokens come first, so they're preserved)
         const seenTokens = new Set<string>();
         tokens = tokens.filter((t) => {
-          const key = `${t.chainId}-${t.address.toLowerCase()}`;
+          const key = `${t.chain}-${t.address.toLowerCase()}`;
           if (seenTokens.has(key)) return false;
           seenTokens.add(key);
           return true;
@@ -352,7 +325,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               })}`,
               icon: BTC_ICON,
               decimals: 8,
-              chainId: 0,
+              chain: "bitcoin",
             };
             // Add BTC at the beginning, then re-sort by USD value
             tokens = [btcTokenWithBalance, ...tokens];
@@ -371,21 +344,21 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         } else if (selectedNetwork === Network.BITCOIN) {
           networkPopularTokens = [BTC_TOKEN];
         } else {
-          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           networkPopularTokens = (
-            chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
+            chain === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
           ).map((t) => ({
             ...t,
-            chainId,
+            chain: chain as 1 | 8453,
           }));
         }
 
         // Filter popular tokens to exclude tokens user already has
         const userTokenAddresses = new Set(
-          tokens.map((t) => `${t.chainId}-${t.address.toLowerCase()}`)
+          tokens.map((t) => `${t.chain}-${t.address.toLowerCase()}`)
         );
         const filteredPopularTokens = networkPopularTokens.filter(
-          (t) => !userTokenAddresses.has(`${t.chainId}-${t.address.toLowerCase()}`)
+          (t) => !userTokenAddresses.has(`${t.chain}-${t.address.toLowerCase()}`)
         );
 
         // Set user tokens
@@ -401,12 +374,12 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         } else if (selectedNetwork === Network.BITCOIN) {
           networkPopularTokens = [BTC_TOKEN];
         } else {
-          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           networkPopularTokens = (
-            chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
+            chain === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
           ).map((t) => ({
             ...t,
-            chainId,
+            chain: chain as 1 | 8453,
           }));
         }
         preloadImages(networkPopularTokens.map((t) => t.icon).filter(Boolean));
@@ -421,12 +394,11 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     }
   }, [
     isOpen,
-    isConnected,
-    address,
+    isEvmConnected,
+    evmAddress,
     selectedNetwork,
     userTokensByChain,
     debouncedQuery,
-    isSwappingForBTC,
     direction,
     btcBalancesKey,
     btcPrice,
@@ -458,94 +430,37 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   ) => {
     console.log("handleAssetSelect", asset, tokenData, selectionDirection);
 
-    // Handle BTC selection with direction-aware flip logic
-    if (tokenData?.ticker === "BTC") {
-      if (selectionDirection === "input") {
-        if (isSwappingForBTC) {
-          // Flip: user selected BTC as input while swapping FOR BTC
-          // -> Switch to swapping FROM BTC (BTC -> cbBTC)
-          setIsSwappingForBTC(false);
-          setSelectedInputToken(BTC_TOKEN);
-          setSelectedOutputToken(CBBTC_TOKEN);
-          setDisplayedInputAmount("");
-          setOutputAmount("");
-          setInputUsdValue(ZERO_USD_DISPLAY);
-        }
-        // else: already swapping FROM BTC, no-op
-      } else {
-        // selectionDirection === "output"
-        if (!isSwappingForBTC) {
-          // Flip: user selected BTC as output while swapping FROM BTC
-          // -> Switch to swapping FOR BTC (ETH -> BTC)
-          setIsSwappingForBTC(true);
-          setSelectedInputToken(ETH_TOKEN);
-          setSelectedOutputToken(BTC_TOKEN);
-          setDisplayedInputAmount("");
-          setOutputAmount("");
-          setInputUsdValue(ZERO_USD_DISPLAY);
-        }
-        // else: already swapping FOR BTC, no-op
-      }
+    if (!tokenData) {
       onClose();
       return;
     }
 
-    // Handle cbBTC selection as output when isSwappingForBTC
-    // This flips direction like swap reverse: BTC becomes input, cbBTC becomes output
-    if (tokenData?.ticker === "cbBTC" && selectionDirection === "output" && isSwappingForBTC) {
-      setIsSwappingForBTC(false);
-      setSelectedInputToken(BTC_TOKEN);
-      setSelectedOutputToken(tokenData);
-      setDisplayedInputAmount("");
-      setOutputAmount("");
-      setInputUsdValue(ZERO_USD_DISPLAY);
-      onClose();
-      return;
+    // Set the token based on selectionDirection
+    if (selectionDirection === "input") {
+      setInputToken(tokenData);
+      setErc20Price(null);
+    } else {
+      setOutputToken(tokenData);
     }
 
-    // Non-BTC token selection
-    if (tokenData) {
-      // When BTC is input (!isSwappingForBTC) and user selects a non-BTC token as input,
-      // flip direction like swap reverse: selected token becomes input, BTC becomes output
-      if (selectionDirection === "input" && !isSwappingForBTC) {
-        setIsSwappingForBTC(true);
-        setSelectedInputToken(tokenData);
-        setSelectedOutputToken(BTC_TOKEN);
-        setErc20Price(null);
-        setDisplayedInputAmount("");
-        setOutputAmount("");
-        setInputUsdValue(ZERO_USD_DISPLAY);
-        onClose();
-        return;
-      }
+    // Switch network to the selected token's chain if it's an EVM token
+    const tokenChain = tokenData.chain;
+    if (tokenChain !== "bitcoin" && isEvmConnected && evmWalletClient) {
+      const targetNetwork = tokenChain === 1 ? Network.ETHEREUM : Network.BASE;
+      setSelectedNetwork(targetNetwork);
 
-      // Set the token based on selectionDirection
-      if (selectionDirection === "input") {
-        setSelectedInputToken(tokenData);
-        setErc20Price(null);
-      } else {
-        setSelectedOutputToken(tokenData);
-      }
-
-      // Switch network to the selected token's chainId
-      if (tokenData.chainId && isConnected) {
-        const targetNetwork = tokenData.chainId === 1 ? Network.ETHEREUM : Network.BASE;
-        setSelectedNetwork(targetNetwork);
-
-        // Switch wallet chain if needed
-        try {
-          const targetChainId = tokenData.chainId === 1 ? mainnet.id : base.id;
-          // Set flag to indicate chain is being switched from asset selector
-          if (targetChainId !== evmConnectWalletChainId) {
-            setSwitchingToInputTokenChain(true);
-            await switchChain({ chainId: targetChainId });
-            setEvmConnectWalletChainId(targetChainId);
-          } else {
-            setSwitchingToInputTokenChain(false);
-          }
-        } catch (error) {
-          console.error("Failed to switch chain:", error);
+      // Switch wallet chain if needed
+      try {
+        const targetChainId = tokenChain === 1 ? mainnet.id : base.id;
+        const currentChainId = await evmWalletClient.getChainId();
+        if (targetChainId !== currentChainId) {
+          setSwitchingToInputTokenChain(true);
+          await switchChain({ chainId: targetChainId });
+        } else {
+          setSwitchingToInputTokenChain(false);
         }
+      } catch (error) {
+        console.error("Failed to switch chain:", error);
       }
     }
 
@@ -567,7 +482,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setSelectedNetwork(network);
 
     // If "all" is selected or wallet not connected, just update the filter
-    if (network === Network.ALL || !isConnected) {
+    if (network === Network.ALL || !isEvmConnected) {
       return;
     }
 
@@ -597,8 +512,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         onClick={onClose}
       >
         <Flex gap="18px" align="stretch">
-          {/* Chain Selector Panel - show when selecting input token */}
-          {!isMobile && direction === "input" && (
+          {/* Chain Selector Panel - show for all token selections */}
+          {!isMobile && (
             <Box
               bg="#131313"
               borderRadius="30px"
@@ -863,7 +778,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
             <Box
               bg="#131313"
               pt="24px"
-              pb={isSwappingForBTC ? "0" : "12px"}
+              pb="0"
               flexShrink={0}
               borderTopRadius="28px"
             >
@@ -889,8 +804,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 </Box>
               </Flex>
 
-              {/* Search Bar - show when selecting input token */}
-              {direction === "input" && (
+              {/* Search Bar - show for all token selections */}
+              {(
                 <Box position="relative" mb="18px" mx="24px">
                   {/* Search Icon */}
                   <Box
@@ -951,7 +866,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               )}
 
               {/* Mobile Network Selector - horizontal scrollable list */}
-              {isMobile && direction === "input" && (
+              {isMobile && (
                 <Flex
                   mx="24px"
                   mb="16px"
@@ -1217,7 +1132,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 ) : (
                   <>
                     {/* Your Tokens Section - only show if wallet connected and has tokens */}
-                    {isConnected && searchResults.length > 0 && (
+                    {isEvmConnected && searchResults.length > 0 && (
                       <>
                         <Box mx="24px" mb="8px" mt="4px">
                           <Text
@@ -1245,7 +1160,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     )}
 
                     {/* Popular Section - show if wallet connected and there are popular tokens to display */}
-                    {isConnected && popularTokens.length > 0 && (
+                    {isEvmConnected && popularTokens.length > 0 && (
                       <>
                         <Box mx="24px" mb="8px" mt={searchResults.length > 0 ? "16px" : "4px"}>
                           <Text
@@ -1273,7 +1188,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     )}
 
                     {/* When not connected, show popular tokens with section header */}
-                    {!isConnected && searchResults.length > 0 && (
+                    {!isEvmConnected && searchResults.length > 0 && (
                       <>
                         <Box mx="24px" mb="8px" mt="4px">
                           <Text

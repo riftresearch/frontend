@@ -54,6 +54,25 @@ export const wagmiConfig = createConfig({
 // Create a query client
 export const queryClient = new QueryClient();
 
+// RPC URLs for wallet client configuration
+export const RPC_URLS: Record<number, string> = {
+  1: "https://rpc.mevblocker.io", // Ethereum mainnet
+  8453: "https://mainnet.base.org", // Base
+};
+
+/**
+ * Get wallet client configuration for a given chainId
+ * Used when calling Dynamic's getWalletClient with explicit chain config
+ */
+export function getWalletClientConfig(accountAddress: string, chainId: number = 1) {
+  const rpcUrl = RPC_URLS[chainId] || RPC_URLS[1];
+  return {
+    accountAddress,
+    chainId,
+    rpcUrl,
+  };
+}
+
 // Set up metadata for your app (can be used by Dynamic if needed)
 export const metadata = {
   name: "Rift",

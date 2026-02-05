@@ -76,7 +76,10 @@ function calculateMaxLiquidity(
  * @returns Query result with liquidity data, loading states, and error handling
  */
 export function useMaxLiquidity() {
-  const { btcPrice, isSwappingForBTC, selectedInputToken, selectedOutputToken } = useStore();
+  const { btcPrice, inputToken, outputToken } = useStore();
+
+  // Derive swap direction from output token chain
+  const isSwappingForBTC = outputToken.chain === "bitcoin";
 
   // Determine the relevant chain based on swap direction:
   // - If swapping EVM → BTC: use the input token's chain (where we're selling from)
@@ -84,12 +87,12 @@ export function useMaxLiquidity() {
   const relevantChainId = useMemo(() => {
     if (isSwappingForBTC) {
       // EVM → BTC: use input token's chain
-      return selectedInputToken?.chainId ?? 1;
+      return inputToken?.chain === "bitcoin" ? 1 : (inputToken?.chain ?? 1);
     } else {
       // BTC → EVM: use output token's chain
-      return selectedOutputToken?.chainId ?? 1;
+      return outputToken?.chain === "bitcoin" ? 1 : (outputToken?.chain ?? 1);
     }
-  }, [isSwappingForBTC, selectedInputToken?.chainId, selectedOutputToken?.chainId]);
+  }, [isSwappingForBTC, inputToken?.chain, outputToken?.chain]);
 
   const relevantChainType = chainIdToChainType(relevantChainId);
 

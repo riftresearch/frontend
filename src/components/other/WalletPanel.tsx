@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Flex, Text, Box, Image, Spinner, Portal } from "@chakra-ui/react";
-import { useAccount } from "wagmi";
 import {
   useDynamicContext,
   useUserWallets,
@@ -20,6 +19,7 @@ import {
 } from "react-icons/fi";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
+import { getWalletClientConfig } from "@/utils/wallet";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
 import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
@@ -49,7 +49,13 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   onClose,
   onConnectNewWallet,
 }) => {
-  const { address: evmAddress } = useAccount();
+  // Get wallet addresses from global store (set via Dynamic's onWalletAdded callback)
+  const evmAddress = useStore((state) => state.evmAddress);
+  const btcAddress = useStore((state) => state.btcAddress);
+  const setEvmAddress = useStore((state) => state.setEvmAddress);
+  const setBtcAddress = useStore((state) => state.setBtcAddress);
+  const setEvmWalletClient = useStore((state) => state.setEvmWalletClient);
+
   const { handleLogOut, setShowAuthFlow, primaryWallet, removeWallet } = useDynamicContext();
   // setShowLinkNewWalletModal is from useDynamicModals hook (for adding wallets when already connected)
   const { setShowLinkNewWalletModal } = useDynamicModals();
@@ -58,12 +64,15 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   const {
     userTokensByChain,
     btcPrice,
-    isSwappingForBTC,
-    setIsSwappingForBTC,
+    inputToken,
+    outputToken,
     setSelectedInputAddress,
     setSelectedOutputAddress,
     setSkipAddressClearOnDirectionChange,
   } = useStore();
+
+  // Derive swap direction from token chains
+  const isSwappingForBTC = outputToken.chain === "bitcoin";
   const { isMobile } = useWindowSize();
 
   // Get all BTC wallet addresses for balance fetching (using payment addresses)
@@ -74,18 +83,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     })
     .map((wallet) => {
       // Use payment address for Xverse and other wallets with separate ordinal/payment addresses
-      console.log("[WalletPanel] Processing BTC wallet:", wallet.id);
-      console.log("[WalletPanel] isBitcoinWallet check:", isBitcoinWallet(wallet));
       if (isBitcoinWallet(wallet)) {
         const paymentAddr = getPaymentAddress(wallet);
-        console.log("[WalletPanel] Using payment address:", paymentAddr);
         return paymentAddr;
       }
-      console.log("[WalletPanel] Using default address:", wallet.address);
       return wallet.address;
     });
-
-  console.log("[WalletPanel] btcWalletAddresses:", btcWalletAddresses);
 
   // Fetch balances for all BTC wallets
   const btcBalances = useBitcoinBalances(btcWalletAddresses);
@@ -130,18 +133,27 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     return wallet.address;
   };
 
-  // Check if a wallet is the primary/selected wallet
+  // Check if a wallet is the active/selected wallet based on store addresses
   const isSelectedWallet = (wallet: any): boolean => {
-    if (!primaryWallet) return false;
-    // Compare using wallet IDs which are stable
-    return primaryWallet.id === wallet.id;
+    const walletChainType = getWalletChainType(wallet);
+    const walletAddress = getWalletDisplayAddress(wallet);
+
+    console.log("isSelectedWallet", evmAddress, btcAddress, walletAddress, wallet);
+    if (walletChainType === "EVM") {
+      return evmAddress === walletAddress;
+    } else if (walletChainType === "BVM") {
+      return btcAddress === walletAddress;
+    }
+    return false;
   };
 
-  // Find EVM wallet for token attribution
-  const evmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
+  // Find EVM wallet object for token attribution (using evmAddress from store)
+  const evmWallet = evmAddress
+    ? userWallets.find((w) => w.address === evmAddress || w.chain?.toUpperCase() === "EVM")
+    : null;
 
   // Get all tokens from all chains (for EVM wallets) - only if EVM wallet is connected
-  const allTokens: TokenData[] = evmWallet ? Object.values(userTokensByChain).flat() : [];
+  const allTokens: TokenData[] = evmAddress ? Object.values(userTokensByChain).flat() : [];
 
   // Sort EVM tokens by USD value
   const sortedEvmTokens = [...allTokens].sort((a, b) => {
@@ -151,7 +163,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   });
 
   // Calculate EVM total USD value - only if EVM wallet is connected
-  const evmTotalUsdValue = evmWallet
+  const evmTotalUsdValue = evmAddress
     ? sortedEvmTokens.reduce((sum, token) => {
         const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
         return sum + (isNaN(usd) ? 0 : usd);
@@ -186,7 +198,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
 
   // Build combined token list for "all" view (merging same tokens from different wallets)
   const combinedTokens: TokenWithWallet[] = React.useMemo(() => {
-    // Use a map to group tokens by unique key (ticker + chainId)
+    // Use a map to group tokens by unique key (ticker + chain)
     const tokenMap = new Map<
       string,
       {
@@ -200,7 +212,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     // Add EVM tokens with wallet attribution
     if (evmWallet) {
       sortedEvmTokens.forEach((token) => {
-        const key = `${token.ticker}-${token.chainId}`;
+        const key = `${token.ticker}-${token.chain}`;
         const balance = parseFloat(token.balance) || 0;
         const usdValue = parseFloat(token.usdValue.replace("$", "").replace(",", "")) || 0;
 
@@ -234,7 +246,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       const wallet = userWallets.find((w) => w.address === addr);
       if (balance?.balanceBtc > 0 && wallet) {
         const btcUsdValue = balance.balanceBtc * (btcPrice || 0);
-        const key = "BTC-0"; // BTC always has chainId 0
+        const key = "BTC-bitcoin"; // BTC uses chain "bitcoin"
 
         if (tokenMap.has(key)) {
           const existing = tokenMap.get(key)!;
@@ -257,7 +269,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
               })}`,
               icon: "/images/BTC_icon.svg",
               decimals: 8,
-              chainId: 0,
+              chain: "bitcoin" as const,
               walletAddress: addr,
               walletIconKey: getWalletIconKey(wallet),
               walletId: wallet.id,
@@ -276,7 +288,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       tokens.push({
         ...token,
         balance:
-          token.chainId === 0
+          token.chain === "bitcoin"
             ? totalBalance.toFixed(8)
             : totalBalance.toLocaleString(undefined, { maximumFractionDigits: token.decimals }),
         usdValue: `$${totalUsdValue.toLocaleString(undefined, {
@@ -328,7 +340,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
             })}`,
             icon: "/images/BTC_icon.svg",
             decimals: 8,
-            chainId: 0,
+            chain: "bitcoin" as const,
             walletAddress: walletAddr,
             walletIconKey: getWalletIconKey(wallet),
             walletId: wallet.id,
@@ -383,45 +395,26 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     }
   };
 
-  // Handle wallet selection with swap direction sync
-  const handleWalletSelect = (wallet: any) => {
+  // Handle wallet selection - update the store address and walletClient for the wallet type
+  const handleWalletSelect = async (wallet: any) => {
     const walletChainType = getWalletChainType(wallet);
-    const isEvmWallet = walletChainType === "EVM";
-    const isBtcWallet = walletChainType === "BVM";
+    const walletAddress = getWalletDisplayAddress(wallet);
 
-    // Switch the primary wallet
-    switchWallet(wallet.id);
-
-    // Check if we need to flip swap direction
-    if (isSwappingForBTC && isBtcWallet) {
-      // Currently EVM→BTC, but selected BTC wallet
-      // Flip to BTC→EVM and use BTC address as input (use payment address)
-      // Set flag to skip address clearing in SwapInputAndOutput effect
-      setSkipAddressClearOnDirectionChange(true);
-      setSelectedInputAddress(getWalletDisplayAddress(wallet));
-      // Find an EVM wallet for output (BTC→EVM needs EVM output)
-      const outputEvmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
-      setSelectedOutputAddress(outputEvmWallet?.address || null);
-      setIsSwappingForBTC(false);
-    } else if (!isSwappingForBTC && isEvmWallet) {
-      // Currently BTC→EVM, but selected EVM wallet
-      // Flip to EVM→BTC and use EVM address as input
-      // Set flag to skip address clearing in SwapInputAndOutput effect
-      setSkipAddressClearOnDirectionChange(true);
-      setSelectedInputAddress(getWalletDisplayAddress(wallet));
-      // Find a BTC wallet for output (EVM→BTC needs BTC output)
-      const outputBtcWallet = userWallets.find((w) => {
-        const chain = w.chain?.toLowerCase();
-        return chain === "btc" || chain === "bitcoin";
-      });
-      setSelectedOutputAddress(outputBtcWallet?.address || null);
-      setIsSwappingForBTC(true);
-    } else {
-      // Chain type matches current input type, just update address
-      setSelectedInputAddress(getWalletDisplayAddress(wallet));
+    if (walletChainType === "EVM") {
+      setEvmAddress(walletAddress);
+      // Also fetch and set the walletClient for EVM wallets with explicit chain config
+      try {
+        const config = getWalletClientConfig(walletAddress, 1); // Default to mainnet
+        const client = await (wallet as any).getWalletClient(config);
+        console.log("handleWalletSelect: Setting wallet client for", walletAddress);
+        setEvmWalletClient(client);
+      } catch (error) {
+        console.error("handleWalletSelect: Failed to get wallet client:", error);
+        setEvmWalletClient(null);
+      }
+    } else if (walletChainType === "BVM") {
+      setBtcAddress(walletAddress);
     }
-
-    setShowWalletsOverlay(false);
   };
 
   // Disconnect a specific wallet
@@ -830,9 +823,6 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      console.log(
-                        "[WalletPanel] Connect New Wallet clicked - using setShowLinkNewWalletModal"
-                      );
                       setShowWalletsOverlay(false);
                       // Use setShowLinkNewWalletModal from useDynamicModals hook
                       setShowLinkNewWalletModal(true);
@@ -1229,7 +1219,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 <Flex direction="column" gap="4px">
                   {displayTokens.map((token, idx) => (
                     <TokenDisplay
-                      key={`${token.address}-${token.chainId}-${token.walletAddress}-${idx}`}
+                      key={`${token.address}-${token.chain}-${token.walletAddress}-${idx}`}
                       token={token}
                       showBalance
                       isMobile={isMobile}

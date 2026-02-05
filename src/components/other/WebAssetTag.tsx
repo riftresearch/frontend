@@ -6,6 +6,7 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { NetworkBadge } from "./NetworkBadge";
 import { useStore } from "@/utils/store";
 import { FALLBACK_TOKEN_ICON, BTC_ICON } from "@/utils/constants";
+import { Chain } from "@/utils/types";
 
 interface WebAssetTagProps {
   asset: string;
@@ -33,7 +34,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
   isOutput = false,
 }) => {
   const { isMobile } = useWindowSize();
-  const { selectedInputToken, selectedOutputToken } = useStore();
+  const { inputToken, outputToken } = useStore();
 
   const adjustedH = (h ?? isMobile) ? "30px" : "36px";
   const adjustedFontSize = fontSize ?? `calc(${adjustedH} / 2 + 0px)`;
@@ -41,7 +42,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
   const adjustedBorderRadius = `calc(${adjustedH} / 4)`;
 
   // Select the appropriate token based on isOutput flag
-  const selectedToken = isOutput ? selectedOutputToken : selectedInputToken;
+  const selectedToken = isOutput ? outputToken : inputToken;
   const displayTicker = asset === "BTC" ? "BTC" : selectedToken?.ticker || "ETH";
 
   // Use selected token's icon if available and valid, otherwise fallback
@@ -87,7 +88,7 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
           />
         </Flex>
         {/* Network Badge - positioned in bottom right */}
-        {asset !== "BTC" && selectedToken?.chainId && (
+        {asset !== "BTC" && selectedToken?.chain && (
           <Box
             position="absolute"
             bottom="-2px"
@@ -95,14 +96,14 @@ const WebAssetTag: React.FC<WebAssetTagProps> = ({
             w="20px"
             h="20px"
             borderRadius="50%"
-            bg={selectedToken.chainId === 8453 ? "white" : "#1a1a2e"}
+            bg={selectedToken.chain === Chain.Base ? "white" : "#1a1a2e"}
             border="2px solid #131313"
             display="flex"
             alignItems="center"
             justifyContent="center"
             overflow="hidden"
           >
-            <NetworkBadge chainId={selectedToken.chainId} />
+            <NetworkBadge chain={selectedToken.chain} />
           </Box>
         )}
       </Box>

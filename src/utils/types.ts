@@ -2,16 +2,11 @@ import { Address } from "viem";
 import { Currency } from "./riftApiClient";
 
 export type TokenStyle = {
-  name: string;
-  symbol: string;
-  display_name?: string;
-  icon_svg?: any;
-  bg_color?: string;
-  border_color?: string;
-  border_color_light?: string;
-  dark_bg_color?: string;
-  light_text_color?: string;
-  logoURI?: string;
+  bg_color: string;
+  border_color: string;
+  border_color_light: string;
+  dark_bg_color: string;
+  light_text_color: string;
 };
 
 export type Asset = {
@@ -33,6 +28,16 @@ export type SVM = {
   name: "SVM";
 };
 
+/** Chain identifier constants */
+export const Chain = {
+  Bitcoin: "bitcoin",
+  Ethereum: 1,
+  Base: 8453,
+} as const;
+
+/** Chain identifier type - "bitcoin" for Bitcoin, or EVM chain ID (1 for Ethereum, 8453 for Base) */
+export type Chain = (typeof Chain)[keyof typeof Chain];
+
 export type TokenData = {
   name: string;
   ticker: string;
@@ -41,7 +46,7 @@ export type TokenData = {
   usdValue: string;
   icon: string;
   decimals: number;
-  chainId: number; // 1 for Ethereum, 8453 for Base
+  chain: Chain;
 };
 
 export type TokenMetadata = {
@@ -93,6 +98,8 @@ export type Config = {
   etherscanUrl: string;
   mainnetRpcUrl: string;
   esploraUrl: string;
+  mempoolUrl: string;
+
   riftApiUrl: string;
   rfqUrl: string;
   underlyingSwappingAssets: Asset[];
@@ -295,3 +302,4 @@ export interface AdminSwapItem {
   /** Raw swap data from backend */
   rawData?: any;
 }
+

@@ -62,38 +62,6 @@ export default function Home() {
     );
   }
 
-  // Coming soon page for non-localhost
-  // if (!isLocalhost && IS_FRONTEND_PAUSED) {
-  //   return (
-  //     <>
-  //       <OpenGraph />
-  //       <Flex
-  //         h="100vh"
-  //         width="100%"
-  //         justify="center"
-  //         align="center"
-  //         direction="column"
-  //         backgroundImage="url('/images/rift_background_low.webp')"
-  //         backgroundSize="cover"
-  //         backgroundPosition="center"
-  //       >
-  //         <RiftLogo width={isTablet ? "70" : "390"} height={isTablet ? "30" : "70"} />
-  //         <Text
-  //           mt="40px"
-  //           fontSize={isTablet ? "24px" : "22px"}
-  //           fontFamily={FONT_FAMILIES.NOSTROMO}
-  //           color="#fff"
-  //           fontWeight="bold"
-  //           textAlign="center"
-  //         >
-  //           LIVE SWAPPING COMING SOON
-  //         </Text>
-  //       </Flex>
-  //     </>
-  //   );
-  // }
-
-  // Full application for localhost
   return (
     <>
       <OpenGraph />
@@ -132,12 +100,10 @@ export default function Home() {
             gap={"0px"}
           >
             <Text mt="15px" mb="25px">
-              The <OrangeText>Bitcoin</OrangeText> liquidity protocol. Learn{" "}
+              The <OrangeText>Bitcoin</OrangeText> trading protocol. Learn{" "}
               <Box
                 as="span"
-                onClick={() =>
-                  (window.location.href = "https://docs.rift.trade")
-                }
+                onClick={() => (window.location.href = "https://docs.rift.trade")}
                 style={{
                   textDecoration: "underline",
                   cursor: "pointer !important",

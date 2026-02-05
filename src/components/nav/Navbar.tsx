@@ -20,14 +20,12 @@ import { useStore } from "@/utils/store";
 import React, { useEffect, useState } from "react";
 import { isDismissWarning, onDismiss } from "@/utils/warningHelper";
 import GlowingShimmerText from "@/components/other/GlowingText";
-import { useAccount } from "wagmi";
 
 export const Navbar = ({}) => {
   const { isMobile, isTablet, isSmallLaptop, windowSize } = useWindowSize();
   const router = useRouter();
   const fontSize = isMobile ? "20px" : "20px";
   const [isLocalhost, setIsLocalhost] = useState(false);
-  const { address, isConnected } = useAccount();
 
   const depositFlowState = useStore((state) => state.depositFlowState);
   const transactionConfirmed = useStore((state) => state.transactionConfirmed);

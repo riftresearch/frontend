@@ -1,8 +1,9 @@
 import { create } from "zustand";
-import { Swap, QuoteResponse } from "./riftApiClient";
+import { Swap } from "./riftApiClient";
 import { TokenData, ApprovalState } from "./types";
 import { FeeOverview } from "./swapHelpers";
-import type { QuoteResults } from "@cowprotocol/sdk-trading";
+import type { WalletClient } from "viem";
+import type { RiftSdk } from "@riftresearch/sdk";
 
 // Inline to avoid circular dependency with constants.ts
 const DEFAULT_INPUT_TOKEN: TokenData = {
@@ -13,7 +14,7 @@ const DEFAULT_INPUT_TOKEN: TokenData = {
   usdValue: "$0.00",
   icon: "https://assets.smold.app/api/chains/1/logo-128.png",
   decimals: 18,
-  chainId: 1,
+  chain: 1,
 };
 
 // Default output token is BTC (mirrors BTC_TOKEN from constants.ts)
@@ -25,7 +26,7 @@ const DEFAULT_OUTPUT_TOKEN: TokenData = {
   usdValue: "$0.00",
   icon: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1696501400",
   decimals: 8,
-  chainId: 0,
+  chain: "bitcoin",
 };
 
 type DepositFlowState =
@@ -39,35 +40,22 @@ type DepositFlowState =
   | "7-RefundingMM"
   | "8-Failed";
 
-export enum CowswapOrderStatus {
-  NO_ORDER = "NO_ORDER",
-  SIGNING = "SIGNING",
-  SIGNED = "SIGNED",
-  SUCCESS = "SUCCESS",
-  FAIL = "FAIL",
-}
-
-export interface CowswapOrderData {
-  id: string | null;
-  order: any | null; // EnrichedOrder from SDK - using any to avoid direct dependency import
-}
-
-/** Quote confidence level - indicative quotes use placeholder address, executable quotes use real user address */
-export type QuoteType = "indicative" | "executable";
-
-export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
+// Type for the executeSwap function from SDK (using any to avoid complex generic types)
+export type DoSwapFn = ((params: any) => Promise<any>) | null;
 
 export const useStore = create<{
-  evmConnectWalletChainId: number;
-  setEvmConnectWalletChainId: (chainId: number) => void;
+  evmAddress: string | null;
+  setEvmAddress: (address: string | null) => void;
+  btcAddress: string | null;
+  setBtcAddress: (address: string | null) => void;
+  evmWalletClient: WalletClient | null;
+  setEvmWalletClient: (client: WalletClient | null) => void;
   userTokensByChain: Record<number, TokenData[]>;
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
-  selectedInputToken: TokenData;
-  setSelectedInputToken: (token: TokenData) => void;
-  selectedOutputToken: TokenData;
-  setSelectedOutputToken: (token: TokenData) => void;
-  isSwappingForBTC: boolean;
-  setIsSwappingForBTC: (value: boolean) => void;
+  inputToken: TokenData;
+  setInputToken: (token: TokenData) => void;
+  outputToken: TokenData;
+  setOutputToken: (token: TokenData) => void;
   displayedInputAmount: string;
   setDisplayedInputAmount: (value: string) => void;
   fullPrecisionInputAmount: string | null;
@@ -94,17 +82,14 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => void;
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
-  cowswapQuote: QuoteResults | null;
-  rfqQuote: QuoteResponse | null;
-  quoteType: QuoteType | null;
-  /** Atomically update quotes and quote type together. Pass null to clear all. */
-  setQuotes: (params: {
-    cowswapQuote: QuoteResults | null;
-    rfqQuote: QuoteResponse | null;
-    quoteType: QuoteType | null;
-  }) => void;
-  /** Clear all quotes atomically (sets cowswapQuote, rfqQuote, and quoteType to null) */
-  clearQuotes: () => void;
+  quote: any | null;
+  setQuote: (quote: any | null) => void;
+  rift: RiftSdk | null;
+  setRift: (rift: RiftSdk | null) => void;
+  doSwap: DoSwapFn;
+  setDoSwap: (fn: DoSwapFn) => void;
+  activeSwapId: string | null;
+  setActiveSwapId: (id: string | null) => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
   payoutAddress: string;
@@ -151,10 +136,6 @@ export const useStore = create<{
   setRefetchQuote: (value: boolean) => void;
   isAwaitingOptimalQuote: boolean;
   setIsAwaitingOptimalQuote: (value: boolean) => void;
-  cowswapOrderStatus: CowswapOrderStatus;
-  setCowswapOrderStatus: (status: CowswapOrderStatus) => void;
-  cowswapOrderData: CowswapOrderData | null;
-  setCowswapOrderData: (data: CowswapOrderData | null) => void;
   switchingToInputTokenChain: boolean;
   setSwitchingToInputTokenChain: (value: boolean) => void;
   selectedInputAddress: string | null;
@@ -164,19 +145,21 @@ export const useStore = create<{
   skipAddressClearOnDirectionChange: boolean;
   setSkipAddressClearOnDirectionChange: (value: boolean) => void;
 }>((set) => ({
-  evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
-  setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
+  evmAddress: null,
+  setEvmAddress: (address: string | null) => set({ evmAddress: address }),
+  btcAddress: null,
+  setBtcAddress: (address: string | null) => set({ btcAddress: address }),
+  evmWalletClient: null,
+  setEvmWalletClient: (client: WalletClient | null) => set({ evmWalletClient: client }),
   userTokensByChain: {},
   setUserTokensForChain: (chainId: number, tokens) =>
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
-  selectedInputToken: DEFAULT_INPUT_TOKEN,
-  setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
-  selectedOutputToken: DEFAULT_OUTPUT_TOKEN,
-  setSelectedOutputToken: (token: TokenData) => set({ selectedOutputToken: token }),
-  isSwappingForBTC: true,
-  setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
+  inputToken: DEFAULT_INPUT_TOKEN,
+  setInputToken: (token: TokenData) => set({ inputToken: token }),
+  outputToken: DEFAULT_OUTPUT_TOKEN,
+  setOutputToken: (token: TokenData) => set({ outputToken: token }),
   displayedInputAmount: "",
   setDisplayedInputAmount: (value: string) => set({ displayedInputAmount: value }),
   fullPrecisionInputAmount: null,
@@ -203,16 +186,14 @@ export const useStore = create<{
   setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
   outputUsdValue: "$0.00",
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
-  cowswapQuote: null,
-  rfqQuote: null,
-  quoteType: null,
-  setQuotes: (params) =>
-    set({
-      cowswapQuote: params.cowswapQuote,
-      rfqQuote: params.rfqQuote,
-      quoteType: params.quoteType,
-    }),
-  clearQuotes: () => set({ cowswapQuote: null, rfqQuote: null, quoteType: null }),
+  quote: null,
+  setQuote: (quote: any | null) => set({ quote }),
+  rift: null,
+  setRift: (rift: RiftSdk | null) => set({ rift }),
+  doSwap: null,
+  setDoSwap: (fn: DoSwapFn) => set({ doSwap: fn }),
+  activeSwapId: null,
+  setActiveSwapId: (id: string | null) => set({ activeSwapId: id }),
   slippageBips: 5,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
   payoutAddress: "",
@@ -256,10 +237,6 @@ export const useStore = create<{
   setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
   isAwaitingOptimalQuote: false,
   setIsAwaitingOptimalQuote: (value: boolean) => set({ isAwaitingOptimalQuote: value }),
-  cowswapOrderStatus: CowswapOrderStatus.NO_ORDER,
-  setCowswapOrderStatus: (status: CowswapOrderStatus) => set({ cowswapOrderStatus: status }),
-  cowswapOrderData: null,
-  setCowswapOrderData: (data: CowswapOrderData | null) => set({ cowswapOrderData: data }),
   switchingToInputTokenChain: false,
   setSwitchingToInputTokenChain: (value: boolean) => set({ switchingToInputTokenChain: value }),
   selectedInputAddress: null,

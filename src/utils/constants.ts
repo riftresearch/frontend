@@ -24,9 +24,9 @@ export const ZERO_USD_DISPLAY = "$0.00";
 
 export const MIN_SWAP_SATS = 3000;
 
-// Chain ID to network name mapping
-export const CHAIN_NAMES: Record<number, string> = {
-  0: "Bitcoin",
+// Chain to network name mapping
+export const CHAIN_NAMES: Record<string | number, string> = {
+  bitcoin: "Bitcoin",
   1: "Ethereum",
   8453: "Base",
   42161: "Arbitrum",
@@ -36,10 +36,6 @@ export const CHAIN_NAMES: Record<number, string> = {
 };
 
 export const bitcoinStyle: TokenStyle = {
-  name: "Bitcoin",
-  display_name: "BTC",
-  symbol: "BTC",
-  icon_svg: null,
   bg_color: "#9B602F",
   border_color: "#FFA04C",
   border_color_light: "#FFA04F",
@@ -47,16 +43,12 @@ export const bitcoinStyle: TokenStyle = {
   light_text_color: "#7d572e",
 };
 
-export const cbBTCStyle: TokenStyle = {
-  name: "Coinbase Bitcoin",
-  display_name: "cbBTC",
-  symbol: "cbBTC",
+export const evmStyle: TokenStyle = {
   bg_color: "#2E59BB",
   border_color: "#1C61FD",
   border_color_light: "#3B70E8",
   dark_bg_color: "rgba(9, 36, 97, 0.3)",
   light_text_color: "#365B9F",
-  logoURI: "https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp",
 };
 export const opaqueBackgroundColor = {
   bg: "rgba(15, 15, 15, 0.55)",
@@ -67,6 +59,7 @@ export const GLOBAL_CONFIG: Config = {
   etherscanUrl: "https://etherscan.io",
   mainnetRpcUrl: "https://eth0.riftnodes.com",
   esploraUrl: "https://blockstream.info/api",
+  mempoolUrl: "https://mempool.space/api",
   riftApiUrl: "https://api.rift.trade",
   rfqUrl: "https://rfq-server-v2-production.up.railway.app",
   underlyingSwappingAssets: [
@@ -90,7 +83,7 @@ export const GLOBAL_CONFIG: Config = {
           decimals: 8,
         },
       },
-      style: cbBTCStyle,
+      style: evmStyle,
     },
   ],
 };
@@ -106,7 +99,7 @@ export const rfqClient = createRfqClient({
 // Popular tokens list
 const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC", "USDe", "DAI", "UNI"];
 
-export const ETH_TOKEN = {
+export const ETH_TOKEN: TokenData = {
   name: "Ethereum",
   ticker: "ETH",
   address: "0x0000000000000000000000000000000000000000",
@@ -114,15 +107,15 @@ export const ETH_TOKEN = {
   usdValue: "$0.00",
   icon: ETH_ICON,
   decimals: 18,
-  chainId: 1,
+  chain: 1,
 };
 
-export const ETH_TOKEN_BASE = {
+export const ETH_TOKEN_BASE: TokenData = {
   ...ETH_TOKEN,
-  chainId: 8453,
+  chain: 8453,
 };
 
-// Bitcoin token (native BTC, chainId 0 indicates Bitcoin network)
+// Bitcoin token (native BTC)
 export const BTC_TOKEN: TokenData = {
   name: "Bitcoin",
   ticker: "BTC",
@@ -131,7 +124,7 @@ export const BTC_TOKEN: TokenData = {
   usdValue: "$0.00",
   icon: BTC_ICON,
   decimals: 8,
-  chainId: 0,
+  chain: "bitcoin",
 };
 
 // cbBTC tokens for Ethereum and Base
@@ -141,14 +134,14 @@ export const CBBTC_TOKEN: TokenData = {
   address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
   balance: "0",
   usdValue: "$0.00",
-  icon: cbBTCStyle.logoURI || FALLBACK_TOKEN_ICON,
+  icon: "https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp",
   decimals: 8,
-  chainId: 1,
+  chain: 1,
 };
 
 export const CBBTC_TOKEN_BASE: TokenData = {
   ...CBBTC_TOKEN,
-  chainId: 8453,
+  chain: 8453,
 };
 
 // Popular output tokens (BTC and cbBTC from both chains)
@@ -169,7 +162,7 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
     usdValue: "$0.00",
     icon: token.icon || FALLBACK_TOKEN_ICON,
     decimals: token.decimals || 18,
-    chainId: 8453,
+    chain: 8453,
   };
 });
 
@@ -187,7 +180,7 @@ export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) 
     usdValue: "$0.00",
     icon: token.icon || FALLBACK_TOKEN_ICON,
     decimals: token.decimals || 18,
-    chainId: 1,
+    chain: 1,
   };
 });
 
@@ -229,8 +222,8 @@ export const ALL_POPULAR_TOKENS: TokenData[] = [
       usdValue: "$0.00",
       icon: token.icon || FALLBACK_TOKEN_ICON,
       decimals: token.decimals || 18,
-      chainId: 1,
-    };
+      chain: 1,
+    } as TokenData;
   }),
   // Base tokens
   ...ALL_POPULAR_TICKERS.map((ticker) => {
@@ -247,10 +240,7 @@ export const ALL_POPULAR_TOKENS: TokenData[] = [
       usdValue: "$0.00",
       icon: token.icon || FALLBACK_TOKEN_ICON,
       decimals: token.decimals || 18,
-      chainId: 8453,
-    };
+      chain: 8453,
+    } as TokenData;
   }),
 ];
-
-// CowSwap Universal Router (used by cowswapClient for approvals)
-export const COWSWAP_VAULT_RELAYER = "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110";

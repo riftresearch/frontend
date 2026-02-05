@@ -3,18 +3,16 @@ import { useChainId } from "wagmi";
 import { useStore } from "../utils/store";
 
 /**
- * Syncs the current wagmi chainId to the global store's connectedChainId.
- * Ensures the store always reflects the latest connected chain.
+ * Monitors chain changes and resets the switching flag.
+ * Note: Chain ID is now derived from the input token, not stored globally.
  */
 export function useSyncChainIdToStore() {
   const chainId = useChainId();
-  const setEvmConnectWalletChainId = useStore((state) => state.setEvmConnectWalletChainId);
   const setSwitchingToInputTokenChain = useStore((state) => state.setSwitchingToInputTokenChain);
 
   useEffect(() => {
     if (chainId) {
-      setEvmConnectWalletChainId(chainId);
       setSwitchingToInputTokenChain(false);
     }
-  }, [chainId, setEvmConnectWalletChainId]);
+  }, [chainId, setSwitchingToInputTokenChain]);
 }

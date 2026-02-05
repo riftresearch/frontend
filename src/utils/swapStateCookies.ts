@@ -10,12 +10,10 @@ const SWAP_STATE_COOKIE = "rift_swap_state";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days in seconds
 
 export interface SwapStateCookie {
-  /** Whether user is swapping TO BTC (true) or FROM BTC (false) */
-  isSwappingForBTC: boolean;
   /** Selected input token data */
-  selectedInputToken: TokenData | null;
+  inputToken: TokenData | null;
   /** Selected output token data */
-  selectedOutputToken: TokenData | null;
+  outputToken: TokenData | null;
   /** Timestamp when state was saved */
   savedAt: number;
 }
@@ -59,7 +57,7 @@ export function loadSwapStateFromCookie(): SwapStateCookie | null {
         const parsed = JSON.parse(decoded) as SwapStateCookie;
 
         // Validate the structure
-        if (typeof parsed.isSwappingForBTC === "boolean" && typeof parsed.savedAt === "number") {
+        if (typeof parsed.savedAt === "number") {
           // Optional: Check if state is too old (e.g., > 30 days)
           const daysSinceSaved = (Date.now() - parsed.savedAt) / (1000 * 60 * 60 * 24);
           if (daysSinceSaved > 30) {

@@ -19,33 +19,19 @@ import {
  * The payment address is needed for sending BTC transactions.
  */
 export function getPaymentAddress(wallet: BitcoinWallet): string {
-  // Debug: Log the entire wallet object to see what's available
-  console.log("[getPaymentAddress] Wallet object:", wallet);
-  console.log("[getPaymentAddress] Wallet address (default):", wallet.address);
-  console.log(
-    "[getPaymentAddress] Wallet additionalAddresses:",
-    (wallet as any).additionalAddresses
-  );
-
   // Check additionalAddresses for a payment address
   const additionalAddresses = (wallet as any).additionalAddresses as
     | Array<{ address: string; type: string; publicKey?: string }>
     | undefined;
 
   if (additionalAddresses && additionalAddresses.length > 0) {
-    console.log("[getPaymentAddress] Found additionalAddresses:", additionalAddresses);
     const paymentAddr = additionalAddresses.find((addr) => addr.type === "payment");
     if (paymentAddr) {
-      console.log("[getPaymentAddress] Found payment address:", paymentAddr.address);
       return paymentAddr.address;
     }
-    console.log("[getPaymentAddress] No payment type found in additionalAddresses");
-  } else {
-    console.log("[getPaymentAddress] No additionalAddresses found");
   }
 
   // Fallback to the default wallet address
-  console.log("[getPaymentAddress] Falling back to default address:", wallet.address);
   return wallet.address;
 }
 
@@ -187,8 +173,7 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
           availableBalance,
           requiredAmount,
         };
-      } catch (err) {
-        console.error("Failed to check balance:", err);
+      } catch {
         return {
           hasSufficientBalance: false,
           availableBalance: 0,
@@ -225,12 +210,6 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
         // Get the payment address from the wallet (important for Xverse which has separate ordinal/payment addresses)
         const paymentAddress = getPaymentAddress(btcWallet);
 
-        console.log("[BTC TX] Preparing deposit transaction...");
-        console.log("[BTC TX] Requested address:", userAddress);
-        console.log("[BTC TX] Payment address:", paymentAddress);
-        console.log("[BTC TX] Deposit address:", depositAddress);
-        console.log("[BTC TX] Amount (sats):", amountSats);
-
         // Step 1: Prepare the PSBT using the payment address
         const psbtResult = await prepareDepositTransaction(
           paymentAddress, // Use payment address for UTXO fetching and change
@@ -239,16 +218,8 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
           "medium" // Use medium fee priority
         );
 
-        console.log("[BTC TX] PSBT prepared:", {
-          fee: psbtResult.fee,
-          inputTotal: psbtResult.inputTotal,
-          changeAmount: psbtResult.changeAmount,
-          feeRate: psbtResult.feeRate,
-        });
-
         // Step 2: Sign the PSBT using Dynamic Labs SDK
         setTransactionState("signing");
-        console.log("[BTC TX] Requesting wallet signature...");
 
         // Build the signing request
         // We need to sign all inputs in the PSBT
@@ -272,29 +243,20 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
           throw new Error("Failed to sign PSBT - no signed PSBT returned");
         }
 
-        console.log("[BTC TX] PSBT signed successfully");
-
         // Step 3: Finalize and extract raw transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtResponse.signedPsbt);
         signedPsbt.finalizeAllInputs();
         const rawTxHex = signedPsbt.extractTransaction().toHex();
 
-        console.log("[BTC TX] Raw transaction hex extracted");
-
         // Step 4: Broadcast the transaction
         setTransactionState("broadcasting");
-        console.log("[BTC TX] Broadcasting transaction...");
 
         const txid = await broadcastBitcoinTransaction(rawTxHex);
-
-        console.log("[BTC TX] Transaction broadcast successful!");
-        console.log("[BTC TX] Transaction ID:", txid);
 
         setTransactionState("success");
         setIsLoading(false);
         return txid;
       } catch (err) {
-        console.error("[BTC TX] Transaction failed:", err);
         setError(err instanceof Error ? err : new Error(String(err)));
         setTransactionState("error");
         setIsLoading(false);

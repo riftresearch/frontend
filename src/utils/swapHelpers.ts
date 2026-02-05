@@ -9,9 +9,6 @@ import { toastError, toastInfo, toastWarning } from "./toast";
 import { parseUnits, formatUnits } from "viem";
 import { validateBitcoinPayoutAddressWithNetwork } from "./bitcoinUtils";
 import { useStore } from "./store";
-import { CowSwapClient } from "./cowswapClient";
-import type { QuoteResults } from "@cowprotocol/sdk-trading";
-import { PriceQuality } from "@cowprotocol/cow-sdk";
 import {
   Currency,
   QuoteResponse,
@@ -21,9 +18,6 @@ import {
   FeesUsd,
 } from "./riftApiClient";
 
-// Re-export PriceQuality for convenience
-export { PriceQuality };
-
 /**
  * Calculate dynamic slippage based on notional swap size (USD)
  * Smaller swaps get higher slippage tolerance to ensure execution
@@ -32,8 +26,8 @@ export { PriceQuality };
  * @returns Slippage in basis points (100 bps = 1%)
  */
 export function getSlippageBpsForNotional(usdValue: number): number {
-  if (usdValue < 10) return 200; // 2%
-  if (usdValue < 25) return 100; // 1%
+  if (usdValue < 10) return 300; // 2%
+  if (usdValue < 25) return 200; // 1%
   if (usdValue < 250) return 50; // 0.5%
   if (usdValue < 1000) return 10; // 0.1%
   return 5; // 0.05%
@@ -94,10 +88,11 @@ const DEFAULT_SLIPPAGE_BPS = 0; // 0.1% = 10 basis points
 /**
  * Response from ERC20 to BTC quote combining CowSwap and RFQ
  * Supports both exact input and exact output modes
+ * @deprecated - Use SDK getQuote instead
  */
 export interface ERC20ToBTCQuoteResponse {
   /** CowSwap quote with pricing information (optional for cbBTC direct swaps) */
-  cowswapQuote?: QuoteResults;
+  cowswapQuote?: any;
   /** Final BTC output amount (formatted string) - for exact input mode */
   btcOutputAmount?: string;
   /** Required ERC20/ETH input amount (formatted string) - for exact output mode */
@@ -172,7 +167,7 @@ export function formatCurrencyAmount(currencyAmount: CurrencyAmount): string {
  */
 export function calculateFees(
   rfqFeesUsd: FeesUsd,
-  cowswapQuote?: QuoteResults | null,
+  cowswapQuote?: any | null,
   sellTokenPrice?: number,
   sellTokenDecimals?: number,
   bitcoinPrice?: number
@@ -391,6 +386,7 @@ export async function callRFQ(
  * For cbBTC input, skips CowSwap and goes direct to RFQ
  * @param priceQuality - CowSwap price quality (FAST for quick quotes, OPTIMAL for best price)
  * @param chainId - Chain ID (1 for Ethereum mainnet, 8453 for Base)
+ * @deprecated - Use SDK getQuote instead
  */
 export async function getERC20ToBTCQuote(
   sellToken: string,
@@ -399,8 +395,8 @@ export async function getERC20ToBTCQuote(
   userAddress: string,
   slippageBps?: number,
   validFor?: number,
-  cowswapClient: CowSwapClient | null = null,
-  priceQuality: PriceQuality = PriceQuality.OPTIMAL,
+  cowswapClient: any | null = null,
+  priceQuality: any = "optimal",
   chainId: number = 1
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
@@ -547,19 +543,19 @@ export function btcToSats(btc: string | number): bigint {
 /**
  * Convert input amount to full decimals (base units)
  * @param amount - The amount to convert
- * @param selectedInputToken - The token to convert for
+ * @param inputToken - The token to convert for
  * @returns BigInt representation of the amount in base units, or undefined on error
  */
 export function convertInputAmountToFullDecimals(
   amount: string,
-  selectedInputToken: TokenData | null
+  inputToken: TokenData | null
 ): bigint | undefined {
   try {
-    if (!selectedInputToken) {
+    if (!inputToken) {
       console.error("No input token selected");
       return undefined;
     }
-    return parseUnits(amount, selectedInputToken.decimals);
+    return parseUnits(amount, inputToken.decimals);
   } catch (error) {
     console.error("Error converting input amount to full decimals:", error);
     return undefined;
@@ -586,19 +582,20 @@ export function applySlippageExactOutput(amount: bigint | string, slippageBps?: 
  * User specifies desired BTC output, we calculate required input
  * @param priceQuality - CowSwap price quality (FAST for quick quotes, OPTIMAL for best price)
  * @param chainId - Chain ID (1 for Ethereum mainnet, 8453 for Base)
+ * @deprecated - Use SDK getQuote instead
  */
 export async function getERC20ToBTCQuoteExactOutput(
   btcOutputAmount: string,
-  selectedInputToken: TokenData | null,
+  inputToken: TokenData | null,
   userAddress: string,
   slippageBps?: number,
   validFor?: number,
-  cowswapClient: CowSwapClient | null = null,
-  priceQuality: PriceQuality = PriceQuality.OPTIMAL,
+  cowswapClient: any | null = null,
+  priceQuality: any = "optimal",
   chainId: number = 1
 ): Promise<ERC20ToBTCQuoteResponse | null> {
   try {
-    if (!selectedInputToken) {
+    if (!inputToken) {
       throw new Error("No input token selected");
     }
 
@@ -616,7 +613,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     const cbBTCAmountNeeded = rfqQuoteData.from.amount;
 
     // Check if input token is cbBTC
-    const isCbBTC = selectedInputToken.ticker === "cbBTC";
+    const isCbBTC = inputToken.ticker === "cbBTC";
 
     const cbBTCFormatted = formatUnits(BigInt(cbBTCAmountNeeded), 8);
     if (isCbBTC) {
@@ -633,7 +630,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     }
 
     // Step 2: Get CowSwap quote for ERC20/ETH -> cbBTC using exact output
-    const sellToken = selectedInputToken.address;
+    const sellToken = inputToken.address;
 
     console.log(
       "Getting CowSwap quote (exact output) for",
@@ -655,7 +652,7 @@ export async function getERC20ToBTCQuoteExactOutput(
     const cowswapResponse = await cowswapClient.getQuote({
       sellToken,
       buyAmount: BigInt(cbBTCAmountNeeded).toString(),
-      decimals: selectedInputToken.decimals,
+      decimals: inputToken.decimals,
       slippageBps,
       validFor,
       userAddress,
@@ -674,7 +671,7 @@ export async function getERC20ToBTCQuoteExactOutput(
 
     // For exact output, sellAmount tells us how much input token we need
     const erc20AmountNeeded = cowswapResponse.amountsAndCosts.afterSlippage.sellAmount.toString();
-    const erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), selectedInputToken.decimals);
+    const erc20InputFormatted = formatUnits(BigInt(erc20AmountNeeded), inputToken.decimals);
     // Calculate expiration from tradeParameters.validFor
     const validForSeconds = cowswapResponse.tradeParameters.validFor || 120;
     const routerExpiration = new Date(Date.now() + validForSeconds * 1000);
@@ -819,26 +816,27 @@ export function calculateExchangeRate(
 /**
  * Validate payout address based on swap direction
  * @param address - The address to validate
- * @param isSwappingForBTC - Whether we're swapping for BTC (true) or for ERC20 (false)
+ * @param isBitcoinDestination - Whether the destination is Bitcoin (true) or EVM (false)
  * @returns Validation result with isValid flag and optional network mismatch details
  */
 export function validatePayoutAddress(
   address: string,
-  isSwappingForBTC: boolean
+  isBitcoinDestination: boolean
 ): { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string } {
   if (!address) {
     return { isValid: false };
   }
 
-  if (!isSwappingForBTC) {
-    // For BTC -> ERC20 swaps, validate Ethereum address for payout
+  if (!isBitcoinDestination) {
+    // For swaps to EVM, validate Ethereum address for payout
     const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
     return {
       isValid: ethAddressRegex.test(address),
     };
   } else {
-    // For ERC20 -> BTC swaps, validate Bitcoin address for payout
+    // For swaps to Bitcoin, validate Bitcoin address for payout
     const validation = validateBitcoinPayoutAddressWithNetwork(address, "mainnet");
     return validation;
   }
 }
+

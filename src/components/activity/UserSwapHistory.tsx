@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Box, Flex, Text, Spinner, Button, Image } from "@chakra-ui/react";
-import { useAccount } from "wagmi";
 import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
@@ -8,6 +7,7 @@ import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { ANALYTICS_API_URL } from "@/utils/analyticsClient";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
+import { useStore } from "@/utils/store";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
@@ -340,25 +340,15 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   embedded = false,
   onSwapClick,
 }) => {
-  const { address: wagmiAddress, isConnected: isWagmiConnected } = useAccount();
+  // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
+  const evmAddress = useStore((state) => state.evmAddress);
+  const isEvmConnected = !!evmAddress;
+
   const { setShowAuthFlow } = useDynamicContext();
   const userWallets = useUserWallets();
 
-  // Find EVM wallet from Dynamic (MetaMask, etc.)
-  const evmWallet = userWallets.find(
-    (w) =>
-      w.chain === "EVM" ||
-      w.chain === "evm" ||
-      w.connector?.name?.toLowerCase()?.includes("metamask") ||
-      w.connector?.name?.toLowerCase()?.includes("coinbase")
-  );
-
-  // Check for EVM connection from either wagmi or Dynamic
-  const walletAddress = wagmiAddress || evmWallet?.address;
-  const isConnected = isWagmiConnected || !!evmWallet;
-
   // Use simulated address if provided, otherwise use wallet address
-  const address = simulatedAddress || walletAddress;
+  const address = simulatedAddress || evmAddress;
   const isSimulating = !!simulatedAddress;
   const router = useRouter();
   const { isMobile } = useWindowSize();
@@ -412,7 +402,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   // Fetch initial swaps with retry logic and set up polling
   useEffect(() => {
     // Skip if no address (not connected and not simulating)
-    if (!address || (!isConnected && !isSimulating)) {
+    if (!address || (!isEvmConnected && !isSimulating)) {
       setSwaps([]);
       setHasMore(true);
       return;
@@ -483,7 +473,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
     // Cleanup interval on unmount or when address/connection changes
     return () => clearInterval(pollInterval);
-  }, [address, isConnected, isSimulating]);
+  }, [address, isEvmConnected, isSimulating]);
 
   // Fetch next page - use actual swaps count as offset to handle filtered items correctly
   const fetchNextPage = useCallback(async () => {
@@ -563,7 +553,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   }
 
   // Only show "not connected" UI if not simulating and not connected
-  if (!isConnected && !isSimulating) {
+  if (!isEvmConnected && !isSimulating) {
     if (embedded) {
       return (
         <Flex direction="column" align="center" justify="center" py="40px" px="20px" gap="16px">

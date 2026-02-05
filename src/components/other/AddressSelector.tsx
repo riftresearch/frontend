@@ -44,30 +44,16 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
   // Map wallets with their addresses (for BTC this will be payment address)
   const walletsWithAddresses = useMemo(() => {
-    console.log(
-      "[AddressSelector] Building walletsWithAddresses for",
-      filteredWallets.length,
-      "wallets, chainType:",
-      chainType
-    );
     const result = filteredWallets.map((wallet) => {
       let address: string;
-      console.log("[AddressSelector] Processing wallet:", wallet.id, "chain:", wallet.chain);
-      console.log("[AddressSelector] isBitcoinWallet check:", isBitcoinWallet(wallet));
 
       if (chainType === "BTC" && isBitcoinWallet(wallet)) {
         address = getPaymentAddress(wallet);
-        console.log("[AddressSelector] Using payment address:", address);
       } else {
         address = wallet.address;
-        console.log("[AddressSelector] Using default address:", address);
       }
       return { wallet, address };
     });
-    console.log(
-      "[AddressSelector] walletsWithAddresses result:",
-      result.map((w) => ({ id: w.wallet.id, address: w.address }))
-    );
     return result;
   }, [filteredWallets, chainType]);
 

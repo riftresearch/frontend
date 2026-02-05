@@ -6,7 +6,19 @@ import { DynamicContextProvider, SortWallets } from "@dynamic-labs/sdk-react-cor
 import { DynamicWagmiConnector } from "@dynamic-labs/wagmi-connector";
 import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
 import { BitcoinWalletConnectors } from "@dynamic-labs/bitcoin";
-import { queryClient, wagmiConfig, dynamicEnvironmentId } from "@/utils/wallet";
+import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
+import { queryClient, wagmiConfig, dynamicEnvironmentId, getWalletClientConfig } from "@/utils/wallet";
+import { useStore } from "@/utils/store";
+import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
+
+// Helper to get the correct address for a wallet (payment address for BTC, default for EVM)
+const getWalletDisplayAddress = (wallet: any): string => {
+  const chain = wallet.chain?.toUpperCase();
+  if ((chain === "BTC" || chain === "BITCOIN") && isBitcoinWallet(wallet)) {
+    return getPaymentAddress(wallet);
+  }
+  return wallet.address;
+};
 
 interface ConditionalWagmiProviderProps {
   children: React.ReactNode;
@@ -14,6 +26,9 @@ interface ConditionalWagmiProviderProps {
 
 export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> = ({ children }) => {
   const router = useRouter();
+  const setEvmAddress = useStore((state) => state.setEvmAddress);
+  const setBtcAddress = useStore((state) => state.setBtcAddress);
+  const setWalletClient = useStore((state) => state.setWalletClient);
 
   // Disable wallet providers on admin page to prevent wallet connection prompts
   const isAdminPage = router.pathname === "/admin";
@@ -63,6 +78,53 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
             max-height: 500px !important;
           }
         `,
+        events: {
+          onWalletAdded: async (args) => {
+            const wallet = args.wallet;
+            console.log("onWalletAdded", wallet);
+            if (wallet) {
+              const chain = wallet.chain?.toUpperCase();
+              if (chain === "EVM") {
+                setEvmAddress(wallet.address);
+                // Fetch and set the wallet client with explicit chain config
+                try {
+                  const config = getWalletClientConfig(wallet.address, 1); // Default to mainnet
+                  const client = await (wallet as any).getWalletClient(config);
+                  console.log("onWalletAdded: Setting wallet client for", wallet.address);
+                  setWalletClient(client);
+                } catch (error) {
+                  console.error("onWalletAdded: Failed to get wallet client:", error);
+                  setWalletClient(null);
+                }
+              } else if (chain === "BTC" || chain === "BITCOIN") {
+                const addr = getWalletDisplayAddress(wallet);
+                setBtcAddress(addr);
+              }
+            }
+          },
+          onWalletRemoved: (args) => {
+            const wallet = args.wallet;
+            console.log("onWalletRemoved", wallet);
+            if (wallet) {
+              const chain = wallet.chain?.toUpperCase();
+              if (chain === "EVM") {
+                // Only clear if this was the selected EVM wallet
+                const currentEvmAddress = useStore.getState().evmAddress;
+                if (currentEvmAddress?.toLowerCase() === wallet.address.toLowerCase()) {
+                  setEvmAddress(null);
+                  setWalletClient(null);
+                }
+              } else if (chain === "BTC" || chain === "BITCOIN") {
+                // Only clear if this was the selected BTC wallet
+                const currentBtcAddress = useStore.getState().btcAddress;
+                const removedAddr = getWalletDisplayAddress(wallet);
+                if (currentBtcAddress?.toLowerCase() === removedAddr.toLowerCase()) {
+                  setBtcAddress(null);
+                }
+              }
+            }
+          },
+        },
       }}
     >
       <WagmiProvider config={wagmiConfig}>
