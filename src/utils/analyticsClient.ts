@@ -352,8 +352,8 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
       const parsed = JSON.parse(startAssetString);
       startAssetMetadata = resolveTokenMetadata(parsed);
       if (
-        startAssetMetadata?.address &&
-        startAssetMetadata.address.toLowerCase() === CBBTC_ADDRESS
+        startAssetMetadata?.ticker &&
+        ["BTC", "CBBTC"].includes(startAssetMetadata.ticker.toUpperCase())
       ) {
         startAssetMetadata = undefined;
       }
@@ -369,6 +369,12 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
     try {
       const parsed = JSON.parse(endAssetString);
       endAssetMetadata = resolveTokenMetadata(parsed);
+      if (
+        endAssetMetadata?.ticker &&
+        ["BTC", "CBBTC"].includes(endAssetMetadata.ticker.toUpperCase())
+      ) {
+        endAssetMetadata = undefined;
+      }
     } catch (e) {
       console.warn("Failed to parse end_asset metadata:", e);
     }
