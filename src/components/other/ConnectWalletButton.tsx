@@ -156,7 +156,7 @@ export const ConnectWalletButton: React.FC = () => {
               usdValue: `$${usd.toFixed(2)}`,
               icon: tokenData?.icon || FALLBACK_TOKEN_ICON,
               decimals: tokenData?.decimals || decimals,
-              chainId: chainIdNum,
+              chain: chainIdNum,
             } as TokenData;
           })
         ).then((results) => results.filter((item): item is TokenData => item !== null));

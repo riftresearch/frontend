@@ -606,6 +606,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
       // Clear existing quotes when user types
       setQuote(null);
+      setFeeOverview(null);
 
       if (!value || parseFloat(value) <= 0) {
         // Clear the other field if this field is empty or 0
@@ -672,6 +673,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       setOutputAmount("");
       setOutputUsdValue(ZERO_USD_DISPLAY);
       setInputUsdValue(ZERO_USD_DISPLAY);
+      setFeeOverview(null);
     }
   };
 

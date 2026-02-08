@@ -844,7 +844,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     bg="#212121"
                     borderRadius="30px"
                     pl="48px"
-                    pr="20px"
+                    pr="44px"
                     py="12px"
                     letterSpacing="-0.9px"
                     border="none"
@@ -864,6 +864,46 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                       outline: "none",
                     }}
                   />
+
+                  {/* Clear Search Button */}
+                  {searchQuery && (
+                    <Box
+                      position="absolute"
+                      right="14px"
+                      top="50%"
+                      transform="translateY(-50%)"
+                      zIndex={1}
+                      cursor="pointer"
+                      onClick={() => {
+                        setSearchQuery("");
+                        searchInputRef.current?.focus();
+                      }}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      borderRadius="50%"
+                      w="22px"
+                      h="22px"
+                      bg="rgba(255,255,255,0.1)"
+                      _hover={{ bg: "rgba(255,255,255,0.2)" }}
+                      transition="background 0.15s"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M1 1L11 11M11 1L1 11"
+                          stroke={colors.textGray}
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </Box>
+                  )}
                 </Box>
               }
 

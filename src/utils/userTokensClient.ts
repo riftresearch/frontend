@@ -308,7 +308,13 @@ export async function fetchUserEth(
       for (const [chainIdStr, balanceData] of Object.entries<any>(data.balances)) {
         const chainId = Number(chainIdStr);
         const network = CHAIN_ID_TO_NETWORK[chainId];
-        if (!network || network === Network.ALL) continue;
+        if (
+          !network ||
+          network === Network.ALL ||
+          (network !== Network.ETHEREUM && network !== Network.BASE)
+        ) {
+          continue;
+        }
 
         const balanceEth = Number(formatUnits(BigInt(balanceData.balance), 18));
         const usdValue = balanceEth * ethPrice;
@@ -324,7 +330,7 @@ export async function fetchUserEth(
           usdValue: `$${usdValue.toFixed(2)}`,
           icon: ETH_ICON,
           decimals: 18,
-          chainId,
+          chain: network === Network.BASE ? 8453 : 1,
         };
       }
     }

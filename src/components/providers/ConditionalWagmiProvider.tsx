@@ -28,7 +28,7 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
   const router = useRouter();
   const setEvmAddress = useStore((state) => state.setEvmAddress);
   const setBtcAddress = useStore((state) => state.setBtcAddress);
-  const setWalletClient = useStore((state) => state.setWalletClient);
+  const setEvmWalletClient = useStore((state) => state.setEvmWalletClient);
 
   // Disable wallet providers on admin page to prevent wallet connection prompts
   const isAdminPage = router.pathname === "/admin";
@@ -91,10 +91,10 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
                   const config = getWalletClientConfig(wallet.address, 1); // Default to mainnet
                   const client = await (wallet as any).getWalletClient(config);
                   console.log("onWalletAdded: Setting wallet client for", wallet.address);
-                  setWalletClient(client);
+                  setEvmWalletClient(client);
                 } catch (error) {
                   console.error("onWalletAdded: Failed to get wallet client:", error);
-                  setWalletClient(null);
+                  setEvmWalletClient(null);
                 }
               } else if (chain === "BTC" || chain === "BITCOIN") {
                 const addr = getWalletDisplayAddress(wallet);
@@ -112,7 +112,7 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
                 const currentEvmAddress = useStore.getState().evmAddress;
                 if (currentEvmAddress?.toLowerCase() === wallet.address.toLowerCase()) {
                   setEvmAddress(null);
-                  setWalletClient(null);
+                  setEvmWalletClient(null);
                 }
               } else if (chain === "BTC" || chain === "BITCOIN") {
                 // Only clear if this was the selected BTC wallet
