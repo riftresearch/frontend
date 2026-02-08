@@ -70,7 +70,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setDisplayedInputAmount,
     setOutputAmount,
     userTokensByChain,
-    setErc20Price,
+    setInputTokenPrice,
+    setOutputTokenPrice,
     setInputUsdValue,
     setSwitchingToInputTokenChain,
     btcPrice,
@@ -275,14 +276,20 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         if (selectedNetwork === Network.ALL) {
           // Combine tokens from both chains
           const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chain: 1 as const }));
-          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chain: 8453 as const }));
+          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({
+            ...t,
+            chain: 8453 as const,
+          }));
           tokens = [...ethTokens, ...baseTokens];
         } else if (selectedNetwork === Network.BITCOIN) {
           // Bitcoin network: no EVM tokens, BTC will be added separately
           tokens = [];
         } else {
           const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
-          tokens = (userTokensByChain[chain] || []).map((t) => ({ ...t, chain: chain as 1 | 8453 }));
+          tokens = (userTokensByChain[chain] || []).map((t) => ({
+            ...t,
+            chain: chain as 1 | 8453,
+          }));
         }
 
         // Deduplicate by chain + address (user tokens come first, so they're preserved)
@@ -438,9 +445,10 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     // Set the token based on selectionDirection
     if (selectionDirection === "input") {
       setInputToken(tokenData);
-      setErc20Price(null);
+      setInputTokenPrice(null);
     } else {
       setOutputToken(tokenData);
+      setOutputTokenPrice(null);
     }
 
     // Switch network to the selected token's chain if it's an EVM token
@@ -775,13 +783,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
             overflow="hidden"
           >
             {/* Sticky Header Section */}
-            <Box
-              bg="#131313"
-              pt="24px"
-              pb="0"
-              flexShrink={0}
-              borderTopRadius="28px"
-            >
+            <Box bg="#131313" pt="24px" pb="0" flexShrink={0} borderTopRadius="28px">
               {/* Header */}
               <Flex justify="space-between" align="center" mb="12px" mt="-2px" mx="24px">
                 <Text
@@ -805,7 +807,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               </Flex>
 
               {/* Search Bar - show for all token selections */}
-              {(
+              {
                 <Box position="relative" mb="18px" mx="24px">
                   {/* Search Icon */}
                   <Box
@@ -863,7 +865,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     }}
                   />
                 </Box>
-              )}
+              }
 
               {/* Mobile Network Selector - horizontal scrollable list */}
               {isMobile && (

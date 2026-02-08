@@ -28,7 +28,7 @@ importers:
         version: 4.50.2(@types/react@19.2.2)(bufferutil@4.0.9)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(utf-8-validate@5.0.10)
       '@dynamic-labs/wagmi-connector':
         specifier: ^4.50.2
-        version: 4.50.2(3494c2752f5ca5e2e2c497fcf27f45af)
+        version: 4.50.2(bdlv4mzrfn2lqfw6dzn74l7nim)
       '@emotion/react':
         specifier: ^11
         version: 11.14.0(@types/react@19.2.2)(react@19.2.0)
@@ -52,7 +52,7 @@ importers:
         version: 3.1.3(@morpho-org/blue-sdk@4.13.1(@morpho-org/morpho-ts@2.4.3))(@morpho-org/morpho-ts@2.4.3)
       '@morpho-org/simulation-sdk-wagmi':
         specifier: ^3.0.2
-        version: 3.0.3(d9b76e2b7ed717c7f94ccac0671a3aa1)
+        version: 3.0.3(5xwiar4u65u3mqr5ymhinyvzbu)
       '@number-flow/react':
         specifier: ^0.5.10
         version: 0.5.10(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -63,8 +63,8 @@ importers:
         specifier: ^1.7.9
         version: 1.8.11(@tanstack/react-query@5.90.5(react@19.2.0))(@types/react@19.2.2)(@wagmi/core@2.22.1(@tanstack/query-core@5.90.5)(@types/react@19.2.2)(immer@10.1.3)(react@19.2.0)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.0))(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)))(bufferutil@4.0.9)(immer@10.1.3)(react@19.2.0)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.0))(utf-8-validate@5.0.10)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))(wagmi@2.18.2(@tanstack/query-core@5.90.5)(@tanstack/react-query@5.90.5(react@19.2.0))(@types/react@19.2.2)(bufferutil@4.0.9)(immer@10.1.3)(react@19.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))(zod@4.1.12))(zod@4.1.12)
       '@riftresearch/sdk':
-        specifier: ^0.4.2
-        version: 0.4.2(elysia@1.4.22(@sinclair/typebox@0.34.48)(exact-mirror@0.2.6(@sinclair/typebox@0.34.48))(file-type@21.3.0)(openapi-types@12.1.3)(typescript@5.9.3))(typescript@5.9.3)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
+        specifier: ^0.5.0
+        version: 0.5.0(elysia@1.4.22(@sinclair/typebox@0.34.48)(exact-mirror@0.2.6(@sinclair/typebox@0.34.48))(file-type@21.3.0)(openapi-types@12.1.3)(typescript@5.9.3))(typescript@5.9.3)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
       '@rive-app/react-canvas':
         specifier: ^4.21.4
         version: 4.23.4(react@19.2.0)
@@ -1724,8 +1724,8 @@ packages:
   '@reown/appkit@1.8.11':
     resolution: {integrity: sha512-G96zt1P3ASrivV7HRrFQuzkCEzSmy3ca7cSQxaLeIS+P2VVhjE5YAyINArGVbooY0heHCPvQuTNM+YgK4oBmfg==}
 
-  '@riftresearch/sdk@0.4.2':
-    resolution: {integrity: sha512-RVdSzbc9PqHaP6kx5p5smRzZ6dwugoW76HNXsIBvkQHtjvsw3ti0TqxU8gvN20UqTgUqTUefTtbDh/4LPxd+rg==}
+  '@riftresearch/sdk@0.5.0':
+    resolution: {integrity: sha512-x9be6gFdxmyHC0wME/HX2iWkU7Mboaw1vb6xLozvZxxOdsPXrxrCqf8Jv0ic1OMbV37fId9esCz0PlVpBHFp+w==}
     peerDependencies:
       typescript: '>=4.5.0'
       viem: ^2.0.0
@@ -7841,7 +7841,7 @@ snapshots:
       - utf-8-validate
       - viem
 
-  '@dynamic-labs/wagmi-connector@4.50.2(3494c2752f5ca5e2e2c497fcf27f45af)':
+  '@dynamic-labs/wagmi-connector@4.50.2(bdlv4mzrfn2lqfw6dzn74l7nim)':
     dependencies:
       '@dynamic-labs/assert-package-version': 4.50.2
       '@dynamic-labs/ethereum-core': 4.50.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
@@ -9116,7 +9116,7 @@ snapshots:
 
   '@morpho-org/morpho-ts@2.4.3': {}
 
-  '@morpho-org/simulation-sdk-wagmi@3.0.3(d9b76e2b7ed717c7f94ccac0671a3aa1)':
+  '@morpho-org/simulation-sdk-wagmi@3.0.3(5xwiar4u65u3mqr5ymhinyvzbu)':
     dependencies:
       '@morpho-org/blue-sdk': 4.13.1(@morpho-org/morpho-ts@2.4.3)
       '@morpho-org/blue-sdk-viem': 3.2.0(@morpho-org/blue-sdk@4.13.1(@morpho-org/morpho-ts@2.4.3))(@morpho-org/morpho-ts@2.4.3)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
@@ -9900,7 +9900,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@riftresearch/sdk@0.4.2(elysia@1.4.22(@sinclair/typebox@0.34.48)(exact-mirror@0.2.6(@sinclair/typebox@0.34.48))(file-type@21.3.0)(openapi-types@12.1.3)(typescript@5.9.3))(typescript@5.9.3)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))':
+  '@riftresearch/sdk@0.5.0(elysia@1.4.22(@sinclair/typebox@0.34.48)(exact-mirror@0.2.6(@sinclair/typebox@0.34.48))(file-type@21.3.0)(openapi-types@12.1.3)(typescript@5.9.3))(typescript@5.9.3)(viem@2.38.3(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))':
     dependencies:
       '@elysiajs/eden': 1.4.6(elysia@1.4.22(@sinclair/typebox@0.34.48)(exact-mirror@0.2.6(@sinclair/typebox@0.34.48))(file-type@21.3.0)(openapi-types@12.1.3)(typescript@5.9.3))
       '@scure/base': 2.0.0

@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { Swap } from "./riftApiClient";
-import { TokenData, ApprovalState } from "./types";
-import { FeeOverview } from "./swapHelpers";
+import { TokenData, ApprovalState, FeeOverview } from "./types";
 import type { WalletClient } from "viem";
 import type { RiftSdk } from "@riftresearch/sdk";
 
@@ -40,9 +39,6 @@ type DepositFlowState =
   | "7-RefundingMM"
   | "8-Failed";
 
-// Type for the executeSwap function from SDK (using any to avoid complex generic types)
-export type DoSwapFn = ((params: any) => Promise<any>) | null;
-
 export const useStore = create<{
   evmAddress: string | null;
   setEvmAddress: (address: string | null) => void;
@@ -76,8 +72,10 @@ export const useStore = create<{
   setBtcPrice: (price: number | null) => void;
   ethPrice: number | null;
   setEthPrice: (price: number | null) => void;
-  erc20Price: number | null;
-  setErc20Price: (price: number | null) => void;
+  inputTokenPrice: number | null;
+  setInputTokenPrice: (price: number | null) => void;
+  outputTokenPrice: number | null;
+  setOutputTokenPrice: (price: number | null) => void;
   inputUsdValue: string;
   setInputUsdValue: (value: string) => void;
   outputUsdValue: string;
@@ -86,8 +84,8 @@ export const useStore = create<{
   setQuote: (quote: any | null) => void;
   rift: RiftSdk | null;
   setRift: (rift: RiftSdk | null) => void;
-  doSwap: DoSwapFn;
-  setDoSwap: (fn: DoSwapFn) => void;
+  executeSwap: ((params: any) => Promise<any>) | null;
+  setExecuteSwap: (fn: ((params: any) => Promise<any>) | null) => void;
   activeSwapId: string | null;
   setActiveSwapId: (id: string | null) => void;
   slippageBips: number;
@@ -180,8 +178,10 @@ export const useStore = create<{
   setBtcPrice: (price: number | null) => set({ btcPrice: price }),
   ethPrice: null,
   setEthPrice: (price: number | null) => set({ ethPrice: price }),
-  erc20Price: null,
-  setErc20Price: (price: number | null) => set({ erc20Price: price }),
+  inputTokenPrice: null,
+  setInputTokenPrice: (price: number | null) => set({ inputTokenPrice: price }),
+  outputTokenPrice: null,
+  setOutputTokenPrice: (price: number | null) => set({ outputTokenPrice: price }),
   inputUsdValue: "$0.00",
   setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
   outputUsdValue: "$0.00",
@@ -190,8 +190,8 @@ export const useStore = create<{
   setQuote: (quote: any | null) => set({ quote }),
   rift: null,
   setRift: (rift: RiftSdk | null) => set({ rift }),
-  doSwap: null,
-  setDoSwap: (fn: DoSwapFn) => set({ doSwap: fn }),
+  executeSwap: null,
+  setExecuteSwap: (fn: ((params: any) => Promise<any>) | null) => set({ executeSwap: fn }),
   activeSwapId: null,
   setActiveSwapId: (id: string | null) => set({ activeSwapId: id }),
   slippageBips: 5,

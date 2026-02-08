@@ -14,7 +14,6 @@ import { mainnet, base } from "viem/chains";
 import { ApprovalState } from "@/utils/types";
 import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
 import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
-import { Currencies, createCurrency } from "@riftresearch/sdk";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -77,8 +76,6 @@ export const SwapButton = () => {
     setQuote,
     payoutAddress,
     addressValidation,
-    btcRefundAddress,
-    btcRefundAddressValidation,
     selectedInputAddress,
     approvalState,
     setApprovalState,
@@ -91,15 +88,10 @@ export const SwapButton = () => {
     inputBelowMinimum,
     refetchQuote,
     setRefetchQuote,
-    isAwaitingOptimalQuote,
-    btcPrice,
-    ethPrice,
-    erc20Price,
     evmWalletClient,
     btcAddress,
     evmAddress,
-    rift,
-    doSwap,
+    executeSwap: storedExecuteSwap,
     setActiveSwapId,
   } = useStore();
 
@@ -204,65 +196,59 @@ export const SwapButton = () => {
     return {
       publicClient,
       walletClient: evmWalletClient,
-      sendBitcoin: async ({ recipient, amountSats }: { recipient: string; amountSats: string }): Promise<void> => {
+      sendBitcoin: async ({
+        recipient,
+        amountSats,
+      }: {
+        recipient: string;
+        amountSats: string;
+      }): Promise<void> => {
         if (!btcAddress) {
           throw new Error("No BTC wallet connected");
         }
         await sendBitcoin(btcAddress, recipient, parseInt(amountSats, 10));
       },
     };
-  }, [inputToken.chain, basePublicClient, mainnetPublicClient, evmWalletClient, btcAddress, sendBitcoin]);
+  }, [
+    inputToken.chain,
+    basePublicClient,
+    mainnetPublicClient,
+    evmWalletClient,
+    btcAddress,
+    sendBitcoin,
+  ]);
 
   // Main swap handler - uses Rift SDK for execution
   const startSwap = useCallback(async () => {
     try {
       setSwapButtonPressed(true);
 
+      if (!storedExecuteSwap) {
+        throw new Error("No quote available. Please get a quote first.");
+      }
+
       // Validate wallet client is available
       if (!evmWalletClient) {
         throw new Error("EVM wallet not connected");
       }
 
-      const executeParams = getExecuteParams();
-
-      if (doSwap) {
-        // Real quote - call doSwap directly
-        const swap = await doSwap(executeParams);
-        setActiveSwapId(swap.swapId);
-      } else {
-        // Dummy quote - fetch new quote with real addresses and execute
-        if (!rift) {
-          throw new Error("SDK not initialized");
-        }
-
-        const fromCurrency =
-          inputToken.chain === "bitcoin"
-            ? Currencies.Bitcoin.BTC
-            : createCurrency({
-                chainId: inputToken.chain as number,
-                address: inputToken.address as `0x${string}`,
-                decimals: inputToken.decimals,
-              });
-        const toCurrency =
-          outputToken.chain === "bitcoin"
-            ? Currencies.Bitcoin.BTC
-            : createCurrency({
-                chainId: outputToken.chain as number,
-                address: outputToken.address as `0x${string}`,
-                decimals: outputToken.decimals,
-              });
-
-        const { quote: newQuote, executeSwap } = await rift.getQuote({
-          from: fromCurrency,
-          to: toCurrency,
-          amount: fullPrecisionInputAmount || displayedInputAmount,
-          mode: "exact_input",
-          destinationAddress: isSwappingForBTC ? btcAddress! : evmAddress!,
-        });
-
-        const swap = await executeSwap(executeParams);
-        setActiveSwapId(swap.swapId);
+      // Determine destination address based on swap direction
+      const destinationAddress = isSwappingForBTC ? btcAddress : evmAddress;
+      if (!destinationAddress) {
+        throw new Error(
+          isSwappingForBTC
+            ? "No Bitcoin address available. Please connect a Bitcoin wallet."
+            : "No EVM address available. Please connect an Ethereum wallet."
+        );
       }
+
+      const executeParams = {
+        ...getExecuteParams(),
+        destinationAddress,
+      };
+
+      const swap = await storedExecuteSwap(executeParams);
+      setActiveSwapId(swap.swapId);
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
@@ -272,12 +258,7 @@ export const SwapButton = () => {
       });
     }
   }, [
-    doSwap,
-    rift,
-    inputToken,
-    outputToken,
-    fullPrecisionInputAmount,
-    displayedInputAmount,
+    storedExecuteSwap,
     isSwappingForBTC,
     btcAddress,
     evmAddress,

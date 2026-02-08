@@ -21,8 +21,6 @@ import { PasteAddressModal } from "@/components/other/PasteAddressModal";
 import { useStore } from "@/utils/store";
 import { TokenData } from "@/utils/types";
 import {
-  getERC20ToBTCQuote,
-  callRFQ,
   isAboveMinSwap,
   calculateUsdValue,
   satsToBtc,
@@ -308,8 +306,10 @@ export const RatesSwapWidget = () => {
     setOutputAmount,
     btcPrice,
     ethPrice,
-    erc20Price,
-    setErc20Price,
+    inputTokenPrice,
+    setInputTokenPrice,
+    outputTokenPrice,
+    setOutputTokenPrice,
     inputUsdValue,
     setInputUsdValue,
     outputUsdValue,
@@ -388,16 +388,34 @@ export const RatesSwapWidget = () => {
   const actualBorderColor = "#323232";
   const borderColor = `2px solid ${actualBorderColor}`;
 
-  // Fetch ERC20 token price from API
-  const fetchErc20TokenPrice = useCallback(
-    async (tokenData: TokenData | null) => {
-      // Skip for native tokens (ETH zero address or BTC "Native")
+  // Fetch token price - uses store btcPrice/ethPrice for native tokens, fetches from API for ERC20s
+  const fetchTokenPriceForDirection = useCallback(
+    async (tokenData: TokenData | null, direction: "input" | "output") => {
+      const setPrice = direction === "input" ? setInputTokenPrice : setOutputTokenPrice;
+
+      if (!tokenData) {
+        setPrice(null);
+        return;
+      }
+
+      // For BTC/cbBTC, use btcPrice from store
+      if (tokenData.ticker === "BTC" || tokenData.ticker === "cbBTC") {
+        setPrice(btcPrice);
+        return;
+      }
+
+      // For ETH, use ethPrice from store
       if (
-        !tokenData?.address ||
-        tokenData.address === "0x0000000000000000000000000000000000000000" ||
-        tokenData.address === "Native"
+        tokenData.ticker === "ETH" ||
+        tokenData.address === "0x0000000000000000000000000000000000000000"
       ) {
-        setErc20Price(null);
+        setPrice(ethPrice);
+        return;
+      }
+
+      // Skip for native tokens without an address
+      if (!tokenData.address || tokenData.address === "Native") {
+        setPrice(null);
         return;
       }
 
@@ -405,15 +423,15 @@ export const RatesSwapWidget = () => {
       const chainName = tokenChainId === 8453 ? "base" : "ethereum";
 
       try {
-        const tokenPrice = await fetchTokenPrice(chainName, tokenData.address);
-        if (tokenPrice && typeof tokenPrice.price === "number") {
-          setErc20Price(tokenPrice.price);
+        const tokenPriceResult = await fetchTokenPrice(chainName, tokenData.address);
+        if (tokenPriceResult && typeof tokenPriceResult.price === "number") {
+          setPrice(tokenPriceResult.price);
         }
       } catch (error) {
-        console.error("Failed to fetch ERC20 price:", error);
+        console.error(`Failed to fetch ${direction} token price:`, error);
       }
     },
-    [evmConnectWalletChainId, setErc20Price]
+    [evmConnectWalletChainId, setInputTokenPrice, setOutputTokenPrice, btcPrice, ethPrice]
   );
 
   // Fetch Relay quote for comparison
@@ -689,15 +707,7 @@ export const RatesSwapWidget = () => {
       }
 
       const inputValue = parseFloat(amountToQuote);
-      let price: number | null = null;
-
-      if (inputToken.ticker === "ETH") {
-        price = ethPrice;
-      } else if (inputToken.ticker === "cbBTC") {
-        price = btcPrice;
-      } else {
-        price = erc20Price;
-      }
+      const price = inputTokenPrice;
 
       if (price && btcPrice) {
         const usdValue = inputValue * price;
@@ -785,7 +795,7 @@ export const RatesSwapWidget = () => {
       setQuote(null),
       setOutputAmount,
       ethPrice,
-      erc20Price,
+      inputTokenPrice,
       btcPrice,
       setFeeOverview,
       setIsAwaitingOptimalQuote,
@@ -808,12 +818,7 @@ export const RatesSwapWidget = () => {
 
       const amountValue = parseFloat(amountToQuote);
 
-      let price;
-      if (outputToken?.ticker === "cbBTC") {
-        price = btcPrice;
-      } else if (erc20Price) {
-        price = erc20Price;
-      }
+      const price = outputTokenPrice;
       if (!btcPrice || !price) {
         return;
       }
@@ -889,7 +894,7 @@ export const RatesSwapWidget = () => {
       inputToken,
       setQuote(null),
       btcPrice,
-      erc20Price,
+      outputTokenPrice,
       setFeeOverview,
       liquidity,
       outputToken?.decimals,
@@ -943,7 +948,7 @@ export const RatesSwapWidget = () => {
       getQuoteForInputRef.current = true;
 
       const inputTicker = isSwappingForBTC ? inputToken.ticker : "BTC";
-      const usdValue = calculateUsdValue(value, inputTicker, ethPrice, btcPrice, erc20Price);
+      const usdValue = calculateUsdValue(value, inputTicker, ethPrice, btcPrice, inputTokenPrice);
       setInputUsdValue(usdValue);
 
       setQuote(null);
@@ -1055,9 +1060,14 @@ export const RatesSwapWidget = () => {
 
   // Note: Output token is now set directly via setOutputToken, not derived from isSwappingForBTC
 
+  // Fetch token prices when selected tokens change
   useEffect(() => {
-    fetchErc20TokenPrice(inputToken);
-  }, [inputToken, fetchErc20TokenPrice]);
+    fetchTokenPriceForDirection(inputToken, "input");
+  }, [inputToken, fetchTokenPriceForDirection]);
+
+  useEffect(() => {
+    fetchTokenPriceForDirection(outputToken, "output");
+  }, [outputToken, fetchTokenPriceForDirection]);
 
   useEffect(() => {
     const inputTicker = isSwappingForBTC ? inputToken.ticker : "BTC";
@@ -1066,11 +1076,11 @@ export const RatesSwapWidget = () => {
       inputTicker,
       ethPrice,
       btcPrice,
-      erc20Price
+      inputTokenPrice
     );
     setInputUsdValue(inputUsd);
   }, [
-    erc20Price,
+    inputTokenPrice,
     btcPrice,
     ethPrice,
     displayedInputAmount,

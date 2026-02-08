@@ -105,6 +105,21 @@ export type Config = {
   underlyingSwappingAssets: Asset[];
 };
 
+/**
+ * Fee breakdown overview for a swap
+ */
+export interface FeeOverview {
+  networkFee: {
+    fee: string;
+    description: string;
+  };
+  protocolFee: {
+    fee: string;
+    description: string;
+  };
+  totalFees: string;
+}
+
 export type RouteButton = "Swap" | "Manage" | "About";
 
 export const ROUTES: { [k in RouteButton]: string } = {

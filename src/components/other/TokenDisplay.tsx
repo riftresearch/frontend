@@ -7,6 +7,7 @@ import { TokenData, Chain } from "@/utils/types";
 // Dynamic's icon sprite URL for wallet badges
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
 
+console.log("[TokenDisplay] CHAIN_NAMES", CHAIN_NAMES);
 export interface WalletIcon {
   iconKey: string;
   walletId: string;
@@ -97,7 +98,13 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
               w="20px"
               h="20px"
               borderRadius="50%"
-              bg={token.chain === Chain.Bitcoin ? "#F7931A" : token.chain === Chain.Base ? "white" : "#1a1a2e"}
+              bg={
+                token.chain === Chain.Bitcoin
+                  ? "#F7931A"
+                  : token.chain === Chain.Base
+                    ? "white"
+                    : "#1a1a2e"
+              }
               border="2px solid #131313"
               display="flex"
               alignItems="center"

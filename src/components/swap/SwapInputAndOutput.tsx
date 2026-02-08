@@ -32,12 +32,13 @@ import {
   calculateUsdValue,
   validatePayoutAddress,
   calculateExchangeRate,
-  calculateFees,
+  buildFeeOverview,
   getMinSwapValueUsd,
   satsToBtc,
   truncateAmount,
   getSlippageBpsForNotional,
   formatCurrencyAmount,
+  calculatePriceImpact,
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
@@ -105,7 +106,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // Rift SDK from store
   const rift = useStore((state) => state.rift);
   const setRift = useStore((state) => state.setRift);
-  const setDoSwap = useStore((state) => state.setDoSwap);
+  const setExecuteSwap = useStore((state) => state.setExecuteSwap);
 
   // Liquidity hook
   const liquidity = useMaxLiquidity();
@@ -155,8 +156,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setOutputAmount,
     btcPrice,
     ethPrice,
-    erc20Price,
-    setErc20Price,
+    inputTokenPrice,
+    setInputTokenPrice,
+    outputTokenPrice,
+    setOutputTokenPrice,
     inputUsdValue,
     setInputUsdValue,
     outputUsdValue,
@@ -223,6 +226,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   useEffect(() => {
     // Find first EVM wallet
     const evmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
+    console.log("[syncWalletAddresses] evmWallet", evmWallet);
     if (evmWallet && !evmAddress) {
       setEvmAddress(evmWallet.address);
       // Also fetch and set the wallet client with explicit chain config
@@ -252,7 +256,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // Initialize Rift SDK
   useEffect(() => {
     if (!rift) {
-      const sdk = new RiftSdk({ integratorName: "rift-app" });
+      const sdk = new RiftSdk({ integratorName: "app.rift.trade" });
       setRift(sdk);
     }
   }, [rift, setRift]);
@@ -378,45 +382,52 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // QUOTING FUNCTIONS
   // ============================================================================
 
-  // Fetch ERC20 token price from API
-  const fetchErc20TokenPrice = useCallback(
-    async (tokenData: TokenData | null) => {
-      // Only fetch if token has an address (ERC20 token, not ETH or BTC)
-      if (
-        !tokenData?.address ||
-        tokenData.address === "0x0000000000000000000000000000000000000000" ||
-        tokenData.address === "Native"
-      ) {
+  // Fetch token price - uses store btcPrice/ethPrice for native tokens, fetches from API for ERC20s
+  const fetchTokenPriceForDirection = useCallback(
+    async (tokenData: TokenData | null, direction: "input" | "output") => {
+      const setPrice = direction === "input" ? setInputTokenPrice : setOutputTokenPrice;
+
+      if (!tokenData) {
+        setPrice(null);
+        return;
+      }
+
+      // For BTC/cbBTC, use btcPrice from store
+      if (tokenData.ticker === "BTC" || tokenData.ticker === "cbBTC") {
+        setPrice(btcPrice);
         setHasNoRoutesError(false);
-        setErc20Price(null);
+        return;
+      }
+
+      // For ETH, use ethPrice from store
+      if (
+        tokenData.ticker === "ETH" ||
+        tokenData.address === "0x0000000000000000000000000000000000000000"
+      ) {
+        setPrice(ethPrice);
+        setHasNoRoutesError(false);
         return;
       }
 
       // Use the token's chain to determine the correct chain for price lookup
-      // Fall back to connected wallet chain, then default to ethereum
-      const tokenChain =
-        tokenData.chain === "bitcoin" ? 1 : (tokenData.chain ?? evmConnectWalletChainId ?? 1);
-      const chainName = tokenChain === 8453 ? "base" : "ethereum";
+
+      const chainName = tokenData.chain === 8453 ? "base" : "ethereum";
 
       try {
-        const tokenPrice = await fetchTokenPrice(chainName, tokenData.address);
-        if (tokenPrice && typeof tokenPrice.price === "number") {
-          setErc20Price(tokenPrice.price);
+        const tokenPriceResult = await fetchTokenPrice(chainName, tokenData.address);
+        if (tokenPriceResult && typeof tokenPriceResult.price === "number") {
+          setPrice(tokenPriceResult.price);
           setHasNoRoutesError(false);
         } else {
           setHasNoRoutesError(true);
         }
       } catch (error) {
-        console.error("Failed to fetch ERC20 price:", error);
+        console.error(`Failed to fetch ${direction} token price:`, error);
         setHasNoRoutesError(true);
       }
     },
-    [evmConnectWalletChainId, setErc20Price]
+    [evmConnectWalletChainId, setInputTokenPrice, setOutputTokenPrice, btcPrice, ethPrice]
   );
-
-  // Default addresses for dummy quotes (when wallet not connected)
-  const DEFAULT_BTC_ADDRESS = "bc1qhnxxeylq3vtzfd6e9me0jtf5xg8jw89c2lav5t";
-  const DEFAULT_EVM_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
   // Unified quote fetching function using Rift SDK
   const fetchQuote = useCallback(
@@ -439,50 +450,39 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         const fromCurrency =
           inputToken.chain === "bitcoin"
             ? Currencies.Bitcoin.BTC
-            : createCurrency({
-                chainId: inputToken.chain as number,
-                address: inputToken.address as `0x${string}`,
-                decimals: inputToken.decimals,
-              });
+            : inputToken.ticker === "ETH" && inputToken.chain === 1
+              ? Currencies.Ethereum.ETH
+              : inputToken.ticker === "ETH" && inputToken.chain === 8453
+                ? Currencies.Base.ETH
+                : createCurrency({
+                    chainId: inputToken.chain as number,
+                    address: inputToken.address as `0x${string}`,
+                    decimals: inputToken.decimals,
+                  });
 
         const toCurrency =
           outputToken.chain === "bitcoin"
             ? Currencies.Bitcoin.BTC
-            : createCurrency({
-                chainId: outputToken.chain as number,
-                address: outputToken.address as `0x${string}`,
-                decimals: outputToken.decimals,
-              });
+            : outputToken.ticker === "ETH" && outputToken.chain === 1
+              ? Currencies.Ethereum.ETH
+              : outputToken.ticker === "ETH" && outputToken.chain === 8453
+                ? Currencies.Base.ETH
+                : createCurrency({
+                    chainId: outputToken.chain as number,
+                    address: outputToken.address as `0x${string}`,
+                    decimals: outputToken.decimals,
+                  });
 
-        // Determine destination address and whether this is a dummy quote
-        let destinationAddress: string;
-        let isDummyQuote = false;
-
-        if (isSwappingForBTC) {
-          // EVM -> BTC: destination is BTC address
-          if (btcAddress) {
-            destinationAddress = btcAddress;
-          } else {
-            destinationAddress = DEFAULT_BTC_ADDRESS;
-            isDummyQuote = true;
-          }
-        } else {
-          // BTC -> EVM: destination is EVM address
-          if (evmAddress) {
-            destinationAddress = evmAddress;
-          } else {
-            destinationAddress = DEFAULT_EVM_ADDRESS;
-            isDummyQuote = true;
-          }
-        }
+        // Normalize amount with token decimals (e.g. "1" USDC -> "1000000")
+        const decimals = isInput ? inputToken.decimals : outputToken.decimals;
+        const normalizedAmount = parseUnits(amount, decimals).toString();
 
         // Call SDK getQuote
         const quoteRequest: TradeParameters = {
           from: fromCurrency,
           to: toCurrency,
-          amount,
+          amount: normalizedAmount,
           mode: isInput ? "exact_input" : "exact_output",
-          destinationAddress,
         };
         console.log("[fetchQuote] quoteRequest", quoteRequest);
         const { quote, executeSwap } = await rift.getQuote(quoteRequest);
@@ -498,24 +498,31 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         if (quote) {
           setQuote(quote);
 
-          // Set doSwap only if not a dummy quote
-          if (isDummyQuote) {
-            setDoSwap(null);
-          } else {
-            setDoSwap(executeSwap);
+          // Extract fee overview from quote response
+          const riftFees = quote.fees?.rift;
+          if (riftFees) {
+            setFeeOverview(
+              buildFeeOverview({
+                rift: riftFees,
+                totalUsd: quote.fees!.totalUsd,
+              })
+            );
           }
 
-          // Update displayed amounts from quote
+          // Store executeSwap for later use by SwapButton
+          setExecuteSwap(executeSwap);
+
+          // Update displayed amounts from quote (convert raw values to human-readable)
           if (isInput && quote.to?.amount) {
-            setOutputAmount(quote.to.amount);
+            setOutputAmount(formatUnits(BigInt(quote.to.amount), outputToken.decimals));
           } else if (!isInput && quote.from?.amount) {
-            setDisplayedInputAmount(quote.from.amount);
+            setDisplayedInputAmount(formatUnits(BigInt(quote.from.amount), inputToken.decimals));
           }
         }
       } catch (error) {
         console.error("[fetchQuote] Error fetching quote:", error);
         setQuote(null);
-        setDoSwap(null);
+        setExecuteSwap(null);
       } finally {
         setIsLoadingQuote(false);
         setRefetchQuote(false);
@@ -525,11 +532,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       rift,
       inputToken,
       outputToken,
-      isSwappingForBTC,
-      btcAddress,
-      evmAddress,
       setQuote,
-      setDoSwap,
+      setExecuteSwap,
       setOutputAmount,
       setDisplayedInputAmount,
     ]
@@ -596,7 +600,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
       // Update USD value using helper
 
-      const usdValue = calculateUsdValue(value, token.ticker, ethPrice, btcPrice, erc20Price);
+      const tokenPrice = isInput ? inputTokenPrice : outputTokenPrice;
+      const usdValue = calculateUsdValue(value, token.ticker, ethPrice, btcPrice, tokenPrice);
       setUsdValue(usdValue);
 
       // Clear existing quotes when user types
@@ -683,7 +688,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       inputToken.ticker,
       ethPrice,
       btcPrice,
-      erc20Price
+      inputTokenPrice
     );
     const balanceUsdFloat = parseFloat(balanceUsd.replace(/[$,]/g, ""));
 
@@ -768,7 +773,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       inputToken.ticker,
       ethPrice,
       btcPrice,
-      erc20Price
+      inputTokenPrice
     );
     setInputUsdValue(usdValue);
 
@@ -834,7 +839,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       outputToken.ticker,
       ethPrice,
       btcPrice,
-      erc20Price
+      outputTokenPrice
     );
     setOutputUsdValue(usdValue);
 
@@ -885,7 +890,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       outputToken.ticker,
       ethPrice,
       btcPrice,
-      erc20Price
+      outputTokenPrice
     );
     setOutputUsdValue(usdValue);
 
@@ -989,10 +994,14 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setSwitchingToInputTokenChain,
   ]);
 
-  // Fetch ERC20 token price when selected token changes
+  // Fetch token prices when selected tokens change
   useEffect(() => {
-    fetchErc20TokenPrice(inputToken);
-  }, [inputToken, fetchErc20TokenPrice]);
+    fetchTokenPriceForDirection(inputToken, "input");
+  }, [inputToken, fetchTokenPriceForDirection]);
+
+  useEffect(() => {
+    fetchTokenPriceForDirection(outputToken, "output");
+  }, [outputToken, fetchTokenPriceForDirection]);
 
   // Update USD values when prices or amounts change
   useEffect(() => {
@@ -1001,7 +1010,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       inputToken.ticker,
       ethPrice,
       btcPrice,
-      erc20Price
+      inputTokenPrice
     );
     setInputUsdValue(inputUsd);
 
@@ -1010,11 +1019,12 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       outputToken.ticker,
       ethPrice,
       btcPrice,
-      erc20Price
+      outputTokenPrice
     );
     setOutputUsdValue(outputUsd);
   }, [
-    erc20Price,
+    inputTokenPrice,
+    outputTokenPrice,
     btcPrice,
     ethPrice,
     displayedInputAmount,
@@ -1322,12 +1332,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         // Calculate user's BALANCE in USD
         let price: number | null = null;
         if (isSwappingForBTC) {
-          // ERC20 -> BTC
-          if (inputToken.ticker === "ETH") {
-            price = ethPrice;
-          } else if (inputToken.address) {
-            price = erc20Price;
-          }
+          // ERC20 -> BTC: use input token price
+          price = inputTokenPrice;
         } else {
           // BTC -> ERC20
           price = btcPrice;
@@ -1367,7 +1373,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     liquidity.maxCbBTCLiquidityInUsd,
     inputToken,
     ethPrice,
-    erc20Price,
+    inputTokenPrice,
     btcPrice,
     evmConnectWalletChainId,
   ]);
@@ -1388,12 +1394,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           const inputFloat = parseFloat(displayedInputAmount);
           // If user has more than MM liquidity (in terms of what they can swap)
           // and they're trying to swap more than MM liquidity, show the error
-          let price: number | null = null;
-          if (inputToken.ticker === "ETH") {
-            price = ethPrice;
-          } else if (inputToken.address) {
-            price = erc20Price;
-          }
+          const price = inputTokenPrice;
           if (price && btcPrice) {
             const inputUsdValue = inputFloat * price;
             const mmLiquidityUsd = parseFloat(liquidity.maxBTCLiquidityInUsd);
@@ -1446,7 +1447,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     currentInputBalance,
     inputToken,
     ethPrice,
-    erc20Price,
+    inputTokenPrice,
     btcPrice,
   ]);
 
@@ -1571,15 +1572,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // Check 2: If input exists but output is empty/zero (quote was blocked)
     if (inputFloat > 0 && (!outputAmount || parseFloat(outputAmount) <= 0)) {
       // Get the price of the input token
-      let price: number | null = null;
-
-      if (inputToken.ticker === "ETH") {
-        price = ethPrice;
-      } else if (inputToken.ticker === "BTC") {
-        price = btcPrice;
-      } else if (inputToken.address) {
-        price = erc20Price;
-      }
+      const price = inputTokenPrice;
 
       // Calculate USD value and check against minimum
       if (price && btcPrice) {
@@ -1603,7 +1596,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     inputToken,
     ethPrice,
     btcPrice,
-    erc20Price,
+    inputTokenPrice,
     lastEditedField,
     isAtAdjustedMax,
   ]);
@@ -2176,16 +2169,33 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   </Text>
                 </>
               ) : (
-                <Text
-                  color={!outputAmount ? colors.offWhite : colors.textGray}
-                  fontSize="14px"
-                  mt="6px"
-                  letterSpacing={isLoadingQuote && getQuoteForInputRef.current ? "-4px" : "-1px"}
-                  fontWeight="normal"
-                  fontFamily="Aux"
-                >
-                  {isLoadingQuote && getQuoteForInputRef.current ? "..." : outputUsdValue}
-                </Text>
+                <Flex direction="row" align="center" gap="6px" mt="6px">
+                  <Text
+                    color={!outputAmount ? colors.offWhite : colors.textGray}
+                    fontSize="14px"
+                    letterSpacing={isLoadingQuote && getQuoteForInputRef.current ? "-4px" : "-1px"}
+                    fontWeight="normal"
+                    fontFamily="Aux"
+                  >
+                    {isLoadingQuote && getQuoteForInputRef.current ? "..." : outputUsdValue}
+                  </Text>
+                  {(() => {
+                    if (isLoadingQuote && getQuoteForInputRef.current) return null;
+                    const impact = calculatePriceImpact(inputUsdValue, outputUsdValue);
+                    if (!impact) return null;
+                    return (
+                      <Text
+                        fontSize="13px"
+                        letterSpacing="-1px"
+                        fontWeight="normal"
+                        fontFamily="Aux"
+                        color={impact.percent < 0 ? colors.textGray : colors.greenOutline}
+                      >
+                        ({impact.display})
+                      </Text>
+                    );
+                  })()}
+                </Flex>
               )}
             </Flex>
           </Flex>
@@ -2280,7 +2290,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
               outputAmount,
               ethPrice,
               btcPrice,
-              erc20Price,
+              isSwappingForBTC ? inputTokenPrice : outputTokenPrice,
               isSwappingForBTC ? inputToken.ticker : outputToken?.ticker || "CBBTC"
             )}
           </Text>
@@ -2302,7 +2312,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 feeOverview ? (
                   <>
                     {[
-                      { key: "erc20", ...feeOverview.erc20Fee },
                       { key: "protocol", ...feeOverview.protocolFee },
                       { key: "network", ...feeOverview.networkFee },
                     ]
