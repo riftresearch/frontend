@@ -3,7 +3,7 @@ import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import { RiftSdk, Currencies, createCurrency, TradeParameters } from "@riftresearch/sdk";
+import { RiftSdk, Currencies, createCurrency, QuoteParameters } from "@riftresearch/sdk";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -478,7 +478,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         const normalizedAmount = parseUnits(amount, decimals).toString();
 
         // Call SDK getQuote
-        const quoteRequest: TradeParameters = {
+        const quoteRequest: QuoteParameters = {
           from: fromCurrency,
           to: toCurrency,
           amount: normalizedAmount,
@@ -2070,8 +2070,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             ) : (
               <Input
                 value={outputAmount}
-                onChange={(e) => handleInputOrOutputChange(e, false)}
-                onKeyDown={(e) => handleKeyDown(e, false)}
+                readOnly
                 fontFamily="Aux"
                 border="none"
                 bg="transparent"
@@ -2080,12 +2079,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 ml="-5px"
                 p="0px"
                 letterSpacing="-6px"
-                color={
-                  (exceedsAvailableBTCLiquidity && lastEditedField === "output") ||
-                  outputBelowMinimum
-                    ? colors.red
-                    : colors.offWhite
-                }
+                color={outputBelowMinimum ? colors.red : colors.offWhite}
                 _active={{ border: "none", boxShadow: "none", outline: "none" }}
                 _focus={{ border: "none", boxShadow: "none", outline: "none" }}
                 _selected={{
@@ -2099,7 +2093,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   color: outputStyle?.light_text_color || "#805530",
                 }}
                 disabled={isOtcServerDead}
-                cursor={isOtcServerDead ? "not-allowed" : "text"}
+                cursor={isOtcServerDead ? "not-allowed" : "not-allowed"}
                 opacity={isOtcServerDead ? 0.5 : 1}
               />
             )}

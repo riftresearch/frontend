@@ -91,7 +91,7 @@ export const SwapButton = () => {
     evmWalletClient,
     btcAddress,
     evmAddress,
-    executeSwap: storedExecuteSwap,
+    executeSwap,
     setActiveSwapId,
   } = useStore();
 
@@ -223,7 +223,7 @@ export const SwapButton = () => {
     try {
       setSwapButtonPressed(true);
 
-      if (!storedExecuteSwap) {
+      if (!executeSwap) {
         throw new Error("No quote available. Please get a quote first.");
       }
 
@@ -247,8 +247,11 @@ export const SwapButton = () => {
         destinationAddress,
       };
 
-      const swap = await storedExecuteSwap(executeParams);
+      console.log("executing swap", executeParams);
+      const swap = await executeSwap(executeParams);
       setActiveSwapId(swap.swapId);
+      console.log("swap executed", swap);
+      router.push(`/swap/${swap.swapId}`);
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
@@ -258,13 +261,14 @@ export const SwapButton = () => {
       });
     }
   }, [
-    storedExecuteSwap,
+    executeSwap,
     isSwappingForBTC,
     btcAddress,
     evmAddress,
     evmWalletClient,
     getExecuteParams,
     setActiveSwapId,
+    router,
   ]);
 
   // Unified handler that checks approval and routes to appropriate action
