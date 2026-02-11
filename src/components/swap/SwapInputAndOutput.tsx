@@ -201,6 +201,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setSelectedOutputAddress,
     skipAddressClearOnDirectionChange,
     setSkipAddressClearOnDirectionChange,
+    isSwapInProgress,
   } = useStore();
 
   // State for paste address modal
@@ -1069,8 +1070,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       quoteRefreshIntervalRef.current = null;
     }
 
-    // Only set up auto-refresh if conditions are met and we have a quote
-    if (displayedInputAmount && parseFloat(displayedInputAmount) > 0 && evmAddress && quote) {
+    // Only set up auto-refresh if conditions are met, we have a quote, and no swap is in progress
+    if (displayedInputAmount && parseFloat(displayedInputAmount) > 0 && evmAddress && quote && !isSwapInProgress) {
       // Determine the amount to use for refresh based on which field was last edited
       const refreshAmount = getQuoteForInputRef.current
         ? fullPrecisionInputAmount || displayedInputAmount
@@ -1095,7 +1096,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         quoteRefreshIntervalRef.current = null;
       }
     };
-  }, [displayedInputAmount, fullPrecisionInputAmount, outputAmount, evmAddress, quote, fetchQuote]);
+  }, [displayedInputAmount, fullPrecisionInputAmount, outputAmount, evmAddress, quote, fetchQuote, isSwapInProgress]);
 
   // Update current input balance when wallet connection or token selection changes
   useEffect(() => {

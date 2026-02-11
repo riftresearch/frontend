@@ -142,6 +142,8 @@ export const useStore = create<{
   setSelectedOutputAddress: (address: string | null) => void;
   skipAddressClearOnDirectionChange: boolean;
   setSkipAddressClearOnDirectionChange: (value: boolean) => void;
+  isSwapInProgress: boolean;
+  setIsSwapInProgress: (value: boolean) => void;
 }>((set) => ({
   evmAddress: null,
   setEvmAddress: (address: string | null) => set({ evmAddress: address }),
@@ -246,4 +248,6 @@ export const useStore = create<{
   skipAddressClearOnDirectionChange: false,
   setSkipAddressClearOnDirectionChange: (value: boolean) =>
     set({ skipAddressClearOnDirectionChange: value }),
+  isSwapInProgress: false,
+  setIsSwapInProgress: (value: boolean) => set({ isSwapInProgress: value }),
 }));

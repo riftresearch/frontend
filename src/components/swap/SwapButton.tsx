@@ -37,6 +37,7 @@ export const SwapButton = () => {
   const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
   const [isCbBTCTransferPending, setIsCbBTCTransferPending] = useState(false);
+  const [swapPhase, setSwapPhase] = useState<"idle" | "signing" | "confirming">("idle");
 
   // Terms of Service modal state
   const [showTosModal, setShowTosModal] = useState(false);
@@ -93,6 +94,7 @@ export const SwapButton = () => {
     evmAddress,
     executeSwap,
     setActiveSwapId,
+    setIsSwapInProgress,
   } = useStore();
 
   // Public clients for swap execution
@@ -116,6 +118,8 @@ export const SwapButton = () => {
     // Cancel all loading states on the button
     setSwapButtonPressed(false);
     setIsApprovingToken(false);
+    setSwapPhase("idle");
+    setIsSwapInProgress(false);
 
     // Clear and refetch the quote
     setQuote(null);
@@ -170,9 +174,14 @@ export const SwapButton = () => {
 
   const isCbBTC = inputToken.ticker === "cbBTC";
 
-  // Button loading state combines pending transaction, approval, and confirmation waiting
+  // Button loading state combines pending transaction, approval, confirmation waiting, and SDK swap
   const isButtonLoading =
-    isPending || isConfirming || isApprovingToken || isApprovalConfirming || isBtcTxLoading;
+    isPending ||
+    isConfirming ||
+    isApprovingToken ||
+    isApprovalConfirming ||
+    isBtcTxLoading ||
+    swapButtonPressed;
 
   // Check if all required fields are filled
   const allFieldsFilled =
@@ -218,10 +227,26 @@ export const SwapButton = () => {
     sendBitcoin,
   ]);
 
+  // Helper to detect if an error is a user wallet rejection
+  const isUserRejectionError = (error: unknown): boolean => {
+    const msg = error instanceof Error ? error.message : String(error);
+    const lower = msg.toLowerCase();
+    return (
+      lower.includes("user rejected") ||
+      lower.includes("user denied") ||
+      lower.includes("rejected the request") ||
+      lower.includes("user cancelled") ||
+      lower.includes("user canceled") ||
+      (error as any)?.code === 4001
+    );
+  };
+
   // Main swap handler - uses Rift SDK for execution
   const startSwap = useCallback(async () => {
     try {
       setSwapButtonPressed(true);
+      setSwapPhase("signing");
+      setIsSwapInProgress(true);
 
       if (!executeSwap) {
         throw new Error("No quote available. Please get a quote first.");
@@ -242,8 +267,31 @@ export const SwapButton = () => {
         );
       }
 
+      // Get base params and wrap walletClient + sendBitcoin to detect signing completion
+      const baseParams = getExecuteParams();
+
+      const wrappedWalletClient = {
+        ...baseParams.walletClient,
+        sendTransaction: async (args: any) => {
+          const txHash = await baseParams.walletClient.sendTransaction(args);
+          // User signed — transaction broadcast, now waiting for confirmation
+          setSwapPhase("confirming");
+          return txHash;
+        },
+      };
+
+      const wrappedSendBitcoin = baseParams.sendBitcoin
+        ? async (params: { recipient: string; amountSats: string }) => {
+            await baseParams.sendBitcoin!(params);
+            // BTC transaction sent, now waiting for confirmation
+            setSwapPhase("confirming");
+          }
+        : undefined;
+
       const executeParams = {
-        ...getExecuteParams(),
+        ...baseParams,
+        walletClient: wrappedWalletClient,
+        ...(wrappedSendBitcoin ? { sendBitcoin: wrappedSendBitcoin } : {}),
         destinationAddress,
       };
 
@@ -255,10 +303,22 @@ export const SwapButton = () => {
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
-      toastError(error as Error, {
-        title: "Swap Failed",
-        description: "Failed to execute swap. Please try again.",
-      });
+      setSwapPhase("idle");
+      setIsSwapInProgress(false);
+
+      if (isUserRejectionError(error)) {
+        toastError(null, {
+          title: "Transaction declined",
+          description: "Sign the transaction to complete the swap",
+        });
+        // Fetch a new quote after rejection
+        setRefetchQuote(true);
+      } else {
+        toastError(error as Error, {
+          title: "Swap Failed",
+          description: "Failed to execute swap. Please try again.",
+        });
+      }
     }
   }, [
     executeSwap,
@@ -268,6 +328,8 @@ export const SwapButton = () => {
     evmWalletClient,
     getExecuteParams,
     setActiveSwapId,
+    setIsSwapInProgress,
+    setRefetchQuote,
     router,
   ]);
 
@@ -409,10 +471,12 @@ export const SwapButton = () => {
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
       setIsCbBTCTransferPending(false);
+      setSwapPhase("idle");
+      setIsSwapInProgress(false);
       setQuote(null);
       setRefetchQuote(true);
     }
-  }, [writeError, setRefetchQuote]);
+  }, [writeError, setRefetchQuote, setIsSwapInProgress]);
 
   // Handle transaction receipt errors
   useEffect(() => {
@@ -429,8 +493,10 @@ export const SwapButton = () => {
       // Reset swap button state
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
+      setSwapPhase("idle");
+      setIsSwapInProgress(false);
     }
-  }, [txError]);
+  }, [txError, setIsSwapInProgress]);
 
   // Capture approval transaction hash
   useEffect(() => {
@@ -474,8 +540,17 @@ export const SwapButton = () => {
       setSwapButtonPressed(false);
       setIsApprovingToken(false);
       setApprovalTxHash(undefined);
+      setSwapPhase("idle");
+      setIsSwapInProgress(false);
     }
-  }, [isApprovalConfirmed, approvalTxError, setApprovalState, swapButtonPressed, startSwap]);
+  }, [
+    isApprovalConfirmed,
+    approvalTxError,
+    setApprovalState,
+    swapButtonPressed,
+    startSwap,
+    setIsSwapInProgress,
+  ]);
 
   // Auto-retry swap after quote refetch completes
   useEffect(() => {
@@ -572,17 +647,17 @@ export const SwapButton = () => {
       };
     }
 
-    // If swap transaction is pending/confirming
+    // If swap transaction is pending/confirming (direct wallet client interactions)
     if (isPending) {
       return {
-        text: "Signing Swap...",
+        text: "signing transaction...",
         handler: undefined,
         showSpinner: true,
       };
     }
     if (isConfirming) {
       return {
-        text: "Signing Swap...",
+        text: "confirming deposit...",
         handler: undefined,
         showSpinner: true,
       };
@@ -606,6 +681,22 @@ export const SwapButton = () => {
     if (btcTransactionState === "broadcasting") {
       return {
         text: "Sending BTC...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+
+    // SDK-based swap phases (signing in wallet → confirming on-chain)
+    if (swapPhase === "signing") {
+      return {
+        text: "signing transaction...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
+    if (swapPhase === "confirming") {
+      return {
+        text: "confirming deposit...",
         handler: undefined,
         showSpinner: true,
       };
