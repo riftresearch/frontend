@@ -29,15 +29,14 @@ const DEFAULT_OUTPUT_TOKEN: TokenData = {
 };
 
 type DepositFlowState =
-  | "0-not-started"
-  | "1-WaitingUserDepositInitiated"
-  | "2-WaitingUserDepositConfirmed"
-  | "3-WaitingMMDepositInitiated"
-  | "4-WaitingMMDepositConfirmed"
-  | "5-Settled"
-  | "6-RefundingUser"
-  | "7-RefundingMM"
-  | "8-Failed";
+  | "not_started"
+  | "waiting_for_deposit"
+  | "deposit_confirming"
+  | "initiating_transfer"
+  | "confirming_transfer"
+  | "swap_complete"
+  | "user_refunded"
+  | "failed";
 
 export const useStore = create<{
   evmAddress: string | null;
@@ -172,7 +171,7 @@ export const useStore = create<{
   setOutputAmount: (value: string) => set({ outputAmount: value }),
   searchResults: [],
   setSearchResults: (tokens: TokenData[]) => set({ searchResults: tokens }),
-  depositFlowState: "0-not-started",
+  depositFlowState: "not_started",
   setDepositFlowState: (s: DepositFlowState) => set({ depositFlowState: s }),
   countdownValue: 99,
   setCountdownValue: (value: number) => set({ countdownValue: value }),

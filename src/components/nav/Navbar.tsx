@@ -47,7 +47,7 @@ export const Navbar = ({}) => {
       // Clear swap state when navigating back to main page
       const { setSwapResponse, setDepositFlowState, setTransactionConfirmed } = useStore.getState();
       setSwapResponse(null);
-      setDepositFlowState("0-not-started");
+      setDepositFlowState("not_started");
       setTransactionConfirmed(false);
     }
 
@@ -96,36 +96,33 @@ export const Navbar = ({}) => {
   const mapStateNumberToString = (
     stateNumber: number
   ):
-    | "0-not-started"
-    | "1-WaitingUserDepositInitiated"
-    | "2-WaitingUserDepositConfirmed"
-    | "3-WaitingMMDepositInitiated"
-    | "4-WaitingMMDepositConfirmed"
-    | "5-Settled"
-    | "6-RefundingUser"
-    | "7-RefundingMM"
-    | "8-Failed" => {
+    | "not_started"
+    | "waiting_for_deposit"
+    | "deposit_confirming"
+    | "initiating_transfer"
+    | "confirming_transfer"
+    | "swap_complete"
+    | "user_refunded"
+    | "failed" => {
     switch (stateNumber) {
       case 0:
-        return "0-not-started";
+        return "not_started";
       case 1:
-        return "1-WaitingUserDepositInitiated";
+        return "waiting_for_deposit";
       case 2:
-        return "2-WaitingUserDepositConfirmed";
+        return "deposit_confirming";
       case 3:
-        return "3-WaitingMMDepositInitiated";
+        return "initiating_transfer";
       case 4:
-        return "4-WaitingMMDepositConfirmed";
+        return "confirming_transfer";
       case 5:
-        return "5-Settled";
+        return "swap_complete";
       case 6:
-        return "6-RefundingUser";
+        return "user_refunded";
       case 7:
-        return "7-RefundingMM";
-      case 8:
-        return "8-Failed";
+        return "failed";
       default:
-        return "0-not-started"; // Default case
+        return "not_started"; // Default case
     }
   };
 
@@ -165,7 +162,7 @@ export const Navbar = ({}) => {
           <>
             <Flex gap="12px">
               {navItem("Swap", "/")}
-              {navItem("Analytics", "/analytics")}
+              {navItem("History", "/history")}
               {/* {navItem("Rates", "/rates")} */}
               {/* {navItem('OTC', '/otc')} */}
             </Flex>
@@ -198,7 +195,7 @@ export const Navbar = ({}) => {
           right={0}
         >
           {!isMobile &&
-            depositFlowState !== "0-not-started" &&
+            depositFlowState !== "not_started" &&
             transactionConfirmed &&
             !router.pathname.includes("/swap/") && (
               <Flex justify="center" align="center" mt="25px">

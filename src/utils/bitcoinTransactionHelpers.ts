@@ -57,7 +57,7 @@ export interface BuildPsbtResult {
 export async function fetchUserUtxos(address: string): Promise<UTXO[]> {
   const utxosUrl = `${GLOBAL_CONFIG.mempoolUrl}/address/${address}/utxo`;
 
-  console.log("utxosUrl", utxosUrl);
+  // console.log("utxosUrl", utxosUrl);
   const response = await fetch(utxosUrl);
   if (!response.ok) {
     throw new Error(`Failed to fetch UTXOs: ${response.status} ${response.statusText}`);

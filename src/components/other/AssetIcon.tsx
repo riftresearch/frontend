@@ -20,7 +20,7 @@ export const AssetIcon: React.FC<AssetIconProps> = ({ asset, iconUrl, size = 18 
     const normalizedAsset = assetSymbol.toUpperCase();
     if (normalizedAsset === "BTC") return "/images/BTC_icon.svg";
     if (normalizedAsset === "CBBTC") return "/images/cbBTC_icon.svg";
-    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_icon.svg";
+    if (normalizedAsset === "ETH" || normalizedAsset === "WETH") return "/images/eth_logo.svg";
     if (normalizedAsset === "USDC") return "/images/usdc_icon.svg";
     if (normalizedAsset === "USDT") return "/images/usdt_icon.svg";
     return null;

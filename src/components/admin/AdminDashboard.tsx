@@ -1037,7 +1037,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 </Text>
                 <Flex direction="column" gap="4px" pl="12px">
                   {selectedSwap.flow
-                    .filter((s) => s.status !== "settled")
+                    .filter((s) => s.status !== "swap_complete")
                     .map((step, idx) => (
                       <Flex key={idx} justify="space-between" align="center">
                         <Text fontSize="13px" color={colors.textGray}>

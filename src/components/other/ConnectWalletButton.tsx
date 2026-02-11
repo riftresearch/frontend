@@ -40,10 +40,17 @@ export const ConnectWalletButton: React.FC = () => {
   // Check if ANY wallet is connected (EVM or Bitcoin)
   const isConnected = !!primaryWallet;
 
-  // Auto-open panel every time user connects from having no wallets
-  const prevIsConnectedRef = React.useRef(false);
+  // Auto-open panel when user actively connects (not on page refresh)
+  const prevIsConnectedRef = React.useRef(isConnected);
+  const hasHydratedRef = React.useRef(false);
   useEffect(() => {
-    // Trigger when going from disconnected to connected
+    // Skip the first render (page load / refresh) to avoid opening panel on hydration
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      prevIsConnectedRef.current = isConnected;
+      return;
+    }
+    // Trigger when going from disconnected to connected (active connect action)
     if (isConnected && !prevIsConnectedRef.current) {
       setIsPanelOpen(true);
     }

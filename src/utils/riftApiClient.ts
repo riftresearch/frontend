@@ -135,13 +135,12 @@ export type SystemStatusResponse = {
 // ============================================================================
 
 export type SwapStatus =
-  | "waiting_user_deposit_initiated"
-  | "waiting_user_deposit_confirmed"
-  | "waiting_mm_deposit_initiated"
-  | "waiting_mm_deposit_confirmed"
-  | "settling"
-  | "settled"
-  | "refunding_user"
+  | "waiting_for_deposit"
+  | "deposit_confirming"
+  | "initiating_transfer"
+  | "confirming_transfer"
+  | "swap_complete"
+  | "user_refunded"
   | "failed";
 
 export type UserDepositStatus = {
@@ -319,11 +318,6 @@ export class RiftApiClient {
   /** Create a swap order from a quote */
   async createOrder(request: SwapRequest): Promise<Result<Swap, ErrorResponse>> {
     return this.post<Swap>("/order", request);
-  }
-
-  /** Get the current status of a swap order */
-  async getOrder(orderId: string): Promise<Result<Swap>> {
-    return this.get<Swap>(`/order/${encodeURIComponent(orderId)}`);
   }
 
   // --------------------------------------------------------------------------

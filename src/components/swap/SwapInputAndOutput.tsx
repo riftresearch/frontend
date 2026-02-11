@@ -3,7 +3,7 @@ import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import { RiftSdk, Currencies, createCurrency, QuoteParameters } from "@riftresearch/sdk";
+import { Currencies, createCurrency, QuoteParameters } from "@riftresearch/sdk";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -105,7 +105,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
   // Rift SDK from store
   const rift = useStore((state) => state.rift);
-  const setRift = useStore((state) => state.setRift);
   const setExecuteSwap = useStore((state) => state.setExecuteSwap);
 
   // Liquidity hook
@@ -258,13 +257,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
   }, [userWallets, evmAddress, btcAddress, setEvmAddress, setBtcAddress, setEvmWalletClient]);
 
-  // Initialize Rift SDK
-  useEffect(() => {
-    if (!rift) {
-      const sdk = new RiftSdk({ integratorName: "app.rift.trade" });
-      setRift(sdk);
-    }
-  }, [rift, setRift]);
+  // Rift SDK is initialized globally in _app.tsx
 
   useEffect(() => {
     if (hasInitializedRef.current || !primaryWallet) return;

@@ -205,7 +205,7 @@ export interface AnalyticsSwapData {
   id: string;
   quote_id: string;
   market_maker_id: string;
-  status: string; // "settled", "waiting_user_deposit_initiated", etc.
+  status: string; // "swap_complete", "waiting_for_deposit", etc.
   created_at: string; // ISO 8601
   updated_at: string; // ISO 8601
   failure_at: string | null;
@@ -238,17 +238,15 @@ export interface AnalyticsSwapData {
   settlement_status: any | null;
 }
 
-// Admin dashboard swap history types - aligned to OTC DB statuses
+// Admin dashboard swap history types - aligned to Rift API/SDK statuses
 export type AdminSwapFlowStatus =
   | "pending" // swap created
-  | "waiting_user_deposit_initiated"
-  | "waiting_user_deposit_confirmed"
-  | "waiting_mm_deposit_initiated"
-  | "waiting_mm_deposit_confirmed"
-  | "settled"
-  | "refunding_user" // refund in progress to user
-  | "refunding_mm" // refund in progress to market maker
-  | "user_refunded_detected"; // refund detected (balance withdrawn)
+  | "waiting_for_deposit"
+  | "deposit_confirming"
+  | "initiating_transfer"
+  | "confirming_transfer"
+  | "swap_complete"
+  | "user_refunded"; // user has been refunded
 
 export interface AdminSwapFlowStep {
   status: AdminSwapFlowStatus;

@@ -11,8 +11,6 @@ import { toastSuccess, toastError } from "@/utils/toast";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import router from "next/router";
-import { filterRefunds } from "@/utils/refundHelpers";
-import { mapDbRowToAdminSwap, ANALYTICS_API_URL } from "@/utils/analyticsClient";
 import { AdminSwapItem } from "@/utils/types";
 import { RefundModal } from "./RefundModal";
 import { useRefundModal } from "@/hooks/useRefundModal";
@@ -74,17 +72,17 @@ export function UnifiedTransactionWidget({
   }, [bitcoinAddress, swapStatusInfo?.quote?.from.currency.chain]);
 
   const isSettled =
-    depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
+    depositFlowState === "confirming_transfer" || depositFlowState === "swap_complete";
   const showLoadingDots = countdownValue === 0 && !isSettled;
 
   // Determine current step index for widget logic
   const stepIds = [
-    "1-WaitingUserDepositInitiated",
-    "2-WaitingUserDepositConfirmed",
-    "3-WaitingMMDepositInitiated",
-    "4-WaitingMMDepositConfirmed",
+    "waiting_for_deposit",
+    "deposit_confirming",
+    "initiating_transfer",
+    "confirming_transfer",
   ];
-  const isSettledStatus = depositFlowState === "5-Settled";
+  const isSettledStatus = depositFlowState === "swap_complete";
   const currentStepIndex = isSettledStatus ? 3 : stepIds.findIndex((id) => id === depositFlowState);
   const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
 
@@ -95,14 +93,14 @@ export function UnifiedTransactionWidget({
   const [showFillingOrderWarning, setShowFillingOrderWarning] = React.useState(false);
 
   // Track EVM confirmations for user deposit (for EVM deposits)
-  const userDepositTxHash = swapStatusInfo?.user_deposit_status?.tx_hash;
+  const userDepositTxHash = swapStatusInfo?.depositTransaction;
   const userDepositChain = swapStatusInfo?.quote?.from.currency.chain;
   const userChainId =
     userDepositChain === "ethereum" ? 1 : userDepositChain === "base" ? 8453 : undefined;
   const evmConfirmations = useEvmConfirmations(
     swapType === "evm-deposit" ? userDepositTxHash : undefined,
     userChainId,
-    depositFlowState === "2-WaitingUserDepositConfirmed"
+    depositFlowState === "deposit_confirming"
   );
 
   // Track BTC confirmations
@@ -125,8 +123,8 @@ export function UnifiedTransactionWidget({
 
     // Transition from "FILLING ORDER" to "SWAP COMPLETE"
     if (
-      previousDepositFlowStateRef.current === "3-WaitingMMDepositInitiated" &&
-      (depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled") &&
+      previousDepositFlowStateRef.current === "initiating_transfer" &&
+      (depositFlowState === "confirming_transfer" || depositFlowState === "swap_complete") &&
       audioRef.current
     ) {
       console.log("🔊 Playing swap completion sound!");
@@ -140,51 +138,42 @@ export function UnifiedTransactionWidget({
   }, [depositFlowState]);
 
   // Check if swap expired (for Bitcoin deposits only)
+  // Note: SDK doesn't expose created_at, so we check if status indicates the swap failed/expired
   const isExpired = React.useMemo(() => {
-    if (swapType !== "bitcoin-deposit" || validStepIndex !== 0 || !swapStatusInfo?.created_at)
-      return false;
-
-    const createdAt = new Date(swapStatusInfo.created_at);
-    const now = new Date();
-    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceCreation > 12;
-  }, [swapType, validStepIndex, swapStatusInfo?.created_at]);
+    if (swapType !== "bitcoin-deposit" || validStepIndex !== 0) return false;
+    return swapStatusInfo?.status === "failed";
+  }, [swapType, validStepIndex, swapStatusInfo?.status]);
 
   // Check if stuck on "FILLING ORDER"
   useEffect(() => {
-    if (depositFlowState !== "3-WaitingMMDepositInitiated") {
+    if (depositFlowState !== "initiating_transfer") {
       setShowFillingOrderWarning(false);
       return;
     }
 
-    const swapCreatedAt = swapStatusInfo?.created_at;
-    if (!swapCreatedAt) return;
+    // Track how long we've been in the filling order state using a local timer
+    const enteredAt = Date.now();
 
     const checkTimer = () => {
-      const createdTime = new Date(swapCreatedAt);
-      const now = new Date();
-      const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
-
-      if (minutesSinceCreated >= 30) {
+      const minutesSinceEntered = (Date.now() - enteredAt) / (1000 * 60);
+      if (minutesSinceEntered >= 30) {
         setShowFillingOrderWarning(true);
       }
     };
 
-    checkTimer();
     const interval = setInterval(checkTimer, 30000);
 
     return () => clearInterval(interval);
-  }, [depositFlowState, swapStatusInfo?.created_at]);
+  }, [depositFlowState]);
 
   // Poll for Bitcoin confirmations
   useEffect(() => {
     // For Bitcoin deposits: track user deposit confirmations during step 2
     // For EVM deposits: track MM deposit confirmations during step 4 (if MM deposits BTC)
     const shouldTrackBtc =
-      (swapType === "bitcoin-deposit" && depositFlowState === "2-WaitingUserDepositConfirmed") ||
+      (swapType === "bitcoin-deposit" && depositFlowState === "deposit_confirming") ||
       (swapType === "evm-deposit" &&
-        (depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled") &&
+        (depositFlowState === "confirming_transfer" || depositFlowState === "swap_complete") &&
         swapStatusInfo?.quote?.to.currency.chain === "bitcoin");
 
     if (!shouldTrackBtc) {
@@ -195,7 +184,7 @@ export function UnifiedTransactionWidget({
     const txHash =
       swapType === "bitcoin-deposit"
         ? userDepositTxHash || bitcoinDepositTx
-        : swapStatusInfo?.mm_deposit_status?.tx_hash;
+        : swapStatusInfo?.payoutTransaction;
 
     if (!txHash) {
       setBtcConfirmations(0);
@@ -228,7 +217,7 @@ export function UnifiedTransactionWidget({
     depositFlowState,
     userDepositTxHash,
     bitcoinDepositTx,
-    swapStatusInfo?.mm_deposit_status?.tx_hash,
+    swapStatusInfo?.payoutTransaction,
     swapStatusInfo?.quote?.to.currency.chain,
   ]);
 
@@ -247,54 +236,54 @@ export function UnifiedTransactionWidget({
     claimRefund,
   } = useRefundModal({ redirectOnSuccess: true });
 
-  // Check refund eligibility whenever swap data updates
+  // Check refund status from SDK status directly
   React.useEffect(() => {
-    async function checkRefundEligibility() {
-      if (!swapStatusInfo) {
-        setIsRefundAvailable(false);
-        setIsSwapRefunded(false);
-        setFailedSwapData(null);
-        return;
-      }
+    if (!swapStatusInfo) {
+      setIsRefundAvailable(false);
+      setIsSwapRefunded(false);
+      setFailedSwapData(null);
+      return;
+    }
 
+    // SDK provides status directly - use it for refund detection
+    if (swapStatusInfo.status === "user_refunded") {
+      setIsSwapRefunded(true);
+      setIsRefundAvailable(false);
+      console.log(`[REFUND CHECK] Swap ${currentSwapId} has been refunded`);
+    } else if (swapStatusInfo.status === "failed") {
+      // Failed swaps may be eligible for refund
+      setIsRefundAvailable(true);
+      setIsSwapRefunded(false);
+      console.log(`[REFUND CHECK] Swap ${currentSwapId} failed, refund may be available`);
+    } else {
+      setIsRefundAvailable(false);
+      setIsSwapRefunded(false);
+    }
+  }, [swapStatusInfo, currentSwapId]);
+
+  // Format amounts - handles large numbers safely using BigInt for precision
+  const formatAmount = (amount: string | number | undefined, decimals: number): string => {
+    if (!amount) return "0";
+
+    // For string amounts that look like raw base-unit integers (no decimal point),
+    // use BigInt arithmetic to avoid floating-point precision loss
+    if (typeof amount === "string" && !amount.includes(".") && decimals > 0) {
       try {
-        // Map to admin swap format and check refund status
-        const mappedSwap = mapDbRowToAdminSwap(swapStatusInfo, btcPrice);
-        const {
-          isRefundAvailable: refundAvailable,
-          shouldMarkAsRefunded,
-          isPartialDeposit: partialDeposit,
-        } = await filterRefunds(swapStatusInfo, mappedSwap);
-
-        // Update refund availability
-        setIsRefundAvailable(refundAvailable);
-        setIsSwapRefunded(shouldMarkAsRefunded);
-        setIsPartialDeposit(partialDeposit || false);
-        setFailedSwapData(refundAvailable ? mappedSwap : null);
-
-        if (refundAvailable) {
-          console.log(`[REFUND CHECK] Refund available for swap ${currentSwapId}`, {
-            partialDeposit,
-          });
-        }
-        if (shouldMarkAsRefunded) {
-          console.log(`[REFUND CHECK] Swap ${currentSwapId} has been refunded (balance = 0)`);
-        }
-      } catch (error) {
-        console.error(`Error checking refund eligibility for ${currentSwapId}:`, error);
-        setIsRefundAvailable(false);
-        setIsSwapRefunded(false);
-        setIsPartialDeposit(false);
-        setFailedSwapData(null);
+        const raw = BigInt(amount);
+        const divisor = BigInt(10 ** decimals);
+        const wholePart = raw / divisor;
+        const remainder = raw % divisor;
+        if (remainder === 0n) return wholePart.toString();
+        const remainderStr = remainder.toString().padStart(decimals, "0");
+        const trimmed = remainderStr.replace(/0+$/, "");
+        const maxDecimals = decimals === 8 ? 8 : Math.min(decimals, 6);
+        const truncated = trimmed.slice(0, maxDecimals);
+        return `${wholePart}.${truncated}`;
+      } catch {
+        // Fall through to parseFloat path
       }
     }
 
-    checkRefundEligibility();
-  }, [swapStatusInfo, currentSwapId]);
-
-  // Format amounts
-  const formatAmount = (amount: string | number | undefined, decimals: number): string => {
-    if (!amount) return "0";
     const numAmount = typeof amount === "string" ? parseFloat(amount) : amount;
     const decimalPlaces = decimals === 8 ? 8 : Math.min(decimals, 6);
     return numAmount.toFixed(decimalPlaces).replace(/\.?0+$/, "");
@@ -304,10 +293,7 @@ export function UnifiedTransactionWidget({
   // Note: inputAmountFromMetadata is calculated after getInputAssetFromMetadata() below
   // This variable will be reassigned after metadata parsing
   let inputAmount = formatAmount(
-    swapStatusInfo?.quote?.from.amount
-      ? parseInt(swapStatusInfo.quote.from.amount) /
-          Math.pow(10, swapStatusInfo.quote.from.currency.decimals)
-      : undefined,
+    swapStatusInfo?.quote?.from.amount || undefined,
     swapStatusInfo?.quote?.from.currency.decimals || (swapType === "bitcoin-deposit" ? 8 : 18)
   );
 
@@ -325,47 +311,29 @@ export function UnifiedTransactionWidget({
     return tokenMap[tokenAddress] || "ERC20";
   };
 
-  // Parse start_asset from metadata
-  // New format (JSON): {"ticker":"USDC","address":"0x...","icon":"https://...","amount":"123.45","decimals":6}
-  // Legacy format (colon-separated): "TICKER:ADDRESS:ICON_URL"
-  const getInputAssetFromMetadata = (): {
+  // Derive input asset info from the SDK quote currency data
+  const getInputAssetInfo = (): {
     ticker: string;
     iconUrl?: string;
-    amount?: string;
-    decimals?: number;
   } => {
-    const startAsset = swapStatusInfo?.metadata?.start_asset;
-    if (!startAsset || typeof startAsset !== "string") {
-      return { ticker: "" };
-    }
+    if (swapType === "bitcoin-deposit") return { ticker: "BTC" };
 
-    // Try parsing as JSON first (new format)
-    try {
-      const parsed = JSON.parse(startAsset);
-      // console.log("parsed input asset", parsed);
-      if (parsed && typeof parsed === "object") {
-        return {
-          ticker: parsed.ticker || "",
-          iconUrl: parsed.icon,
-          amount: parsed.amount,
-          decimals: parsed.decimals,
-        };
-      }
-    } catch (e) {
-      // Not JSON, try legacy format
-      const parts = startAsset.split(":");
-      if (parts.length >= 1 && parts[0]) {
-        return {
-          ticker: parts[0], // Return the ticker (e.g., "USDC", "WETH", etc.)
-          iconUrl: parts.length >= 3 ? parts[2] : undefined, // Return icon URL if available
-        };
-      }
+    const token = swapStatusInfo?.quote?.from.currency.token;
+    if (!token) return { ticker: "" };
+
+    // For native tokens (ETH), return ETH
+    if (token.type === "Native") return { ticker: "ETH" };
+
+    // For ERC20 tokens, look up by address
+    if (token.type === "Address" && token.data) {
+      const symbol = getAssetSymbol(token.data, "");
+      return { ticker: symbol };
     }
 
     return { ticker: "" };
   };
 
-  const inputAssetMetadata = getInputAssetFromMetadata();
+  const inputAssetInfo = getInputAssetInfo();
 
   // Helper to extract token address from the currency token structure
   const getTokenAddress = (
@@ -377,29 +345,18 @@ export function UnifiedTransactionWidget({
     return undefined;
   };
 
-  // For EVM deposits, prioritize metadata, then fallback to token address lookup
-  // Don't use "ETH" as default to avoid showing wrong icon while loading
+  // Derive input asset from SDK quote data
   const fromTokenAddress = getTokenAddress(swapStatusInfo?.quote?.from.currency.token);
   const inputAsset =
     swapType === "bitcoin-deposit"
       ? "BTC"
-      : inputAssetMetadata.ticker || (fromTokenAddress ? getAssetSymbol(fromTokenAddress, "") : "");
+      : inputAssetInfo.ticker || (fromTokenAddress ? getAssetSymbol(fromTokenAddress, "") : "");
 
-  // For icon URL, use metadata if available, otherwise don't provide one
-  // This prevents showing wrong icon while data loads
-  const inputAssetIconUrl = swapType === "bitcoin-deposit" ? undefined : inputAssetMetadata.iconUrl;
-
-  // For input amount, prioritize metadata amount (human-readable) over quote amount (raw)
-  // If metadata has amount, use it directly; otherwise keep the calculated amount from quote
-  if (swapType === "evm-deposit" && inputAssetMetadata.amount) {
-    inputAmount = formatAmount(inputAssetMetadata.amount, inputAssetMetadata.decimals || 18);
-  }
+  // Icon URL - the SDK doesn't provide custom icons, rely on AssetIcon component defaults
+  const inputAssetIconUrl = inputAssetInfo.iconUrl;
 
   const outputAmount = formatAmount(
-    swapStatusInfo?.quote?.to.amount
-      ? parseInt(swapStatusInfo.quote.to.amount) /
-          Math.pow(10, swapStatusInfo.quote.to.currency.decimals)
-      : undefined,
+    swapStatusInfo?.quote?.to.amount || undefined,
     swapStatusInfo?.quote?.to.currency.decimals || (swapType === "bitcoin-deposit" ? 18 : 8)
   );
 
@@ -408,7 +365,7 @@ export function UnifiedTransactionWidget({
     swapType === "bitcoin-deposit" ? getAssetSymbol(toTokenAddress, "cbBTC") : "BTC";
 
   const handleViewUserTransaction = () => {
-    const txnId = swapStatusInfo?.user_deposit_status?.tx_hash;
+    const txnId = swapStatusInfo?.depositTransaction;
     const chain = swapStatusInfo?.quote?.from.currency.chain;
 
     if (txnId) {
@@ -783,7 +740,7 @@ export function UnifiedTransactionWidget({
               direction={isMobile ? "column" : "row"}
               alignItems="center"
             >
-              {swapStatusInfo?.user_deposit_status?.tx_hash && (
+              {swapStatusInfo?.depositTransaction && (
                 <Box
                   as="button"
                   onClick={handleViewUserTransaction}
@@ -1358,7 +1315,7 @@ export function UnifiedTransactionWidget({
                   direction="column"
                   alignItems="center"
                   justifyContent="center"
-                  marginTop={isMobile ? "20px" : "100px"}
+                  marginTop={isMobile ? "20px" : userDepositTxHash ? "100px" : "30px"}
                   gap="24px"
                   zIndex={1}
                 >

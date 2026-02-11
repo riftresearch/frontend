@@ -68,12 +68,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
   const currentStatus = currentStep?.status;
   const isRefundAvailable = (swap as any).isRefundAvailable;
 
-  // Refunded: refunding_user, refunding_mm, or user_refunded_detected (regardless of isRefundAvailable)
-  if (
-    currentStatus === "refunding_user" ||
-    currentStatus === "refunding_mm" ||
-    currentStatus === "user_refunded_detected"
-  ) {
+  // Refunded: user_refunded (regardless of isRefundAvailable)
+  if (currentStatus === "user_refunded") {
     return (
       <Flex
         align="center"
@@ -130,8 +126,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Completed: waiting_mm_deposit_confirmed or settled
-  if (currentStatus === "waiting_mm_deposit_confirmed" || currentStatus === "settled") {
+  // Completed: confirming_transfer or swap_complete
+  if (currentStatus === "confirming_transfer" || currentStatus === "swap_complete") {
     return (
       <Flex
         align="center"
@@ -156,8 +152,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Confirming: waiting_user_deposit_confirmed
-  if (currentStatus === "waiting_user_deposit_confirmed") {
+  // Confirming: deposit_confirming
+  if (currentStatus === "deposit_confirming") {
     return (
       <Flex
         align="center"
@@ -185,7 +181,7 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Swapping: waiting_mm_deposit_initiated (default for other in-progress states)
+  // Swapping: initiating_transfer (default for other in-progress states)
   return (
     <Flex
       align="center"
@@ -269,7 +265,7 @@ async function fetchUserSwaps(
               ...stepsBeforeFailed,
               failedStep,
               {
-                status: "user_refunded_detected",
+                status: "user_refunded",
                 label: "Refunded",
                 state: "completed",
               },
@@ -289,9 +285,9 @@ async function fetchUserSwaps(
       })
     );
 
-    // Filter out swaps that are pending or at waiting_user_deposit_initiated WITHOUT a refund available
+    // Filter out swaps that are pending or at waiting_for_deposit WITHOUT a refund available
     // (these are created but user never deposited)
-    // But KEEP waiting_user_deposit_initiated swaps that have refund available (partial deposits)
+    // But KEEP waiting_for_deposit swaps that have refund available (partial deposits)
 
     const swaps = allSwaps.filter((swap: AdminSwapItem) => {
       const currentStep =
@@ -308,8 +304,8 @@ async function fetchUserSwaps(
       // Exclude pending swaps
       if (currentStatus === "pending") return false;
 
-      // Exclude waiting_user_deposit_initiated UNLESS refund is available (partial deposit case)
-      if (currentStatus === "waiting_user_deposit_initiated") {
+      // Exclude waiting_for_deposit UNLESS refund is available (partial deposit case)
+      if (currentStatus === "waiting_for_deposit") {
         return swapIsRefundAvailable === true;
       }
 
@@ -675,10 +671,10 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
               // Get transaction hashes
               const userDepositStep = swap.flow.find(
-                (s) => s.status === "waiting_user_deposit_initiated"
+                (s) => s.status === "waiting_for_deposit"
               );
               const mmDepositStep = swap.flow.find(
-                (s) => s.status === "waiting_mm_deposit_initiated"
+                (s) => s.status === "initiating_transfer"
               );
               let userTxHash = userDepositStep?.txHash;
               const userTxChain = userDepositStep?.txChain;
@@ -725,14 +721,12 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
               // Check refund status
               const lastStep = swap.flow[swap.flow.length - 1];
-              const isCompleted = lastStep?.state === "completed" && lastStep?.status === "settled";
+              const isCompleted = lastStep?.state === "completed" && lastStep?.status === "swap_complete";
               const isRefundAvailable = (swap as any).isRefundAvailable;
               const currentStep =
                 swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
               const isRefunded =
-                currentStep?.status === "refunding_user" ||
-                currentStep?.status === "refunding_mm" ||
-                (currentStep?.status as string) === "user_refunded_detected";
+                currentStep?.status === "user_refunded";
 
               return (
                 <Flex
@@ -1054,10 +1048,10 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
               {/* Mobile Card Layout */}
               {swaps.map((swap) => {
                 const userDepositStep = swap.flow.find(
-                  (s) => s.status === "waiting_user_deposit_initiated"
+                  (s) => s.status === "waiting_for_deposit"
                 );
                 const mmDepositStep = swap.flow.find(
-                  (s) => s.status === "waiting_mm_deposit_initiated"
+                  (s) => s.status === "initiating_transfer"
                 );
                 let userTxHash = userDepositStep?.txHash;
                 const userTxChain = userDepositStep?.txChain;
@@ -1097,17 +1091,14 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
                 const lastStep = swap.flow[swap.flow.length - 1];
                 const isCompleted =
-                  lastStep?.state === "completed" && lastStep?.status === "settled";
+                  lastStep?.state === "completed" && lastStep?.status === "swap_complete";
                 const isRefundAvailable = (swap as any).isRefundAvailable;
 
                 // Check if swap is refunded
                 const currentStep =
                   swap.flow.find((s) => s.state === "inProgress") ||
                   swap.flow[swap.flow.length - 1];
-                const isRefunded =
-                  currentStep?.status === "refunding_user" ||
-                  currentStep?.status === "refunding_mm" ||
-                  (currentStep?.status as string) === "user_refunded_detected";
+                const isRefunded = currentStep?.status === "user_refunded";
 
                 return (
                   <Flex
@@ -1605,10 +1596,10 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                 {/* Table Rows */}
                 {swaps.map((swap) => {
                   const userDepositStep = swap.flow.find(
-                    (s) => s.status === "waiting_user_deposit_initiated"
+                    (s) => s.status === "waiting_for_deposit"
                   );
                   const mmDepositStep = swap.flow.find(
-                    (s) => s.status === "waiting_mm_deposit_initiated"
+                    (s) => s.status === "initiating_transfer"
                   );
                   let userTxHash = userDepositStep?.txHash;
                   const userTxChain = userDepositStep?.txChain;
@@ -1643,17 +1634,14 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
                   const lastStep = swap.flow[swap.flow.length - 1];
                   const isCompleted =
-                    lastStep?.state === "completed" && lastStep?.status === "settled";
+                    lastStep?.state === "completed" && lastStep?.status === "swap_complete";
                   const isRefundAvailable = (swap as any).isRefundAvailable;
 
                   // Check if swap is refunded
                   const currentStep =
                     swap.flow.find((s) => s.state === "inProgress") ||
                     swap.flow[swap.flow.length - 1];
-                  const isRefunded =
-                    currentStep?.status === "refunding_user" ||
-                    currentStep?.status === "refunding_mm" ||
-                    (currentStep?.status as string) === "user_refunded_detected";
+                  const isRefunded = currentStep?.status === "user_refunded";
 
                   return (
                     <Flex
@@ -2151,7 +2139,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                 </Text>
                 <Flex direction="column" gap="4px" pl="12px">
                   {selectedSwap.flow
-                    .filter((s) => s.status !== "settled")
+                    .filter((s) => s.status !== "swap_complete")
                     .map((step, idx) => (
                       <Flex key={idx} justify="space-between" align="center">
                         <Text fontSize="13px" color={colors.textGray}>
