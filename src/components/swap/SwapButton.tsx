@@ -85,6 +85,7 @@ export const SwapButton = () => {
     hasNoRoutesError,
     exceedsAvailableBTCLiquidity,
     exceedsAvailableCBBTCLiquidity,
+    exceedsAvailableLiquidity,
     exceedsUserBalance,
     inputBelowMinimum,
     refetchQuote,
@@ -605,7 +606,7 @@ export const SwapButton = () => {
   // Determine button text and click handler
   const getButtonTextAndHandler = () => {
     // Check validation errors first
-    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity) {
+    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity || exceedsAvailableLiquidity) {
       return {
         text: "Not enough liquidity",
         handler: undefined,
@@ -724,6 +725,7 @@ export const SwapButton = () => {
     exceedsUserBalance ||
     exceedsAvailableBTCLiquidity ||
     exceedsAvailableCBBTCLiquidity ||
+    exceedsAvailableLiquidity ||
     inputBelowMinimum;
 
   const isButtonDisabled =

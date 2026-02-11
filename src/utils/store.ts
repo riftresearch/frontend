@@ -130,6 +130,10 @@ export const useStore = create<{
   setExceedsUserBalance: (value: boolean) => void;
   inputBelowMinimum: boolean;
   setInputBelowMinimum: (value: boolean) => void;
+  exceedsAvailableLiquidity: boolean;
+  setExceedsAvailableLiquidity: (value: boolean) => void;
+  maxAvailableLiquidity: string | null;
+  setMaxAvailableLiquidity: (value: string | null) => void;
   refetchQuote: boolean;
   setRefetchQuote: (value: boolean) => void;
   isAwaitingOptimalQuote: boolean;
@@ -235,6 +239,10 @@ export const useStore = create<{
   setExceedsUserBalance: (value: boolean) => set({ exceedsUserBalance: value }),
   inputBelowMinimum: false,
   setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
+  exceedsAvailableLiquidity: false,
+  setExceedsAvailableLiquidity: (value: boolean) => set({ exceedsAvailableLiquidity: value }),
+  maxAvailableLiquidity: null,
+  setMaxAvailableLiquidity: (value: string | null) => set({ maxAvailableLiquidity: value }),
   refetchQuote: false,
   setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
   isAwaitingOptimalQuote: false,

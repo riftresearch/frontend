@@ -189,6 +189,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setExceedsUserBalance,
     inputBelowMinimum,
     setInputBelowMinimum,
+    exceedsAvailableLiquidity,
+    setExceedsAvailableLiquidity,
+    maxAvailableLiquidity,
+    setMaxAvailableLiquidity,
     refetchQuote,
     setRefetchQuote,
     setIsAwaitingOptimalQuote,
@@ -445,6 +449,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       }
 
       setIsLoadingQuote(true);
+      setExceedsAvailableLiquidity(false);
+      setMaxAvailableLiquidity(null);
 
       try {
         // Build from/to currencies
@@ -524,6 +530,41 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         console.error("[fetchQuote] Error fetching quote:", error);
         setQuote(null);
         setExecuteSwap(null);
+
+        // Zero out the non-last-edited field on any quote error
+        if (isInput) {
+          setOutputAmount("");
+          setOutputUsdValue(ZERO_USD_DISPLAY);
+        } else {
+          setDisplayedInputAmount("");
+          setInputUsdValue(ZERO_USD_DISPLAY);
+        }
+
+        // Parse insufficient liquidity errors from market maker
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const liquidityMatch = errorMessage.match(
+          /Insufficient liquidity: requires \d+ but max available is (\d+)/
+        );
+        if (liquidityMatch) {
+          const maxAvailable = Number(liquidityMatch[1]);
+          if (outputToken.chain === "bitcoin") {
+            // Output is BTC: use exact value, will set as output
+            setMaxAvailableLiquidity(maxAvailable.toString());
+            setOutputAmount("");
+            setOutputUsdValue(ZERO_USD_DISPLAY);
+          } else {
+            // Input is BTC: use 99.9%, will set as input
+            setMaxAvailableLiquidity(Math.floor(maxAvailable * 0.999).toString());
+            setOutputAmount("");
+            setOutputUsdValue(ZERO_USD_DISPLAY);
+          }
+          setExceedsAvailableLiquidity(true);
+        }
+
+        // DEX quote failure = not enough DEX liquidity
+        if (errorMessage.includes("DEX quote failed")) {
+          setExceedsAvailableLiquidity(true);
+        }
       } finally {
         setIsLoadingQuote(false);
         setRefetchQuote(false);
@@ -605,9 +646,11 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       const usdValue = calculateUsdValue(value, token.ticker, ethPrice, btcPrice, tokenPrice);
       setUsdValue(usdValue);
 
-      // Clear existing quotes when user types
+      // Clear existing quotes and liquidity error when user types
       setQuote(null);
       setFeeOverview(null);
+      setExceedsAvailableLiquidity(false);
+      setMaxAvailableLiquidity(null);
 
       if (!value || parseFloat(value) <= 0) {
         // Clear the other field if this field is empty or 0
@@ -1071,7 +1114,13 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
 
     // Only set up auto-refresh if conditions are met, we have a quote, and no swap is in progress
-    if (displayedInputAmount && parseFloat(displayedInputAmount) > 0 && evmAddress && quote && !isSwapInProgress) {
+    if (
+      displayedInputAmount &&
+      parseFloat(displayedInputAmount) > 0 &&
+      evmAddress &&
+      quote &&
+      !isSwapInProgress
+    ) {
       // Determine the amount to use for refresh based on which field was last edited
       const refreshAmount = getQuoteForInputRef.current
         ? fullPrecisionInputAmount || displayedInputAmount
@@ -1096,7 +1145,15 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         quoteRefreshIntervalRef.current = null;
       }
     };
-  }, [displayedInputAmount, fullPrecisionInputAmount, outputAmount, evmAddress, quote, fetchQuote, isSwapInProgress]);
+  }, [
+    displayedInputAmount,
+    fullPrecisionInputAmount,
+    outputAmount,
+    evmAddress,
+    quote,
+    fetchQuote,
+    isSwapInProgress,
+  ]);
 
   // Update current input balance when wallet connection or token selection changes
   useEffect(() => {
@@ -1697,6 +1754,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   exceedsUserBalance ||
                   (exceedsAvailableBTCLiquidity && lastEditedField === "input") ||
                   exceedsAvailableCBBTCLiquidity ||
+                  exceedsAvailableLiquidity ||
                   inputBelowMinimum
                     ? colors.red
                     : colors.offWhite
@@ -1752,8 +1810,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     MAX
                   </Text>
                 </>
-              ) : exceedsAvailableBTCLiquidity &&
-                isSwappingForBTC &&
+              ) : exceedsAvailableLiquidity &&
+                maxAvailableLiquidity &&
                 lastEditedField === "input" ? (
                 <>
                   <Text
@@ -1773,49 +1831,19 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     ml={isMobile ? "0px" : "8px"}
                     color={inputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
-                    onClick={handleOutputMaxClick}
+                    onClick={() => {
+                      const formattedMax = formatUnits(BigInt(maxAvailableLiquidity), 8);
+                      handleInputOrOutputChange(
+                        { target: { value: formattedMax } } as ChangeEvent<HTMLInputElement>,
+                        !isSwappingForBTC
+                      );
+                    }}
                     _hover={{ textDecoration: "underline" }}
                     letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    {(() => {
-                      const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
-                      const maxBtcLiquidityBtc = Number(maxBtcLiquiditySats) / 100_000_000;
-                      return `${maxBtcLiquidityBtc.toFixed(4)} BTC Max`;
-                    })()}
-                  </Text>
-                </>
-              ) : exceedsAvailableCBBTCLiquidity ? (
-                <>
-                  <Text
-                    color={colors.redHover}
-                    fontSize="13px"
-                    mt="6px"
-                    ml="1px"
-                    letterSpacing="-1.5px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    {isMobile ? "" : "Exceeds available liquidity - "}
-                  </Text>
-                  <Text
-                    fontSize="13px"
-                    mt="7px"
-                    ml={isMobile ? "0px" : "8px"}
-                    color={inputStyle?.border_color_light || colors.textGray}
-                    cursor="pointer"
-                    onClick={handleOutputMaxClick}
-                    _hover={{ textDecoration: "underline" }}
-                    letterSpacing="-1.5px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    {(() => {
-                      const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-                      const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
-                      return `${maxCbBtcLiquidityBtc.toFixed(4)} BTC Max`;
-                    })()}
+                    {`${formatUnits(BigInt(maxAvailableLiquidity), 8)} BTC Max`}
                   </Text>
                 </>
               ) : inputBelowMinimum ? (
@@ -2071,7 +2099,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             ) : (
               <Input
                 value={outputAmount}
-                readOnly
+                onChange={(e) => handleInputOrOutputChange(e, false)}
+                onKeyDown={(e) => handleKeyDown(e, false)}
                 fontFamily="Aux"
                 border="none"
                 bg="transparent"
@@ -2094,14 +2123,16 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   color: outputStyle?.light_text_color || "#805530",
                 }}
                 disabled={isOtcServerDead}
-                cursor={isOtcServerDead ? "not-allowed" : "not-allowed"}
+                cursor={isOtcServerDead ? "not-allowed" : "text"}
                 opacity={isOtcServerDead ? 0.5 : 1}
               />
             )}
 
             {/* USD value / errors at bottom */}
             <Flex>
-              {exceedsAvailableBTCLiquidity && lastEditedField === "output" ? (
+              {exceedsAvailableLiquidity &&
+              maxAvailableLiquidity &&
+              lastEditedField === "output" ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -2119,20 +2150,19 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     ml={isMobile ? "0px" : "8px"}
                     color={outputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
-                    onClick={handleOutputMaxClick}
+                    onClick={() => {
+                      const formattedMax = formatUnits(BigInt(maxAvailableLiquidity), 8);
+                      handleInputOrOutputChange(
+                        { target: { value: formattedMax } } as ChangeEvent<HTMLInputElement>,
+                        !isSwappingForBTC
+                      );
+                    }}
                     _hover={{ textDecoration: "underline" }}
                     letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    {(() => {
-                      const maxLiquiditySats = isSwappingForBTC
-                        ? liquidity.maxBTCLiquidity
-                        : liquidity.maxCbBTCLiquidity;
-                      const maxLiquidityBtc = Number(maxLiquiditySats) / 100_000_000;
-                      const ticker = isSwappingForBTC ? "BTC" : "cbBTC";
-                      return `${maxLiquidityBtc.toFixed(4)} ${ticker} Max`;
-                    })()}
+                    {`${formatUnits(BigInt(maxAvailableLiquidity), 8)} BTC Max`}
                   </Text>
                 </>
               ) : outputBelowMinimum ? (
@@ -2178,6 +2208,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   </Text>
                   {(() => {
                     if (isLoadingQuote && getQuoteForInputRef.current) return null;
+                    if (outputUsdValue === ZERO_USD_DISPLAY) return null;
                     const impact = calculatePriceImpact(inputUsdValue, outputUsdValue);
                     if (!impact) return null;
                     return (
