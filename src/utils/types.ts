@@ -109,11 +109,11 @@ export type Config = {
  * Fee breakdown overview for a swap
  */
 export interface FeeOverview {
-  networkFee: {
+  gasFee: {
     fee: string;
     description: string;
   };
-  protocolFee: {
+  riftFee: {
     fee: string;
     description: string;
   };

@@ -514,6 +514,13 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 totalUsd: quote.fees!.totalUsd,
               })
             );
+          } else if (quote.fees?.preswap) {
+            // ERC20-to-ERC20 swap (no BTC involved) — only preswap + totalUsd
+            setFeeOverview({
+              gasFee: { fee: "$0.00", description: "Gas Fee" },
+              riftFee: { fee: "$0.00", description: "Rift Fee" },
+              totalFees: `$${quote.fees.totalUsd.toFixed(2)}`,
+            });
           }
 
           // Store executeSwap for later use by SwapButton
@@ -2331,17 +2338,17 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             fontWeight="normal"
             fontFamily="Helvetica"
           >
-            <Tooltip
-              show={showFeeTooltip && !!feeOverview}
-              onMouseEnter={() => setShowFeeTooltip(true)}
-              onMouseLeave={() => setShowFeeTooltip(false)}
-              width="145px"
-              hoverText={
-                feeOverview ? (
+            {feeOverview && feeOverview.totalFees !== "$0.00" ? (
+              <Tooltip
+                show={showFeeTooltip}
+                onMouseEnter={() => setShowFeeTooltip(true)}
+                onMouseLeave={() => setShowFeeTooltip(false)}
+                width="145px"
+                hoverText={
                   <>
                     {[
-                      { key: "protocol", ...feeOverview.protocolFee },
-                      { key: "network", ...feeOverview.networkFee },
+                      { key: "rift", ...feeOverview.riftFee },
+                      { key: "gas", ...feeOverview.gasFee },
                     ]
                       .filter((fee) => fee.fee !== "$0.00")
                       .map((fee) => (
@@ -2351,27 +2358,41 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                         </Flex>
                       ))}
                   </>
-                ) : null
-              }
-              body={
-                <Flex pr="3px" mt="-2px">
-                  <Text
-                    color={colors.textGray}
-                    fontSize="14px"
-                    mr="8px"
-                    mt="1px"
-                    letterSpacing="-1.5px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                  >
-                    Fees: {feeOverview?.totalFees || ""}
-                  </Text>
-                  <Flex mt="0px" mr="2px">
-                    <InfoSVG width="14px" />
+                }
+                body={
+                  <Flex pr="3px" mt="-2px">
+                    <Text
+                      color={colors.textGray}
+                      fontSize="14px"
+                      mr="8px"
+                      mt="1px"
+                      letterSpacing="-1.5px"
+                      fontWeight="normal"
+                      fontFamily="Aux"
+                    >
+                      Fees: {feeOverview.totalFees}
+                    </Text>
+                    <Flex mt="0px" mr="2px">
+                      <InfoSVG width="14px" />
+                    </Flex>
                   </Flex>
-                </Flex>
-              }
-            />
+                }
+              />
+            ) : feeOverview ? (
+              <Flex pr="3px" mt="-2px">
+                <Text
+                  color={colors.textGray}
+                  fontSize="14px"
+                  mr="8px"
+                  mt="1px"
+                  letterSpacing="-1.5px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                >
+                  Fees: {feeOverview.totalFees}
+                </Text>
+              </Flex>
+            ) : null}
           </Flex>
         </Flex>
       </Flex>

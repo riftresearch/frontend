@@ -176,11 +176,11 @@ export function buildFeeOverview(fees: {
   totalUsd: number;
 }): FeeOverview {
   const feeOverview: FeeOverview = {
-    networkFee: {
+    gasFee: {
       fee: formatUsdValue(fees.rift.network.usd),
       description: "Gas Fee",
     },
-    protocolFee: {
+    riftFee: {
       fee: formatUsdValue(fees.rift.protocol.usd),
       description: "Rift Fee",
     },

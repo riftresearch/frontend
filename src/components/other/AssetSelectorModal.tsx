@@ -74,6 +74,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setOutputTokenPrice,
     setInputUsdValue,
     setSwitchingToInputTokenChain,
+    setFeeOverview,
     btcPrice,
     evmWalletClient,
   } = useStore();
@@ -450,6 +451,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       setOutputToken(tokenData);
       setOutputTokenPrice(null);
     }
+
+    // Clear fee overview since the quote is no longer valid for the new asset
+    setFeeOverview(null);
 
     // Switch network to the selected token's chain if it's an EVM token
     const tokenChain = tokenData.chain;
