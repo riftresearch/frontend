@@ -246,7 +246,7 @@ export type AdminSwapFlowStatus =
   | "initiating_transfer"
   | "confirming_transfer"
   | "swap_complete"
-  | "user_refunded"; // user has been refunded
+  | "refunding_user"; // user has been refunded
 
 export interface AdminSwapFlowStep {
   status: AdminSwapFlowStatus;
@@ -312,6 +312,12 @@ export interface AdminSwapItem {
     amount: string;
     decimals: number;
   };
+  /** Output amount in base units (string to preserve precision) */
+  outputAmount?: string;
+  /** Output asset symbol (e.g. "BTC", "cbBTC") */
+  outputAsset?: string;
+  /** Output asset decimals */
+  outputDecimals?: number;
   /** Raw swap data from backend */
   rawData?: any;
 }

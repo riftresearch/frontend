@@ -746,7 +746,7 @@ export const AdminChats: React.FC = () => {
                           swap.flow[swap.flow.length - 1];
                         const isCompleted = currentStep?.status === "swap_complete";
                         const isRefunded =
-                          currentStep?.status === "user_refunded";
+                          currentStep?.status === "refunding_user";
                         const isFailed =
                           (swap.rawData as any)?.isRefundAvailable ||
                           (swap.rawData as any)?.is_refund_available;
@@ -1203,7 +1203,7 @@ export const AdminChats: React.FC = () => {
                           swap.flow[swap.flow.length - 1];
                         const isCompleted = currentStep?.status === "swap_complete";
                         const isRefunded =
-                          currentStep?.status === "user_refunded";
+                          currentStep?.status === "refunding_user";
                         const isFailed =
                           (swap.rawData as any)?.isRefundAvailable ||
                           (swap.rawData as any)?.is_refund_available;

@@ -23,7 +23,7 @@ const mapStatusToDepositFlowState = (status: string) => {
     initiating_payout: "initiating_transfer",
     confirming_payout: "confirming_transfer",
     swap_complete: "swap_complete",
-    user_refunded: "user_refunded",
+    refunding_user: "refunding_user",
     failed: "failed",
   };
 

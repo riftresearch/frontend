@@ -140,7 +140,7 @@ export type SwapStatus =
   | "initiating_transfer"
   | "confirming_transfer"
   | "swap_complete"
-  | "user_refunded"
+  | "refunding_user"
   | "failed";
 
 export type UserDepositStatus = {

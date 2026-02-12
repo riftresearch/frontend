@@ -92,7 +92,7 @@ const Pill: React.FC<{
   previousStep?: AdminSwapFlowStep;
   isMobile?: boolean;
 }> = ({ step, isRefundAvailable, isLastStep, isRefunded, previousStep, isMobile }) => {
-  // Use the step label directly (it will be "Refunded" if status is user_refunded)
+  // Use the step label directly (it will be "Refunded" if status is refunding_user)
   let displayedLabel = step.label;
 
   // Shorten labels on mobile
@@ -143,7 +143,7 @@ const Pill: React.FC<{
   const styleByState = () => {
     // Yellow pill for refunded status
     if (
-      step.status === "user_refunded"
+      step.status === "refunding_user"
     ) {
       return {
         bg: "rgba(251, 191, 36, 0.15)",
@@ -375,7 +375,7 @@ const Card: React.FC<{
 
   const currentStep =
     swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
-  const isRefunded = currentStep?.status === "user_refunded";
+  const isRefunded = currentStep?.status === "refunding_user";
 
   const getPreviousStepTimestamp = (index: number): number | undefined => {
     const timestamps = swap.stepTimestamps;
@@ -780,7 +780,7 @@ const Row: React.FC<{
     // Check if swap has been refunded (detect by status)
     const currentStep =
       swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
-    const isRefunded = currentStep?.status === "user_refunded";
+    const isRefunded = currentStep?.status === "refunding_user";
 
     // Get timestamp for previous step to calculate live duration
     const getPreviousStepTimestamp = (index: number): number | undefined => {
@@ -1198,7 +1198,7 @@ function timeAgoFrom(nowMs: number, tsMs: number): string {
 function getSwapCategory(status: string): "created" | "completed" | "failed" | "in-progress" {
   if (status === "waiting_for_deposit") return "created";
   if (status === "swap_complete") return "completed";
-  if (status === "user_refunded" || status === "failed")
+  if (status === "refunding_user" || status === "failed")
     return "failed";
   return "in-progress";
 }
@@ -1488,7 +1488,7 @@ export const SwapHistory: React.FC<{
                 ...stepsBeforeFailed,
                 failedStep,
                 {
-                  status: "user_refunded",
+                  status: "refunding_user",
                   label: "Refunded",
                   state: "completed",
                 },
@@ -1588,7 +1588,7 @@ export const SwapHistory: React.FC<{
             ...stepsBeforeFailed,
             failedStep,
             {
-              status: "user_refunded",
+              status: "refunding_user",
               label: "Refunded",
               state: "completed",
             },
@@ -1689,7 +1689,7 @@ export const SwapHistory: React.FC<{
             ...stepsBeforeFailed,
             failedStep,
             {
-              status: "user_refunded",
+              status: "refunding_user",
               label: "Refunded",
               state: "completed",
             },

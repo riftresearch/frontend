@@ -40,22 +40,27 @@ export const ConnectWalletButton: React.FC = () => {
   // Check if ANY wallet is connected (EVM or Bitcoin)
   const isConnected = !!primaryWallet;
 
-  // Auto-open panel when user actively connects (not on page refresh)
+  // Auto-open panel when user actively connects (not on page refresh/session restore)
   const prevIsConnectedRef = React.useRef(isConnected);
-  const hasHydratedRef = React.useRef(false);
+  const [isSessionRestoreWindow, setIsSessionRestoreWindow] = React.useState(true);
   useEffect(() => {
-    // Skip the first render (page load / refresh) to avoid opening panel on hydration
-    if (!hasHydratedRef.current) {
-      hasHydratedRef.current = true;
+    // Give Dynamic 2 seconds to restore the session before we start tracking transitions.
+    // Any connected->true change during this window is session restore, not an active connect.
+    const timer = setTimeout(() => setIsSessionRestoreWindow(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    // During session restore window, just track the state without opening
+    if (isSessionRestoreWindow) {
       prevIsConnectedRef.current = isConnected;
       return;
     }
-    // Trigger when going from disconnected to connected (active connect action)
+    // After window: trigger when going from disconnected to connected (active connect action)
     if (isConnected && !prevIsConnectedRef.current) {
       setIsPanelOpen(true);
     }
     prevIsConnectedRef.current = isConnected;
-  }, [isConnected]);
+  }, [isConnected, isSessionRestoreWindow]);
 
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {

@@ -246,7 +246,7 @@ export function UnifiedTransactionWidget({
     }
 
     // SDK provides status directly - use it for refund detection
-    if (swapStatusInfo.status === "user_refunded") {
+    if (swapStatusInfo.status === "refunding_user") {
       setIsSwapRefunded(true);
       setIsRefundAvailable(false);
       console.log(`[REFUND CHECK] Swap ${currentSwapId} has been refunded`);

@@ -102,7 +102,7 @@ export const Navbar = ({}) => {
     | "initiating_transfer"
     | "confirming_transfer"
     | "swap_complete"
-    | "user_refunded"
+    | "refunding_user"
     | "failed" => {
     switch (stateNumber) {
       case 0:
@@ -118,7 +118,7 @@ export const Navbar = ({}) => {
       case 5:
         return "swap_complete";
       case 6:
-        return "user_refunded";
+        return "refunding_user";
       case 7:
         return "failed";
       default:

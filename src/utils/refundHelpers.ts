@@ -336,12 +336,12 @@ export async function filterRefunds(
     waiting_mm_deposit_confirmed: "confirming_transfer",
     settling: "swap_complete",
     settled: "swap_complete",
-    refunding_user: "user_refunded",
+    refunding_user: "refunding_user",
   };
   const swapStatus = legacyStatusMap[row.status] || row.status;
 
-  // If status is already user_refunded, mark as refunded immediately
-  if (swapStatus === "user_refunded") {
+  // If status is already refunding_user, mark as refunded immediately
+  if (swapStatus === "refunding_user") {
     console.log(
       `[REFUND STATUS] Swap ${mappedSwap.id}: Status is ${swapStatus}, marking as refunded`
     );

@@ -208,7 +208,7 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
     waiting_mm_deposit_confirmed: "confirming_transfer",
     settling: "swap_complete",
     settled: "swap_complete",
-    refunding_user: "user_refunded",
+    refunding_user: "refunding_user",
   };
   const rawStatus = (row.status || "pending") as string;
   const status: string = legacyStatusMap[rawStatus] || rawStatus;
@@ -226,7 +226,7 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
 
   // If status is a refund/failed state, determine where it stopped in the normal flow
   if (currentIndex === -1) {
-    if (status === "user_refunded" || status === "failed") {
+    if (status === "refunding_user" || status === "failed") {
       // Try to determine last completed step based on deposit statuses
       if (row.mm_deposit_status?.deposit_detected_at) {
         currentIndex = 3; // Made it to MM deposit
@@ -411,7 +411,7 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
   ];
 
   // Add "Refunded" step if swap is in refunding state
-  if (status === "user_refunded") {
+  if (status === "refunding_user") {
     console.log(`[REFUND STATUS] Swap ${row.id}: status=${status}, adding Refunded step to flow`);
 
     // Mark the current in-progress step as completed
@@ -459,6 +459,9 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
       mmPrivateKeySent: mmPrivateKeySentAt || undefined,
     },
     startAssetMetadata,
+    outputAmount: row.quote?.to_amount || undefined,
+    outputAsset: direction === "BTC_TO_EVM" ? "cbBTC" : "BTC",
+    outputDecimals: row.quote?.to_decimals || (direction === "BTC_TO_EVM" ? 8 : 8),
     rawData: row,
   };
 }
