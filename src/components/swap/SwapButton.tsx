@@ -2,7 +2,7 @@ import { Flex, Text, Spinner, Box, Button } from "@chakra-ui/react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { useRouter } from "next/router";
-import { useWaitForTransactionReceipt, usePublicClient } from "wagmi";
+import { useWaitForTransactionReceipt, usePublicClient, useWalletClient } from "wagmi";
 import { colors } from "@/utils/colors";
 import { GLOBAL_CONFIG, riftApiClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
 import { useStore } from "@/utils/store";
@@ -105,6 +105,9 @@ export const SwapButton = () => {
   // Derive swap direction and chain ID from token chains
   const isSwappingForBTC = outputToken.chain === "bitcoin";
   const evmConnectWalletChainId = inputToken.chain === "bitcoin" ? 1 : inputToken.chain;
+  const { data: wagmiWalletClient } = useWalletClient({
+    chainId: evmConnectWalletChainId,
+  });
 
   const isEvmConnected = !!evmAddress;
 
@@ -200,12 +203,18 @@ export const SwapButton = () => {
   // Helper to build execute params for SDK
   const getExecuteParams = useCallback(() => {
     const publicClient = inputToken.chain === 8453 ? basePublicClient : mainnetPublicClient;
-    if (!evmWalletClient) {
+    const walletClient = wagmiWalletClient ?? evmWalletClient;
+    if (!walletClient) {
       throw new Error("EVM wallet client not available");
+    }
+    if (!walletClient.chain) {
+      throw new Error(
+        "EVM wallet client is missing chain config. Please reconnect your EVM wallet and try again."
+      );
     }
     return {
       publicClient,
-      walletClient: evmWalletClient,
+      walletClient,
       sendBitcoin: async ({
         recipient,
         amountSats,
@@ -223,6 +232,7 @@ export const SwapButton = () => {
     inputToken.chain,
     basePublicClient,
     mainnetPublicClient,
+    wagmiWalletClient,
     evmWalletClient,
     btcAddress,
     sendBitcoin,
@@ -253,11 +263,6 @@ export const SwapButton = () => {
         throw new Error("No quote available. Please get a quote first.");
       }
 
-      // Validate wallet client is available
-      if (!evmWalletClient) {
-        throw new Error("EVM wallet not connected");
-      }
-
       // Determine destination address based on swap direction
       const destinationAddress = isSwappingForBTC ? btcAddress : evmAddress;
       if (!destinationAddress) {
@@ -268,18 +273,8 @@ export const SwapButton = () => {
         );
       }
 
-      // Get base params and wrap walletClient + sendBitcoin to detect signing completion
+      // Build execute params directly from real wallet clients
       const baseParams = getExecuteParams();
-
-      const wrappedWalletClient = {
-        ...baseParams.walletClient,
-        sendTransaction: async (args: any) => {
-          const txHash = await baseParams.walletClient.sendTransaction(args);
-          // User signed — transaction broadcast, now waiting for confirmation
-          setSwapPhase("confirming");
-          return txHash;
-        },
-      };
 
       const wrappedSendBitcoin = baseParams.sendBitcoin
         ? async (params: { recipient: string; amountSats: string }) => {
@@ -291,7 +286,6 @@ export const SwapButton = () => {
 
       const executeParams = {
         ...baseParams,
-        walletClient: wrappedWalletClient,
         ...(wrappedSendBitcoin ? { sendBitcoin: wrappedSendBitcoin } : {}),
         destinationAddress,
       };
@@ -326,7 +320,6 @@ export const SwapButton = () => {
     isSwappingForBTC,
     btcAddress,
     evmAddress,
-    evmWalletClient,
     getExecuteParams,
     setActiveSwapId,
     setIsSwapInProgress,

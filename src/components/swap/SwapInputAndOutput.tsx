@@ -1,9 +1,9 @@
 import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
-import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
+import { useState, useEffect, ChangeEvent, useCallback, useRef, useMemo } from "react";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import { Currencies, createCurrency, QuoteParameters } from "@riftresearch/sdk";
+import { Currencies, createCurrency, getSupportedModes, QuoteParameters } from "@riftresearch/sdk";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -137,6 +137,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const quoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const outputQuoteDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const quoteRequestIdRef = useRef(0);
+  const quoteContextVersionRef = useRef(0);
   const approvalDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMountRef = useRef(true);
   const hasLoadedFromCookieRef = useRef(false);
@@ -380,6 +381,25 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // QUOTING FUNCTIONS
   // ============================================================================
 
+  const toSdkCurrency = useCallback((token: TokenData) => {
+    if (token.chain === "bitcoin") return Currencies.Bitcoin.BTC;
+    if (token.ticker === "ETH" && token.chain === 1) return Currencies.Ethereum.ETH;
+    if (token.ticker === "ETH" && token.chain === 8453) return Currencies.Base.ETH;
+    return createCurrency({
+      chainId: token.chain as number,
+      address: token.address as `0x${string}`,
+      decimals: token.decimals,
+    });
+  }, []);
+
+  const supportedModes = useMemo(() => {
+    try {
+      return getSupportedModes(toSdkCurrency(inputToken), toSdkCurrency(outputToken));
+    } catch {
+      return { exactInput: true, exactOutput: false };
+    }
+  }, [inputToken, outputToken, toSdkCurrency]);
+
   // Fetch token price - uses store btcPrice/ethPrice for native tokens, fetches from API for ERC20s
   const fetchTokenPriceForDirection = useCallback(
     async (tokenData: TokenData | null, direction: "input" | "output") => {
@@ -444,34 +464,12 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       setIsLoadingQuote(true);
       setExceedsAvailableLiquidity(false);
       setMaxAvailableLiquidity(null);
+      const startContextVersion = quoteContextVersionRef.current;
 
       try {
         // Build from/to currencies
-        const fromCurrency =
-          inputToken.chain === "bitcoin"
-            ? Currencies.Bitcoin.BTC
-            : inputToken.ticker === "ETH" && inputToken.chain === 1
-              ? Currencies.Ethereum.ETH
-              : inputToken.ticker === "ETH" && inputToken.chain === 8453
-                ? Currencies.Base.ETH
-                : createCurrency({
-                    chainId: inputToken.chain as number,
-                    address: inputToken.address as `0x${string}`,
-                    decimals: inputToken.decimals,
-                  });
-
-        const toCurrency =
-          outputToken.chain === "bitcoin"
-            ? Currencies.Bitcoin.BTC
-            : outputToken.ticker === "ETH" && outputToken.chain === 1
-              ? Currencies.Ethereum.ETH
-              : outputToken.ticker === "ETH" && outputToken.chain === 8453
-                ? Currencies.Base.ETH
-                : createCurrency({
-                    chainId: outputToken.chain as number,
-                    address: outputToken.address as `0x${string}`,
-                    decimals: outputToken.decimals,
-                  });
+        const fromCurrency = toSdkCurrency(inputToken);
+        const toCurrency = toSdkCurrency(outputToken);
 
         // Normalize amount with token decimals (e.g. "1" USDC -> "1000000")
         const decimals = isInput ? inputToken.decimals : outputToken.decimals;
@@ -488,6 +486,11 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         const { quote, executeSwap } = await rift.getQuote(quoteRequest);
 
         console.log("[fetchQuote] quote", quote);
+
+        if (startContextVersion !== quoteContextVersionRef.current) {
+          console.log("[fetchQuote] Ignoring stale quote response after token change");
+          return;
+        }
 
         // Check if this is still the latest request
         if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
@@ -527,6 +530,15 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           }
         }
       } catch (error) {
+        if (startContextVersion !== quoteContextVersionRef.current) {
+          console.log("[fetchQuote] Ignoring stale quote error after token change");
+          return;
+        }
+        if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
+          console.log("[fetchQuote] Ignoring stale quote error", requestId);
+          return;
+        }
+
         console.error("[fetchQuote] Error fetching quote:", error);
         setQuote(null);
         setExecuteSwap(null);
@@ -566,14 +578,20 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           setExceedsAvailableLiquidity(true);
         }
       } finally {
-        setIsLoadingQuote(false);
-        setRefetchQuote(false);
+        if (
+          startContextVersion === quoteContextVersionRef.current &&
+          (requestId === undefined || requestId === quoteRequestIdRef.current)
+        ) {
+          setIsLoadingQuote(false);
+          setRefetchQuote(false);
+        }
       }
     },
     [
       rift,
       inputToken,
       outputToken,
+      toSdkCurrency,
       setQuote,
       setExecuteSwap,
       setOutputAmount,
@@ -614,6 +632,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleInputOrOutputChange = (e: ChangeEvent<HTMLInputElement>, isInput: boolean) => {
+    if (!isInput && !supportedModes.exactOutput) return;
+
     let value = e.target.value;
     const currentAmount = isInput ? displayedInputAmount : outputAmount;
     const token = isInput ? inputToken : outputToken;
@@ -672,7 +692,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       // Set up debounced quote fetch
       const shouldFetchQuote = isInput
         ? value && parseFloat(value) > 0 && getQuoteForInputRef.current && !hasNoRoutesError
-        : value && parseFloat(value) > 0 && !getQuoteForInputRef.current;
+        : value &&
+          parseFloat(value) > 0 &&
+          !getQuoteForInputRef.current &&
+          supportedModes.exactOutput;
 
       if (shouldFetchQuote) {
         // For output, check if below min (3000 sats = 0.00003 BTC)
@@ -705,6 +728,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, isInput: boolean) => {
+    if (!isInput && !supportedModes.exactOutput) return;
+
     // Set flag to indicate which field we should quote for
     getQuoteForInputRef.current = isInput;
 
@@ -846,6 +871,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleOutputMaxClick = () => {
+    if (!supportedModes.exactOutput) return;
+
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
 
@@ -912,6 +939,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleMinimumClick = () => {
+    if (!supportedModes.exactOutput) return;
+
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
 
@@ -994,6 +1023,17 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setPayoutAddress,
     setAddressValidation,
   ]);
+
+  useEffect(() => {
+    if (supportedModes.exactOutput) return;
+    if (lastEditedField !== "output") return;
+
+    setLastEditedField("input");
+    getQuoteForInputRef.current = true;
+    setOutputAmount("");
+    setOutputUsdValue(ZERO_USD_DISPLAY);
+    setOutputBelowMinimum(false);
+  }, [lastEditedField, setOutputAmount, setOutputUsdValue, supportedModes.exactOutput]);
 
   // Load swap state from cookies on initial mount BEFORE setting defaults
   useEffect(() => {
@@ -1672,7 +1712,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         const currentRequestId = quoteRequestIdRef.current;
 
         // Fetch quote based on which field was last edited
-        const isInput = lastEditedField === "input";
+        const isInput = lastEditedField === "input" || !supportedModes.exactOutput;
         const amount = isInput ? fullPrecisionInputAmount || displayedInputAmount : outputAmount;
         console.log(`refetching quote (${isInput ? "exact input" : "exact output"})`);
         await fetchQuote(isInput, amount, currentRequestId);
@@ -1685,10 +1725,32 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
     fetchAndExecute();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refetchQuote, lastEditedField, fullPrecisionInputAmount, displayedInputAmount, outputAmount]);
+  }, [
+    refetchQuote,
+    lastEditedField,
+    fullPrecisionInputAmount,
+    displayedInputAmount,
+    outputAmount,
+    supportedModes.exactOutput,
+  ]);
 
   // Auto-refetch quotes when prices become available (simplified)
   // The new SDK will handle this internally, so this is a placeholder
+
+  // Save swap state to cookies whenever tokens change
+  useEffect(() => {
+    // Invalidate any in-flight quote request when path changes.
+    quoteContextVersionRef.current += 1;
+    quoteRequestIdRef.current += 1;
+
+    if (quoteDebounceTimerRef.current) clearTimeout(quoteDebounceTimerRef.current);
+    if (outputQuoteDebounceTimerRef.current) clearTimeout(outputQuoteDebounceTimerRef.current);
+
+    setIsLoadingQuote(false);
+    setQuote(null);
+    setExecuteSwap(null);
+    setFeeOverview(null);
+  }, [inputToken, outputToken, setExecuteSwap, setFeeOverview, setQuote]);
 
   // Save swap state to cookies whenever tokens change
   useEffect(() => {
@@ -2122,9 +2184,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 _placeholder={{
                   color: outputStyle?.light_text_color || "#805530",
                 }}
-                disabled={isOtcServerDead}
-                cursor={isOtcServerDead ? "not-allowed" : "text"}
-                opacity={isOtcServerDead ? 0.5 : 1}
+                disabled={isOtcServerDead || !supportedModes.exactOutput}
+                cursor={isOtcServerDead || !supportedModes.exactOutput ? "not-allowed" : "text"}
+                opacity={isOtcServerDead || !supportedModes.exactOutput ? 0.5 : 1}
               />
             )}
 
