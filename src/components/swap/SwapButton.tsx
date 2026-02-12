@@ -369,14 +369,17 @@ export const SwapButton = () => {
         return;
       }
     } else {
-      // BTC->EVM: Need both wallets connected
-      if (!btcAddress) {
-        toastInfo({
-          title: "Connect Bitcoin Wallet",
-          description: "Please connect a Bitcoin wallet to send BTC",
-        });
-        setShowAuthFlow(true);
-        return;
+      // Non-BTC output: check wallet connections based on input asset
+      if (inputToken.chain === "bitcoin") {
+        // BTC->EVM: Need BTC wallet to send
+        if (!btcAddress) {
+          toastInfo({
+            title: "Connect Bitcoin Wallet",
+            description: "Please connect a Bitcoin wallet to send BTC",
+          });
+          setShowAuthFlow(true);
+          return;
+        }
       }
       if (!evmAddress) {
         toastInfo({
@@ -618,7 +621,7 @@ export const SwapButton = () => {
 
     if (exceedsUserBalance) {
       return {
-        text: `Not enough ${isSwappingForBTC ? inputToken.ticker : "BTC"}`,
+        text: `Not enough ${inputToken.ticker}`,
         handler: undefined,
         showSpinner: false,
       };

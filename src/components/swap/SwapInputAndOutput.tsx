@@ -309,24 +309,28 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
   }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress]);
 
-  // Auto-select output address when swap direction changes
+  // Auto-select output address based on output token's chain
   useEffect(() => {
     // Skip if addresses are already set (user selected them)
     if (selectedOutputAddress) return;
 
-    // Use store addresses for output based on direction
-    if (isSwappingForBTC) {
-      // EVM → BTC: Use BTC address from store for output
-      if (btcAddress) {
-        setSelectedOutputAddress(btcAddress);
-      }
-    } else {
-      // BTC → EVM: Use EVM address from store for output
-      if (evmAddress) {
-        setSelectedOutputAddress(evmAddress);
-      }
+    if (outputToken.chain === "bitcoin" && btcAddress) {
+      setSelectedOutputAddress(btcAddress);
+    } else if (outputToken.chain !== "bitcoin" && evmAddress) {
+      setSelectedOutputAddress(evmAddress);
     }
-  }, [isSwappingForBTC, btcAddress, evmAddress, selectedOutputAddress, setSelectedOutputAddress]);
+  }, [outputToken.chain, btcAddress, evmAddress, selectedOutputAddress, setSelectedOutputAddress]);
+
+  // Auto-select input address based on input token's chain
+  useEffect(() => {
+    if (selectedInputAddress) return;
+
+    if (inputToken.chain === "bitcoin" && btcAddress) {
+      setSelectedInputAddress(btcAddress);
+    } else if (inputToken.chain !== "bitcoin" && evmAddress) {
+      setSelectedInputAddress(evmAddress);
+    }
+  }, [inputToken.chain, evmAddress, btcAddress, selectedInputAddress, setSelectedInputAddress]);
 
   // Track previous swap direction to detect actual changes
   const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
@@ -1478,127 +1482,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     evmConnectWalletChainId,
   ]);
 
-  // Check if input/output amount exceeds market maker liquidity
-  useEffect(() => {
-    // Check based on which field user is editing
-    if (lastEditedField === "input") {
-      // For ERC20 -> BTC: Check if input exceeds MM liquidity
-      if (isSwappingForBTC) {
-        //   const maxBtcLiquiditySats = liquidity.maxBTCLiquidity;
-        //   if (!maxBtcLiquiditySats || maxBtcLiquiditySats === "0") {
-        //     setExceedsAvailableBTCLiquidity(false);
-        //     return;
-        //   }
-        //   // Check input (ERC20 sent) - convert to USD and compare with MM liquidity in USD
-        if (displayedInputAmount && parseFloat(displayedInputAmount) > 0 && currentInputBalance) {
-          const inputFloat = parseFloat(displayedInputAmount);
-          // If user has more than MM liquidity (in terms of what they can swap)
-          // and they're trying to swap more than MM liquidity, show the error
-          const price = inputTokenPrice;
-          if (price && btcPrice) {
-            const inputUsdValue = inputFloat * price;
-            const mmLiquidityUsd = parseFloat(liquidity.maxBTCLiquidityInUsd);
-            if (mmLiquidityUsd > 0 && inputUsdValue < mmLiquidityUsd) {
-              setExceedsAvailableBTCLiquidity(false);
-              return;
-            }
-          }
-        }
-        //   setExceedsAvailableBTCLiquidity(false);
-        // } else {
-        //   // BTC -> ERC20 (cbBTC): Check maxCbBTCLiquidity
-        //   setExceedsAvailableBTCLiquidity(false);
-      }
-    } else if (lastEditedField === "output") {
-      // Check output (BTC or cbBTC received)
-      if (!outputAmount || parseFloat(outputAmount) <= 0) {
-        setExceedsAvailableBTCLiquidity(false);
-        return;
-      }
 
-      const outputFloat = parseFloat(outputAmount);
-      const maxLiquiditySats = isSwappingForBTC
-        ? liquidity.maxBTCLiquidity
-        : liquidity.maxCbBTCLiquidity;
-
-      if (maxLiquiditySats && maxLiquiditySats !== "0") {
-        const maxLiquidityBtc = Number(maxLiquiditySats) / 100_000_000;
-        const tolerance = maxLiquidityBtc * 0.001;
-
-        if (outputFloat > maxLiquidityBtc + tolerance) {
-          setExceedsAvailableBTCLiquidity(true);
-          return;
-        }
-      }
-
-      setExceedsAvailableBTCLiquidity(false);
-    } else {
-      setExceedsAvailableBTCLiquidity(false);
-    }
-  }, [
-    displayedInputAmount,
-    outputAmount,
-    lastEditedField,
-    isSwappingForBTC,
-    liquidity.maxBTCLiquidity,
-    liquidity.maxCbBTCLiquidity,
-    liquidity.maxBTCLiquidityInUsd,
-    exceedsUserBalance,
-    currentInputBalance,
-    inputToken,
-    ethPrice,
-    inputTokenPrice,
-    btcPrice,
-  ]);
-
-  // Check if input BTC amount exceeds cbBTC liquidity (BTC -> cbBTC direction)
-  useEffect(() => {
-    // Only check for BTC -> cbBTC direction
-    if (isSwappingForBTC) {
-      setExceedsAvailableCBBTCLiquidity(false);
-      return;
-    }
-
-    if (!displayedInputAmount || parseFloat(displayedInputAmount) <= 0) {
-      setExceedsAvailableCBBTCLiquidity(false);
-      return;
-    }
-
-    // Skip check if user balance is already exceeded (takes priority)
-    if (exceedsUserBalance) {
-      setExceedsAvailableCBBTCLiquidity(false);
-      return;
-    }
-
-    // Skip check if user is editing the output field (lastEditedField === "output")
-    // because the input is being calculated from the output and may temporarily exceed
-    if (lastEditedField === "output") {
-      setExceedsAvailableCBBTCLiquidity(false);
-      return;
-    }
-
-    const inputFloat = parseFloat(displayedInputAmount);
-
-    // BTC -> cbBTC: Check if input BTC exceeds maxCbBTCLiquidity
-    const maxCbBtcLiquiditySats = liquidity.maxCbBTCLiquidity;
-    if (maxCbBtcLiquiditySats && maxCbBtcLiquiditySats !== "0") {
-      const maxCbBtcLiquidityBtc = Number(maxCbBtcLiquiditySats) / 100_000_000;
-
-      if (inputFloat > maxCbBtcLiquidityBtc) {
-        setExceedsAvailableCBBTCLiquidity(true);
-      } else {
-        setExceedsAvailableCBBTCLiquidity(false);
-      }
-    } else {
-      setExceedsAvailableCBBTCLiquidity(false);
-    }
-  }, [
-    displayedInputAmount,
-    isSwappingForBTC,
-    liquidity.maxCbBTCLiquidity,
-    exceedsUserBalance,
-    lastEditedField,
-  ]);
 
   // Check if output amount is below minimum swap amount (3000 sats)
   // Only show this error when user is editing the OUTPUT field
@@ -2010,7 +1894,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           >
             {/* Address Selector at top */}
             <AddressSelector
-              chainType={isSwappingForBTC ? "EVM" : "BTC"}
+              chainType={inputToken.chain === "bitcoin" ? "BTC" : "EVM"}
               selectedAddress={selectedInputAddress}
               onSelect={setSelectedInputAddress}
               showPasteOption={false}
@@ -2301,31 +2185,16 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             flexShrink={0}
           >
             {/* Address Selector at top */}
-            {isSwappingForBTC ? (
-              // EVM → BTC: Show BTC address selector with paste option
-              <AddressSelector
-                chainType="BTC"
-                selectedAddress={selectedOutputAddress}
-                onSelect={setSelectedOutputAddress}
-                onPasteAddress={() => {
-                  setPasteModalType("BTC");
-                  setIsPasteModalOpen(true);
-                }}
-                showPasteOption={true}
-              />
-            ) : (
-              // BTC → EVM: Show EVM address selector with paste option
-              <AddressSelector
-                chainType="EVM"
-                selectedAddress={selectedOutputAddress}
-                onSelect={setSelectedOutputAddress}
-                onPasteAddress={() => {
-                  setPasteModalType("EVM");
-                  setIsPasteModalOpen(true);
-                }}
-                showPasteOption={true}
-              />
-            )}
+            <AddressSelector
+              chainType={outputToken.chain === "bitcoin" ? "BTC" : "EVM"}
+              selectedAddress={selectedOutputAddress}
+              onSelect={setSelectedOutputAddress}
+              onPasteAddress={() => {
+                setPasteModalType(outputToken.chain === "bitcoin" ? "BTC" : "EVM");
+                setIsPasteModalOpen(true);
+              }}
+              showPasteOption={true}
+            />
             {/* Asset tag centered */}
             <WebAssetTag
               cursor="pointer"
