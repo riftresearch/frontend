@@ -157,7 +157,45 @@ export const Navbar = ({}) => {
         zIndex={400}
       >
         {isMobile ? (
-          <Flex />
+          <Flex align="center">
+            {(router.pathname === "/" || router.pathname.includes("/swap")) ? (
+              <Flex
+                as="button"
+                onClick={() => handleNavigation("/history")}
+                align="center"
+                gap="6px"
+                cursor="pointer"
+                _hover={{ opacity: 0.8 }}
+              >
+                <Text
+                  color="white"
+                  fontSize="15px"
+                  fontFamily="Nostromo"
+                >
+                  History
+                </Text>
+                <IoChevronForward size={20} color="white" />
+              </Flex>
+            ) : (
+              <Flex
+                as="button"
+                onClick={() => handleNavigation("/")}
+                align="center"
+                gap="6px"
+                cursor="pointer"
+                _hover={{ opacity: 0.8 }}
+              >
+                <IoChevronBack size={20} color="white" />
+                <Text
+                  color="white"
+                  fontSize="15px"
+                  fontFamily="Nostromo"
+                >
+                  Swap
+                </Text>
+              </Flex>
+            )}
+          </Flex>
         ) : (
           <>
             <Flex gap="12px">
