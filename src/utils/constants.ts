@@ -56,7 +56,7 @@ export const GLOBAL_CONFIG: Config = {
   etherscanUrl: "https://etherscan.io",
   mainnetRpcUrl: "https://eth0.riftnodes.com",
   esploraUrl: "https://blockstream.info/api",
-  riftApiUrl: "https://api.rift.trade",
+  riftApiUrl: "https://swap-router-production.up.railway.app",
   rfqUrl: "https://rfq-server-v2-production.up.railway.app",
   underlyingSwappingAssets: [
     {
