@@ -24,6 +24,8 @@ import {
   ETH_TOKEN_BASE,
   BTC_TOKEN,
   BTC_ICON,
+  USDC_TOKEN,
+  USDC_TOKEN_BASE,
 } from "@/utils/constants";
 
 interface AssetSelectorModalProps {
@@ -450,6 +452,42 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     } else {
       setOutputToken(tokenData);
       setOutputTokenPrice(null);
+    }
+
+    // --- Constraint: resolve opposite token for duplicate-ticker & chain-consistency ---
+    const oppositeToken = selectionDirection === "input" ? outputToken : inputToken;
+    const setOppositeToken = selectionDirection === "input" ? setOutputToken : setInputToken;
+    const setOppositeTokenPrice =
+      selectionDirection === "input" ? setOutputTokenPrice : setInputTokenPrice;
+    let resolvedOpposite = oppositeToken;
+
+    // No duplicate tickers: if same ticker, switch opposite to BTC (or ETH if ticker is BTC)
+    if (tokenData.ticker === resolvedOpposite.ticker) {
+      if (tokenData.ticker !== "BTC") {
+        resolvedOpposite = BTC_TOKEN;
+      } else {
+        resolvedOpposite = ETH_TOKEN;
+      }
+    }
+
+    // EVM chain consistency: if both are EVM and on different chains, fix the opposite
+    if (
+      tokenData.chain !== "bitcoin" &&
+      resolvedOpposite.chain !== "bitcoin" &&
+      tokenData.chain !== resolvedOpposite.chain
+    ) {
+      const targetChain = tokenData.chain;
+      if (tokenData.ticker === "ETH") {
+        resolvedOpposite = targetChain === 1 ? USDC_TOKEN : USDC_TOKEN_BASE;
+      } else {
+        resolvedOpposite = targetChain === 1 ? ETH_TOKEN : ETH_TOKEN_BASE;
+      }
+    }
+
+    // Apply opposite token change if it was modified
+    if (resolvedOpposite !== oppositeToken) {
+      setOppositeToken(resolvedOpposite);
+      setOppositeTokenPrice(null);
     }
 
     // Clear fee overview since the quote is no longer valid for the new asset

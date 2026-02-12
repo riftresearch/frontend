@@ -2313,13 +2313,12 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             fontFamily="Aux"
           >
             {calculateExchangeRate(
-              isSwappingForBTC,
               displayedInputAmount,
               outputAmount,
-              ethPrice,
-              btcPrice,
-              isSwappingForBTC ? inputTokenPrice : outputTokenPrice,
-              isSwappingForBTC ? inputToken.ticker : outputToken?.ticker || "CBBTC"
+              inputTokenPrice,
+              outputTokenPrice,
+              inputToken.ticker,
+              outputToken?.ticker || "CBBTC"
             )}
           </Text>
           <Spacer />

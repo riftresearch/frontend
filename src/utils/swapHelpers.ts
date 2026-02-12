@@ -351,24 +351,33 @@ export function calculateUsdValue(
  * @param isSwappingForBTC - Whether swapping for BTC (true) or from BTC (false)
  * @param inputAmount - Input amount (already formatted as decimal string)
  * @param outputAmount - Output amount (already formatted as decimal string)
- * @param ethPrice - Current ETH price in USD
- * @param btcPrice - Current BTC price in USD
- * @param tokenPrice - Current token price in USD (optional, used for non-ETH/BTC tokens)
- * @param ticker - Token ticker for the non-BTC asset
- * @param decimals - Token decimals for the non-BTC asset
- * @returns Formatted exchange rate string: "1 BTC = X ticker ($Y)"
+ * @param inputAmount - Amount of input token
+ * @param outputAmount - Amount of output token
+ * @param inputPrice - USD price of input token
+ * @param outputPrice - USD price of output token
+ * @param inputTicker - Ticker for the input token
+ * @param outputTicker - Ticker for the output token
+ * @returns Formatted exchange rate string: "1 BASE = X QUOTE" where BASE is the higher-priced token
  */
 export function calculateExchangeRate(
-  isSwappingForBTC: boolean,
   inputAmount: string,
   outputAmount: string,
-  ethPrice: number | null,
-  btcPrice: number | null,
-  tokenPrice: number | null,
-  ticker: string
+  inputPrice: number | null,
+  outputPrice: number | null,
+  inputTicker: string,
+  outputTicker: string
 ): string {
   const inputParsed = parseFloat(inputAmount);
   const outputParsed = parseFloat(outputAmount);
+
+  // Determine base asset (higher USD price) and quote asset
+  // Base goes on the left: "1 BASE = X QUOTE" so X >= 1
+  const inputPriceVal = inputPrice ?? 0;
+  const outputPriceVal = outputPrice ?? 0;
+  const inputIsBase = inputPriceVal >= outputPriceVal;
+
+  const baseTicker = inputIsBase ? inputTicker : outputTicker;
+  const quoteTicker = inputIsBase ? outputTicker : inputTicker;
 
   // Validate inputs
   if (
@@ -379,34 +388,21 @@ export function calculateExchangeRate(
     inputParsed <= 0 ||
     outputParsed <= 0
   ) {
-    return `1 BTC = -- ${ticker}`;
+    return `1 ${baseTicker} = -- ${quoteTicker}`;
   }
 
+  // Calculate exchange rate: how many quote tokens per 1 base token
   let exchangeRate: number;
-
-  if (isSwappingForBTC) {
-    // Swapping for BTC: input is ERC20/ETH, output is BTC
-    // Calculate how much input needed for 1 BTC
-    exchangeRate = inputParsed / outputParsed;
-  } else {
-    // Swapping from BTC: input is BTC, output is ERC20/ETH
-    // Calculate how much output received for 1 BTC
+  if (inputIsBase) {
     exchangeRate = outputParsed / inputParsed;
+  } else {
+    exchangeRate = inputParsed / outputParsed;
   }
 
   // Format to max 5 decimal places, removing trailing zeros
   const formattedRate = parseFloat(exchangeRate.toFixed(5)).toString();
 
-  // Calculate USD value of the exchange rate
-  const usdValue = calculateUsdValue(
-    exchangeRate.toString(),
-    ticker,
-    ethPrice,
-    btcPrice,
-    tokenPrice
-  );
-
-  return `1 BTC = ${formattedRate} ${ticker}`;
+  return `1 ${baseTicker} = ${formattedRate} ${quoteTicker}`;
 }
 
 /**

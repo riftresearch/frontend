@@ -144,6 +144,29 @@ export const CBBTC_TOKEN_BASE: TokenData = {
   chain: 8453,
 };
 
+// USDC tokens for Ethereum and Base
+export const USDC_TOKEN: TokenData = {
+  name: "USD Coin",
+  ticker: "USDC",
+  address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+  decimals: 6,
+  chain: 1,
+};
+
+export const USDC_TOKEN_BASE: TokenData = {
+  name: "USD Coin",
+  ticker: "USDC",
+  address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.smold.app/api/token/8453/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913/logo-128.png",
+  decimals: 6,
+  chain: 8453,
+};
+
 // Popular output tokens (BTC and cbBTC from both chains)
 export const POPULAR_OUTPUT_TOKENS: TokenData[] = [BTC_TOKEN, CBBTC_TOKEN, CBBTC_TOKEN_BASE];
 
