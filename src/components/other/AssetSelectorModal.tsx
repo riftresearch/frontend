@@ -5,10 +5,8 @@ import { BASE_LOGO } from "./SVGs";
 import { NetworkBadge } from "./NetworkBadge";
 import { TokenDisplay } from "./TokenDisplay";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useSwitchChain } from "wagmi";
-import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
+import { useSwitchNetwork, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { useStore } from "@/utils/store";
-import { mainnet, base } from "viem/chains";
 import { TokenData, Network } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
@@ -51,14 +49,11 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
-  const evmAddress = useStore((state) => state.evmAddress);
-  const isEvmConnected = !!evmAddress;
-
-  // Wagmi hooks for chain switching
-  const { switchChain } = useSwitchChain();
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const isEvmConnected = !!primaryEvmAddress;
 
   // Dynamic hooks for wallet detection
-  const { primaryWallet } = useDynamicContext();
+  const switchNetwork = useSwitchNetwork();
   const userWallets = useUserWallets();
 
   // Zustand store
@@ -78,8 +73,18 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setSwitchingToInputTokenChain,
     setFeeOverview,
     btcPrice,
-    evmWalletClient,
   } = useStore();
+
+  const primaryEvmWallet = useMemo(
+    () =>
+      userWallets.find(
+        (wallet) =>
+          wallet.chain?.toUpperCase() === "EVM" &&
+          !!primaryEvmAddress &&
+          wallet.address.toLowerCase() === primaryEvmAddress.toLowerCase()
+      ) || null,
+    [userWallets, primaryEvmAddress]
+  );
 
   // Get BTC wallet addresses from connected wallets (memoized to prevent infinite loops)
   const btcWalletAddresses = useMemo(
@@ -123,23 +128,41 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
   // Auto-switch chain when wallet connects or address changes
   useEffect(() => {
-    if (!isEvmConnected) return;
+    if (!isEvmConnected || !primaryEvmWallet) return;
 
     // Determine target chain from input token if it's an EVM token
     const targetChain = inputToken?.chain;
     if (targetChain === "bitcoin" || !targetChain) return;
 
+    let isCancelled = false;
     const switchToChain = async () => {
+      setSwitchingToInputTokenChain(true);
       try {
-        const chainId = targetChain === 1 ? mainnet.id : base.id;
-        await switchChain({ chainId });
+        const currentNetwork = await primaryEvmWallet.getNetwork();
+        if (Number(currentNetwork) !== targetChain) {
+          await switchNetwork({ wallet: primaryEvmWallet, network: targetChain });
+        }
       } catch (error) {
         console.error("Failed to auto-switch chain:", error);
+      } finally {
+        if (!isCancelled) {
+          setSwitchingToInputTokenChain(false);
+        }
       }
     };
 
-    switchToChain();
-  }, [isEvmConnected, evmAddress, inputToken?.chain, switchChain]);
+    void switchToChain();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    isEvmConnected,
+    primaryEvmWallet,
+    inputToken?.chain,
+    setSwitchingToInputTokenChain,
+    switchNetwork,
+  ]);
 
   // Debounce search input
   useEffect(() => {
@@ -274,7 +297,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       }
 
       // No query: show wallet tokens if connected and available; otherwise popular tokens
-      if (isEvmConnected && evmAddress) {
+      if (isEvmConnected && primaryEvmAddress) {
         let tokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
           // Combine tokens from both chains
@@ -405,7 +428,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   }, [
     isOpen,
     isEvmConnected,
-    evmAddress,
+    primaryEvmAddress,
     selectedNetwork,
     userTokensByChain,
     debouncedQuery,
@@ -493,24 +516,24 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     // Clear fee overview since the quote is no longer valid for the new asset
     setFeeOverview(null);
 
-    // Switch network to the selected token's chain if it's an EVM token
-    const tokenChain = tokenData.chain;
-    if (tokenChain !== "bitcoin" && isEvmConnected && evmWalletClient) {
-      const targetNetwork = tokenChain === 1 ? Network.ETHEREUM : Network.BASE;
+    // Switch network for the primary EVM wallet based on the resulting input token chain.
+    // For EVM<>EVM swaps this ensures the input wallet chain is the active one.
+    const resultingInputToken = selectionDirection === "input" ? tokenData : resolvedOpposite;
+    if (resultingInputToken.chain !== "bitcoin" && isEvmConnected && primaryEvmWallet) {
+      const targetNetwork = resultingInputToken.chain === 1 ? Network.ETHEREUM : Network.BASE;
       setSelectedNetwork(targetNetwork);
 
-      // Switch wallet chain if needed
       try {
-        const targetChainId = tokenChain === 1 ? mainnet.id : base.id;
-        const currentChainId = await evmWalletClient.getChainId();
+        const targetChainId = resultingInputToken.chain;
+        const currentChainId = Number(await primaryEvmWallet.getNetwork());
         if (targetChainId !== currentChainId) {
           setSwitchingToInputTokenChain(true);
-          await switchChain({ chainId: targetChainId });
-        } else {
-          setSwitchingToInputTokenChain(false);
+          await switchNetwork({ wallet: primaryEvmWallet, network: targetChainId });
         }
       } catch (error) {
         console.error("Failed to switch chain:", error);
+      } finally {
+        setSwitchingToInputTokenChain(false);
       }
     }
 
@@ -536,14 +559,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       return;
     }
 
-    // Switch wallet to the selected network
-    // try {
-    //   const targetChainId = network === Network.ETHEREUM ? mainnet.id : base.id;
-    //   await switchChain({ chainId: targetChainId });
-    //   setEvmConnectWalletChainId(targetChainId);
-    // } catch (error) {
-    //   console.error("Failed to switch chain:", error);
-    // }
+    // Chain switching is handled by token selection and primary-wallet synchronization.
   };
 
   return (

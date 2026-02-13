@@ -38,13 +38,25 @@ type DepositFlowState =
   | "refunding_user"
   | "failed";
 
+type EvmChainId = 1 | 8453;
+type EvmWalletClientByChain = Record<EvmChainId, WalletClient | null>;
+
 export const useStore = create<{
-  evmAddress: string | null;
-  setEvmAddress: (address: string | null) => void;
+  primaryEvmAddress: string | null;
+  setPrimaryEvmAddress: (address: string | null) => void;
+  outputEvmAddress: string | null;
+  setOutputEvmAddress: (address: string | null) => void;
   btcAddress: string | null;
   setBtcAddress: (address: string | null) => void;
-  evmWalletClient: WalletClient | null;
-  setEvmWalletClient: (client: WalletClient | null) => void;
+  evmWalletClients: Record<string, EvmWalletClientByChain>;
+  setEvmWalletClientsForAddress: (address: string, clients: EvmWalletClientByChain) => void;
+  setEvmWalletClientForAddress: (
+    address: string,
+    chainId: EvmChainId,
+    client: WalletClient | null
+  ) => void;
+  removeEvmWalletClientsForAddress: (address: string) => void;
+  clearEvmWalletClients: () => void;
   userTokensByChain: Record<number, TokenData[]>;
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
   inputToken: TokenData;
@@ -148,12 +160,42 @@ export const useStore = create<{
   isSwapInProgress: boolean;
   setIsSwapInProgress: (value: boolean) => void;
 }>((set) => ({
-  evmAddress: null,
-  setEvmAddress: (address: string | null) => set({ evmAddress: address }),
+  primaryEvmAddress: null,
+  setPrimaryEvmAddress: (address: string | null) => set({ primaryEvmAddress: address }),
+  outputEvmAddress: null,
+  setOutputEvmAddress: (address: string | null) => set({ outputEvmAddress: address }),
   btcAddress: null,
   setBtcAddress: (address: string | null) => set({ btcAddress: address }),
-  evmWalletClient: null,
-  setEvmWalletClient: (client: WalletClient | null) => set({ evmWalletClient: client }),
+  evmWalletClients: {},
+  setEvmWalletClientsForAddress: (address: string, clients: EvmWalletClientByChain) =>
+    set((state) => ({
+      evmWalletClients: { ...state.evmWalletClients, [address.toLowerCase()]: clients },
+    })),
+  setEvmWalletClientForAddress: (
+    address: string,
+    chainId: EvmChainId,
+    client: WalletClient | null
+  ) =>
+    set((state) => {
+      const key = address.toLowerCase();
+      const existing = state.evmWalletClients[key] || { 1: null, 8453: null };
+      return {
+        evmWalletClients: {
+          ...state.evmWalletClients,
+          [key]: {
+            ...existing,
+            [chainId]: client,
+          },
+        },
+      };
+    }),
+  removeEvmWalletClientsForAddress: (address: string) =>
+    set((state) => {
+      const key = address.toLowerCase();
+      const { [key]: _removed, ...rest } = state.evmWalletClients;
+      return { evmWalletClients: rest };
+    }),
+  clearEvmWalletClients: () => set({ evmWalletClients: {} }),
   userTokensByChain: {},
   setUserTokensForChain: (chainId: number, tokens) =>
     set((state) => ({

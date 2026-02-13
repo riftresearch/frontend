@@ -27,8 +27,8 @@ const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite
 
 export const ConnectWalletButton: React.FC = () => {
   // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
-  const evmAddress = useStore((state) => state.evmAddress);
-  const isEvmConnected = !!evmAddress;
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const isEvmConnected = !!primaryEvmAddress;
 
   const { setUserTokensForChain, setSearchResults, inputToken, setInputToken } =
     useStore();
@@ -76,14 +76,14 @@ export const ConnectWalletButton: React.FC = () => {
   // Fetch user tokens and populate global store when EVM wallet connects
   useEffect(() => {
     const fetchAllUserTokens = async () => {
-      if (!isEvmConnected || !evmAddress) return;
+      if (!isEvmConnected || !primaryEvmAddress) return;
 
-      console.log("[UserTokens] Fetching tokens for all chains...", evmAddress);
+      console.log("[UserTokens] Fetching tokens for all chains...", primaryEvmAddress);
 
       // Fetch all ERC20 tokens and ETH balances across all chains in parallel
       const [walletTokensByChain, ethByChain] = await Promise.all([
-        fetchWalletTokens(evmAddress),
-        fetchUserEth(evmAddress),
+        fetchWalletTokens(primaryEvmAddress),
+        fetchUserEth(primaryEvmAddress),
       ]);
       console.log("[UserTokens] walletTokensByChain", walletTokensByChain);
 
@@ -227,7 +227,7 @@ export const ConnectWalletButton: React.FC = () => {
     fetchAllUserTokens();
   }, [
     isEvmConnected,
-    evmAddress,
+    primaryEvmAddress,
     setUserTokensForChain,
     setSearchResults,
     inputToken,

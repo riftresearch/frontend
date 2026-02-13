@@ -1,7 +1,7 @@
 import { createConfig, createStorage, cookieStorage, http, fallback } from "wagmi";
 import { mainnet, base } from "viem/chains";
 import { QueryClient } from "@tanstack/react-query";
-import type { WalletClient } from "viem";
+import { createWalletClient, custom, type WalletClient } from "viem";
 import type { Chain } from "viem/chains";
 
 // Define a custom Anvil network for local development
@@ -61,6 +61,12 @@ export const RPC_URLS: Record<number, string> = {
   8453: "https://mainnet.base.org", // Base
 };
 
+type SupportedEvmChainId = 1 | 8453;
+const SUPPORTED_EVM_CHAINS: Record<SupportedEvmChainId, (typeof networks)[number]> = {
+  1: mainnet,
+  8453: base,
+};
+
 /**
  * Get wallet client configuration for a given chainId
  * Used when calling Dynamic's getWalletClient with explicit chain config
@@ -75,8 +81,36 @@ export function getWalletClientConfig(accountAddress: string, chainId: number = 
 }
 
 const MOBILE_PROVIDER_NOT_READY_ERROR = "SDK state invalid -- undefined mobile provider";
+const DYNAMIC_PROVIDER_NOT_READY_ERROR = "Dynamic wallet provider not ready";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const isSupportedEvmChainId = (chainId: number): chainId is SupportedEvmChainId =>
+  chainId === 1 || chainId === 8453;
+
+type Eip1193ProviderLike = {
+  request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>;
+};
+
+const getEip1193Provider = (dynamicClient: any): Eip1193ProviderLike | null => {
+  if (typeof dynamicClient?.request === "function") {
+    return {
+      request: dynamicClient.request.bind(dynamicClient),
+    };
+  }
+
+  const transportValue = dynamicClient?.transport?.value;
+  if (transportValue && typeof transportValue.request === "function") {
+    return transportValue;
+  }
+
+  const transport = dynamicClient?.transport;
+  if (transport && typeof transport.request === "function") {
+    return transport;
+  }
+
+  return null;
+};
 
 const getMetaMaskSdkInitPromise = (wallet: any): Promise<unknown> | null => {
   const connector = wallet?.connector ?? wallet?._connector;
@@ -87,6 +121,7 @@ const getMetaMaskSdkInitPromise = (wallet: any): Promise<unknown> | null => {
 /**
  * Dynamic's MetaMask connector can race on hydration, where getWalletClient is called
  * before the SDK provider is fully initialized. Wait for SDK init and retry transient failures.
+ * We then build an explicit chain-aware viem wallet client so `client.chain` is always present.
  */
 export async function getDynamicWalletClient(
   wallet: any,
@@ -94,20 +129,37 @@ export async function getDynamicWalletClient(
   chainId: number = 1,
   maxRetries: number = 5
 ): Promise<WalletClient | null> {
+  const resolvedChainId: SupportedEvmChainId = isSupportedEvmChainId(chainId) ? chainId : 1;
+
   const sdkInitPromise = getMetaMaskSdkInitPromise(wallet);
   if (sdkInitPromise) {
     await sdkInitPromise;
   }
 
-  const config = getWalletClientConfig(accountAddress, chainId);
+  const config = getWalletClientConfig(accountAddress, resolvedChainId);
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     try {
-      const client = await wallet.getWalletClient(config);
-      return client ?? null;
+      const dynamicClient = await wallet.getWalletClient(config);
+      if (!dynamicClient) {
+        return null;
+      }
+
+      const provider = getEip1193Provider(dynamicClient);
+      if (!provider) {
+        throw new Error(DYNAMIC_PROVIDER_NOT_READY_ERROR);
+      }
+
+      return createWalletClient({
+        account: accountAddress as `0x${string}`,
+        chain: SUPPORTED_EVM_CHAINS[resolvedChainId],
+        transport: custom(provider),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const shouldRetry = message.includes(MOBILE_PROVIDER_NOT_READY_ERROR);
+      const shouldRetry =
+        message.includes(MOBILE_PROVIDER_NOT_READY_ERROR) ||
+        message.includes(DYNAMIC_PROVIDER_NOT_READY_ERROR);
       const isLastAttempt = attempt === maxRetries;
 
       if (!shouldRetry || isLastAttempt) {

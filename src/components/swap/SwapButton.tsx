@@ -8,9 +8,10 @@ import { IS_FRONTEND_PAUSED } from "@/utils/constants";
 import { useStore } from "@/utils/store";
 import { toastInfo, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { mainnet, base } from "viem/chains";
 import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
+import { getDynamicWalletClient } from "@/utils/wallet";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -20,12 +21,10 @@ export const SwapButton = () => {
   const { isMobile } = useWindowSize();
   const router = useRouter();
   const { setShowAuthFlow } = useDynamicContext();
+  const userWallets = useUserWallets();
 
   // Bitcoin transaction hook for BTC->cbBTC auto-send
-  const {
-    sendBitcoin,
-    isLoading: isBtcTxLoading,
-  } = useBitcoinTransaction();
+  const { sendBitcoin, isLoading: isBtcTxLoading } = useBitcoinTransaction();
 
   // Local state
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
@@ -62,6 +61,7 @@ export const SwapButton = () => {
     displayedInputAmount,
     outputAmount,
     payoutAddress,
+    btcRefundAddress,
     addressValidation,
     isOtcServerDead,
     isRetryingOtcServer,
@@ -71,9 +71,11 @@ export const SwapButton = () => {
     exceedsUserBalance,
     inputBelowMinimum,
     setRefetchQuote,
-    evmWalletClient,
+    evmWalletClients,
+    setEvmWalletClientForAddress,
     btcAddress,
-    evmAddress,
+    primaryEvmAddress,
+    outputEvmAddress,
     executeSwap,
     setActiveSwapId,
     setIsSwapInProgress,
@@ -85,6 +87,16 @@ export const SwapButton = () => {
 
   // Derive swap direction and chain ID from token chains
   const isSwappingForBTC = outputToken.chain === "bitcoin";
+  const evmClientChainId =
+    inputToken.chain === 1 || inputToken.chain === 8453
+      ? inputToken.chain
+      : outputToken.chain === 1 || outputToken.chain === 8453
+        ? outputToken.chain
+        : null;
+  const activeEvmWalletClient =
+    primaryEvmAddress && evmClientChainId
+      ? evmWalletClients[primaryEvmAddress.toLowerCase()]?.[evmClientChainId] || null
+      : null;
 
   // Button loading state combines BTC transaction loading and SDK swap
   const isButtonLoading = isBtcTxLoading || swapButtonPressed;
@@ -103,19 +115,73 @@ export const SwapButton = () => {
   // ============================================================================
 
   // Helper to build execute params for SDK
-  const getExecuteParams = useCallback(() => {
+  const getExecuteParams = useCallback(async () => {
     const publicClient = inputToken.chain === 8453 ? basePublicClient : mainnetPublicClient;
-    if (!evmWalletClient) {
+    let walletClient = activeEvmWalletClient;
+    const shouldRefreshWalletClient =
+      !walletClient ||
+      !walletClient.chain ||
+      (evmClientChainId !== null && walletClient.chain.id !== evmClientChainId);
+
+    // Lazy fallback: if cache is cold/stale, fetch the required chain client on demand.
+    if (shouldRefreshWalletClient && primaryEvmAddress && evmClientChainId) {
+      const primaryEvmWallet = userWallets.find(
+        (wallet) =>
+          wallet.chain?.toUpperCase() === "EVM" &&
+          wallet.address.toLowerCase() === primaryEvmAddress.toLowerCase()
+      );
+
+      if (primaryEvmWallet) {
+        try {
+          walletClient = await getDynamicWalletClient(
+            primaryEvmWallet,
+            primaryEvmAddress,
+            evmClientChainId
+          );
+          setEvmWalletClientForAddress(primaryEvmAddress, evmClientChainId, walletClient);
+        } catch (error) {
+          console.error("[SwapButton] Failed to lazily fetch EVM wallet client:", error);
+        }
+      }
+    }
+
+    if (!walletClient) {
       throw new Error("EVM wallet client not available");
     }
-    if (!evmWalletClient.chain) {
+    if (!walletClient.chain || (evmClientChainId !== null && walletClient.chain.id !== evmClientChainId)) {
       throw new Error(
         "EVM wallet client is missing chain config. Please reconnect your EVM wallet and try again."
       );
     }
+
+    const destinationAddress = isSwappingForBTC
+      ? payoutAddress || btcAddress
+      : outputEvmAddress || primaryEvmAddress;
+    if (!destinationAddress) {
+      throw new Error(
+        isSwappingForBTC
+          ? "No Bitcoin address available. Please connect or paste a Bitcoin destination address."
+          : "No EVM address available. Please connect an Ethereum wallet."
+      );
+    }
+
+    const refundAddress =
+      inputToken.chain === "bitcoin"
+        ? btcRefundAddress || btcAddress
+        : outputToken.chain === "bitcoin"
+          ? payoutAddress || btcAddress
+          : undefined;
+    if ((inputToken.chain === "bitcoin" || outputToken.chain === "bitcoin") && !refundAddress) {
+      throw new Error(
+        "No Bitcoin refund address available. Please connect a Bitcoin wallet or provide a refund address."
+      );
+    }
+
     return {
+      destinationAddress,
+      refundAddress,
       publicClient,
-      walletClient: evmWalletClient,
+      walletClient,
       sendBitcoin: async ({
         recipient,
         amountSats,
@@ -133,8 +199,17 @@ export const SwapButton = () => {
     inputToken.chain,
     basePublicClient,
     mainnetPublicClient,
-    evmWalletClient,
+    activeEvmWalletClient,
+    evmClientChainId,
+    primaryEvmAddress,
+    outputEvmAddress,
+    isSwappingForBTC,
+    payoutAddress,
+    setEvmWalletClientForAddress,
+    userWallets,
+    btcRefundAddress,
     btcAddress,
+    outputToken.chain,
     sendBitcoin,
   ]);
 
@@ -163,23 +238,7 @@ export const SwapButton = () => {
         throw new Error("No quote available. Please get a quote first.");
       }
 
-      // Determine destination address based on swap direction
-      const destinationAddress = isSwappingForBTC ? btcAddress : evmAddress;
-      if (!destinationAddress) {
-        throw new Error(
-          isSwappingForBTC
-            ? "No Bitcoin address available. Please connect a Bitcoin wallet."
-            : "No EVM address available. Please connect an Ethereum wallet."
-        );
-      }
-
-      // Build execute params directly from real wallet clients
-      const baseParams = getExecuteParams();
-
-      const executeParams = {
-        ...baseParams,
-        destinationAddress,
-      };
+      const executeParams = await getExecuteParams();
 
       console.log("executing swap", executeParams);
       const swap = await executeSwap(executeParams);
@@ -208,9 +267,6 @@ export const SwapButton = () => {
     }
   }, [
     executeSwap,
-    isSwappingForBTC,
-    btcAddress,
-    evmAddress,
     getExecuteParams,
     setActiveSwapId,
     setIsSwapInProgress,
@@ -237,7 +293,7 @@ export const SwapButton = () => {
     // Wallet connection checks
     if (isSwappingForBTC) {
       // EVM->BTC: Need EVM wallet to send, BTC address to receive
-      if (!evmAddress) {
+      if (!primaryEvmAddress) {
         toastInfo({
           title: "Connect Ethereum Wallet",
           description: "Please connect an Ethereum wallet to swap",
@@ -272,7 +328,16 @@ export const SwapButton = () => {
           return;
         }
       }
-      if (!evmAddress) {
+      if (!primaryEvmAddress) {
+        toastInfo({
+          title: "Connect Ethereum Wallet",
+          description: "Please connect an Ethereum wallet to receive",
+        });
+        setShowAuthFlow(true);
+        return;
+      }
+      const destinationEvmAddress = outputEvmAddress || primaryEvmAddress;
+      if (!destinationEvmAddress) {
         toastInfo({
           title: "Connect Ethereum Wallet",
           description: "Please connect an Ethereum wallet to receive",
@@ -287,11 +352,16 @@ export const SwapButton = () => {
     await startSwap();
   }, [
     startSwap,
-    payoutAddress,
-    addressValidation,
-    isSwappingForBTC,
     displayedInputAmount,
     outputAmount,
+    isSwappingForBTC,
+    primaryEvmAddress,
+    btcAddress,
+    payoutAddress,
+    addressValidation,
+    inputToken.chain,
+    outputEvmAddress,
+    setShowAuthFlow,
   ]);
 
   // ============================================================================
@@ -320,7 +390,11 @@ export const SwapButton = () => {
   // Determine button text and click handler
   const getButtonTextAndHandler = () => {
     // Check validation errors first
-    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity || exceedsAvailableLiquidity) {
+    if (
+      exceedsAvailableBTCLiquidity ||
+      exceedsAvailableCBBTCLiquidity ||
+      exceedsAvailableLiquidity
+    ) {
       return {
         text: "Not enough liquidity",
         handler: undefined,
@@ -386,10 +460,7 @@ export const SwapButton = () => {
     inputBelowMinimum;
 
   const isButtonDisabled =
-    isButtonLoading ||
-    isOtcServerDead ||
-    isRetryingOtcServer ||
-    hasValidationError;
+    isButtonLoading || isOtcServerDead || isRetryingOtcServer || hasValidationError;
 
   const handleButtonClick = () => {
     if (isRetryingOtcServer) {

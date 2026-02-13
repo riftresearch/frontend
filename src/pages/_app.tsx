@@ -5,7 +5,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import type { AppProps } from "next/app";
 import theme from "@/components/other/Theme";
 import { CustomToastProvider } from "@/components/other/CustomToastProvider";
-import { ConditionalWagmiProvider } from "@/components/providers/ConditionalWagmiProvider";
+import { DynamicProvider } from "@/components/providers/DynamicProvider";
 import { RiftSdk } from "@riftresearch/sdk";
 import { useStore } from "@/utils/store";
 
@@ -22,11 +22,11 @@ export default function App({ Component, pageProps }: AppProps) {
   }, [rift, setRift]);
 
   return (
-    <ConditionalWagmiProvider>
+    <DynamicProvider>
       <ChakraProvider value={theme}>
         <CustomToastProvider />
         <Component {...pageProps} />
       </ChakraProvider>
-    </ConditionalWagmiProvider>
+    </DynamicProvider>
   );
 }

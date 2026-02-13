@@ -1,6 +1,11 @@
 import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef, useMemo } from "react";
-import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
+import {
+  useDynamicContext,
+  useSwitchNetwork,
+  useSwitchWallet,
+  useUserWallets,
+} from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
 import { Currencies, createCurrency, getSupportedModes, QuoteParameters } from "@riftresearch/sdk";
@@ -47,7 +52,6 @@ import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { fetchTokenPrice } from "@/utils/userTokensClient";
 import { useBitcoinBalance } from "@/hooks/useBitcoinBalance";
 import { getRecommendedFeeRate, estimateTransactionSize } from "@/utils/bitcoinTransactionHelpers";
-import { getDynamicWalletClient } from "@/utils/wallet";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -93,15 +97,15 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   // ============================================================================
 
   // Get wallet addresses from global store (set via Dynamic's onWalletAdded callback)
-  const evmAddress = useStore((state) => state.evmAddress);
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
   const btcAddress = useStore((state) => state.btcAddress);
-  const setEvmAddress = useStore((state) => state.setEvmAddress);
-  const setBtcAddress = useStore((state) => state.setBtcAddress);
-  const setEvmWalletClient = useStore((state) => state.setEvmWalletClient);
-  const isEvmConnected = !!evmAddress;
+  const setOutputEvmAddress = useStore((state) => state.setOutputEvmAddress);
+  const isEvmConnected = !!primaryEvmAddress;
 
   // Dynamic wallet context
   const { primaryWallet } = useDynamicContext();
+  const switchWallet = useSwitchWallet();
+  const switchNetwork = useSwitchNetwork();
 
   // Rift SDK from store
   const rift = useStore((state) => state.rift);
@@ -147,7 +151,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     inputToken,
     outputToken,
     userTokensByChain,
-    evmWalletClient,
     displayedInputAmount,
     setDisplayedInputAmount,
     fullPrecisionInputAmount,
@@ -227,49 +230,71 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const hasInitializedRef = useRef(false);
   const userWallets = useUserWallets();
 
-  // Sync wallet addresses from useUserWallets to global store on mount/change
+  // Keep output EVM address in global store for destination routing.
   useEffect(() => {
-    // Find first EVM wallet
-    const evmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
-    console.log("[syncWalletAddresses] evmWallet", evmWallet);
-    if (evmWallet && evmWallet.address !== evmAddress) {
-      setEvmAddress(evmWallet.address);
+    if (outputToken.chain === "bitcoin") {
+      setOutputEvmAddress(null);
+      return;
+    }
+    setOutputEvmAddress(selectedOutputAddress);
+  }, [outputToken.chain, selectedOutputAddress, setOutputEvmAddress]);
+
+  // Ensure the EVM input wallet is primary whenever EVM is the input side.
+  // This covers: a newly connected input wallet and direction flips to EVM input.
+  const isPromotingPrimaryRef = useRef(false);
+  useEffect(() => {
+    if (inputToken.chain === "bitcoin" || !selectedInputAddress) {
+      return;
     }
 
+    const inputEvmWallet = userWallets.find(
+      (wallet) =>
+        wallet.chain?.toUpperCase() === "EVM" &&
+        wallet.address.toLowerCase() === selectedInputAddress.toLowerCase()
+    );
+    if (!inputEvmWallet) {
+      return;
+    }
+
+    const targetChainId = inputToken.chain;
     let isCancelled = false;
-    if (evmWallet && !evmWalletClient) {
-      getDynamicWalletClient(evmWallet, evmWallet.address, 1)
-        .then((client) => {
-          if (isCancelled) return;
-          console.log("SwapInputAndOutput: Setting wallet client for", evmWallet.address);
-          setEvmWalletClient(client);
-        })
-        .catch((error: any) => {
-          if (isCancelled) return;
-          console.error("SwapInputAndOutput: Failed to get wallet client:", error);
-          setEvmWalletClient(null);
-        });
-    }
 
-    // Find first BTC wallet
-    const btcWallet = userWallets.find((w) => {
-      const chain = w.chain?.toUpperCase();
-      return chain === "BTC" || chain === "BITCOIN";
-    });
-    if (btcWallet && !btcAddress) {
-      setBtcAddress(btcWallet.address);
-    }
+    const syncPrimaryAndChain = async () => {
+      if (isPromotingPrimaryRef.current) return;
+      isPromotingPrimaryRef.current = true;
+      setSwitchingToInputTokenChain(true);
+      try {
+        if (!primaryWallet || primaryWallet.address.toLowerCase() !== inputEvmWallet.address.toLowerCase()) {
+          await switchWallet(inputEvmWallet.id);
+        }
+
+        const currentNetwork = Number(await inputEvmWallet.getNetwork());
+        if (currentNetwork !== targetChainId) {
+          await switchNetwork({ wallet: inputEvmWallet, network: targetChainId });
+        }
+      } catch (error) {
+        console.error("[SwapInputAndOutput] Failed to sync primary input EVM wallet:", error);
+      } finally {
+        if (!isCancelled) {
+          setSwitchingToInputTokenChain(false);
+        }
+        isPromotingPrimaryRef.current = false;
+      }
+    };
+
+    void syncPrimaryAndChain();
+
     return () => {
       isCancelled = true;
     };
   }, [
+    inputToken.chain,
+    selectedInputAddress,
     userWallets,
-    evmAddress,
-    btcAddress,
-    evmWalletClient,
-    setEvmAddress,
-    setBtcAddress,
-    setEvmWalletClient,
+    primaryWallet,
+    switchWallet,
+    switchNetwork,
+    setSwitchingToInputTokenChain,
   ]);
 
   // Rift SDK is initialized globally in _app.tsx
@@ -330,10 +355,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
     if (outputToken.chain === "bitcoin" && btcAddress) {
       setSelectedOutputAddress(btcAddress);
-    } else if (outputToken.chain !== "bitcoin" && evmAddress) {
-      setSelectedOutputAddress(evmAddress);
+    } else if (outputToken.chain !== "bitcoin" && primaryEvmAddress) {
+      setSelectedOutputAddress(primaryEvmAddress);
     }
-  }, [outputToken.chain, btcAddress, evmAddress, selectedOutputAddress, setSelectedOutputAddress]);
+  }, [outputToken.chain, btcAddress, primaryEvmAddress, selectedOutputAddress, setSelectedOutputAddress]);
 
   // Auto-select input address based on input token's chain
   useEffect(() => {
@@ -341,10 +366,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
     if (inputToken.chain === "bitcoin" && btcAddress) {
       setSelectedInputAddress(btcAddress);
-    } else if (inputToken.chain !== "bitcoin" && evmAddress) {
-      setSelectedInputAddress(evmAddress);
+    } else if (inputToken.chain !== "bitcoin" && primaryEvmAddress) {
+      setSelectedInputAddress(primaryEvmAddress);
     }
-  }, [inputToken.chain, evmAddress, btcAddress, selectedInputAddress, setSelectedInputAddress]);
+  }, [inputToken.chain, primaryEvmAddress, btcAddress, selectedInputAddress, setSelectedInputAddress]);
 
   // Track previous swap direction to detect actual changes
   const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
@@ -1175,7 +1200,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     if (
       displayedInputAmount &&
       parseFloat(displayedInputAmount) > 0 &&
-      evmAddress &&
+      primaryEvmAddress &&
       quote &&
       !isSwapInProgress
     ) {
@@ -1207,7 +1232,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     displayedInputAmount,
     fullPrecisionInputAmount,
     outputAmount,
-    evmAddress,
+    primaryEvmAddress,
     quote,
     fetchQuote,
     isSwapInProgress,
@@ -1260,7 +1285,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setCurrentInputTicker(token.ticker || null);
   }, [
     isEvmConnected,
-    evmAddress,
+    primaryEvmAddress,
     inputToken,
     userTokensByChain,
     evmConnectWalletChainId,
@@ -1305,7 +1330,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setCurrentOutputTicker(outputToken.ticker || null);
   }, [
     isEvmConnected,
-    evmAddress,
+    primaryEvmAddress,
     outputToken,
     userTokensByChain,
     evmConnectWalletChainId,

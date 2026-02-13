@@ -17,8 +17,8 @@ import { useStore } from "@/utils/store";
 
 export const FeedbackChat: React.FC = () => {
   // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
-  const evmAddress = useStore((state) => state.evmAddress);
-  const isEvmConnected = !!evmAddress;
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const isEvmConnected = !!primaryEvmAddress;
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [chatList, setChatList] = useState<ChatThread[]>([]);
@@ -37,21 +37,21 @@ export const FeedbackChat: React.FC = () => {
 
   // Check for unread messages when wallet connects
   useEffect(() => {
-    if (isEvmConnected && evmAddress && !isOpen) {
+    if (isEvmConnected && primaryEvmAddress && !isOpen) {
       checkForUnreadMessages();
     }
-  }, [isEvmConnected, evmAddress]);
+  }, [isEvmConnected, primaryEvmAddress]);
 
   // Load chats when opened
   useEffect(() => {
-    if (isOpen && isEvmConnected && evmAddress) {
+    if (isOpen && isEvmConnected && primaryEvmAddress) {
       loadChats();
     }
-  }, [isOpen, isEvmConnected, evmAddress]);
+  }, [isOpen, isEvmConnected, primaryEvmAddress]);
 
   // Set up polling for new messages (every 10 seconds)
   useEffect(() => {
-    if (isEvmConnected && evmAddress) {
+    if (isEvmConnected && primaryEvmAddress) {
       // Initial check
       checkForUnreadMessages();
 
@@ -66,12 +66,12 @@ export const FeedbackChat: React.FC = () => {
         }
       };
     }
-  }, [isEvmConnected, evmAddress, isOpen, currentChatId]);
+  }, [isEvmConnected, primaryEvmAddress, isOpen, currentChatId]);
 
   const checkForUnreadMessages = async () => {
-    if (!evmAddress) return;
+    if (!primaryEvmAddress) return;
     try {
-      const result = await listChats(evmAddress);
+      const result = await listChats(primaryEvmAddress);
       if (!result.ok) {
         console.error("Error checking for unread messages:", result.error);
         return;
@@ -92,7 +92,7 @@ export const FeedbackChat: React.FC = () => {
 
       // If chat is open, reload the current thread to show new messages
       if (isOpen && currentChatId) {
-        const thread = await getThread(currentChatId, evmAddress);
+        const thread = await getThread(currentChatId, primaryEvmAddress);
         setCurrentThread(thread);
       }
     } catch (error) {
@@ -101,10 +101,10 @@ export const FeedbackChat: React.FC = () => {
   };
 
   const loadChats = async () => {
-    if (!evmAddress) return;
+    if (!primaryEvmAddress) return;
     setIsLoading(true);
     try {
-      const result = await listChats(evmAddress);
+      const result = await listChats(primaryEvmAddress);
       if (!result.ok) {
         console.error("Error loading chats:", result.error);
         toastError(new Error(result.error), {
@@ -143,15 +143,15 @@ export const FeedbackChat: React.FC = () => {
   };
 
   const createNewChat = async () => {
-    if (!evmAddress) return;
+    if (!primaryEvmAddress) return;
     setIsLoading(true);
     try {
-      const chatId = await createChat(evmAddress, { source: "feedback_button" });
+      const chatId = await createChat(primaryEvmAddress, { source: "feedback_button" });
       console.log("Created new chat:", chatId);
       setCurrentChatId(chatId);
 
       // Reload chat list
-      const result = await listChats(evmAddress);
+      const result = await listChats(primaryEvmAddress);
       if (result.ok) {
         setChatList(result.data);
       }
@@ -175,9 +175,9 @@ export const FeedbackChat: React.FC = () => {
   };
 
   const loadThread = async (chatId: string) => {
-    if (!evmAddress) return;
+    if (!primaryEvmAddress) return;
     try {
-      const thread = await getThread(chatId, evmAddress);
+      const thread = await getThread(chatId, primaryEvmAddress);
       console.log("[FEEDBACK CHAT] Loaded thread:", thread);
       console.log("[FEEDBACK CHAT] Messages:", thread.messages);
       setCurrentThread(thread);
@@ -185,7 +185,7 @@ export const FeedbackChat: React.FC = () => {
 
       // Mark as read when loading thread
       if (isOpen) {
-        await markRead(chatId, evmAddress);
+        await markRead(chatId, primaryEvmAddress);
         // Refresh unread count after marking as read
         checkForUnreadMessages();
       }
@@ -199,15 +199,15 @@ export const FeedbackChat: React.FC = () => {
   };
 
   const sendMessage = async () => {
-    if (!messageInput.trim() || !currentChatId || !evmAddress || isSending) return;
+    if (!messageInput.trim() || !currentChatId || !primaryEvmAddress || isSending) return;
 
     setIsSending(true);
     try {
-      await appendMessage(currentChatId, evmAddress, "user", messageInput.trim());
+      await appendMessage(currentChatId, primaryEvmAddress, "user", messageInput.trim());
       setMessageInput("");
 
       // Reload the thread to get updated messages
-      const thread = await getThread(currentChatId, evmAddress);
+      const thread = await getThread(currentChatId, primaryEvmAddress);
       setCurrentThread(thread);
 
       toastSuccess({
@@ -247,9 +247,9 @@ export const FeedbackChat: React.FC = () => {
     setIsOpen(false);
 
     // Mark current chat as read when closing
-    if (evmAddress && currentChatId) {
+    if (primaryEvmAddress && currentChatId) {
       try {
-        await markRead(currentChatId, evmAddress);
+        await markRead(currentChatId, primaryEvmAddress);
         checkForUnreadMessages();
       } catch (error) {
         console.error("Error marking chat as read:", error);

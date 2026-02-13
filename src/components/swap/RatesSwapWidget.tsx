@@ -255,7 +255,7 @@ async function fetchRelayQuote(
 
 export const RatesSwapWidget = () => {
   // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
-  const evmAddress = useStore((state) => state.evmAddress);
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
 
   const liquidity = useMaxLiquidity();
   useBtcEthPrices();
@@ -452,7 +452,7 @@ export const RatesSwapWidget = () => {
         inputToken.ticker === "ETH"
           ? "0x0000000000000000000000000000000000000000"
           : inputToken.address;
-      const userAddr = evmAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+      const userAddr = primaryEvmAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
       const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
 
       try {
@@ -477,7 +477,7 @@ export const RatesSwapWidget = () => {
         setIsLoadingRelayQuote(false);
       }
     },
-    [isSwappingForBTC, inputToken, evmAddress]
+    [isSwappingForBTC, inputToken, primaryEvmAddress]
   );
 
   // Fetch Chainflip quote for comparison using the SDK
@@ -726,7 +726,7 @@ export const RatesSwapWidget = () => {
         const decimals = inputToken.decimals;
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
         const sellToken = inputToken.address;
-        const userAddr = evmAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+        const userAddr = primaryEvmAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
         const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
 
         // Also fetch Relay, Chainflip, Thorchain, and ThorSwap quotes in parallel
@@ -790,7 +790,7 @@ export const RatesSwapWidget = () => {
     [
       isSwappingForBTC,
       displayedInputAmount,
-      evmAddress,
+      primaryEvmAddress,
       inputToken,
       setQuote(null),
       setOutputAmount,

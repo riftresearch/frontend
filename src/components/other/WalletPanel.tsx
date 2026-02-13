@@ -19,7 +19,6 @@ import {
 } from "react-icons/fi";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
-import { getDynamicWalletClient } from "@/utils/wallet";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
 import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
@@ -50,11 +49,10 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   onConnectNewWallet,
 }) => {
   // Get wallet addresses from global store (set via Dynamic's onWalletAdded callback)
-  const evmAddress = useStore((state) => state.evmAddress);
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
   const btcAddress = useStore((state) => state.btcAddress);
-  const setEvmAddress = useStore((state) => state.setEvmAddress);
+  const setPrimaryEvmAddress = useStore((state) => state.setPrimaryEvmAddress);
   const setBtcAddress = useStore((state) => state.setBtcAddress);
-  const setEvmWalletClient = useStore((state) => state.setEvmWalletClient);
 
   const { handleLogOut, setShowAuthFlow, primaryWallet, removeWallet } = useDynamicContext();
   // setShowLinkNewWalletModal is from useDynamicModals hook (for adding wallets when already connected)
@@ -138,22 +136,22 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     const walletChainType = getWalletChainType(wallet);
     const walletAddress = getWalletDisplayAddress(wallet);
 
-    console.log("isSelectedWallet", evmAddress, btcAddress, walletAddress, wallet);
+    console.log("isSelectedWallet", primaryEvmAddress, btcAddress, walletAddress, wallet);
     if (walletChainType === "EVM") {
-      return evmAddress === walletAddress;
+      return primaryEvmAddress === walletAddress;
     } else if (walletChainType === "BVM") {
       return btcAddress === walletAddress;
     }
     return false;
   };
 
-  // Find EVM wallet object for token attribution (using evmAddress from store)
-  const evmWallet = evmAddress
-    ? userWallets.find((w) => w.address === evmAddress || w.chain?.toUpperCase() === "EVM")
+  // Find EVM wallet object for token attribution (using primaryEvmAddress from store)
+  const evmWallet = primaryEvmAddress
+    ? userWallets.find((w) => w.address === primaryEvmAddress || w.chain?.toUpperCase() === "EVM")
     : null;
 
   // Get all tokens from all chains (for EVM wallets) - only if EVM wallet is connected
-  const allTokens: TokenData[] = evmAddress ? Object.values(userTokensByChain).flat() : [];
+  const allTokens: TokenData[] = primaryEvmAddress ? Object.values(userTokensByChain).flat() : [];
 
   // Sort EVM tokens by USD value
   const sortedEvmTokens = [...allTokens].sort((a, b) => {
@@ -163,7 +161,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   });
 
   // Calculate EVM total USD value - only if EVM wallet is connected
-  const evmTotalUsdValue = evmAddress
+  const evmTotalUsdValue = primaryEvmAddress
     ? sortedEvmTokens.reduce((sum, token) => {
         const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
         return sum + (isNaN(usd) ? 0 : usd);
@@ -401,15 +399,11 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     const walletAddress = getWalletDisplayAddress(wallet);
 
     if (walletChainType === "EVM") {
-      setEvmAddress(walletAddress);
-      // Also fetch and set the walletClient for EVM wallets with explicit chain config
       try {
-        const client = await getDynamicWalletClient(wallet, walletAddress, 1);
-        console.log("handleWalletSelect: Setting wallet client for", walletAddress);
-        setEvmWalletClient(client);
+        await switchWallet(wallet.id);
+        setPrimaryEvmAddress(walletAddress);
       } catch (error) {
-        console.error("handleWalletSelect: Failed to get wallet client:", error);
-        setEvmWalletClient(null);
+        console.error("handleWalletSelect: Failed to switch primary wallet:", error);
       }
     } else if (walletChainType === "BVM") {
       setBtcAddress(walletAddress);
