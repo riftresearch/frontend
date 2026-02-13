@@ -241,7 +241,7 @@ export const useStore = create<{
   setExecuteSwap: (fn: ((params: any) => Promise<any>) | null) => set({ executeSwap: fn }),
   activeSwapId: null,
   setActiveSwapId: (id: string | null) => set({ activeSwapId: id }),
-  slippageBips: 5,
+  slippageBips: 100,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
   payoutAddress: "",
   setPayoutAddress: (address: string) => set({ payoutAddress: address }),

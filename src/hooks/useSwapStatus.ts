@@ -86,7 +86,7 @@ function mapSdkResponse(sdkResponse: RiftSwap): NormalizedSwapStatus {
           token: mapToken(sdkResponse.quote.from.currency.token as any),
           decimals: (sdkResponse.quote.from.currency.token as any).decimals ?? 18,
         },
-        amount: sdkResponse.quote.from.amount,
+        amount: sdkResponse.quote.from.expected,
       },
       to: {
         currency: {
@@ -94,7 +94,7 @@ function mapSdkResponse(sdkResponse: RiftSwap): NormalizedSwapStatus {
           token: mapToken(sdkResponse.quote.to.currency.token as any),
           decimals: (sdkResponse.quote.to.currency.token as any).decimals ?? 8,
         },
-        amount: sdkResponse.quote.to.amount,
+        amount: sdkResponse.quote.to.expected,
       },
     },
     depositTransaction: (sdkResponse as any).depositTransaction,

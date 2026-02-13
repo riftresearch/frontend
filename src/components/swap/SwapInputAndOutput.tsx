@@ -524,6 +524,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           to: toCurrency,
           amount: normalizedAmount,
           mode: isInput ? "exact_input" : "exact_output",
+          slippageBps: useStore.getState().slippageBips || 100,
         };
         console.log("[fetchQuote] quoteRequest", quoteRequest);
         const { quote, executeSwap } = await rift.getQuote(quoteRequest);
@@ -566,10 +567,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           setExecuteSwap(executeSwap);
 
           // Update displayed amounts from quote (convert raw values to human-readable)
-          if (isInput && quote.to?.amount) {
-            setOutputAmount(formatUnits(BigInt(quote.to.amount), outputToken.decimals));
-          } else if (!isInput && quote.from?.amount) {
-            setDisplayedInputAmount(formatUnits(BigInt(quote.from.amount), inputToken.decimals));
+          if (isInput && quote.to?.expected) {
+            setOutputAmount(formatUnits(BigInt(quote.to.expected), outputToken.decimals));
+          } else if (!isInput && quote.from?.expected) {
+            setDisplayedInputAmount(formatUnits(BigInt(quote.from.expected), inputToken.decimals));
           }
         }
       } catch (error) {
