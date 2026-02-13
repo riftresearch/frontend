@@ -47,7 +47,7 @@ import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { fetchTokenPrice } from "@/utils/userTokensClient";
 import { useBitcoinBalance } from "@/hooks/useBitcoinBalance";
 import { getRecommendedFeeRate, estimateTransactionSize } from "@/utils/bitcoinTransactionHelpers";
-import { getWalletClientConfig } from "@/utils/wallet";
+import { getDynamicWalletClient } from "@/utils/wallet";
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
@@ -232,17 +232,20 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // Find first EVM wallet
     const evmWallet = userWallets.find((w) => w.chain?.toUpperCase() === "EVM");
     console.log("[syncWalletAddresses] evmWallet", evmWallet);
-    if (evmWallet && !evmAddress) {
+    if (evmWallet && evmWallet.address !== evmAddress) {
       setEvmAddress(evmWallet.address);
-      // Also fetch and set the wallet client with explicit chain config
-      const config = getWalletClientConfig(evmWallet.address, 1); // Default to mainnet
-      (evmWallet as any)
-        .getWalletClient(config)
-        .then((client: any) => {
+    }
+
+    let isCancelled = false;
+    if (evmWallet && !evmWalletClient) {
+      getDynamicWalletClient(evmWallet, evmWallet.address, 1)
+        .then((client) => {
+          if (isCancelled) return;
           console.log("SwapInputAndOutput: Setting wallet client for", evmWallet.address);
           setEvmWalletClient(client);
         })
         .catch((error: any) => {
+          if (isCancelled) return;
           console.error("SwapInputAndOutput: Failed to get wallet client:", error);
           setEvmWalletClient(null);
         });
@@ -256,7 +259,18 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     if (btcWallet && !btcAddress) {
       setBtcAddress(btcWallet.address);
     }
-  }, [userWallets, evmAddress, btcAddress, setEvmAddress, setBtcAddress, setEvmWalletClient]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    userWallets,
+    evmAddress,
+    btcAddress,
+    evmWalletClient,
+    setEvmAddress,
+    setBtcAddress,
+    setEvmWalletClient,
+  ]);
 
   // Rift SDK is initialized globally in _app.tsx
 

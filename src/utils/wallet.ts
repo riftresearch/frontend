@@ -1,6 +1,7 @@
 import { createConfig, createStorage, cookieStorage, http, fallback } from "wagmi";
 import { mainnet, base } from "viem/chains";
 import { QueryClient } from "@tanstack/react-query";
+import type { WalletClient } from "viem";
 import type { Chain } from "viem/chains";
 
 // Define a custom Anvil network for local development
@@ -71,6 +72,53 @@ export function getWalletClientConfig(accountAddress: string, chainId: number = 
     chainId,
     rpcUrl,
   };
+}
+
+const MOBILE_PROVIDER_NOT_READY_ERROR = "SDK state invalid -- undefined mobile provider";
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const getMetaMaskSdkInitPromise = (wallet: any): Promise<unknown> | null => {
+  const connector = wallet?.connector ?? wallet?._connector;
+  const sdkInitPromise = connector?.metaMaskSDK?.sdkInitPromise;
+  return typeof sdkInitPromise?.then === "function" ? sdkInitPromise : null;
+};
+
+/**
+ * Dynamic's MetaMask connector can race on hydration, where getWalletClient is called
+ * before the SDK provider is fully initialized. Wait for SDK init and retry transient failures.
+ */
+export async function getDynamicWalletClient(
+  wallet: any,
+  accountAddress: string,
+  chainId: number = 1,
+  maxRetries: number = 5
+): Promise<WalletClient | null> {
+  const sdkInitPromise = getMetaMaskSdkInitPromise(wallet);
+  if (sdkInitPromise) {
+    await sdkInitPromise;
+  }
+
+  const config = getWalletClientConfig(accountAddress, chainId);
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      const client = await wallet.getWalletClient(config);
+      return client ?? null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const shouldRetry = message.includes(MOBILE_PROVIDER_NOT_READY_ERROR);
+      const isLastAttempt = attempt === maxRetries;
+
+      if (!shouldRetry || isLastAttempt) {
+        throw error;
+      }
+
+      await wait(200 * (attempt + 1));
+    }
+  }
+
+  return null;
 }
 
 // Set up metadata for your app (can be used by Dynamic if needed)

@@ -7,7 +7,12 @@ import { DynamicWagmiConnector } from "@dynamic-labs/wagmi-connector";
 import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
 import { BitcoinWalletConnectors } from "@dynamic-labs/bitcoin";
 import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
-import { queryClient, wagmiConfig, dynamicEnvironmentId, getWalletClientConfig } from "@/utils/wallet";
+import {
+  queryClient,
+  wagmiConfig,
+  dynamicEnvironmentId,
+  getDynamicWalletClient,
+} from "@/utils/wallet";
 import { useStore } from "@/utils/store";
 import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
 
@@ -88,9 +93,9 @@ export const ConditionalWagmiProvider: React.FC<ConditionalWagmiProviderProps> =
                 setEvmAddress(wallet.address);
                 // Fetch and set the wallet client with explicit chain config
                 try {
-                  const config = getWalletClientConfig(wallet.address, 1); // Default to mainnet
-                  const client = await (wallet as any).getWalletClient(config);
+                  const client = await getDynamicWalletClient(wallet, wallet.address, 1);
                   console.log("onWalletAdded: Setting wallet client for", wallet.address);
+                  console.log("onWalletAdded: Wallet client", client);
                   setEvmWalletClient(client);
                 } catch (error) {
                   console.error("onWalletAdded: Failed to get wallet client:", error);

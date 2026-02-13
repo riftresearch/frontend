@@ -19,7 +19,7 @@ import {
 } from "react-icons/fi";
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
-import { getWalletClientConfig } from "@/utils/wallet";
+import { getDynamicWalletClient } from "@/utils/wallet";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
 import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
@@ -404,8 +404,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       setEvmAddress(walletAddress);
       // Also fetch and set the walletClient for EVM wallets with explicit chain config
       try {
-        const config = getWalletClientConfig(walletAddress, 1); // Default to mainnet
-        const client = await (wallet as any).getWalletClient(config);
+        const client = await getDynamicWalletClient(wallet, walletAddress, 1);
         console.log("handleWalletSelect: Setting wallet client for", walletAddress);
         setEvmWalletClient(client);
       } catch (error) {

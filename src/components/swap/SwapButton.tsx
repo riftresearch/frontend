@@ -1,18 +1,15 @@
 import { Flex, Text, Spinner, Box, Button } from "@chakra-ui/react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { useRouter } from "next/router";
-import { useWaitForTransactionReceipt, usePublicClient, useWalletClient } from "wagmi";
+import { usePublicClient } from "wagmi";
 import { colors } from "@/utils/colors";
-import { GLOBAL_CONFIG, riftApiClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
+import { IS_FRONTEND_PAUSED } from "@/utils/constants";
 import { useStore } from "@/utils/store";
-import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
+import { toastInfo, toastError } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { Address, erc20Abi, parseUnits } from "viem";
 import { mainnet, base } from "viem/chains";
-import { ApprovalState } from "@/utils/types";
-import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
 import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
 
 export const SwapButton = () => {
@@ -27,16 +24,11 @@ export const SwapButton = () => {
   // Bitcoin transaction hook for BTC->cbBTC auto-send
   const {
     sendBitcoin,
-    transactionState: btcTransactionState,
     isLoading: isBtcTxLoading,
-    error: btcTxError,
   } = useBitcoinTransaction();
 
   // Local state
-  const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
-  const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
-  const [isCbBTCTransferPending, setIsCbBTCTransferPending] = useState(false);
   const [swapPhase, setSwapPhase] = useState<"idle" | "signing" | "confirming">("idle");
 
   // Terms of Service modal state
@@ -65,30 +57,19 @@ export const SwapButton = () => {
 
   // Global store
   const {
-    swapResponse,
-    setSwapResponse,
-    setTransactionConfirmed,
     inputToken,
     outputToken,
     displayedInputAmount,
-    fullPrecisionInputAmount,
     outputAmount,
-    quote,
-    setQuote,
     payoutAddress,
     addressValidation,
-    selectedInputAddress,
-    approvalState,
-    setApprovalState,
     isOtcServerDead,
     isRetryingOtcServer,
-    hasNoRoutesError,
     exceedsAvailableBTCLiquidity,
     exceedsAvailableCBBTCLiquidity,
     exceedsAvailableLiquidity,
     exceedsUserBalance,
     inputBelowMinimum,
-    refetchQuote,
     setRefetchQuote,
     evmWalletClient,
     btcAddress,
@@ -104,88 +85,9 @@ export const SwapButton = () => {
 
   // Derive swap direction and chain ID from token chains
   const isSwappingForBTC = outputToken.chain === "bitcoin";
-  const evmConnectWalletChainId = inputToken.chain === "bitcoin" ? 1 : inputToken.chain;
-  const { data: wagmiWalletClient } = useWalletClient({
-    chainId: evmConnectWalletChainId,
-  });
 
-  const isEvmConnected = !!evmAddress;
-
-  // Ref to track previous refetchQuote value for retry detection
-  const prevRefetchQuoteRef = useRef(refetchQuote);
-
-  // Helper function to handle swap errors with specific messaging
-  // Defined inside component to access state setters for loading cancellation
-  const handleSwapError = (error: unknown) => {
-    console.error("Swap Error:", error);
-
-    // Cancel all loading states on the button
-    setSwapButtonPressed(false);
-    setIsApprovingToken(false);
-    setSwapPhase("idle");
-    setIsSwapInProgress(false);
-
-    // Clear and refetch the quote
-    setQuote(null);
-    setRefetchQuote(true);
-
-    // Check if it's an OFAC-related error by examining the error message
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (
-      errorMessage.toLowerCase().includes("ofac") ||
-      errorMessage.toLowerCase().includes("sanction")
-    ) {
-      toastError(error, {
-        title: "Address Blocked",
-        description:
-          "This address is blocked due to sanctions compliance. We cannot process swaps for sanctioned addresses.",
-      });
-      return;
-    }
-
-    // Default error message
-    toastError(error, {
-      title: "Swap Failed",
-      description: "Try refreshing the quote and try again.",
-    });
-  };
-
-  // Transaction state for direct wallet client interactions
-  const [hash, setHash] = useState<`0x${string}` | undefined>(undefined);
-  const [isPending, setIsPending] = useState(false);
-  const [writeError, setWriteError] = useState<Error | null>(null);
-
-  // Wait for approval transaction confirmation
-  const {
-    isLoading: isApprovalConfirming,
-    isSuccess: isApprovalConfirmed,
-    error: approvalTxError,
-  } = useWaitForTransactionReceipt({
-    hash: approvalTxHash,
-  });
-
-  // Wait for writeContract transaction confirmation
-  const {
-    isLoading: isConfirming,
-    isSuccess: isConfirmed,
-    error: txError,
-  } = useWaitForTransactionReceipt({
-    hash,
-  });
-
-  // Check token allowance
-  const isNativeETH = inputToken.ticker === "ETH";
-
-  const isCbBTC = inputToken.ticker === "cbBTC";
-
-  // Button loading state combines pending transaction, approval, confirmation waiting, and SDK swap
-  const isButtonLoading =
-    isPending ||
-    isConfirming ||
-    isApprovingToken ||
-    isApprovalConfirming ||
-    isBtcTxLoading ||
-    swapButtonPressed;
+  // Button loading state combines BTC transaction loading and SDK swap
+  const isButtonLoading = isBtcTxLoading || swapButtonPressed;
 
   // Check if all required fields are filled
   const allFieldsFilled =
@@ -203,18 +105,17 @@ export const SwapButton = () => {
   // Helper to build execute params for SDK
   const getExecuteParams = useCallback(() => {
     const publicClient = inputToken.chain === 8453 ? basePublicClient : mainnetPublicClient;
-    const walletClient = wagmiWalletClient ?? evmWalletClient;
-    if (!walletClient) {
+    if (!evmWalletClient) {
       throw new Error("EVM wallet client not available");
     }
-    if (!walletClient.chain) {
+    if (!evmWalletClient.chain) {
       throw new Error(
         "EVM wallet client is missing chain config. Please reconnect your EVM wallet and try again."
       );
     }
     return {
       publicClient,
-      walletClient,
+      walletClient: evmWalletClient,
       sendBitcoin: async ({
         recipient,
         amountSats,
@@ -232,7 +133,6 @@ export const SwapButton = () => {
     inputToken.chain,
     basePublicClient,
     mainnetPublicClient,
-    wagmiWalletClient,
     evmWalletClient,
     btcAddress,
     sendBitcoin,
@@ -276,17 +176,8 @@ export const SwapButton = () => {
       // Build execute params directly from real wallet clients
       const baseParams = getExecuteParams();
 
-      const wrappedSendBitcoin = baseParams.sendBitcoin
-        ? async (params: { recipient: string; amountSats: string }) => {
-            await baseParams.sendBitcoin!(params);
-            // BTC transaction sent, now waiting for confirmation
-            setSwapPhase("confirming");
-          }
-        : undefined;
-
       const executeParams = {
         ...baseParams,
-        ...(wrappedSendBitcoin ? { sendBitcoin: wrappedSendBitcoin } : {}),
         destinationAddress,
       };
 
@@ -399,186 +290,13 @@ export const SwapButton = () => {
     payoutAddress,
     addressValidation,
     isSwappingForBTC,
-    isEvmConnected,
-    selectedInputAddress,
     displayedInputAmount,
     outputAmount,
-    isNativeETH,
-    isCbBTC,
   ]);
 
   // ============================================================================
   // USE EFFECTS
   // ============================================================================
-
-  // Handle transaction pending state
-  useEffect(() => {
-    if (isPending) {
-      console.log("Transaction pending...");
-    }
-  }, [isPending]);
-
-  // Update store when transaction is confirmed
-  useEffect(() => {
-    console.log("isConfirmed", isConfirmed);
-    if (isConfirmed) {
-      setTransactionConfirmed(true);
-    }
-  }, [isConfirmed, setTransactionConfirmed]);
-
-  // Handle user declined transaction in wallet
-  useEffect(() => {
-    if (writeError) {
-      console.warn("Transaction error:", writeError);
-
-      // Check if user rejected the request
-      const errorMessage = writeError?.message || "";
-      const isUserRejection = errorMessage.includes("User rejected the request");
-      const isInternalError = errorMessage.includes("An internal error was received");
-
-      // Custom BTC orange toast based on error type
-      if (isUserRejection) {
-        toastInfo({
-          title: "Transaction Declined",
-          description: "The user declined the transaction request",
-          customStyle: {
-            background: `${colors.assetTag.btc.background}`,
-          },
-        });
-      } else if (isInternalError) {
-        toastInfo({
-          title: "Transaction Failed",
-          description: errorMessage,
-          customStyle: {
-            background: `${colors.assetTag.btc.background}`,
-          },
-        });
-      } else {
-        // Fallback for other errors
-        toastInfo({
-          title: "Transaction Failed",
-          description: "The transaction could not be completed",
-          customStyle: {
-            background: `${colors.assetTag.btc.background}`,
-          },
-        });
-      }
-
-      // Reset swap button state
-      setSwapButtonPressed(false);
-      setIsApprovingToken(false);
-      setIsCbBTCTransferPending(false);
-      setSwapPhase("idle");
-      setIsSwapInProgress(false);
-      setQuote(null);
-      setRefetchQuote(true);
-    }
-  }, [writeError, setRefetchQuote, setIsSwapInProgress]);
-
-  // Handle transaction receipt errors
-  useEffect(() => {
-    if (txError) {
-      console.error("Transaction error:", txError);
-      // Custom BTC orange toast for transaction failed
-      toastInfo({
-        title: "Transaction Failed",
-        description: "The transaction failed on the network",
-        customStyle: {
-          background: `${colors.assetTag.btc.background}`,
-        },
-      });
-      // Reset swap button state
-      setSwapButtonPressed(false);
-      setIsApprovingToken(false);
-      setSwapPhase("idle");
-      setIsSwapInProgress(false);
-    }
-  }, [txError, setIsSwapInProgress]);
-
-  // Capture approval transaction hash
-  useEffect(() => {
-    if (hash && isApprovingToken) {
-      console.log("Approval transaction hash:", hash);
-      setApprovalTxHash(hash);
-      setIsApprovingToken(false);
-    }
-  }, [hash, isApprovingToken]);
-
-  // Handle cbBTC transfer: redirect to swap monitoring page when transaction is signed
-  useEffect(() => {
-    if (hash && isCbBTCTransferPending && swapResponse?.id) {
-      console.log("cbBTC transfer signed, redirecting to swap page:", swapResponse.id);
-      setIsCbBTCTransferPending(false);
-      router.push(`/swap/${swapResponse.id}`);
-    }
-  }, [hash, isCbBTCTransferPending, swapResponse?.id, router]);
-
-  // Handle approval confirmation and errors
-  useEffect(() => {
-    if (isApprovalConfirmed) {
-      console.log("Approval confirmed");
-      setApprovalState(ApprovalState.APPROVED);
-      setIsApprovingToken(false);
-      // Auto-execute swap after approval is confirmed
-      if (swapButtonPressed) {
-        startSwap();
-      }
-    } else if (approvalTxError) {
-      console.error("Approval transaction error:", approvalTxError);
-      setApprovalState(ApprovalState.NEEDS_APPROVAL);
-      toastInfo({
-        title: "Approval Failed",
-        description: "The approval transaction failed on the network",
-        customStyle: {
-          background: `${colors.assetTag.btc.background}`,
-        },
-      });
-      // Reset swap button state
-      setSwapButtonPressed(false);
-      setIsApprovingToken(false);
-      setApprovalTxHash(undefined);
-      setSwapPhase("idle");
-      setIsSwapInProgress(false);
-    }
-  }, [
-    isApprovalConfirmed,
-    approvalTxError,
-    setApprovalState,
-    swapButtonPressed,
-    startSwap,
-    setIsSwapInProgress,
-  ]);
-
-  // Auto-retry swap after quote refetch completes
-  useEffect(() => {
-    const wasRefetching = prevRefetchQuoteRef.current === true;
-    const isDoneRefetching = refetchQuote === false;
-
-    // Detect transition from refetching → done refetching
-    if (wasRefetching && isDoneRefetching && quote !== null && swapButtonPressed) {
-      console.log("Auto-retrying swap after quote refetch completed");
-      startSwap();
-      // Update ref to prevent re-triggering on subsequent renders
-      prevRefetchQuoteRef.current = false;
-    } else {
-      // Update ref with current value
-      prevRefetchQuoteRef.current = refetchQuote;
-    }
-  }, [refetchQuote, quote, swapButtonPressed, startSwap]);
-
-  // Track previous wallet connection state for detecting connection events
-  const wasWalletConnectedRef = useRef(isEvmConnected);
-
-  // Auto-trigger swap when wallet connects while an executable quote exists
-  useEffect(() => {
-    const justConnected = !wasWalletConnectedRef.current && isEvmConnected;
-    wasWalletConnectedRef.current = isEvmConnected;
-
-    if (justConnected && quote !== null) {
-      console.log("Wallet connected with quote - triggering swap");
-      handleSwapButtonClick();
-    }
-  }, [isEvmConnected, quote, handleSwapButtonClick]);
 
   // Handle keyboard events (Enter to submit)
   useEffect(() => {
@@ -610,15 +328,6 @@ export const SwapButton = () => {
       };
     }
 
-    // If there's a "no routes found" error, disable button with message
-    if (hasNoRoutesError) {
-      return {
-        text: "No routes found",
-        handler: undefined,
-        showSpinner: false,
-      };
-    }
-
     if (exceedsUserBalance) {
       return {
         text: `Not enough ${inputToken.ticker}`,
@@ -632,54 +341,6 @@ export const SwapButton = () => {
         text: "Swap too small",
         handler: undefined,
         showSpinner: false,
-      };
-    }
-
-    // If approving token
-    if (approvalState === ApprovalState.APPROVING || isApprovalConfirming || isApprovingToken) {
-      return {
-        text: "Approving...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-
-    // If swap transaction is pending/confirming (direct wallet client interactions)
-    if (isPending) {
-      return {
-        text: "signing transaction...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-    if (isConfirming) {
-      return {
-        text: "confirming deposit...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-
-    // Bitcoin transaction states (BTC->cbBTC swaps)
-    if (btcTransactionState === "preparing") {
-      return {
-        text: "Preparing...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-    if (btcTransactionState === "signing") {
-      return {
-        text: "Sign in Wallet...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-    if (btcTransactionState === "broadcasting") {
-      return {
-        text: "Sending BTC...",
-        handler: undefined,
-        showSpinner: true,
       };
     }
 
@@ -728,21 +389,7 @@ export const SwapButton = () => {
     isButtonLoading ||
     isOtcServerDead ||
     isRetryingOtcServer ||
-    hasNoRoutesError ||
     hasValidationError;
-
-  // console.log("[DEBUG] Button state:", {
-  //   exceedsUserBalance,
-  //   exceedsAvailableBTCLiquidity,
-  //   exceedsAvailableCBBTCLiquidity,
-  //   inputBelowMinimum,
-  //   hasValidationError,
-  //   isButtonLoading,
-  //   isOtcServerDead,
-  //   isRetryingOtcServer,
-  //   hasNoRoutesError,
-  //   isButtonDisabled,
-  // });
 
   const handleButtonClick = () => {
     if (isRetryingOtcServer) {
