@@ -12,6 +12,7 @@ import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core"
 import { mainnet, base } from "viem/chains";
 import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
 import { getDynamicWalletClient } from "@/utils/wallet";
+import { validatePayoutAddress } from "@/utils/swapHelpers";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -60,9 +61,6 @@ export const SwapButton = () => {
     outputToken,
     displayedInputAmount,
     outputAmount,
-    payoutAddress,
-    btcRefundAddress,
-    addressValidation,
     isOtcServerDead,
     isRetryingOtcServer,
     exceedsAvailableBTCLiquidity,
@@ -74,6 +72,7 @@ export const SwapButton = () => {
     evmWalletClients,
     setEvmWalletClientForAddress,
     btcAddress,
+    pastedBTCAddress,
     primaryEvmAddress,
     outputEvmAddress,
     executeSwap,
@@ -102,13 +101,17 @@ export const SwapButton = () => {
   const isButtonLoading = isBtcTxLoading || swapButtonPressed;
 
   // Check if all required fields are filled
+  const destinationBtcAddress = pastedBTCAddress || btcAddress;
+  const destinationEvmAddress = outputEvmAddress || primaryEvmAddress;
+  const isDestinationReady = isSwappingForBTC
+    ? !!destinationBtcAddress && validatePayoutAddress(destinationBtcAddress, true).isValid
+    : !!destinationEvmAddress;
   const allFieldsFilled =
     displayedInputAmount &&
     outputAmount &&
     parseFloat(displayedInputAmount) > 0 &&
     parseFloat(outputAmount) > 0 &&
-    payoutAddress &&
-    addressValidation.isValid;
+    isDestinationReady;
 
   // ============================================================================
   // SWAP-RELATED FUNCTIONS
@@ -155,7 +158,7 @@ export const SwapButton = () => {
     }
 
     const destinationAddress = isSwappingForBTC
-      ? payoutAddress || btcAddress
+      ? pastedBTCAddress || btcAddress
       : outputEvmAddress || primaryEvmAddress;
     if (!destinationAddress) {
       throw new Error(
@@ -165,15 +168,12 @@ export const SwapButton = () => {
       );
     }
 
-    const refundAddress =
-      inputToken.chain === "bitcoin"
-        ? btcRefundAddress || btcAddress
-        : outputToken.chain === "bitcoin"
-          ? payoutAddress || btcAddress
-          : undefined;
-    if ((inputToken.chain === "bitcoin" || outputToken.chain === "bitcoin") && !refundAddress) {
+    const refundAddress = inputToken.chain === "bitcoin" ? btcAddress : primaryEvmAddress;
+    if (!refundAddress) {
       throw new Error(
-        "No Bitcoin refund address available. Please connect a Bitcoin wallet or provide a refund address."
+        inputToken.chain === "bitcoin"
+          ? "No Bitcoin refund address available. Please connect a Bitcoin wallet or provide a refund address."
+          : "No EVM refund address available. Please connect an Ethereum wallet."
       );
     }
 
@@ -204,12 +204,10 @@ export const SwapButton = () => {
     primaryEvmAddress,
     outputEvmAddress,
     isSwappingForBTC,
-    payoutAddress,
+    pastedBTCAddress,
     setEvmWalletClientForAddress,
     userWallets,
-    btcRefundAddress,
     btcAddress,
-    outputToken.chain,
     sendBitcoin,
   ]);
 
@@ -301,14 +299,15 @@ export const SwapButton = () => {
         setShowAuthFlow(true);
         return;
       }
-      if (!btcAddress && !payoutAddress) {
+      const destinationBtcAddress = pastedBTCAddress || btcAddress;
+      if (!destinationBtcAddress) {
         toastInfo({
           title: "Paste or Connect Bitcoin Wallet",
           description: "Please connect a Bitcoin wallet or paste a Bitcoin address to receive BTC",
         });
         return;
       }
-      if (payoutAddress && !addressValidation.isValid) {
+      if (!validatePayoutAddress(destinationBtcAddress, true).isValid) {
         toastInfo({
           title: "Invalid Bitcoin Address",
           description: "Please enter a valid Bitcoin address",
@@ -357,8 +356,7 @@ export const SwapButton = () => {
     isSwappingForBTC,
     primaryEvmAddress,
     btcAddress,
-    payoutAddress,
-    addressValidation,
+    pastedBTCAddress,
     inputToken.chain,
     outputEvmAddress,
     setShowAuthFlow,

@@ -1,6 +1,5 @@
 import { Flex, Text, Input, Spacer, Spinner, Image } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
-import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
 import {
@@ -26,6 +25,7 @@ import {
   satsToBtc,
   getSlippageBpsForNotional,
   formatCurrencyAmount,
+  validatePayoutAddress,
 } from "@/utils/swapHelpers";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
@@ -256,14 +256,17 @@ async function fetchRelayQuote(
 export const RatesSwapWidget = () => {
   // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
   const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const setPrimaryEvmAddress = useStore((state) => state.setPrimaryEvmAddress);
+  const outputEvmAddress = useStore((state) => state.outputEvmAddress);
+  const setOutputEvmAddress = useStore((state) => state.setOutputEvmAddress);
+  const btcAddress = useStore((state) => state.btcAddress);
+  const setBtcAddress = useStore((state) => state.setBtcAddress);
+  const pastedBTCAddress = useStore((state) => state.pastedBTCAddress);
+  const setPastedBTCAddress = useStore((state) => state.setPastedBTCAddress);
 
   const liquidity = useMaxLiquidity();
   useBtcEthPrices();
   const { isMobile } = useWindowSize();
-
-  // Dynamic wallet context
-  const { primaryWallet } = useDynamicContext();
-  const userWallets = useUserWallets();
 
   // Local state
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
@@ -322,10 +325,6 @@ export const RatesSwapWidget = () => {
     setHasNoRoutesError,
     setExceedsAvailableBTCLiquidity,
     setIsAwaitingOptimalQuote,
-    selectedInputAddress,
-    setSelectedInputAddress,
-    selectedOutputAddress,
-    setSelectedOutputAddress,
   } = useStore();
 
   // Derive swap direction and chain ID from token chains
@@ -336,42 +335,16 @@ export const RatesSwapWidget = () => {
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
 
-  // Note: Auto-selection is now handled by AddressSelector component
-  // This effect only runs once on mount to set initial primary wallet if available
-  const hasInitializedRef = useRef(false);
+  const resolvedInputAddress = isSwappingForBTC ? primaryEvmAddress : btcAddress;
+  const resolvedOutputAddress = isSwappingForBTC
+    ? pastedBTCAddress || btcAddress
+    : outputEvmAddress || primaryEvmAddress;
 
   useEffect(() => {
-    if (hasInitializedRef.current || !primaryWallet) return;
-    hasInitializedRef.current = true;
-
-    const walletChain = primaryWallet.chain?.toUpperCase();
-    const isEvmWallet = walletChain === "EVM";
-    const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
-
-    // For input address - only set on mount if matches swap direction
-    if (isSwappingForBTC && isEvmWallet) {
-      setSelectedInputAddress(primaryWallet.address);
-    } else if (!isSwappingForBTC && isBtcWallet) {
-      setSelectedInputAddress(primaryWallet.address);
+    if (!isSwappingForBTC && pastedBTCAddress) {
+      setPastedBTCAddress(null);
     }
-
-    // For output address (only for EVM → BTC direction, BTC wallet)
-    if (isSwappingForBTC && isBtcWallet) {
-      setSelectedOutputAddress(primaryWallet.address);
-    }
-  }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
-
-  // Track previous swap direction to detect actual changes
-  const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
-
-  // Clear addresses when swap direction changes (not on mount)
-  useEffect(() => {
-    if (prevIsSwappingForBTCRef.current !== isSwappingForBTC) {
-      setSelectedInputAddress(null);
-      setSelectedOutputAddress(null);
-      prevIsSwappingForBTCRef.current = isSwappingForBTC;
-    }
-  }, [isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
+  }, [isSwappingForBTC, pastedBTCAddress, setPastedBTCAddress]);
 
   // Define styles based on swap direction
   const inputStyle = isSwappingForBTC
@@ -1181,8 +1154,15 @@ export const RatesSwapWidget = () => {
               {/* Address Selector - above token selector */}
               <AddressSelector
                 chainType={isSwappingForBTC ? "EVM" : "BTC"}
-                selectedAddress={selectedInputAddress}
-                onSelect={setSelectedInputAddress}
+                selectedAddress={resolvedInputAddress}
+                onSelect={(address) => {
+                  if (!address) return;
+                  if (isSwappingForBTC) {
+                    setPrimaryEvmAddress(address);
+                  } else {
+                    setBtcAddress(address);
+                  }
+                }}
                 showPasteOption={false}
               />
               <WebAssetTag
@@ -1262,8 +1242,13 @@ export const RatesSwapWidget = () => {
                 // EVM → BTC: Show BTC address selector with paste option
                 <AddressSelector
                   chainType="BTC"
-                  selectedAddress={selectedOutputAddress}
-                  onSelect={setSelectedOutputAddress}
+                  selectedAddress={resolvedOutputAddress}
+                  onSelect={(address) => {
+                    if (!address) return;
+                    if (!validatePayoutAddress(address, true).isValid) return;
+                    setPastedBTCAddress(null);
+                    setBtcAddress(address);
+                  }}
                   onPasteAddress={() => {
                     setPasteModalType("BTC");
                     setIsPasteModalOpen(true);
@@ -1288,9 +1273,9 @@ export const RatesSwapWidget = () => {
                     setIsPasteModalOpen(true);
                   }}
                 >
-                  {selectedOutputAddress ? (
+                  {resolvedOutputAddress ? (
                     <Text color="#788CFF" fontSize="13px" fontWeight="500" fontFamily="Inter">
-                      {`${selectedOutputAddress.slice(0, 6)}...${selectedOutputAddress.slice(-4)}`}
+                      {`${resolvedOutputAddress.slice(0, 6)}...${resolvedOutputAddress.slice(-4)}`}
                     </Text>
                   ) : (
                     <Text
@@ -1334,7 +1319,14 @@ export const RatesSwapWidget = () => {
           onClose={() => setIsPasteModalOpen(false)}
           addressType={pasteModalType}
           onConfirm={(address) => {
-            setSelectedOutputAddress(address);
+            if (pasteModalType === "BTC") {
+              if (!validatePayoutAddress(address, true).isValid) return;
+              setPastedBTCAddress(address);
+              return;
+            }
+
+            if (!validatePayoutAddress(address, false).isValid) return;
+            setOutputEvmAddress(address);
           }}
         />
 
