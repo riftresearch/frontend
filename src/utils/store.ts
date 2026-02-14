@@ -48,6 +48,8 @@ export const useStore = create<{
   setOutputEvmAddress: (address: string | null) => void;
   btcAddress: string | null;
   setBtcAddress: (address: string | null) => void;
+  pastedBTCAddress: string | null;
+  setPastedBTCAddress: (address: string | null) => void;
   evmWalletClients: Record<string, EvmWalletClientByChain>;
   setEvmWalletClientsForAddress: (address: string, clients: EvmWalletClientByChain) => void;
   setEvmWalletClientForAddress: (
@@ -101,26 +103,6 @@ export const useStore = create<{
   setActiveSwapId: (id: string | null) => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
-  payoutAddress: string;
-  setPayoutAddress: (address: string) => void;
-  addressValidation: { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string };
-  setAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => void;
-  btcRefundAddress: string;
-  setBtcRefundAddress: (address: string) => void;
-  btcRefundAddressValidation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  };
-  setBtcRefundAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => void;
   approvalState: ApprovalState;
   setApprovalState: (state: ApprovalState) => void;
   feeOverview: FeeOverview | null;
@@ -151,12 +133,6 @@ export const useStore = create<{
   setIsAwaitingOptimalQuote: (value: boolean) => void;
   switchingToInputTokenChain: boolean;
   setSwitchingToInputTokenChain: (value: boolean) => void;
-  selectedInputAddress: string | null;
-  setSelectedInputAddress: (address: string | null) => void;
-  selectedOutputAddress: string | null;
-  setSelectedOutputAddress: (address: string | null) => void;
-  skipAddressClearOnDirectionChange: boolean;
-  setSkipAddressClearOnDirectionChange: (value: boolean) => void;
   isSwapInProgress: boolean;
   setIsSwapInProgress: (value: boolean) => void;
 }>((set) => ({
@@ -166,6 +142,8 @@ export const useStore = create<{
   setOutputEvmAddress: (address: string | null) => set({ outputEvmAddress: address }),
   btcAddress: null,
   setBtcAddress: (address: string | null) => set({ btcAddress: address }),
+  pastedBTCAddress: null,
+  setPastedBTCAddress: (address: string | null) => set({ pastedBTCAddress: address }),
   evmWalletClients: {},
   setEvmWalletClientsForAddress: (address: string, clients: EvmWalletClientByChain) =>
     set((state) => ({
@@ -243,22 +221,6 @@ export const useStore = create<{
   setActiveSwapId: (id: string | null) => set({ activeSwapId: id }),
   slippageBips: 100,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
-  payoutAddress: "",
-  setPayoutAddress: (address: string) => set({ payoutAddress: address }),
-  addressValidation: { isValid: false },
-  setAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => set({ addressValidation: validation }),
-  btcRefundAddress: "",
-  setBtcRefundAddress: (address: string) => set({ btcRefundAddress: address }),
-  btcRefundAddressValidation: { isValid: false },
-  setBtcRefundAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => set({ btcRefundAddressValidation: validation }),
   approvalState: ApprovalState.UNKNOWN,
   setApprovalState: (state: ApprovalState) => set({ approvalState: state }),
   feeOverview: null,
@@ -290,13 +252,6 @@ export const useStore = create<{
   setIsAwaitingOptimalQuote: (value: boolean) => set({ isAwaitingOptimalQuote: value }),
   switchingToInputTokenChain: false,
   setSwitchingToInputTokenChain: (value: boolean) => set({ switchingToInputTokenChain: value }),
-  selectedInputAddress: null,
-  setSelectedInputAddress: (address: string | null) => set({ selectedInputAddress: address }),
-  selectedOutputAddress: null,
-  setSelectedOutputAddress: (address: string | null) => set({ selectedOutputAddress: address }),
-  skipAddressClearOnDirectionChange: false,
-  setSkipAddressClearOnDirectionChange: (value: boolean) =>
-    set({ skipAddressClearOnDirectionChange: value }),
   isSwapInProgress: false,
   setIsSwapInProgress: (value: boolean) => set({ isSwapInProgress: value }),
 }));

@@ -1,11 +1,6 @@
 import { Flex, Text, Input, Spacer, Button, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef, useMemo } from "react";
-import {
-  useDynamicContext,
-  useSwitchNetwork,
-  useSwitchWallet,
-  useUserWallets,
-} from "@dynamic-labs/sdk-react-core";
+import { useSwitchNetwork, useSwitchWallet, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
 import { Currencies, createCurrency, getSupportedModes, QuoteParameters } from "@riftresearch/sdk";
@@ -98,14 +93,18 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
   // Get wallet addresses from global store (set via Dynamic's onWalletAdded callback)
   const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const setPrimaryEvmAddress = useStore((state) => state.setPrimaryEvmAddress);
+  const outputEvmAddress = useStore((state) => state.outputEvmAddress);
   const btcAddress = useStore((state) => state.btcAddress);
+  const setBtcAddress = useStore((state) => state.setBtcAddress);
+  const pastedBTCAddress = useStore((state) => state.pastedBTCAddress);
+  const setPastedBTCAddress = useStore((state) => state.setPastedBTCAddress);
   const setOutputEvmAddress = useStore((state) => state.setOutputEvmAddress);
   const isEvmConnected = !!primaryEvmAddress;
 
-  // Dynamic wallet context
-  const { primaryWallet } = useDynamicContext();
   const switchWallet = useSwitchWallet();
   const switchNetwork = useSwitchNetwork();
+  const userWallets = useUserWallets();
 
   // Rift SDK from store
   const rift = useStore((state) => state.rift);
@@ -169,14 +168,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setOutputUsdValue,
     quote,
     setQuote,
-    payoutAddress,
-    setPayoutAddress,
-    addressValidation,
-    setAddressValidation,
-    btcRefundAddress,
-    setBtcRefundAddress,
-    btcRefundAddressValidation,
-    setBtcRefundAddressValidation,
     setApprovalState,
     setInputToken,
     setOutputToken,
@@ -201,13 +192,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setIsAwaitingOptimalQuote,
     hasNoRoutesError,
     switchingToInputTokenChain,
-    setSwitchingToInputTokenChain,
-    selectedInputAddress,
-    setSelectedInputAddress,
-    selectedOutputAddress,
-    setSelectedOutputAddress,
-    skipAddressClearOnDirectionChange,
-    setSkipAddressClearOnDirectionChange,
     isSwapInProgress,
   } = useStore();
 
@@ -225,188 +209,87 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const { balanceBtc: btcBalanceBtc, isLoading: isBtcBalanceLoading } =
     useBitcoinBalance(btcAddress);
 
-  // Note: Auto-selection is now handled by AddressSelector component
-  // This effect only runs once on mount to set initial primary wallet if available
-  const hasInitializedRef = useRef(false);
-  const userWallets = useUserWallets();
+  const resolvedInputAddress = inputToken.chain === "bitcoin" ? btcAddress : primaryEvmAddress;
+  const resolvedOutputAddress =
+    outputToken.chain === "bitcoin"
+      ? pastedBTCAddress || btcAddress
+      : inputToken.chain === "bitcoin"
+        ? outputEvmAddress || primaryEvmAddress
+        : primaryEvmAddress;
 
-  // Keep output EVM address in global store for destination routing.
   useEffect(() => {
-    if (outputToken.chain === "bitcoin") {
-      setOutputEvmAddress(null);
-      return;
+    if (outputToken.chain !== "bitcoin" && pastedBTCAddress) {
+      setPastedBTCAddress(null);
     }
-    setOutputEvmAddress(selectedOutputAddress);
-  }, [outputToken.chain, selectedOutputAddress, setOutputEvmAddress]);
+  }, [outputToken.chain, pastedBTCAddress, setPastedBTCAddress]);
 
-  // Ensure the EVM input wallet is primary whenever EVM is the input side.
-  // This covers: a newly connected input wallet and direction flips to EVM input.
-  const isPromotingPrimaryRef = useRef(false);
-  useEffect(() => {
-    if (inputToken.chain === "bitcoin" || !selectedInputAddress) {
-      return;
-    }
+  const selectEvmWallet = useCallback(
+    async (address: string, targetChainId?: number) => {
+      const wallet = userWallets.find(
+        (candidate) =>
+          candidate.chain?.toUpperCase() === "EVM" &&
+          candidate.address.toLowerCase() === address.toLowerCase()
+      );
+      if (!wallet) return false;
 
-    const inputEvmWallet = userWallets.find(
-      (wallet) =>
-        wallet.chain?.toUpperCase() === "EVM" &&
-        wallet.address.toLowerCase() === selectedInputAddress.toLowerCase()
-    );
-    if (!inputEvmWallet) {
-      return;
-    }
-
-    const targetChainId = inputToken.chain;
-    let isCancelled = false;
-
-    const syncPrimaryAndChain = async () => {
-      if (isPromotingPrimaryRef.current) return;
-      isPromotingPrimaryRef.current = true;
-      setSwitchingToInputTokenChain(true);
       try {
-        if (!primaryWallet || primaryWallet.address.toLowerCase() !== inputEvmWallet.address.toLowerCase()) {
-          await switchWallet(inputEvmWallet.id);
+        await switchWallet(wallet.id);
+        setPrimaryEvmAddress(wallet.address);
+        if (targetChainId !== undefined) {
+          const currentNetwork = Number(await wallet.getNetwork());
+          if (currentNetwork !== targetChainId) {
+            await switchNetwork({ wallet, network: targetChainId });
+          }
         }
-
-        const currentNetwork = Number(await inputEvmWallet.getNetwork());
-        if (currentNetwork !== targetChainId) {
-          await switchNetwork({ wallet: inputEvmWallet, network: targetChainId });
-        }
+        return true;
       } catch (error) {
-        console.error("[SwapInputAndOutput] Failed to sync primary input EVM wallet:", error);
-      } finally {
-        if (!isCancelled) {
-          setSwitchingToInputTokenChain(false);
-        }
-        isPromotingPrimaryRef.current = false;
+        console.error("[SwapInputAndOutput] Failed to select EVM wallet:", error);
+        return false;
       }
-    };
+    },
+    [setPrimaryEvmAddress, switchNetwork, switchWallet, userWallets]
+  );
 
-    void syncPrimaryAndChain();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [
-    inputToken.chain,
-    selectedInputAddress,
-    userWallets,
-    primaryWallet,
-    switchWallet,
-    switchNetwork,
-    setSwitchingToInputTokenChain,
-  ]);
-
-  // Rift SDK is initialized globally in _app.tsx
-
-  useEffect(() => {
-    if (hasInitializedRef.current || !primaryWallet) return;
-    hasInitializedRef.current = true;
-
-    const walletChain = primaryWallet.chain?.toUpperCase();
-    const isEvmWallet = walletChain === "EVM";
-    const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
-
-    // For input address - only set on mount if matches swap direction
-    if (isSwappingForBTC && isEvmWallet) {
-      setSelectedInputAddress(primaryWallet.address);
-    } else if (!isSwappingForBTC && isBtcWallet) {
-      setSelectedInputAddress(primaryWallet.address);
-    }
-
-    // For output address
-    if (isSwappingForBTC && isBtcWallet) {
-      // EVM → BTC: Select BTC wallet for output
-      setSelectedOutputAddress(primaryWallet.address);
-    } else if (!isSwappingForBTC && isEvmWallet) {
-      // BTC → EVM: Select EVM wallet for output
-      setSelectedOutputAddress(primaryWallet.address);
-    }
-  }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress, setSelectedOutputAddress]);
-
-  // Sync input address with primary wallet when user selects a different wallet in the panel
-  // This runs after mount when the primary wallet changes
-  const prevPrimaryWalletRef = useRef<string | null>(primaryWallet?.address || null);
-  useEffect(() => {
-    if (!primaryWallet) return;
-
-    // Skip if primary wallet hasn't changed
-    if (prevPrimaryWalletRef.current === primaryWallet.address) return;
-    prevPrimaryWalletRef.current = primaryWallet.address;
-
-    const walletChain = primaryWallet.chain?.toUpperCase();
-    const isEvmWallet = walletChain === "EVM";
-    const isBtcWallet = walletChain === "BTC" || walletChain === "BITCOIN";
-
-    // Update input address if wallet type matches swap direction
-    if (isSwappingForBTC && isEvmWallet) {
-      // EVM → BTC: Update input to the selected EVM wallet
-      setSelectedInputAddress(primaryWallet.address);
-    } else if (!isSwappingForBTC && isBtcWallet) {
-      // BTC → EVM: Update input to the selected BTC wallet
-      setSelectedInputAddress(primaryWallet.address);
-    }
-  }, [primaryWallet, isSwappingForBTC, setSelectedInputAddress]);
-
-  // Auto-select output address based on output token's chain
-  useEffect(() => {
-    // Skip if addresses are already set (user selected them)
-    if (selectedOutputAddress) return;
-
-    if (outputToken.chain === "bitcoin" && btcAddress) {
-      setSelectedOutputAddress(btcAddress);
-    } else if (outputToken.chain !== "bitcoin" && primaryEvmAddress) {
-      setSelectedOutputAddress(primaryEvmAddress);
-    }
-  }, [outputToken.chain, btcAddress, primaryEvmAddress, selectedOutputAddress, setSelectedOutputAddress]);
-
-  // Auto-select input address based on input token's chain
-  useEffect(() => {
-    if (selectedInputAddress) return;
-
-    if (inputToken.chain === "bitcoin" && btcAddress) {
-      setSelectedInputAddress(btcAddress);
-    } else if (inputToken.chain !== "bitcoin" && primaryEvmAddress) {
-      setSelectedInputAddress(primaryEvmAddress);
-    }
-  }, [inputToken.chain, primaryEvmAddress, btcAddress, selectedInputAddress, setSelectedInputAddress]);
-
-  // Track previous swap direction to detect actual changes
-  const prevIsSwappingForBTCRef = useRef(isSwappingForBTC);
-
-  // Clear addresses when swap direction changes (not on mount)
-  // Skip clearing if direction change was triggered by wallet selection in WalletPanel
-  useEffect(() => {
-    if (prevIsSwappingForBTCRef.current !== isSwappingForBTC) {
-      if (!skipAddressClearOnDirectionChange) {
-        setSelectedInputAddress(null);
-        setSelectedOutputAddress(null);
-      } else {
-        // Reset the flag after skipping
-        setSkipAddressClearOnDirectionChange(false);
+  const handleInputAddressSelect = useCallback(
+    async (address: string | null) => {
+      if (!address) return;
+      if (inputToken.chain === "bitcoin") {
+        setBtcAddress(address);
+        return;
       }
-      prevIsSwappingForBTCRef.current = isSwappingForBTC;
-    }
-  }, [
-    isSwappingForBTC,
-    setSelectedInputAddress,
-    setSelectedOutputAddress,
-    skipAddressClearOnDirectionChange,
-    setSkipAddressClearOnDirectionChange,
-  ]);
+      await selectEvmWallet(address, inputToken.chain);
+    },
+    [inputToken.chain, selectEvmWallet, setBtcAddress]
+  );
 
-  // Sync selectedOutputAddress to payoutAddress when swapping for BTC
-  useEffect(() => {
-    if (isSwappingForBTC && selectedOutputAddress) {
-      setPayoutAddress(selectedOutputAddress);
-      // Also validate immediately to avoid timing issues
-      const validation = validatePayoutAddress(selectedOutputAddress, true);
-      setAddressValidation(validation);
-    } else if (isSwappingForBTC && !selectedOutputAddress) {
-      setPayoutAddress("");
-      setAddressValidation({ isValid: false });
-    }
-  }, [isSwappingForBTC, selectedOutputAddress, setPayoutAddress, setAddressValidation]);
+  const handleOutputAddressSelect = useCallback(
+    async (address: string | null) => {
+      if (!address) return;
+
+      if (outputToken.chain === "bitcoin") {
+        if (!validatePayoutAddress(address, true).isValid) return;
+        setPastedBTCAddress(null);
+        setBtcAddress(address);
+        return;
+      }
+
+      if (inputToken.chain === "bitcoin") {
+        if (!validatePayoutAddress(address, false).isValid) return;
+        setOutputEvmAddress(address);
+        return;
+      }
+
+      await selectEvmWallet(address, inputToken.chain);
+    },
+    [
+      inputToken.chain,
+      outputToken.chain,
+      selectEvmWallet,
+      setBtcAddress,
+      setOutputEvmAddress,
+      setPastedBTCAddress,
+    ]
+  );
 
   // Define the styles based on asset chain
   const inputStyle = inputToken.chain === "bitcoin" ? bitcoinStyle : evmStyle;
@@ -670,8 +553,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setInputUsdValue(ZERO_USD_DISPLAY);
     setOutputUsdValue(ZERO_USD_DISPLAY);
     setFeeOverview(null);
-    setPayoutAddress("");
-    setAddressValidation({ isValid: false });
+    setPastedBTCAddress(null);
     setHasStartedTyping(false);
   };
 
@@ -1043,8 +925,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setOutputAmount("");
     setInputUsdValue(ZERO_USD_DISPLAY);
     setOutputUsdValue(ZERO_USD_DISPLAY);
-    setPayoutAddress("");
-    setAddressValidation({ isValid: false });
 
     console.log("resetting values");
     // Cleanup debounce timers on unmount
@@ -1064,8 +944,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setOutputAmount,
     setInputUsdValue,
     setOutputUsdValue,
-    setPayoutAddress,
-    setAddressValidation,
   ]);
 
   useEffect(() => {
@@ -1121,7 +999,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     evmConnectWalletChainId,
     inputToken,
     switchingToInputTokenChain,
-    setSwitchingToInputTokenChain,
   ]);
 
   // Fetch token prices when selected tokens change
@@ -1165,29 +1042,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setInputUsdValue,
     setOutputUsdValue,
   ]);
-
-  // Validate payout address whenever it changes (Bitcoin or Ethereum based on swap direction)
-  useEffect(() => {
-    if (payoutAddress) {
-      const validation = validatePayoutAddress(payoutAddress, isSwappingForBTC);
-      setAddressValidation(validation);
-    } else {
-      setAddressValidation({ isValid: false });
-    }
-  }, [payoutAddress, isSwappingForBTC, setAddressValidation]);
-
-  // Sync selectedInputAddress to btcRefundAddress when in BTC -> EVM mode
-  useEffect(() => {
-    if (!isSwappingForBTC && selectedInputAddress) {
-      setBtcRefundAddress(selectedInputAddress);
-      // Also validate immediately
-      const validation = validatePayoutAddress(selectedInputAddress, true);
-      setBtcRefundAddressValidation(validation);
-    } else if (!isSwappingForBTC && !selectedInputAddress) {
-      setBtcRefundAddress("");
-      setBtcRefundAddressValidation({ isValid: false });
-    }
-  }, [isSwappingForBTC, selectedInputAddress, setBtcRefundAddress, setBtcRefundAddressValidation]);
 
   // Auto-refresh quote every 10 seconds when user has entered an amount
   useEffect(() => {
@@ -1243,7 +1097,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   useEffect(() => {
     // Handle BTC input (BTC -> EVM swap direction)
     if (inputAssetIdentifier === "BTC") {
-      if (selectedInputAddress && btcBalanceBtc > 0) {
+      if (btcAddress && btcBalanceBtc > 0) {
         setCurrentInputBalance(btcBalanceBtc.toFixed(8));
         setCurrentInputTicker("BTC");
       } else {
@@ -1291,7 +1145,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     userTokensByChain,
     evmConnectWalletChainId,
     inputAssetIdentifier,
-    selectedInputAddress,
+    btcAddress,
     btcBalanceBtc,
   ]);
 
@@ -1299,7 +1153,11 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   useEffect(() => {
     // Handle BTC output (EVM -> BTC swap direction)
     if (isSwappingForBTC) {
-      if (selectedOutputAddress && btcBalanceBtc > 0) {
+      const isConnectedDestination =
+        !!resolvedOutputAddress &&
+        !!btcAddress &&
+        resolvedOutputAddress.toLowerCase() === btcAddress.toLowerCase();
+      if (isConnectedDestination && btcBalanceBtc > 0) {
         setCurrentOutputBalance(btcBalanceBtc.toFixed(8));
         setCurrentOutputTicker("BTC");
       } else {
@@ -1336,7 +1194,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     userTokensByChain,
     evmConnectWalletChainId,
     isSwappingForBTC,
-    selectedOutputAddress,
+    resolvedOutputAddress,
+    btcAddress,
     btcBalanceBtc,
   ]);
 
@@ -1935,8 +1794,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             {/* Address Selector at top */}
             <AddressSelector
               chainType={inputToken.chain === "bitcoin" ? "BTC" : "EVM"}
-              selectedAddress={selectedInputAddress}
-              onSelect={setSelectedInputAddress}
+              selectedAddress={resolvedInputAddress}
+              onSelect={(address) => {
+                void handleInputAddressSelect(address);
+              }}
               showPasteOption={false}
             />
             {/* Token Selector centered */}
@@ -2227,8 +2088,10 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             {/* Address Selector at top */}
             <AddressSelector
               chainType={outputToken.chain === "bitcoin" ? "BTC" : "EVM"}
-              selectedAddress={selectedOutputAddress}
-              onSelect={setSelectedOutputAddress}
+              selectedAddress={resolvedOutputAddress}
+              onSelect={(address) => {
+                void handleOutputAddressSelect(address);
+              }}
               onPasteAddress={() => {
                 setPasteModalType(outputToken.chain === "bitcoin" ? "BTC" : "EVM");
                 setIsPasteModalOpen(true);
@@ -2269,7 +2132,16 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           onClose={() => setIsPasteModalOpen(false)}
           addressType={pasteModalType}
           onConfirm={(address) => {
-            setSelectedOutputAddress(address);
+            if (pasteModalType === "BTC") {
+              const validation = validatePayoutAddress(address, true);
+              if (!validation.isValid) return;
+              setPastedBTCAddress(address);
+              return;
+            }
+
+            const validation = validatePayoutAddress(address, false);
+            if (!validation.isValid) return;
+            setOutputEvmAddress(address);
           }}
         />
 

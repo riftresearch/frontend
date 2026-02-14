@@ -64,9 +64,6 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     btcPrice,
     inputToken,
     outputToken,
-    setSelectedInputAddress,
-    setSelectedOutputAddress,
-    setSkipAddressClearOnDirectionChange,
   } = useStore();
 
   // Derive swap direction from token chains
