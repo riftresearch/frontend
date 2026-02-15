@@ -13,6 +13,7 @@ import { mainnet, base } from "viem/chains";
 import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
 import { getDynamicWalletClient } from "@/utils/wallet";
 import { validatePayoutAddress } from "@/utils/swapHelpers";
+import type { ExecuteSwapStepType } from "@riftresearch/sdk";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -29,7 +30,9 @@ export const SwapButton = () => {
 
   // Local state
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
-  const [swapPhase, setSwapPhase] = useState<"idle" | "signing" | "confirming">("idle");
+  const [swapPhase, setSwapPhase] = useState<
+    "idle" | "approving" | "signing" | "confirming"
+  >("idle");
 
   // Terms of Service modal state
   const [showTosModal, setShowTosModal] = useState(false);
@@ -151,7 +154,10 @@ export const SwapButton = () => {
     if (!walletClient) {
       throw new Error("EVM wallet client not available");
     }
-    if (!walletClient.chain || (evmClientChainId !== null && walletClient.chain.id !== evmClientChainId)) {
+    if (
+      !walletClient.chain ||
+      (evmClientChainId !== null && walletClient.chain.id !== evmClientChainId)
+    ) {
       throw new Error(
         "EVM wallet client is missing chain config. Please reconnect your EVM wallet and try again."
       );
@@ -182,6 +188,10 @@ export const SwapButton = () => {
       refundAddress,
       publicClient,
       walletClient,
+      onExecuteStep: async (type: ExecuteSwapStepType) => {
+        // The SDK calls this immediately before prompting the wallet UI.
+        setSwapPhase(type === "approval" ? "approving" : "signing");
+      },
       sendBitcoin: async ({
         recipient,
         amountSats,
@@ -417,6 +427,13 @@ export const SwapButton = () => {
     }
 
     // SDK-based swap phases (signing in wallet → confirming on-chain)
+    if (swapPhase === "approving") {
+      return {
+        text: "approving...",
+        handler: undefined,
+        showSpinner: true,
+      };
+    }
     if (swapPhase === "signing") {
       return {
         text: "signing transaction...",
