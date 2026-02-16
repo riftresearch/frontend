@@ -16,7 +16,10 @@ export default function App({ Component, pageProps }: AppProps) {
   // Initialize Rift SDK globally so it's available on all pages
   useEffect(() => {
     if (!rift) {
-      const sdk = new RiftSdk({ integratorName: "app.rift.trade" });
+      const sdk = new RiftSdk({
+        integratorName: "app.rift.trade",
+        debug: true,
+      });
       setRift(sdk);
     }
   }, [rift, setRift]);
