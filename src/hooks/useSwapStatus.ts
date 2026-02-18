@@ -44,7 +44,14 @@ function mapToken(
  * Maps the Rift SDK's SwapStatusResponse into a shape compatible with existing components.
  */
 export type NormalizedSwapStatus = {
-  status: string;
+  status:
+    | "waiting_for_deposit"
+    | "deposit_confirming"
+    | "initiating_payout"
+    | "confirming_payout"
+    | "swap_complete"
+    | "refunding_user"
+    | "failed";
   quote: {
     from: {
       currency: {

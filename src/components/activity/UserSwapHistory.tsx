@@ -182,8 +182,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Completed: confirming_transfer or swap_complete
-  if (currentStatus === "confirming_transfer" || currentStatus === "swap_complete") {
+  // Completed: confirming_payout or swap_complete
+  if (currentStatus === "confirming_payout" || currentStatus === "swap_complete") {
     return (
       <Flex
         align="center"
@@ -237,7 +237,7 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Swapping: initiating_transfer (default for other in-progress states)
+  // Swapping: initiating_payout (default for other in-progress states)
   return (
     <Flex
       align="center"
@@ -770,7 +770,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                 (s) => s.status === "waiting_for_deposit"
               );
               const mmDepositStep = swap.flow.find(
-                (s) => s.status === "initiating_transfer"
+                (s) => s.status === "initiating_payout"
               );
               let userTxHash = userDepositStep?.txHash;
               const userTxChain = userDepositStep?.txChain;
@@ -1148,7 +1148,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                   (s) => s.status === "waiting_for_deposit"
                 );
                 const mmDepositStep = swap.flow.find(
-                  (s) => s.status === "initiating_transfer"
+                  (s) => s.status === "initiating_payout"
                 );
                 let userTxHash = userDepositStep?.txHash;
                 const userTxChain = userDepositStep?.txChain;
@@ -1696,7 +1696,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                     (s) => s.status === "waiting_for_deposit"
                   );
                   const mmDepositStep = swap.flow.find(
-                    (s) => s.status === "initiating_transfer"
+                    (s) => s.status === "initiating_payout"
                   );
                   let userTxHash = userDepositStep?.txHash;
                   const userTxChain = userDepositStep?.txChain;

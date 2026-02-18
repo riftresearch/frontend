@@ -332,8 +332,8 @@ export async function filterRefunds(
   const legacyStatusMap: Record<string, string> = {
     waiting_user_deposit_initiated: "waiting_for_deposit",
     waiting_user_deposit_confirmed: "deposit_confirming",
-    waiting_mm_deposit_initiated: "initiating_transfer",
-    waiting_mm_deposit_confirmed: "confirming_transfer",
+    waiting_mm_deposit_initiated: "initiating_payout",
+    waiting_mm_deposit_confirmed: "confirming_payout",
     settling: "swap_complete",
     settled: "swap_complete",
     refunding_user: "refunding_user",

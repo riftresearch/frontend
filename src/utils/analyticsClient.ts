@@ -204,8 +204,8 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
   const legacyStatusMap: Record<string, string> = {
     waiting_user_deposit_initiated: "waiting_for_deposit",
     waiting_user_deposit_confirmed: "deposit_confirming",
-    waiting_mm_deposit_initiated: "initiating_transfer",
-    waiting_mm_deposit_confirmed: "confirming_transfer",
+    waiting_mm_deposit_initiated: "initiating_payout",
+    waiting_mm_deposit_confirmed: "confirming_payout",
     settling: "swap_complete",
     settled: "swap_complete",
     refunding_user: "refunding_user",
@@ -216,8 +216,8 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
     "pending",
     "waiting_for_deposit",
     "deposit_confirming",
-    "initiating_transfer",
-    "confirming_transfer",
+    "initiating_payout",
+    "confirming_payout",
     "swap_complete",
   ];
 
@@ -389,7 +389,7 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
       duration: durationUserSentToConfs,
     },
     {
-      status: "initiating_transfer",
+      status: "initiating_payout",
       label: "MM Sent",
       state: currentIndex > 3 ? "completed" : currentIndex === 3 ? "inProgress" : "notStarted",
       badge: mmAsset,
@@ -398,7 +398,7 @@ export function mapDbRowToAdminSwap(row: any, fallbackBtcPrice?: number | null):
       txChain: mmTxChain,
     },
     {
-      status: "confirming_transfer",
+      status: "confirming_payout",
       label: mmConfsLabel,
       state: currentIndex > 4 ? "completed" : currentIndex === 4 ? "inProgress" : "notStarted",
       duration: durationMmSentToMmConfs,

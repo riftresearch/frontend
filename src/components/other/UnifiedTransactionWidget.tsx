@@ -72,15 +72,15 @@ export function UnifiedTransactionWidget({
   }, [bitcoinAddress, swapStatusInfo?.quote?.from.currency.chain]);
 
   const isSettled =
-    depositFlowState === "confirming_transfer" || depositFlowState === "swap_complete";
+    depositFlowState === "confirming_payout" || depositFlowState === "swap_complete";
   const showLoadingDots = countdownValue === 0 && !isSettled;
 
   // Determine current step index for widget logic
   const stepIds = [
     "waiting_for_deposit",
     "deposit_confirming",
-    "initiating_transfer",
-    "confirming_transfer",
+    "initiating_payout",
+    "confirming_payout",
   ];
   const isSettledStatus = depositFlowState === "swap_complete";
   const currentStepIndex = isSettledStatus ? 3 : stepIds.findIndex((id) => id === depositFlowState);
@@ -123,8 +123,8 @@ export function UnifiedTransactionWidget({
 
     // Transition from "FILLING ORDER" to "SWAP COMPLETE"
     if (
-      previousDepositFlowStateRef.current === "initiating_transfer" &&
-      (depositFlowState === "confirming_transfer" || depositFlowState === "swap_complete") &&
+      previousDepositFlowStateRef.current === "initiating_payout" &&
+      (depositFlowState === "confirming_payout" || depositFlowState === "swap_complete") &&
       audioRef.current
     ) {
       console.log("🔊 Playing swap completion sound!");
@@ -146,7 +146,7 @@ export function UnifiedTransactionWidget({
 
   // Check if stuck on "FILLING ORDER"
   useEffect(() => {
-    if (depositFlowState !== "initiating_transfer") {
+    if (depositFlowState !== "initiating_payout") {
       setShowFillingOrderWarning(false);
       return;
     }
@@ -173,7 +173,7 @@ export function UnifiedTransactionWidget({
     const shouldTrackBtc =
       (swapType === "bitcoin-deposit" && depositFlowState === "deposit_confirming") ||
       (swapType === "evm-deposit" &&
-        (depositFlowState === "confirming_transfer" || depositFlowState === "swap_complete") &&
+        (depositFlowState === "confirming_payout" || depositFlowState === "swap_complete") &&
         swapStatusInfo?.quote?.to.currency.chain === "bitcoin");
 
     if (!shouldTrackBtc) {

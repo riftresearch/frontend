@@ -99,8 +99,8 @@ export const Navbar = ({}) => {
     | "not_started"
     | "waiting_for_deposit"
     | "deposit_confirming"
-    | "initiating_transfer"
-    | "confirming_transfer"
+    | "initiating_payout"
+    | "confirming_payout"
     | "swap_complete"
     | "refunding_user"
     | "failed" => {
@@ -112,9 +112,9 @@ export const Navbar = ({}) => {
       case 2:
         return "deposit_confirming";
       case 3:
-        return "initiating_transfer";
+        return "initiating_payout";
       case 4:
-        return "confirming_transfer";
+        return "confirming_payout";
       case 5:
         return "swap_complete";
       case 6:

@@ -32,8 +32,8 @@ type DepositFlowState =
   | "not_started"
   | "waiting_for_deposit"
   | "deposit_confirming"
-  | "initiating_transfer"
-  | "confirming_transfer"
+  | "initiating_payout"
+  | "confirming_payout"
   | "swap_complete"
   | "refunding_user"
   | "failed";

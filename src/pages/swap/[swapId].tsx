@@ -17,11 +17,8 @@ const mapStatusToDepositFlowState = (status: string) => {
   const statusMap: Record<string, string> = {
     waiting_for_deposit: "waiting_for_deposit",
     deposit_confirming: "deposit_confirming",
-    initiating_transfer: "initiating_transfer",
-    confirming_transfer: "confirming_transfer",
-    // SDK uses "payout" naming for the MM side
-    initiating_payout: "initiating_transfer",
-    confirming_payout: "confirming_transfer",
+    initiating_payout: "initiating_payout",
+    confirming_payout: "confirming_payout",
     swap_complete: "swap_complete",
     refunding_user: "refunding_user",
     failed: "failed",

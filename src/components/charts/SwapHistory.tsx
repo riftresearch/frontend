@@ -109,7 +109,7 @@ const Pill: React.FC<{
   const isClickable =
     (hasTx &&
       (step.status === "waiting_for_deposit" ||
-        step.status === "initiating_transfer")) ||
+        step.status === "initiating_payout")) ||
     (isConfsPill && hasPreviousTx);
 
   const handleClick = (e: React.MouseEvent) => {
@@ -200,7 +200,7 @@ const Pill: React.FC<{
         {displayedLabel}
       </Text>
       {(step.status === "waiting_for_deposit" ||
-        step.status === "initiating_transfer") && (
+        step.status === "initiating_payout") && (
         <AssetIcon asset={step.badge} iconUrl={step.badgeIconUrl} size={15} />
       )}
     </Flex>
@@ -1236,14 +1236,14 @@ function buildAverageFlowSteps(
       duration: formatSecondsToMinSec(Math.round(avgData.time_user_sent_to_confs_ms / 1000)),
     },
     {
-      status: "initiating_transfer",
+      status: "initiating_payout",
       label: "MM Sent",
       state: "completed",
       badge: mmAsset,
       duration: formatSecondsToMinSec(Math.round(avgData.time_user_confs_to_mm_sent_ms / 1000)),
     },
     {
-      status: "confirming_transfer",
+      status: "confirming_payout",
       label: "Confs",
       state: "completed",
       duration: formatSecondsToMinSec(Math.round(avgData.time_mm_sent_to_mm_confs_ms / 1000)),
@@ -1419,14 +1419,14 @@ export const SwapHistory: React.FC<{
           duration: avgDuration(list, 2),
         },
         {
-          status: "initiating_transfer",
+          status: "initiating_payout",
           label: "MM Sent",
           state: "completed",
           badge: dir === "BTC_TO_EVM" ? "cbBTC" : "BTC",
           duration: avgDuration(list, 3),
         },
         {
-          status: "confirming_transfer",
+          status: "confirming_payout",
           label: `${Math.max(avgMmConfs, 0)}+ Confs`,
           state: "completed",
           duration: avgDuration(list, 4),
