@@ -4,7 +4,7 @@ import { useDynamicContext, useUserWallets, useDynamicModals } from "@dynamic-la
 import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
 import { FiChevronDown, FiPlus, FiEdit3 } from "react-icons/fi";
 import { colors } from "@/utils/colors";
-import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
+import { getPaymentAddress, getAllBtcAddressesWithInfo, type BtcAddressInfo } from "@/hooks/useBitcoinTransaction";
 
 // Dynamic's icon sprite URL
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
@@ -42,18 +42,37 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     }
   });
 
-  // Map wallets with their addresses (for BTC this will be payment address)
-  const walletsWithAddresses = useMemo(() => {
-    const result = filteredWallets.map((wallet) => {
-      let address: string;
+  // Entry type for wallet addresses (BTC wallets expand to multiple entries)
+  interface WalletAddressEntry {
+    wallet: any;
+    address: string;
+    addressLabel?: string; // For BTC: "Taproot", "Native Segwit", etc.
+  }
 
+  // Map wallets with their addresses (BTC wallets expand to multiple entries - one per address type)
+  const walletsWithAddresses: WalletAddressEntry[] = useMemo(() => {
+    const result: WalletAddressEntry[] = [];
+    
+    for (const wallet of filteredWallets) {
       if (chainType === "BTC" && isBitcoinWallet(wallet)) {
-        address = getPaymentAddress(wallet);
+        // Expand BTC wallet into multiple entries (Taproot, Native Segwit, etc.)
+        const addressInfos = getAllBtcAddressesWithInfo(wallet);
+        for (const info of addressInfos) {
+          result.push({
+            wallet,
+            address: info.address,
+            addressLabel: info.label,
+          });
+        }
       } else {
-        address = wallet.address;
+        // EVM wallets - single entry
+        result.push({
+          wallet,
+          address: wallet.address,
+        });
       }
-      return { wallet, address };
-    });
+    }
+    
     return result;
   }, [filteredWallets, chainType]);
 
@@ -196,19 +215,32 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
       >
         {selectedWalletData ? (
           <>
+            {selectedWalletData.addressLabel && (
+              <Text
+                color={chainType === "EVM" ? "#788CFF" : "#F7AA50"}
+                fontSize="13px"
+                fontWeight="500"
+                fontFamily="Aux"
+                letterSpacing="-0.5px"
+                whiteSpace="nowrap"
+              >
+                {selectedWalletData.addressLabel}
+              </Text>
+            )}
             <Image
               src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(selectedWallet)}`}
               alt="wallet"
-              w="16px"
-              h="16px"
+              w="14px"
+              h="14px"
               borderRadius="3px"
+              flexShrink={0}
             />
             <Text
               color={chainType === "EVM" ? "#788CFF" : "#F7AA50"}
-              fontSize="14px"
+              fontSize="13px"
               fontWeight="500"
               fontFamily="Aux"
-              letterSpacing="-1px"
+              letterSpacing="-0.5px"
               whiteSpace="nowrap"
             >
               {formatAddress(selectedWalletData.address)}
@@ -269,10 +301,10 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             zIndex={2000}
             boxShadow="0 8px 32px rgba(0,0,0,0.4)"
           >
-            {/* Connected Wallets */}
-            {walletsWithAddresses.map(({ wallet, address }) => (
+            {/* Connected Wallets - BTC wallets show each address type separately */}
+            {walletsWithAddresses.map(({ wallet, address, addressLabel }, index) => (
               <Flex
-                key={wallet.id}
+                key={`${wallet.id}-${address}`}
                 align="center"
                 gap="10px"
                 px="12px"
@@ -289,9 +321,16 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
                   h="22px"
                   borderRadius="6px"
                 />
-                <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily="Inter">
-                  {formatAddress(address)}
-                </Text>
+                <Flex direction="column" gap="2px">
+                  <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily="Inter">
+                    {formatAddress(address)}
+                  </Text>
+                  {addressLabel && (
+                    <Text color={colors.textGray} fontSize="11px" fontFamily="Inter">
+                      {addressLabel}
+                    </Text>
+                  )}
+                </Flex>
               </Flex>
             ))}
 

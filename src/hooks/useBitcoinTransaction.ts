@@ -64,6 +64,69 @@ export function getAllBtcAddresses(wallet: BitcoinWallet): string[] {
 }
 
 /**
+ * Address info with type label for display
+ */
+export interface BtcAddressInfo {
+  address: string;
+  type: string;
+  label: string;
+}
+
+/**
+ * Get address type label from address prefix (short labels for compact display)
+ */
+function getAddressTypeLabel(address: string): string {
+  if (address.startsWith("bc1p") || address.startsWith("tb1p")) {
+    return "Taproot";
+  } else if (address.startsWith("bc1q") || address.startsWith("tb1q")) {
+    return "Segwit";
+  } else if (address.startsWith("3") || address.startsWith("2")) {
+    return "P2SH";
+  } else if (address.startsWith("1") || address.startsWith("m") || address.startsWith("n")) {
+    return "Legacy";
+  }
+  return "";
+}
+
+/**
+ * Get ALL addresses from a Bitcoin wallet with type info
+ * Returns array of { address, type, label } for each address
+ */
+export function getAllBtcAddressesWithInfo(wallet: BitcoinWallet): BtcAddressInfo[] {
+  const addressInfos: BtcAddressInfo[] = [];
+  const seenAddresses = new Set<string>();
+
+  // Check for additional addresses first (these have explicit type info)
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string; publicKey?: string }>
+    | undefined;
+
+  if (additionalAddresses && additionalAddresses.length > 0) {
+    for (const addr of additionalAddresses) {
+      if (addr.address && !seenAddresses.has(addr.address)) {
+        seenAddresses.add(addr.address);
+        addressInfos.push({
+          address: addr.address,
+          type: addr.type || "unknown",
+          label: getAddressTypeLabel(addr.address),
+        });
+      }
+    }
+  }
+
+  // Add the primary wallet address if not already added
+  if (wallet.address && !seenAddresses.has(wallet.address)) {
+    addressInfos.push({
+      address: wallet.address,
+      type: "primary",
+      label: getAddressTypeLabel(wallet.address),
+    });
+  }
+
+  return addressInfos;
+}
+
+/**
  * Check if an address belongs to a Bitcoin wallet (either primary or additional)
  */
 export function walletHasAddress(wallet: BitcoinWallet, address: string): boolean {
@@ -227,43 +290,44 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
           throw new Error("No Bitcoin address provided");
         }
 
-        // Find the Bitcoin wallet that matches the user address
-        const btcWallet = findBitcoinWalletByAddress(userAddress);
-        if (!btcWallet) {
-          throw new Error(
-            `No Bitcoin wallet found for address ${userAddress}. Please ensure your Bitcoin wallet is connected.`
-          );
-        }
-
-        // Get the payment address from the wallet (important for Xverse which has separate ordinal/payment addresses)
-        const paymentAddress = getPaymentAddress(btcWallet);
-
-        // Step 1: Prepare the PSBT using the payment address
-        const psbtResult = await prepareDepositTransaction(
-          paymentAddress, // Use payment address for UTXO fetching and change
-          depositAddress,
-          amountSats,
-          "medium" // Use medium fee priority
+      // Find the Bitcoin wallet that matches the user address
+      const btcWallet = findBitcoinWalletByAddress(userAddress);
+      if (!btcWallet) {
+        throw new Error(
+          `No Bitcoin wallet found for address ${userAddress}. Please ensure your Bitcoin wallet is connected.`
         );
+      }
 
-        // Step 2: Sign the PSBT using Dynamic Labs SDK
-        setTransactionState("signing");
+      // Use the exact address that was selected by the user (Taproot, Native Segwit, etc.)
+      // This ensures we use UTXOs from the correct address type
+      const selectedAddress = userAddress;
 
-        // Build the signing request
-        // We need to sign all inputs in the PSBT
-        const psbt = bitcoin.Psbt.fromBase64(psbtResult.psbtBase64);
-        const signingIndexes = psbt.data.inputs.map((_, index) => index);
+      // Step 1: Prepare the PSBT using the selected address
+      const psbtResult = await prepareDepositTransaction(
+        selectedAddress, // Use the exact selected address for UTXO fetching and change
+        depositAddress,
+        amountSats,
+        "medium" // Use medium fee priority
+      );
 
-        const signPsbtRequest = {
-          allowedSighash: [1], // SIGHASH_ALL
-          unsignedPsbtBase64: psbtResult.psbtBase64,
-          signature: [
-            {
-              address: paymentAddress, // Use payment address for signing
-              signingIndexes,
-            },
-          ],
-        };
+      // Step 2: Sign the PSBT using Dynamic Labs SDK
+      setTransactionState("signing");
+
+      // Build the signing request
+      // We need to sign all inputs in the PSBT
+      const psbt = bitcoin.Psbt.fromBase64(psbtResult.psbtBase64);
+      const signingIndexes = psbt.data.inputs.map((_, index) => index);
+
+      const signPsbtRequest = {
+        allowedSighash: [1], // SIGHASH_ALL
+        unsignedPsbtBase64: psbtResult.psbtBase64,
+        signature: [
+          {
+            address: selectedAddress, // Use the exact selected address for signing
+            signingIndexes,
+          },
+        ],
+      };
 
         const signedPsbtResponse = await btcWallet.signPsbt(signPsbtRequest);
 

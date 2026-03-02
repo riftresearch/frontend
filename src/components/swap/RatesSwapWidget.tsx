@@ -1102,7 +1102,7 @@ export const RatesSwapWidget = () => {
             borderColor={inputStyle?.bg_color || "#255283"}
             borderRadius="16px"
           >
-            <Flex direction="column" py="12px" px="8px" flex="1">
+            <Flex direction="column" py="12px" px="8px" flex="1" minW="0" overflow="hidden">
               <Text
                 color={!displayedInputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
@@ -1150,7 +1150,7 @@ export const RatesSwapWidget = () => {
               </Text>
             </Flex>
 
-            <Flex py="12px" direction="column" align="flex-end" justify="center" gap="8px">
+            <Flex py="12px" direction="column" align="flex-end" justify="center" gap="8px" flexShrink={0}>
               {/* Address Selector - above token selector */}
               <AddressSelector
                 chainType={isSwappingForBTC ? "EVM" : "BTC"}

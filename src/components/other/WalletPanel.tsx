@@ -21,7 +21,7 @@ import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
-import { getPaymentAddress, getAllBtcAddresses } from "@/hooks/useBitcoinTransaction";
+import { getPaymentAddress, getAllBtcAddresses, getAllBtcAddressesWithInfo, type BtcAddressInfo } from "@/hooks/useBitcoinTransaction";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
 import { toastSuccess } from "@/utils/toast";
 import type { TokenData } from "@/utils/types";
@@ -77,13 +77,51 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     return chain === "btc" || chain === "bitcoin";
   });
 
-  // Get ALL BTC addresses for balance fetching (includes Taproot, Native Segwit, etc.)
-  const btcWalletAddresses = btcWallets.flatMap((wallet) => {
-    if (isBitcoinWallet(wallet)) {
-      return getAllBtcAddresses(wallet);
+  // Expanded BTC wallet entry - each address type becomes its own entry
+  interface ExpandedBtcWallet {
+    id: string; // unique ID: walletId-addressType
+    originalWallet: any; // reference to the Dynamic wallet for signing
+    address: string;
+    addressType: string; // "payment", "ordinal", etc.
+    addressLabel: string; // "Taproot", "Native Segwit", etc.
+    connectorName: string;
+  }
+
+  // Create expanded BTC wallet entries - each address type is shown separately
+  const expandedBtcWallets: ExpandedBtcWallet[] = React.useMemo(() => {
+    const expanded: ExpandedBtcWallet[] = [];
+    
+    for (const wallet of btcWallets) {
+      if (isBitcoinWallet(wallet)) {
+        const addressInfos = getAllBtcAddressesWithInfo(wallet);
+        for (const info of addressInfos) {
+          expanded.push({
+            id: `${wallet.id}-${info.type}`,
+            originalWallet: wallet,
+            address: info.address,
+            addressType: info.type,
+            addressLabel: info.label,
+            connectorName: wallet.connector?.name || "Bitcoin",
+          });
+        }
+      } else {
+        // Fallback for non-standard BTC wallets
+        expanded.push({
+          id: wallet.id,
+          originalWallet: wallet,
+          address: wallet.address,
+          addressType: "default",
+          addressLabel: "Bitcoin",
+          connectorName: wallet.connector?.name || "Bitcoin",
+        });
+      }
     }
-    return [wallet.address];
-  });
+    
+    return expanded;
+  }, [btcWallets]);
+
+  // Get ALL BTC addresses for balance fetching (includes Taproot, Native Segwit, etc.)
+  const btcWalletAddresses = expandedBtcWallets.map((w) => w.address);
 
   // Fetch balances for all BTC wallets
   const btcBalances = useBitcoinBalances(btcWalletAddresses);
@@ -128,20 +166,6 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     return wallet.address;
   };
 
-  // Check if a wallet is the active/selected wallet based on store addresses
-  const isSelectedWallet = (wallet: any): boolean => {
-    const walletChainType = getWalletChainType(wallet);
-    const walletAddress = getWalletDisplayAddress(wallet);
-
-    console.log("isSelectedWallet", primaryEvmAddress, btcAddress, walletAddress, wallet);
-    if (walletChainType === "EVM") {
-      return primaryEvmAddress === walletAddress;
-    } else if (walletChainType === "BVM") {
-      return btcAddress === walletAddress;
-    }
-    return false;
-  };
-
   // Get all connected EVM wallets
   const connectedEvmWallets = userWallets.filter(
     (w) => w.chain?.toUpperCase() === "EVM"
@@ -182,53 +206,28 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     }, 0);
   };
 
-  // Get all BTC addresses for connected wallets (for balance aggregation)
-  const connectedBtcAddresses = btcWallets.flatMap((w) => {
-    if (isBitcoinWallet(w)) {
-      return getAllBtcAddresses(w);
-    }
-    return [w.address];
-  });
-
-  // Calculate total BTC balance across ALL addresses of ALL connected BTC wallets
-  const allBtcTotalUsd = connectedBtcAddresses.reduce((sum, addr) => {
-    const balance = btcBalances[addr];
+  // Calculate total BTC balance across ALL expanded BTC wallet addresses
+  const allBtcTotalUsd = expandedBtcWallets.reduce((sum, expandedWallet) => {
+    const balance = btcBalances[expandedWallet.address];
     if (balance?.balanceBtc) {
       return sum + balance.balanceBtc * (btcPrice || 0);
     }
     return sum;
   }, 0);
 
-  // Get total BTC USD value for a specific wallet (only counts BTC, not EVM tokens)
-  const getBtcWalletUsdValue = (wallet: any): number => {
-    // Ensure this wallet is actually a BTC wallet
-    if (!isBitcoinWallet(wallet)) return 0;
-    if (!btcWallets.some((w) => w.id === wallet.id)) return 0;
-    
-    const addresses = getAllBtcAddresses(wallet);
-    return addresses.reduce((sum, addr) => {
-      const balance = btcBalances[addr];
-      if (balance?.balanceBtc) {
-        return sum + balance.balanceBtc * (btcPrice || 0);
-      }
-      return sum;
-    }, 0);
+  // Get USD value for a specific BTC address
+  const getBtcAddressUsdValue = (address: string): number => {
+    const balance = btcBalances[address];
+    if (balance?.balanceBtc) {
+      return balance.balanceBtc * (btcPrice || 0);
+    }
+    return 0;
   };
 
-  // Get total BTC balance for a specific wallet (only counts BTC, not EVM tokens)
-  const getBtcWalletBalance = (wallet: any): number => {
-    // Ensure this wallet is actually a BTC wallet
-    if (!isBitcoinWallet(wallet)) return 0;
-    if (!btcWallets.some((w) => w.id === wallet.id)) return 0;
-    
-    const addresses = getAllBtcAddresses(wallet);
-    return addresses.reduce((sum, addr) => {
-      const balance = btcBalances[addr];
-      if (balance?.balanceBtc) {
-        return sum + balance.balanceBtc;
-      }
-      return sum;
-    }, 0);
+  // Get BTC balance for a specific address
+  const getBtcAddressBalance = (address: string): number => {
+    const balance = btcBalances[address];
+    return balance?.balanceBtc || 0;
   };
 
   // Interface for tokens with wallet attribution (supports multiple wallets for combined view)
@@ -238,6 +237,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     walletId: string;
     // For merged tokens in "all" view
     walletIcons?: { iconKey: string; walletId: string }[];
+    // For BTC tokens: "Taproot", "Native Segwit", etc.
+    addressLabel?: string;
   }
 
   // Build combined token list for "all" view (merging same tokens from different wallets)
@@ -290,47 +291,40 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       }
     }
 
-    // Add BTC tokens for each connected BTC wallet (summing all addresses per wallet)
-    for (const wallet of btcWallets) {
-      const walletBtcBalance = getBtcWalletBalance(wallet);
-      if (walletBtcBalance <= 0) continue;
+    // Add BTC tokens for each expanded BTC wallet address (each address type is its own entry)
+    for (const expandedWallet of expandedBtcWallets) {
+      const addressBalance = getBtcAddressBalance(expandedWallet.address);
+      if (addressBalance <= 0) continue;
       
-      const btcUsdValue = walletBtcBalance * (btcPrice || 0);
-      const key = "BTC-bitcoin";
+      const btcUsdValue = addressBalance * (btcPrice || 0);
+      // Each address type gets its own unique key
+      const key = `BTC-${expandedWallet.id}`;
 
-      if (tokenMap.has(key)) {
-        const existing = tokenMap.get(key)!;
-        existing.totalBalance += walletBtcBalance;
-        existing.totalUsdValue += btcUsdValue;
-        if (!existing.walletIcons.some(icon => icon.walletId === wallet.id)) {
-          existing.walletIcons.push({
-            iconKey: getWalletIconKey(wallet),
-            walletId: wallet.id,
-          });
-        }
-      } else {
-        tokenMap.set(key, {
-          token: {
-            name: "Bitcoin",
-            ticker: "BTC",
-            address: "btc",
-            balance: walletBtcBalance.toFixed(8),
-            usdValue: `$${btcUsdValue.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}`,
-            icon: "/images/BTC_icon.svg",
-            decimals: 8,
-            chain: "bitcoin" as const,
-            walletAddress: wallet.address,
-            walletIconKey: getWalletIconKey(wallet),
-            walletId: wallet.id,
-          },
-          totalBalance: walletBtcBalance,
-          totalUsdValue: btcUsdValue,
-          walletIcons: [{ iconKey: getWalletIconKey(wallet), walletId: wallet.id }],
-        });
-      }
+      tokenMap.set(key, {
+        token: {
+          name: "Bitcoin",
+          ticker: "BTC",
+          address: expandedWallet.address,
+          balance: addressBalance.toFixed(8),
+          usdValue: `$${btcUsdValue.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`,
+          icon: "/images/BTC_icon.svg",
+          decimals: 8,
+          chain: "bitcoin" as const,
+          walletAddress: expandedWallet.address,
+          walletIconKey: getWalletIconKey(expandedWallet.originalWallet),
+          walletId: expandedWallet.id,
+          addressLabel: expandedWallet.addressLabel,
+        } as TokenWithWallet,
+        totalBalance: addressBalance,
+        totalUsdValue: btcUsdValue,
+        walletIcons: [{ 
+          iconKey: getWalletIconKey(expandedWallet.originalWallet), 
+          walletId: expandedWallet.id 
+        }],
+      });
     }
 
     // Convert map to array with updated balances and wallet icons
@@ -356,10 +350,40 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       const usdB = parseFloat(b.usdValue.replace("$", "").replace(",", ""));
       return usdB - usdA;
     });
-  }, [connectedEvmWallets, userTokensByWallet, btcWallets, btcBalances, btcPrice, userWallets]);
+  }, [connectedEvmWallets, userTokensByWallet, expandedBtcWallets, btcBalances, btcPrice, userWallets]);
 
-  // Get tokens for a specific wallet
+  // Get tokens for a specific wallet (handles both EVM and expanded BTC wallets)
   const getTokensForWallet = (walletId: string): TokenWithWallet[] => {
+    // First check if it's an expanded BTC wallet
+    const expandedBtcWallet = expandedBtcWallets.find((w) => w.id === walletId);
+    if (expandedBtcWallet) {
+      const addressBalance = getBtcAddressBalance(expandedBtcWallet.address);
+      if (addressBalance > 0) {
+        const btcUsdValue = addressBalance * (btcPrice || 0);
+        return [
+          {
+            name: "Bitcoin",
+            ticker: "BTC",
+            address: expandedBtcWallet.address,
+            balance: addressBalance.toFixed(8),
+            usdValue: `$${btcUsdValue.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`,
+            icon: "/images/BTC_icon.svg",
+            decimals: 8,
+            chain: "bitcoin" as const,
+            walletAddress: expandedBtcWallet.address,
+            walletIconKey: getWalletIconKey(expandedBtcWallet.originalWallet),
+            walletId: expandedBtcWallet.id,
+            addressLabel: expandedBtcWallet.addressLabel,
+          },
+        ];
+      }
+      return [];
+    }
+
+    // Check if it's an EVM wallet
     const wallet = userWallets.find((w) => w.id === walletId);
     if (!wallet) return [];
 
@@ -383,32 +407,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         walletIconKey: getWalletIconKey(wallet),
         walletId: wallet.id,
       }));
-    } else {
-      // Return BTC token for this wallet (sum all addresses: Taproot, Native Segwit, etc.)
-      const walletBtcBalance = getBtcWalletBalance(wallet);
-      if (walletBtcBalance > 0) {
-        const btcUsdValue = walletBtcBalance * (btcPrice || 0);
-        return [
-          {
-            name: "Bitcoin",
-            ticker: "BTC",
-            address: "btc",
-            balance: walletBtcBalance.toFixed(8),
-            usdValue: `$${btcUsdValue.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}`,
-            icon: "/images/BTC_icon.svg",
-            decimals: 8,
-            chain: "bitcoin" as const,
-            walletAddress: wallet.address,
-            walletIconKey: getWalletIconKey(wallet),
-            walletId: wallet.id,
-          },
-        ];
-      }
-      return [];
     }
+    
+    return [];
   };
 
   // Use the appropriate tokens based on viewMode
@@ -420,20 +421,76 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     viewMode === "all"
       ? allEvmTotalUsdValue + allBtcTotalUsd
       : (() => {
+          // Check if it's an expanded BTC wallet
+          const expandedBtcWallet = expandedBtcWallets.find((w) => w.id === viewMode);
+          if (expandedBtcWallet) {
+            return getBtcAddressUsdValue(expandedBtcWallet.address);
+          }
+          
+          // Check if it's an EVM wallet
           const wallet = userWallets.find((w) => w.id === viewMode);
           if (!wallet) return 0;
           const chainType = getWalletChainType(wallet);
           if (chainType === "EVM") {
             return getEvmWalletUsdValue(wallet.address);
-          } else {
-            return getBtcWalletUsdValue(wallet);
           }
+          return 0;
         })();
 
   // Calculate loading state
   const isLoadingBtc = btcWalletAddresses.some((addr) => btcBalances[addr]?.isLoading);
   const isLoadingEvm = connectedEvmWallets.length > 0 && Object.keys(userTokensByWallet).length === 0;
   const isLoadingBalances = isLoadingBtc || isLoadingEvm;
+
+  // Display wallet entry - unified type for EVM and expanded BTC wallets
+  interface DisplayWallet {
+    id: string;
+    address: string;
+    chainType: "EVM" | "BVM";
+    iconKey: string;
+    addressLabel?: string; // For BTC: "Taproot", "Native Segwit", etc.
+    originalWallet: any; // Reference to Dynamic wallet for actions
+    usdValue: number;
+    isLoading: boolean;
+  }
+
+  // Create unified display wallet list (EVM wallets + expanded BTC wallets)
+  const displayWallets: DisplayWallet[] = React.useMemo(() => {
+    const wallets: DisplayWallet[] = [];
+
+    // Add EVM wallets
+    for (const wallet of connectedEvmWallets) {
+      wallets.push({
+        id: wallet.id,
+        address: wallet.address,
+        chainType: "EVM",
+        iconKey: getWalletIconKey(wallet),
+        originalWallet: wallet,
+        usdValue: getEvmWalletUsdValue(wallet.address),
+        isLoading: false,
+      });
+    }
+
+    // Add expanded BTC wallets (each address type separately)
+    for (const expandedWallet of expandedBtcWallets) {
+      const balance = btcBalances[expandedWallet.address];
+      wallets.push({
+        id: expandedWallet.id,
+        address: expandedWallet.address,
+        chainType: "BVM",
+        iconKey: getWalletIconKey(expandedWallet.originalWallet),
+        addressLabel: expandedWallet.addressLabel,
+        originalWallet: expandedWallet.originalWallet,
+        usdValue: getBtcAddressUsdValue(expandedWallet.address),
+        isLoading: balance?.isLoading || false,
+      });
+    }
+
+    return wallets;
+  }, [connectedEvmWallets, expandedBtcWallets, btcBalances, userTokensByWallet, btcPrice]);
+
+  // Total wallet count for display
+  const totalWalletCount = displayWallets.length;
 
   // Format address for display
   const formatAddress = (addr: string) => {
@@ -470,6 +527,31 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     }
   };
 
+  // Handle display wallet selection (works with both EVM and expanded BTC wallets)
+  const handleDisplayWalletSelect = async (displayWallet: DisplayWallet) => {
+    if (displayWallet.chainType === "EVM") {
+      try {
+        await switchWallet(displayWallet.originalWallet.id);
+        setPrimaryEvmAddress(displayWallet.address);
+      } catch (error) {
+        console.error("handleDisplayWalletSelect: Failed to switch primary wallet:", error);
+      }
+    } else if (displayWallet.chainType === "BVM") {
+      // Set the specific BTC address (Taproot or Native Segwit)
+      setBtcAddress(displayWallet.address);
+    }
+  };
+
+  // Check if a display wallet is the active/selected wallet
+  const isDisplayWalletSelected = (displayWallet: DisplayWallet): boolean => {
+    if (displayWallet.chainType === "EVM") {
+      return primaryEvmAddress?.toLowerCase() === displayWallet.address.toLowerCase();
+    } else if (displayWallet.chainType === "BVM") {
+      return btcAddress === displayWallet.address;
+    }
+    return false;
+  };
+
   // Disconnect a specific wallet
   const disconnectWallet = async (wallet: any) => {
     try {
@@ -478,6 +560,21 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         await handleLogOut();
       } else {
         await removeWallet(wallet.id);
+      }
+    } catch (err) {
+      console.error("Failed to disconnect wallet:", err);
+    }
+  };
+
+  // Disconnect a display wallet (uses the original wallet reference)
+  const disconnectDisplayWallet = async (displayWallet: DisplayWallet) => {
+    try {
+      // Count unique original wallets
+      const uniqueOriginalWallets = new Set(displayWallets.map((w) => w.originalWallet.id));
+      if (uniqueOriginalWallets.size <= 1) {
+        await handleLogOut();
+      } else {
+        await removeWallet(displayWallet.originalWallet.id);
       }
     } catch (err) {
       console.error("Failed to disconnect wallet:", err);
@@ -630,12 +727,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                       fontFamily="Inter"
                     >
                       {viewMode === "all"
-                        ? `All Wallets (${userWallets.length})`
+                        ? `All Wallets (${totalWalletCount})`
                         : (() => {
-                            const selectedWallet = userWallets.find((w) => w.id === viewMode);
+                            const selectedWallet = displayWallets.find((w) => w.id === viewMode);
                             return selectedWallet
                               ? formatAddress(selectedWallet.address)
-                              : `All Wallets (${userWallets.length})`;
+                              : `All Wallets (${totalWalletCount})`;
                           })()}
                     </Text>
                     <FiChevronUp size={16} color={colors.textGray} />
@@ -659,38 +756,38 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                   </Box>
                 </Flex>
 
-                {/* Wallet List */}
+                {/* Wallet List - uses displayWallets to show EVM and expanded BTC wallets separately */}
                 <Box p="12px">
-                  {userWallets.map((wallet) => (
+                  {displayWallets.map((displayWallet) => (
                     <Box
-                      key={wallet.id}
+                      key={displayWallet.id}
                       p="16px"
                       mb="8px"
                       borderRadius="12px"
                       border={`2px solid ${
-                        isSelectedWallet(wallet)
-                          ? getWalletChainType(wallet) === "EVM"
+                        isDisplayWalletSelected(displayWallet)
+                          ? displayWallet.chainType === "EVM"
                             ? "rgba(120, 140, 255, 0.6)"
                             : "rgba(247, 170, 80, 0.6)"
                           : colors.borderGray
                       }`}
                       bg={
-                        isSelectedWallet(wallet)
-                          ? getWalletChainType(wallet) === "EVM"
+                        isDisplayWalletSelected(displayWallet)
+                          ? displayWallet.chainType === "EVM"
                             ? "rgba(9, 36, 97, 0.3)"
                             : "#291B0D"
                           : colors.offBlack
                       }
-                      cursor={isSelectedWallet(wallet) ? "default" : "pointer"}
+                      cursor={isDisplayWalletSelected(displayWallet) ? "default" : "pointer"}
                       transition="all 0.2s ease-in-out"
                       _hover={{
-                        bg: isSelectedWallet(wallet)
-                          ? getWalletChainType(wallet) === "EVM"
+                        bg: isDisplayWalletSelected(displayWallet)
+                          ? displayWallet.chainType === "EVM"
                             ? "rgba(9, 36, 97, 0.4)"
                             : "#3a2510"
                           : "#1a1a1a",
                       }}
-                      onClick={() => handleWalletSelect(wallet)}
+                      onClick={() => handleDisplayWalletSelect(displayWallet)}
                     >
                       {/* Top Row: Icon, Address, Balance */}
                       <Flex align="center" justify="space-between" mb="12px">
@@ -704,36 +801,51 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             flexShrink={0}
                           >
                             <Image
-                              src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                              src={`${DYNAMIC_ICON_BASE}#${displayWallet.iconKey}`}
                               alt="wallet"
                               w="100%"
                               h="100%"
                               objectFit="contain"
                             />
                           </Box>
-                          {/* Address with copy button */}
+                          {/* Address with copy button and optional label */}
                           <Flex
-                            align="center"
-                            gap="8px"
-                            cursor="pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyAddress(getWalletDisplayAddress(wallet));
-                            }}
-                            _hover={{ opacity: 0.8 }}
+                            direction="column"
+                            gap="2px"
                           >
-                            <Text
-                              color={colors.offWhite}
-                              fontSize="18px"
-                              fontWeight="600"
-                              fontFamily="Inter"
+                            <Flex
+                              align="center"
+                              gap="8px"
+                              cursor="pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyAddress(displayWallet.address);
+                              }}
+                              _hover={{ opacity: 0.8 }}
                             >
-                              {formatAddress(getWalletDisplayAddress(wallet))}
-                            </Text>
-                            {copiedAddress === getWalletDisplayAddress(wallet) ? (
-                              <FiCheck size={16} color={colors.greenOutline} />
-                            ) : (
-                              <FiCopy size={16} color={colors.textGray} />
+                              <Text
+                                color={colors.offWhite}
+                                fontSize="18px"
+                                fontWeight="600"
+                                fontFamily="Inter"
+                              >
+                                {formatAddress(displayWallet.address)}
+                              </Text>
+                              {copiedAddress === displayWallet.address ? (
+                                <FiCheck size={16} color={colors.greenOutline} />
+                              ) : (
+                                <FiCopy size={16} color={colors.textGray} />
+                              )}
+                            </Flex>
+                            {/* Show address type label for BTC wallets */}
+                            {displayWallet.addressLabel && displayWallet.chainType === "BVM" && (
+                              <Text
+                                color={colors.textGray}
+                                fontSize="12px"
+                                fontFamily="Inter"
+                              >
+                                {displayWallet.addressLabel}
+                              </Text>
                             )}
                           </Flex>
                         </Flex>
@@ -744,22 +856,16 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           fontWeight="600"
                           fontFamily="Inter"
                         >
-                          {getWalletChainType(wallet) === "EVM"
-                            ? `$${getEvmWalletUsdValue(wallet.address).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : (() => {
-                                const usdValue = getBtcWalletUsdValue(wallet);
-                                const addresses = isBitcoinWallet(wallet) ? getAllBtcAddresses(wallet) : [wallet.address];
-                                const isLoading = addresses.some(addr => btcBalances[addr]?.isLoading);
-                                if (isLoading) return "...";
-                                return `$${usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                              })()}
+                          {displayWallet.isLoading
+                            ? "..."
+                            : `$${displayWallet.usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </Text>
                       </Flex>
 
                       {/* Bottom Row: Chain Badge, Select Wallet, Disconnect */}
                       <Flex align="center" justify="space-between">
                         <Flex align="center" gap="8px">
-                          {/* Chain Badge with Icon */}
+                          {/* Chain Badge with Icon and optional address type */}
                           <Flex
                             align="center"
                             gap="6px"
@@ -767,12 +873,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             py="4px"
                             borderRadius="6px"
                             bg={
-                              getWalletChainType(wallet) === "EVM"
+                              displayWallet.chainType === "EVM"
                                 ? "rgba(57, 74, 255, 0.15)"
                                 : "rgba(247, 147, 26, 0.15)"
                             }
                           >
-                            {CHAIN_TYPE_LOGOS[getWalletChainType(wallet)] && (
+                            {CHAIN_TYPE_LOGOS[displayWallet.chainType] && (
                               <Box
                                 w="14px"
                                 h="14px"
@@ -782,12 +888,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                                 alignItems="center"
                                 justifyContent="center"
                                 bg={
-                                  getWalletChainType(wallet) === "EVM" ? colors.RiftBlue : "#F7931A"
+                                  displayWallet.chainType === "EVM" ? colors.RiftBlue : "#F7931A"
                                 }
                                 p="2px"
                               >
                                 <Image
-                                  src={CHAIN_TYPE_LOGOS[getWalletChainType(wallet)]}
+                                  src={CHAIN_TYPE_LOGOS[displayWallet.chainType]}
                                   alt="chain"
                                   w="100%"
                                   h="100%"
@@ -797,7 +903,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             )}
                             <Text
                               color={
-                                getWalletChainType(wallet) === "EVM"
+                                displayWallet.chainType === "EVM"
                                   ? "rgba(120, 140, 255, 1)"
                                   : "rgba(247, 170, 80, 1)"
                               }
@@ -805,11 +911,13 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               fontWeight="600"
                               fontFamily="Inter"
                             >
-                              {getWalletChainType(wallet)}
+                              {displayWallet.chainType === "BVM" && displayWallet.addressLabel
+                                ? displayWallet.addressLabel
+                                : displayWallet.chainType}
                             </Text>
                           </Flex>
                           {/* Active indicator or Select Wallet */}
-                          {isSelectedWallet(wallet) ? (
+                          {isDisplayWalletSelected(displayWallet) ? (
                             <Flex align="center" gap="4px">
                               <Box w="6px" h="6px" borderRadius="full" bg={colors.greenOutline} />
                               <Text
@@ -831,7 +939,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               _hover={{ color: "#C4B5FD" }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleWalletSelect(wallet);
+                                handleDisplayWalletSelect(displayWallet);
                               }}
                             >
                               Select Wallet
@@ -850,7 +958,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             _hover={{ color: "#FCA5A5" }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              disconnectWallet(wallet);
+                              disconnectDisplayWallet(displayWallet);
                             }}
                           >
                             Disconnect
@@ -935,12 +1043,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
               </Flex>
               <Text color={colors.offWhite} fontSize="15px" fontWeight={500} fontFamily="Inter">
                 {viewMode === "all"
-                  ? `All Wallets (${userWallets.length})`
+                  ? `All Wallets (${totalWalletCount})`
                   : (() => {
-                      const selectedWallet = userWallets.find((w) => w.id === viewMode);
+                      const selectedWallet = displayWallets.find((w) => w.id === viewMode);
                       return selectedWallet
                         ? formatAddress(selectedWallet.address)
-                        : `All Wallets (${userWallets.length})`;
+                        : `All Wallets (${totalWalletCount})`;
                     })()}
               </Text>
               <FiChevronDown size={16} color={colors.textGray} />
@@ -1277,6 +1385,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                       showBalance
                       isMobile={isMobile}
                       walletIcons={viewMode === "all" ? token.walletIcons : undefined}
+                      addressLabel={token.addressLabel}
                     />
                   ))}
                 </Flex>

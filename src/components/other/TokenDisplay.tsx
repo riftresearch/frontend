@@ -20,6 +20,7 @@ export interface TokenDisplayProps {
   isMobile?: boolean;
   formatUsdValue?: (usdValue: string) => string;
   walletIcons?: WalletIcon[];
+  addressLabel?: string; // For BTC: "Taproot", "Native Segwit", etc.
 }
 
 export const TokenDisplay: React.FC<TokenDisplayProps> = ({
@@ -29,6 +30,7 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
   isMobile = false,
   formatUsdValue,
   walletIcons,
+  addressLabel,
 }) => {
   return (
     <Box mx="12px" cursor={onClick ? "pointer" : "default"} onClick={onClick}>
@@ -124,7 +126,7 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
           </Text>
           <Flex align="center" gap="8px">
             <Text fontSize="12px" fontFamily="Inter" color={colors.textGray}>
-              {CHAIN_NAMES[token.chain] || "Unknown"}
+              {addressLabel || CHAIN_NAMES[token.chain] || "Unknown"}
             </Text>
             {!isMobile && token.address && token.ticker !== "BTC" && token.ticker !== "ETH" && (
               <Text fontSize="12px" fontFamily="Inter" color={colors.darkerGray}>
