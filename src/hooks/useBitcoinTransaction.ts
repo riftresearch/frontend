@@ -36,6 +36,34 @@ export function getPaymentAddress(wallet: BitcoinWallet): string {
 }
 
 /**
+ * Get ALL addresses from a Bitcoin wallet (for balance fetching)
+ * This includes both the primary address and any additional addresses (Taproot, Native Segwit, etc.)
+ */
+export function getAllBtcAddresses(wallet: BitcoinWallet): string[] {
+  const addresses: string[] = [];
+  
+  // Add the primary wallet address
+  if (wallet.address) {
+    addresses.push(wallet.address);
+  }
+
+  // Check for additional addresses (Phantom, Xverse, etc. may have multiple address types)
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string; publicKey?: string }>
+    | undefined;
+
+  if (additionalAddresses && additionalAddresses.length > 0) {
+    for (const addr of additionalAddresses) {
+      if (addr.address && !addresses.includes(addr.address)) {
+        addresses.push(addr.address);
+      }
+    }
+  }
+
+  return addresses;
+}
+
+/**
  * Check if an address belongs to a Bitcoin wallet (either primary or additional)
  */
 export function walletHasAddress(wallet: BitcoinWallet, address: string): boolean {

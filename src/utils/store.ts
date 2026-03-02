@@ -61,6 +61,9 @@ export const useStore = create<{
   clearEvmWalletClients: () => void;
   userTokensByChain: Record<number, TokenData[]>;
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
+  userTokensByWallet: Record<string, Record<number, TokenData[]>>;
+  setUserTokensForWallet: (walletAddress: string, chainId: number, tokens: TokenData[]) => void;
+  clearUserTokensForWallet: (walletAddress: string) => void;
   inputToken: TokenData;
   setInputToken: (token: TokenData) => void;
   outputToken: TokenData;
@@ -179,6 +182,27 @@ export const useStore = create<{
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
+  userTokensByWallet: {},
+  setUserTokensForWallet: (walletAddress: string, chainId: number, tokens: TokenData[]) =>
+    set((state) => {
+      const key = walletAddress.toLowerCase();
+      const existingWalletTokens = state.userTokensByWallet[key] || {};
+      return {
+        userTokensByWallet: {
+          ...state.userTokensByWallet,
+          [key]: {
+            ...existingWalletTokens,
+            [chainId]: tokens,
+          },
+        },
+      };
+    }),
+  clearUserTokensForWallet: (walletAddress: string) =>
+    set((state) => {
+      const key = walletAddress.toLowerCase();
+      const { [key]: _removed, ...rest } = state.userTokensByWallet;
+      return { userTokensByWallet: rest };
+    }),
   inputToken: DEFAULT_INPUT_TOKEN,
   setInputToken: (token: TokenData) => set({ inputToken: token }),
   outputToken: DEFAULT_OUTPUT_TOKEN,

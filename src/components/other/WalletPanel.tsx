@@ -21,7 +21,7 @@ import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
-import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
+import { getPaymentAddress, getAllBtcAddresses } from "@/hooks/useBitcoinTransaction";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
 import { toastSuccess } from "@/utils/toast";
 import type { TokenData } from "@/utils/types";
@@ -61,6 +61,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   const switchWallet = useSwitchWallet();
   const {
     userTokensByChain,
+    userTokensByWallet,
     btcPrice,
     inputToken,
     outputToken,
@@ -70,20 +71,19 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   const isSwappingForBTC = outputToken.chain === "bitcoin";
   const { isMobile } = useWindowSize();
 
-  // Get all BTC wallet addresses for balance fetching (using payment addresses)
-  const btcWalletAddresses = userWallets
-    .filter((wallet) => {
-      const chain = wallet.chain?.toLowerCase();
-      return chain === "btc" || chain === "bitcoin";
-    })
-    .map((wallet) => {
-      // Use payment address for Xverse and other wallets with separate ordinal/payment addresses
-      if (isBitcoinWallet(wallet)) {
-        const paymentAddr = getPaymentAddress(wallet);
-        return paymentAddr;
-      }
-      return wallet.address;
-    });
+  // Get all BTC wallets
+  const btcWallets = userWallets.filter((wallet) => {
+    const chain = wallet.chain?.toLowerCase();
+    return chain === "btc" || chain === "bitcoin";
+  });
+
+  // Get ALL BTC addresses for balance fetching (includes Taproot, Native Segwit, etc.)
+  const btcWalletAddresses = btcWallets.flatMap((wallet) => {
+    if (isBitcoinWallet(wallet)) {
+      return getAllBtcAddresses(wallet);
+    }
+    return [wallet.address];
+  });
 
   // Fetch balances for all BTC wallets
   const btcBalances = useBitcoinBalances(btcWalletAddresses);
@@ -142,38 +142,55 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     return false;
   };
 
-  // Find EVM wallet object for token attribution (using primaryEvmAddress from store)
-  const evmWallet = primaryEvmAddress
-    ? userWallets.find((w) => w.address === primaryEvmAddress || w.chain?.toUpperCase() === "EVM")
-    : null;
+  // Get all connected EVM wallets
+  const connectedEvmWallets = userWallets.filter(
+    (w) => w.chain?.toUpperCase() === "EVM"
+  );
 
-  // Get all tokens from all chains (for EVM wallets) - only if EVM wallet is connected
-  const allTokens: TokenData[] = primaryEvmAddress ? Object.values(userTokensByChain).flat() : [];
+  // Calculate total EVM USD value across ALL connected EVM wallets
+  const allEvmTotalUsdValue = React.useMemo(() => {
+    let total = 0;
+    for (const wallet of connectedEvmWallets) {
+      const walletTokens = userTokensByWallet[wallet.address.toLowerCase()];
+      if (walletTokens) {
+        const allTokens = Object.values(walletTokens).flat();
+        for (const token of allTokens) {
+          const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
+          if (!isNaN(usd)) {
+            total += usd;
+          }
+        }
+      }
+    }
+    return total;
+  }, [connectedEvmWallets, userTokensByWallet]);
 
-  // Sort EVM tokens by USD value
-  const sortedEvmTokens = [...allTokens].sort((a, b) => {
-    const usdA = parseFloat(a.usdValue.replace("$", "").replace(",", ""));
-    const usdB = parseFloat(b.usdValue.replace("$", "").replace(",", ""));
-    return usdB - usdA;
+  // Get USD value for a specific EVM wallet (only counts EVM tokens, not BTC)
+  const getEvmWalletUsdValue = (walletAddress: string): number => {
+    // Ensure this wallet is actually an EVM wallet
+    const wallet = connectedEvmWallets.find(
+      (w) => w.address.toLowerCase() === walletAddress.toLowerCase()
+    );
+    if (!wallet) return 0;
+    
+    const walletTokens = userTokensByWallet[walletAddress.toLowerCase()];
+    if (!walletTokens) return 0;
+    const allTokens = Object.values(walletTokens).flat();
+    return allTokens.reduce((sum, token) => {
+      const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
+      return sum + (isNaN(usd) ? 0 : usd);
+    }, 0);
+  };
+
+  // Get all BTC addresses for connected wallets (for balance aggregation)
+  const connectedBtcAddresses = btcWallets.flatMap((w) => {
+    if (isBitcoinWallet(w)) {
+      return getAllBtcAddresses(w);
+    }
+    return [w.address];
   });
 
-  // Calculate EVM total USD value - only if EVM wallet is connected
-  const evmTotalUsdValue = primaryEvmAddress
-    ? sortedEvmTokens.reduce((sum, token) => {
-        const usd = parseFloat(token.usdValue.replace("$", "").replace(",", ""));
-        return sum + (isNaN(usd) ? 0 : usd);
-      }, 0)
-    : 0;
-
-  // Get currently connected BTC wallet addresses
-  const connectedBtcAddresses = userWallets
-    .filter((w) => {
-      const chain = w.chain?.toLowerCase();
-      return chain === "btc" || chain === "bitcoin";
-    })
-    .map((w) => w.address);
-
-  // Calculate total BTC balance only for currently connected BTC wallets
+  // Calculate total BTC balance across ALL addresses of ALL connected BTC wallets
   const allBtcTotalUsd = connectedBtcAddresses.reduce((sum, addr) => {
     const balance = btcBalances[addr];
     if (balance?.balanceBtc) {
@@ -181,6 +198,38 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     }
     return sum;
   }, 0);
+
+  // Get total BTC USD value for a specific wallet (only counts BTC, not EVM tokens)
+  const getBtcWalletUsdValue = (wallet: any): number => {
+    // Ensure this wallet is actually a BTC wallet
+    if (!isBitcoinWallet(wallet)) return 0;
+    if (!btcWallets.some((w) => w.id === wallet.id)) return 0;
+    
+    const addresses = getAllBtcAddresses(wallet);
+    return addresses.reduce((sum, addr) => {
+      const balance = btcBalances[addr];
+      if (balance?.balanceBtc) {
+        return sum + balance.balanceBtc * (btcPrice || 0);
+      }
+      return sum;
+    }, 0);
+  };
+
+  // Get total BTC balance for a specific wallet (only counts BTC, not EVM tokens)
+  const getBtcWalletBalance = (wallet: any): number => {
+    // Ensure this wallet is actually a BTC wallet
+    if (!isBitcoinWallet(wallet)) return 0;
+    if (!btcWallets.some((w) => w.id === wallet.id)) return 0;
+    
+    const addresses = getAllBtcAddresses(wallet);
+    return addresses.reduce((sum, addr) => {
+      const balance = btcBalances[addr];
+      if (balance?.balanceBtc) {
+        return sum + balance.balanceBtc;
+      }
+      return sum;
+    }, 0);
+  };
 
   // Interface for tokens with wallet attribution (supports multiple wallets for combined view)
   interface TokenWithWallet extends TokenData {
@@ -204,9 +253,13 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       }
     >();
 
-    // Add EVM tokens with wallet attribution
-    if (evmWallet) {
-      sortedEvmTokens.forEach((token) => {
+    // Add EVM tokens from ALL connected EVM wallets
+    for (const wallet of connectedEvmWallets) {
+      const walletTokens = userTokensByWallet[wallet.address.toLowerCase()];
+      if (!walletTokens) continue;
+      
+      const allTokens = Object.values(walletTokens).flat();
+      for (const token of allTokens) {
         const key = `${token.ticker}-${token.chain}`;
         const balance = parseFloat(token.balance) || 0;
         const usdValue = parseFloat(token.usdValue.replace("$", "").replace(",", "")) || 0;
@@ -215,67 +268,70 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
           const existing = tokenMap.get(key)!;
           existing.totalBalance += balance;
           existing.totalUsdValue += usdValue;
-          existing.walletIcons.push({
-            iconKey: getWalletIconKey(evmWallet),
-            walletId: evmWallet.id,
-          });
+          if (!existing.walletIcons.some(icon => icon.walletId === wallet.id)) {
+            existing.walletIcons.push({
+              iconKey: getWalletIconKey(wallet),
+              walletId: wallet.id,
+            });
+          }
         } else {
           tokenMap.set(key, {
             token: {
               ...token,
-              walletAddress: evmWallet.address,
-              walletIconKey: getWalletIconKey(evmWallet),
-              walletId: evmWallet.id,
-            },
-            totalBalance: balance,
-            totalUsdValue: usdValue,
-            walletIcons: [{ iconKey: getWalletIconKey(evmWallet), walletId: evmWallet.id }],
-          });
-        }
-      });
-    }
-
-    // Add BTC tokens for each connected BTC wallet
-    connectedBtcAddresses.forEach((addr) => {
-      const balance = btcBalances[addr];
-      const wallet = userWallets.find((w) => w.address === addr);
-      if (balance?.balanceBtc > 0 && wallet) {
-        const btcUsdValue = balance.balanceBtc * (btcPrice || 0);
-        const key = "BTC-bitcoin"; // BTC uses chain "bitcoin"
-
-        if (tokenMap.has(key)) {
-          const existing = tokenMap.get(key)!;
-          existing.totalBalance += balance.balanceBtc;
-          existing.totalUsdValue += btcUsdValue;
-          existing.walletIcons.push({
-            iconKey: getWalletIconKey(wallet),
-            walletId: wallet.id,
-          });
-        } else {
-          tokenMap.set(key, {
-            token: {
-              name: "Bitcoin",
-              ticker: "BTC",
-              address: "btc",
-              balance: balance.balanceBtc.toFixed(8),
-              usdValue: `$${btcUsdValue.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}`,
-              icon: "/images/BTC_icon.svg",
-              decimals: 8,
-              chain: "bitcoin" as const,
-              walletAddress: addr,
+              walletAddress: wallet.address,
               walletIconKey: getWalletIconKey(wallet),
               walletId: wallet.id,
             },
-            totalBalance: balance.balanceBtc,
-            totalUsdValue: btcUsdValue,
+            totalBalance: balance,
+            totalUsdValue: usdValue,
             walletIcons: [{ iconKey: getWalletIconKey(wallet), walletId: wallet.id }],
           });
         }
       }
-    });
+    }
+
+    // Add BTC tokens for each connected BTC wallet (summing all addresses per wallet)
+    for (const wallet of btcWallets) {
+      const walletBtcBalance = getBtcWalletBalance(wallet);
+      if (walletBtcBalance <= 0) continue;
+      
+      const btcUsdValue = walletBtcBalance * (btcPrice || 0);
+      const key = "BTC-bitcoin";
+
+      if (tokenMap.has(key)) {
+        const existing = tokenMap.get(key)!;
+        existing.totalBalance += walletBtcBalance;
+        existing.totalUsdValue += btcUsdValue;
+        if (!existing.walletIcons.some(icon => icon.walletId === wallet.id)) {
+          existing.walletIcons.push({
+            iconKey: getWalletIconKey(wallet),
+            walletId: wallet.id,
+          });
+        }
+      } else {
+        tokenMap.set(key, {
+          token: {
+            name: "Bitcoin",
+            ticker: "BTC",
+            address: "btc",
+            balance: walletBtcBalance.toFixed(8),
+            usdValue: `$${btcUsdValue.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`,
+            icon: "/images/BTC_icon.svg",
+            decimals: 8,
+            chain: "bitcoin" as const,
+            walletAddress: wallet.address,
+            walletIconKey: getWalletIconKey(wallet),
+            walletId: wallet.id,
+          },
+          totalBalance: walletBtcBalance,
+          totalUsdValue: btcUsdValue,
+          walletIcons: [{ iconKey: getWalletIconKey(wallet), walletId: wallet.id }],
+        });
+      }
+    }
 
     // Convert map to array with updated balances and wallet icons
     const tokens: TokenWithWallet[] = [];
@@ -300,7 +356,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
       const usdB = parseFloat(b.usdValue.replace("$", "").replace(",", ""));
       return usdB - usdA;
     });
-  }, [sortedEvmTokens, connectedBtcAddresses, btcBalances, btcPrice, userWallets, evmWallet]);
+  }, [connectedEvmWallets, userTokensByWallet, btcWallets, btcBalances, btcPrice, userWallets]);
 
   // Get tokens for a specific wallet
   const getTokensForWallet = (walletId: string): TokenWithWallet[] => {
@@ -310,25 +366,34 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     const chainType = getWalletChainType(wallet);
 
     if (chainType === "EVM") {
-      // Return EVM tokens
-      return sortedEvmTokens.map((token) => ({
+      // Return tokens from userTokensByWallet for this specific wallet
+      const walletTokens = userTokensByWallet[wallet.address.toLowerCase()];
+      if (!walletTokens) return [];
+      
+      const allTokens = Object.values(walletTokens).flat();
+      const sortedTokens = [...allTokens].sort((a, b) => {
+        const usdA = parseFloat(a.usdValue.replace("$", "").replace(",", ""));
+        const usdB = parseFloat(b.usdValue.replace("$", "").replace(",", ""));
+        return usdB - usdA;
+      });
+      
+      return sortedTokens.map((token) => ({
         ...token,
         walletAddress: wallet.address,
         walletIconKey: getWalletIconKey(wallet),
         walletId: wallet.id,
       }));
     } else {
-      // Return BTC token for this wallet (use payment address for balance lookup)
-      const walletAddr = getWalletDisplayAddress(wallet);
-      const balance = btcBalances[walletAddr];
-      if (balance?.balanceBtc > 0) {
-        const btcUsdValue = balance.balanceBtc * (btcPrice || 0);
+      // Return BTC token for this wallet (sum all addresses: Taproot, Native Segwit, etc.)
+      const walletBtcBalance = getBtcWalletBalance(wallet);
+      if (walletBtcBalance > 0) {
+        const btcUsdValue = walletBtcBalance * (btcPrice || 0);
         return [
           {
             name: "Bitcoin",
             ticker: "BTC",
             address: "btc",
-            balance: balance.balanceBtc.toFixed(8),
+            balance: walletBtcBalance.toFixed(8),
             usdValue: `$${btcUsdValue.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
@@ -336,7 +401,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
             icon: "/images/BTC_icon.svg",
             decimals: 8,
             chain: "bitcoin" as const,
-            walletAddress: walletAddr,
+            walletAddress: wallet.address,
             walletIconKey: getWalletIconKey(wallet),
             walletId: wallet.id,
           },
@@ -353,23 +418,21 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
   // Calculate total USD value based on viewMode
   const totalUsdValue =
     viewMode === "all"
-      ? evmTotalUsdValue + allBtcTotalUsd
+      ? allEvmTotalUsdValue + allBtcTotalUsd
       : (() => {
           const wallet = userWallets.find((w) => w.id === viewMode);
           if (!wallet) return 0;
           const chainType = getWalletChainType(wallet);
           if (chainType === "EVM") {
-            return evmTotalUsdValue;
+            return getEvmWalletUsdValue(wallet.address);
           } else {
-            const walletAddr = getWalletDisplayAddress(wallet);
-            const balance = btcBalances[walletAddr];
-            return balance?.balanceBtc ? balance.balanceBtc * (btcPrice || 0) : 0;
+            return getBtcWalletUsdValue(wallet);
           }
         })();
 
   // Calculate loading state
-  const isLoadingBtc = connectedBtcAddresses.some((addr) => btcBalances[addr]?.isLoading);
-  const isLoadingEvm = evmWallet && Object.keys(userTokensByChain).length === 0;
+  const isLoadingBtc = btcWalletAddresses.some((addr) => btcBalances[addr]?.isLoading);
+  const isLoadingEvm = connectedEvmWallets.length > 0 && Object.keys(userTokensByWallet).length === 0;
   const isLoadingBalances = isLoadingBtc || isLoadingEvm;
 
   // Format address for display
@@ -682,12 +745,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           fontFamily="Inter"
                         >
                           {getWalletChainType(wallet) === "EVM"
-                            ? `$${totalUsdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            ? `$${getEvmWalletUsdValue(wallet.address).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : (() => {
-                                const balanceData = btcBalances[getWalletDisplayAddress(wallet)];
-                                if (!balanceData || balanceData.isLoading) return "...";
-                                if (balanceData.error) return "$0.00";
-                                const usdValue = balanceData.balanceBtc * (btcPrice || 0);
+                                const usdValue = getBtcWalletUsdValue(wallet);
+                                const addresses = isBitcoinWallet(wallet) ? getAllBtcAddresses(wallet) : [wallet.address];
+                                const isLoading = addresses.some(addr => btcBalances[addr]?.isLoading);
+                                if (isLoading) return "...";
                                 return `$${usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                               })()}
                         </Text>
