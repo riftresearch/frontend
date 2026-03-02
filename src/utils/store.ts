@@ -139,12 +139,30 @@ export const useStore = create<{
   isSwapInProgress: boolean;
   setIsSwapInProgress: (value: boolean) => void;
 }>((set) => ({
-  primaryEvmAddress: null,
-  setPrimaryEvmAddress: (address: string | null) => set({ primaryEvmAddress: address }),
+  primaryEvmAddress: typeof window !== "undefined" ? localStorage.getItem("rift_selectedEvmAddress") : null,
+  setPrimaryEvmAddress: (address: string | null) => {
+    if (typeof window !== "undefined") {
+      if (address) {
+        localStorage.setItem("rift_selectedEvmAddress", address);
+      } else {
+        localStorage.removeItem("rift_selectedEvmAddress");
+      }
+    }
+    set({ primaryEvmAddress: address });
+  },
   outputEvmAddress: null,
   setOutputEvmAddress: (address: string | null) => set({ outputEvmAddress: address }),
-  btcAddress: null,
-  setBtcAddress: (address: string | null) => set({ btcAddress: address }),
+  btcAddress: typeof window !== "undefined" ? localStorage.getItem("rift_selectedBtcAddress") : null,
+  setBtcAddress: (address: string | null) => {
+    if (typeof window !== "undefined") {
+      if (address) {
+        localStorage.setItem("rift_selectedBtcAddress", address);
+      } else {
+        localStorage.removeItem("rift_selectedBtcAddress");
+      }
+    }
+    set({ btcAddress: address });
+  },
   pastedBTCAddress: null,
   setPastedBTCAddress: (address: string | null) => set({ pastedBTCAddress: address }),
   evmWalletClients: {},

@@ -21,7 +21,7 @@ import {
   getDynamicWalletClient,
 } from "@/utils/wallet";
 import { useStore } from "@/utils/store";
-import { getPaymentAddress } from "@/hooks/useBitcoinTransaction";
+import { getPaymentAddress, getAllBtcAddresses } from "@/hooks/useBitcoinTransaction";
 
 const EVM_CHAIN_IDS = [1, 8453] as const;
 
@@ -155,15 +155,23 @@ const DynamicWalletSync = () => {
       return;
     }
 
-    const connectedBtcAddresses = btcWallets.map((wallet) => getWalletDisplayAddress(wallet));
+    // Get ALL BTC addresses including Taproot, Segwit, etc. from all connected wallets
+    const allConnectedBtcAddresses = btcWallets.flatMap((wallet) => {
+      if (isBitcoinWallet(wallet)) {
+        return getAllBtcAddresses(wallet);
+      }
+      return [wallet.address];
+    });
+    
     const currentBtcAddress = useStore.getState().btcAddress;
     if (
       !currentBtcAddress ||
-      !connectedBtcAddresses.some(
+      !allConnectedBtcAddresses.some(
         (address) => address.toLowerCase() === currentBtcAddress.toLowerCase()
       )
     ) {
-      setBtcAddress(connectedBtcAddresses[0]);
+      // Default to first address (usually the primary/payment address)
+      setBtcAddress(allConnectedBtcAddresses[0]);
     }
   }, [
     userWallets,
