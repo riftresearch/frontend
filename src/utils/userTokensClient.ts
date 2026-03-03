@@ -151,8 +151,6 @@ export async function fetchBtcEthPrices(): Promise<{
 export async function fetchWalletTokens(
   walletAddress: string
 ): Promise<Record<Network, TokenBalance[]>> {
-  console.log("[Balance Check] Fetching token balances for address:", walletAddress);
-
   const result: Record<Network, TokenBalance[]> = {
     [Network.ALL]: [],
     [Network.ETHEREUM]: [],

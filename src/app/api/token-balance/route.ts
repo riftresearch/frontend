@@ -63,8 +63,6 @@ async function fetchTokenBalances(
     return [];
   }
 
-  console.log("SAMEEEE fetching token balances for chainId", chainId, "network", network);
-
   const alchemyApiKey = process.env.ALCHEMY_API_KEY;
   if (!alchemyApiKey) {
     console.error("ALCHEMY_API_KEY not configured");

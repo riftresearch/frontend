@@ -3,7 +3,7 @@ import { useState, useEffect, ChangeEvent, useCallback, useRef, useMemo } from "
 import { useSwitchNetwork, useSwitchWallet, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import { Currencies, createCurrency, getSupportedModes, QuoteParameters } from "@riftresearch/sdk";
+import { Currencies, createCurrency, QuoteParameters } from "@riftresearch/sdk";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -201,6 +201,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
   // Derive swap direction from token chains
   const isSwappingForBTC = outputToken.chain === "bitcoin";
+  const isOutputFieldLocked =
+    inputToken.chain === "bitcoin" && outputToken.ticker.toLowerCase() !== "cbbtc";
+  const canEditOutputField = !isOutputFieldLocked;
 
   // Derive EVM chain ID from input token (default to Ethereum mainnet)
   const evmConnectWalletChainId = inputToken.chain === "bitcoin" ? 1 : inputToken.chain;
@@ -317,14 +320,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       decimals: token.decimals,
     });
   }, []);
-
-  const supportedModes = useMemo(() => {
-    try {
-      return getSupportedModes(toSdkCurrency(inputToken), toSdkCurrency(outputToken));
-    } catch {
-      return { exactInput: true, exactOutput: false };
-    }
-  }, [inputToken, outputToken, toSdkCurrency]);
 
   // Fetch token price - uses store btcPrice/ethPrice for native tokens, fetches from API for ERC20s
   const fetchTokenPriceForDirection = useCallback(
@@ -558,7 +553,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleInputOrOutputChange = (e: ChangeEvent<HTMLInputElement>, isInput: boolean) => {
-    if (!isInput && !supportedModes.exactOutput) return;
+    if (!isInput && !canEditOutputField) return;
 
     let value = e.target.value;
     const currentAmount = isInput ? displayedInputAmount : outputAmount;
@@ -621,7 +616,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         : value &&
           parseFloat(value) > 0 &&
           !getQuoteForInputRef.current &&
-          supportedModes.exactOutput;
+          canEditOutputField;
 
       if (shouldFetchQuote) {
         // For output, check if below min (3000 sats = 0.00003 BTC)
@@ -654,7 +649,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, isInput: boolean) => {
-    if (!isInput && !supportedModes.exactOutput) return;
+    if (!isInput && !canEditOutputField) return;
 
     // Set flag to indicate which field we should quote for
     getQuoteForInputRef.current = isInput;
@@ -797,7 +792,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleOutputMaxClick = () => {
-    if (!supportedModes.exactOutput) return;
+    if (!canEditOutputField) return;
 
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
@@ -865,7 +860,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const handleMinimumClick = () => {
-    if (!supportedModes.exactOutput) return;
+    if (!canEditOutputField) return;
 
     // Set flag to indicate we should quote for output field
     getQuoteForInputRef.current = false;
@@ -947,7 +942,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   ]);
 
   useEffect(() => {
-    if (supportedModes.exactOutput) return;
+    if (canEditOutputField) return;
     if (lastEditedField !== "output") return;
 
     setLastEditedField("input");
@@ -955,7 +950,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     setOutputAmount("");
     setOutputUsdValue(ZERO_USD_DISPLAY);
     setOutputBelowMinimum(false);
-  }, [lastEditedField, setOutputAmount, setOutputUsdValue, supportedModes.exactOutput]);
+  }, [canEditOutputField, lastEditedField, setOutputAmount, setOutputUsdValue]);
 
   // Load swap state from cookies on initial mount BEFORE setting defaults
   useEffect(() => {
@@ -1381,8 +1376,6 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     evmConnectWalletChainId,
   ]);
 
-
-
   // Check if output amount is below minimum swap amount (3000 sats)
   // Only show this error when user is editing the OUTPUT field
   useEffect(() => {
@@ -1495,7 +1488,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         const currentRequestId = quoteRequestIdRef.current;
 
         // Fetch quote based on which field was last edited
-        const isInput = lastEditedField === "input" || !supportedModes.exactOutput;
+        const isInput = lastEditedField === "input" || !canEditOutputField;
         const amount = isInput ? fullPrecisionInputAmount || displayedInputAmount : outputAmount;
         console.log(`refetching quote (${isInput ? "exact input" : "exact output"})`);
         await fetchQuote(isInput, amount, currentRequestId);
@@ -1514,7 +1507,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     fullPrecisionInputAmount,
     displayedInputAmount,
     outputAmount,
-    supportedModes.exactOutput,
+    canEditOutputField,
   ]);
 
   // Auto-refetch quotes when prices become available (simplified)
@@ -1969,9 +1962,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                 _placeholder={{
                   color: outputStyle?.light_text_color || "#805530",
                 }}
-                disabled={isOtcServerDead || !supportedModes.exactOutput}
-                cursor={isOtcServerDead || !supportedModes.exactOutput ? "not-allowed" : "text"}
-                opacity={isOtcServerDead || !supportedModes.exactOutput ? 0.5 : 1}
+                disabled={isOtcServerDead || !canEditOutputField}
+                cursor={isOtcServerDead || !canEditOutputField ? "not-allowed" : "text"}
+                opacity={isOtcServerDead || !canEditOutputField ? 0.5 : 1}
               />
             )}
 
