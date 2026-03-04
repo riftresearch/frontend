@@ -2,9 +2,29 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Flex, Text, Box, Image, Portal } from "@chakra-ui/react";
 import { useDynamicContext, useUserWallets, useDynamicModals } from "@dynamic-labs/sdk-react-core";
 import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
-import { FiChevronDown, FiPlus, FiEdit3 } from "react-icons/fi";
+import { FiChevronDown, FiPlus, FiEdit3, FiAlertCircle } from "react-icons/fi";
 import { colors } from "@/utils/colors";
 import { getPaymentAddress, getAllBtcAddressesWithInfo, type BtcAddressInfo } from "@/hooks/useBitcoinTransaction";
+
+// Check if address is Taproot (bc1p... or tb1p...)
+const isTaprootAddress = (address: string): boolean => {
+  return address.startsWith("bc1p") || address.startsWith("tb1p");
+};
+
+// Check if wallet is Xverse or OKX (both have Taproot spending restrictions)
+const isXverseWallet = (wallet: any): boolean => {
+  return wallet?.connector?.name?.toLowerCase().includes("xverse");
+};
+
+const isOkxWallet = (wallet: any): boolean => {
+  const name = wallet?.connector?.name?.toLowerCase() || "";
+  return name.includes("okx");
+};
+
+// Check if wallet has Taproot spending restrictions
+const hasTaprootRestriction = (wallet: any): boolean => {
+  return isXverseWallet(wallet) || isOkxWallet(wallet);
+};
 
 // Dynamic's icon sprite URL
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
@@ -78,7 +98,12 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
   // Get wallet icon key for Dynamic sprite
   const getWalletIconKey = (wallet: any): string => {
-    return wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+    const name = wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+    // Remove spaces and normalize common wallet names for Dynamic sprite
+    const normalized = name.replace(/\s+/g, "");
+    // Handle specific wallet name mappings
+    if (normalized.includes("okx")) return "okx";
+    return normalized;
   };
 
   // Format address for display
@@ -140,12 +165,32 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
       wasPastedRef.current = false;
     }
 
+    // Check if current selection is an unsupported Taproot address (Xverse, OKX)
+    // If so, auto-switch to the first non-disabled address
+    if (selectedAddress && chainType === "BTC") {
+      const currentEntry = walletsWithAddresses.find((w) => w.address === selectedAddress);
+      if (currentEntry && hasTaprootRestriction(currentEntry.wallet) && isTaprootAddress(selectedAddress)) {
+        // Find the first non-restricted address (payment address)
+        const validAddress = walletsWithAddresses.find(
+          (w) => !(hasTaprootRestriction(w.wallet) && isTaprootAddress(w.address))
+        );
+        if (validAddress) {
+          onSelect(validAddress.address);
+          return;
+        }
+      }
+    }
+
     // If address was just changed externally, don't interfere
     if (addressChanged) return;
 
     // Auto-select first wallet if none selected and wallets available
     if (!selectedAddress && walletsWithAddresses.length > 0) {
-      onSelect(walletsWithAddresses[0].address);
+      // Skip restricted Taproot addresses when auto-selecting
+      const validAddress = walletsWithAddresses.find(
+        (w) => !(hasTaprootRestriction(w.wallet) && isTaprootAddress(w.address))
+      ) || walletsWithAddresses[0];
+      onSelect(validAddress.address);
       return;
     }
 
@@ -155,13 +200,16 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
       if (!stillConnected) {
         // Wallet was disconnected - select first available or clear
         if (walletsWithAddresses.length > 0) {
-          onSelect(walletsWithAddresses[0].address);
+          const validAddress = walletsWithAddresses.find(
+            (w) => !(hasTaprootRestriction(w.wallet) && isTaprootAddress(w.address))
+          ) || walletsWithAddresses[0];
+          onSelect(validAddress.address);
         } else {
           onSelect(null);
         }
       }
     }
-  }, [filteredWallets.length, selectedAddress, onSelect, walletsWithAddresses]);
+  }, [filteredWallets.length, selectedAddress, onSelect, walletsWithAddresses, chainType]);
 
   const handleConnectNewWallet = () => {
     setIsOpen(false);
@@ -302,37 +350,56 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             boxShadow="0 8px 32px rgba(0,0,0,0.4)"
           >
             {/* Connected Wallets - BTC wallets show each address type separately */}
-            {walletsWithAddresses.map(({ wallet, address, addressLabel }, index) => (
-              <Flex
-                key={`${wallet.id}-${address}`}
-                align="center"
-                gap="10px"
-                px="12px"
-                py="10px"
-                cursor="pointer"
-                bg={selectedAddress === address ? "#252525" : "transparent"}
-                _hover={{ bg: "#252525" }}
-                onClick={() => handleSelectWallet(address)}
-              >
-                <Image
-                  src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
-                  alt="wallet"
-                  w="22px"
-                  h="22px"
-                  borderRadius="6px"
-                />
-                <Flex direction="column" gap="2px">
-                  <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily="Inter">
-                    {formatAddress(address)}
-                  </Text>
-                  {addressLabel && (
-                    <Text color={colors.textGray} fontSize="11px" fontFamily="Inter">
-                      {addressLabel}
+            {walletsWithAddresses.map(({ wallet, address, addressLabel }) => {
+              // Check if this wallet has Taproot spending restrictions (Xverse, OKX)
+              const isTaprootRestricted = hasTaprootRestriction(wallet) && isTaprootAddress(address);
+              
+              return (
+                <Flex
+                  key={`${wallet.id}-${address}`}
+                  align="center"
+                  gap="10px"
+                  px="12px"
+                  py="10px"
+                  cursor={isTaprootRestricted ? "not-allowed" : "pointer"}
+                  bg={selectedAddress === address ? "#252525" : "transparent"}
+                  _hover={{ bg: isTaprootRestricted ? "transparent" : "#252525" }}
+                  onClick={() => !isTaprootRestricted && handleSelectWallet(address)}
+                  opacity={isTaprootRestricted ? 0.5 : 1}
+                >
+                  <Image
+                    src={`${DYNAMIC_ICON_BASE}#${getWalletIconKey(wallet)}`}
+                    alt="wallet"
+                    w="22px"
+                    h="22px"
+                    borderRadius="6px"
+                  />
+                  <Flex direction="column" gap="2px" flex="1">
+                    <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily="Inter">
+                      {formatAddress(address)}
                     </Text>
+                    {addressLabel && (
+                      <Text color={colors.textGray} fontSize="11px" fontFamily="Inter">
+                        {addressLabel}
+                      </Text>
+                    )}
+                  </Flex>
+                  {isTaprootRestricted && (
+                    <Flex
+                      align="center"
+                      gap="4px"
+                      color={colors.textGray}
+                      fontSize="10px"
+                      fontFamily="Inter"
+                      whiteSpace="nowrap"
+                    >
+                      <FiAlertCircle size={12} />
+                      <Text>Use Segwit</Text>
+                    </Flex>
                   )}
                 </Flex>
-              </Flex>
-            ))}
+              );
+            })}
 
             {/* Divider if there are wallets */}
             {hasWallets && <Box h="1px" bg="#333" my="6px" mx="8px" />}

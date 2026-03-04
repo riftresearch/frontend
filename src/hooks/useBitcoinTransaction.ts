@@ -298,13 +298,28 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
         );
       }
 
-      // Use the exact address that was selected by the user (Taproot, Native Segwit, etc.)
-      // This ensures we use UTXOs from the correct address type
-      const selectedAddress = userAddress;
+      // Log wallet info for debugging
+      const connectorName = btcWallet.connector?.name?.toLowerCase() || "";
+      console.log("[sendBitcoin] Wallet connector:", connectorName);
+      console.log("[sendBitcoin] User address:", userAddress);
+      console.log("[sendBitcoin] Payment address:", getPaymentAddress(btcWallet));
+      console.log("[sendBitcoin] All addresses:", getAllBtcAddresses(btcWallet));
 
-      // Step 1: Prepare the PSBT using the selected address
+      // Check if this is Xverse or OKX - they only support spending from payment address (Native Segwit)
+      // These wallets' architecture separates Taproot (ordinals) and payment addresses intentionally
+      // Per Xverse docs: "Bitcoin sent to the Ordinals address must be transferred to the 
+      // Preferred Bitcoin Address before it can be used for standard transactions"
+      const isXverse = connectorName.includes("xverse");
+      const isOkx = connectorName.includes("okx");
+      const hasTaprootRestriction = isXverse || isOkx;
+      
+      // For restricted wallets, always use payment address for both UTXOs and signing
+      const effectiveAddress = hasTaprootRestriction ? getPaymentAddress(btcWallet) : userAddress;
+      console.log("[sendBitcoin] Effective address:", effectiveAddress, "hasTaprootRestriction:", hasTaprootRestriction);
+
+      // Step 1: Prepare the PSBT using the effective address
       const psbtResult = await prepareDepositTransaction(
-        selectedAddress, // Use the exact selected address for UTXO fetching and change
+        effectiveAddress, // Use payment address for Xverse, selected address for others
         depositAddress,
         amountSats,
         "medium" // Use medium fee priority
@@ -314,7 +329,6 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
       setTransactionState("signing");
 
       // Build the signing request
-      // We need to sign all inputs in the PSBT
       const psbt = bitcoin.Psbt.fromBase64(psbtResult.psbtBase64);
       const signingIndexes = psbt.data.inputs.map((_, index) => index);
 
@@ -323,13 +337,15 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
         unsignedPsbtBase64: psbtResult.psbtBase64,
         signature: [
           {
-            address: selectedAddress, // Use the exact selected address for signing
+            address: effectiveAddress, // Same address for both UTXO fetching and signing
             signingIndexes,
           },
         ],
       };
 
+        console.log("[sendBitcoin] Sign PSBT request:", JSON.stringify(signPsbtRequest, null, 2));
         const signedPsbtResponse = await btcWallet.signPsbt(signPsbtRequest);
+        console.log("[sendBitcoin] Signed PSBT response:", signedPsbtResponse);
 
         if (!signedPsbtResponse?.signedPsbt) {
           throw new Error("Failed to sign PSBT - no signed PSBT returned");

@@ -16,7 +16,29 @@ import {
   FiChevronUp,
   FiX,
   FiMaximize2,
+  FiAlertCircle,
 } from "react-icons/fi";
+
+// Check if address is Taproot (bc1p... or tb1p...)
+const isTaprootAddress = (address: string): boolean => {
+  return address.startsWith("bc1p") || address.startsWith("tb1p");
+};
+
+// Check if wallet is Xverse
+const isXverseWallet = (wallet: any): boolean => {
+  return wallet?.connector?.name?.toLowerCase().includes("xverse");
+};
+
+// Check if wallet is OKX
+const isOkxWallet = (wallet: any): boolean => {
+  const name = wallet?.connector?.name?.toLowerCase() || "";
+  return name.includes("okx");
+};
+
+// Check if wallet has Taproot spending restrictions (Xverse, OKX)
+const hasTaprootRestriction = (wallet: any): boolean => {
+  return isXverseWallet(wallet) || isOkxWallet(wallet);
+};
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
@@ -138,7 +160,12 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
 
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {
-    return wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+    const name = wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+    // Remove spaces and normalize common wallet names for Dynamic sprite
+    const normalized = name.replace(/\s+/g, "");
+    // Handle specific wallet name mappings
+    if (normalized.includes("okx")) return "okx";
+    return normalized;
   };
 
   // Get wallet chain type
@@ -452,6 +479,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     originalWallet: any; // Reference to Dynamic wallet for actions
     usdValue: number;
     isLoading: boolean;
+    isDisabled?: boolean; // For unsupported combinations (e.g., Xverse + Taproot)
+    disabledReason?: string; // Tooltip text explaining why disabled
   }
 
   // Create unified display wallet list (EVM wallets + expanded BTC wallets)
@@ -474,6 +503,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     // Add expanded BTC wallets (each address type separately)
     for (const expandedWallet of expandedBtcWallets) {
       const balance = btcBalances[expandedWallet.address];
+      // Check if this wallet has Taproot spending restrictions (Xverse, OKX)
+      const isTaprootRestricted = hasTaprootRestriction(expandedWallet.originalWallet) && isTaprootAddress(expandedWallet.address);
       wallets.push({
         id: expandedWallet.id,
         address: expandedWallet.address,
@@ -483,6 +514,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         originalWallet: expandedWallet.originalWallet,
         usdValue: getBtcAddressUsdValue(expandedWallet.address),
         isLoading: balance?.isLoading || false,
+        isDisabled: isTaprootRestricted,
+        disabledReason: isTaprootRestricted ? "This wallet requires BTC in the payment address for transactions. Transfer BTC from Taproot to your Segwit address first." : undefined,
       });
     }
 
@@ -758,36 +791,45 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
 
                 {/* Wallet List - uses displayWallets to show EVM and expanded BTC wallets separately */}
                 <Box p="12px">
-                  {displayWallets.map((displayWallet) => (
+                  {displayWallets.map((displayWallet) => {
+                    const walletBox = (
                     <Box
                       key={displayWallet.id}
                       p="16px"
                       mb="8px"
                       borderRadius="12px"
                       border={`2px solid ${
-                        isDisplayWalletSelected(displayWallet)
-                          ? displayWallet.chainType === "EVM"
-                            ? "rgba(120, 140, 255, 0.6)"
-                            : "rgba(247, 170, 80, 0.6)"
-                          : colors.borderGray
+                        displayWallet.isDisabled
+                          ? colors.borderGray
+                          : isDisplayWalletSelected(displayWallet)
+                            ? displayWallet.chainType === "EVM"
+                              ? "rgba(120, 140, 255, 0.6)"
+                              : "rgba(247, 170, 80, 0.6)"
+                            : colors.borderGray
                       }`}
                       bg={
-                        isDisplayWalletSelected(displayWallet)
-                          ? displayWallet.chainType === "EVM"
-                            ? "rgba(9, 36, 97, 0.3)"
-                            : "#291B0D"
-                          : colors.offBlack
+                        displayWallet.isDisabled
+                          ? colors.offBlack
+                          : isDisplayWalletSelected(displayWallet)
+                            ? displayWallet.chainType === "EVM"
+                              ? "rgba(9, 36, 97, 0.3)"
+                              : "#291B0D"
+                            : colors.offBlack
                       }
-                      cursor={isDisplayWalletSelected(displayWallet) ? "default" : "pointer"}
+                      cursor={displayWallet.isDisabled ? "not-allowed" : isDisplayWalletSelected(displayWallet) ? "default" : "pointer"}
                       transition="all 0.2s ease-in-out"
+                      opacity={displayWallet.isDisabled ? 0.5 : 1}
                       _hover={{
-                        bg: isDisplayWalletSelected(displayWallet)
-                          ? displayWallet.chainType === "EVM"
-                            ? "rgba(9, 36, 97, 0.4)"
-                            : "#3a2510"
-                          : "#1a1a1a",
+                        bg: displayWallet.isDisabled
+                          ? colors.offBlack
+                          : isDisplayWalletSelected(displayWallet)
+                            ? displayWallet.chainType === "EVM"
+                              ? "rgba(9, 36, 97, 0.4)"
+                              : "#3a2510"
+                            : "#1a1a1a",
                       }}
-                      onClick={() => handleDisplayWalletSelect(displayWallet)}
+                      onClick={() => !displayWallet.isDisabled && handleDisplayWalletSelect(displayWallet)}
+                      title={displayWallet.isDisabled ? displayWallet.disabledReason : undefined}
                     >
                       {/* Top Row: Icon, Address, Balance */}
                       <Flex align="center" justify="space-between" mb="12px">
@@ -916,8 +958,20 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                                 : displayWallet.chainType}
                             </Text>
                           </Flex>
-                          {/* Active indicator or Select Wallet */}
-                          {isDisplayWalletSelected(displayWallet) ? (
+                          {/* Active indicator, Disabled indicator, or Select Wallet */}
+                          {displayWallet.isDisabled ? (
+                            <Flex align="center" gap="4px">
+                              <FiAlertCircle size={12} color={colors.textGray} />
+                              <Text
+                                color={colors.textGray}
+                                fontSize="12px"
+                                fontWeight="500"
+                                fontFamily="Inter"
+                              >
+                                Not Supported
+                              </Text>
+                            </Flex>
+                          ) : isDisplayWalletSelected(displayWallet) ? (
                             <Flex align="center" gap="4px">
                               <Box w="6px" h="6px" borderRadius="full" bg={colors.greenOutline} />
                               <Text
@@ -966,7 +1020,10 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                         </Flex>
                       </Flex>
                     </Box>
-                  ))}
+                    );
+
+                    return walletBox;
+                  })}
                 </Box>
 
                 {/* Connect New Wallet Button */}

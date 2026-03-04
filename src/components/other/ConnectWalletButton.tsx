@@ -64,7 +64,12 @@ export const ConnectWalletButton: React.FC = () => {
 
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {
-    return wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+    const name = wallet.connector?.name?.toLowerCase() || wallet.key?.toLowerCase() || "walletconnect";
+    // Remove spaces and normalize common wallet names for Dynamic sprite
+    const normalized = name.replace(/\s+/g, "");
+    // Handle specific wallet name mappings
+    if (normalized.includes("okx")) return "okx";
+    return normalized;
   };
 
   // Format address for display

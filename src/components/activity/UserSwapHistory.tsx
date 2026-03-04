@@ -1868,14 +1868,14 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                                     : `https://etherscan.io/tx/${userTxHash}`;
                               window.open(url, "_blank");
                             }}
-                            bg="rgba(255, 255, 255, 0.06)"
-                            border="1.5px solid rgba(255, 255, 255, 0.12)"
+                            bg={userBg}
+                            border={`1.5px solid ${userBorder}`}
                             borderRadius="16px"
                             px="10px"
                             h="32px"
-                            _hover={{ bg: "rgba(255, 255, 255, 0.1)", border: "1.5px solid rgba(255, 255, 255, 0.2)" }}
+                            _hover={{ filter: "brightness(1.2)" }}
                             fontSize="11px"
-                            color={colors.textGray}
+                            color={colors.offWhite}
                             fontWeight="500"
                             cursor="pointer"
                             align="center"
@@ -1902,14 +1902,14 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                                     : `https://etherscan.io/tx/${mmTxHash}`;
                               window.open(url, "_blank");
                             }}
-                            bg="rgba(255, 255, 255, 0.06)"
-                            border="1.5px solid rgba(255, 255, 255, 0.12)"
+                            bg={mmBg}
+                            border={`1.5px solid ${mmBorder}`}
                             borderRadius="16px"
                             px="10px"
                             h="32px"
-                            _hover={{ bg: "rgba(255, 255, 255, 0.1)", border: "1.5px solid rgba(255, 255, 255, 0.2)" }}
+                            _hover={{ filter: "brightness(1.2)" }}
                             fontSize="11px"
-                            color={colors.textGray}
+                            color={colors.offWhite}
                             fontWeight="500"
                             cursor="pointer"
                             align="center"
