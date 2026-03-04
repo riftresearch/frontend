@@ -11,20 +11,6 @@ const isTaprootAddress = (address: string): boolean => {
   return address.startsWith("bc1p") || address.startsWith("tb1p");
 };
 
-// Check if wallet is Xverse or OKX (both have Taproot spending restrictions)
-const isXverseWallet = (wallet: any): boolean => {
-  return wallet?.connector?.name?.toLowerCase().includes("xverse");
-};
-
-const isOkxWallet = (wallet: any): boolean => {
-  const name = wallet?.connector?.name?.toLowerCase() || "";
-  return name.includes("okx");
-};
-
-// Check if wallet has Taproot spending restrictions
-const hasTaprootRestriction = (wallet: any): boolean => {
-  return isXverseWallet(wallet) || isOkxWallet(wallet);
-};
 
 // Dynamic's icon sprite URL
 const DYNAMIC_ICON_BASE = "https://iconic.dynamic-static-assets.com/icons/sprite.svg";
@@ -165,19 +151,14 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
       wasPastedRef.current = false;
     }
 
-    // Check if current selection is an unsupported Taproot address (Xverse, OKX)
-    // If so, auto-switch to the first non-disabled address
-    if (selectedAddress && chainType === "BTC") {
-      const currentEntry = walletsWithAddresses.find((w) => w.address === selectedAddress);
-      if (currentEntry && hasTaprootRestriction(currentEntry.wallet) && isTaprootAddress(selectedAddress)) {
-        // Find the first non-restricted address (payment address)
-        const validAddress = walletsWithAddresses.find(
-          (w) => !(hasTaprootRestriction(w.wallet) && isTaprootAddress(w.address))
-        );
-        if (validAddress) {
-          onSelect(validAddress.address);
-          return;
-        }
+    // Check if current selection is a Taproot address (not supported for spending)
+    // If so, auto-switch to the first non-Taproot address
+    if (selectedAddress && chainType === "BTC" && isTaprootAddress(selectedAddress)) {
+      // Find the first non-Taproot address (payment address)
+      const validAddress = walletsWithAddresses.find((w) => !isTaprootAddress(w.address));
+      if (validAddress) {
+        onSelect(validAddress.address);
+        return;
       }
     }
 
@@ -186,9 +167,9 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
     // Auto-select first wallet if none selected and wallets available
     if (!selectedAddress && walletsWithAddresses.length > 0) {
-      // Skip restricted Taproot addresses when auto-selecting
+      // Skip Taproot addresses when auto-selecting (not supported for spending)
       const validAddress = walletsWithAddresses.find(
-        (w) => !(hasTaprootRestriction(w.wallet) && isTaprootAddress(w.address))
+        (w) => !isTaprootAddress(w.address)
       ) || walletsWithAddresses[0];
       onSelect(validAddress.address);
       return;
@@ -201,7 +182,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
         // Wallet was disconnected - select first available or clear
         if (walletsWithAddresses.length > 0) {
           const validAddress = walletsWithAddresses.find(
-            (w) => !(hasTaprootRestriction(w.wallet) && isTaprootAddress(w.address))
+            (w) => !isTaprootAddress(w.address)
           ) || walletsWithAddresses[0];
           onSelect(validAddress.address);
         } else {
@@ -351,8 +332,8 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
           >
             {/* Connected Wallets - BTC wallets show each address type separately */}
             {walletsWithAddresses.map(({ wallet, address, addressLabel }) => {
-              // Check if this wallet has Taproot spending restrictions (Xverse, OKX)
-              const isTaprootRestricted = hasTaprootRestriction(wallet) && isTaprootAddress(address);
+              // Taproot addresses are not supported for spending in most wallets
+              const isTaprootRestricted = isTaprootAddress(address);
               
               return (
                 <Flex

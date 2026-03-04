@@ -305,17 +305,13 @@ export function useBitcoinTransaction(): UseBitcoinTransactionResult {
       console.log("[sendBitcoin] Payment address:", getPaymentAddress(btcWallet));
       console.log("[sendBitcoin] All addresses:", getAllBtcAddresses(btcWallet));
 
-      // Check if this is Xverse or OKX - they only support spending from payment address (Native Segwit)
-      // These wallets' architecture separates Taproot (ordinals) and payment addresses intentionally
-      // Per Xverse docs: "Bitcoin sent to the Ordinals address must be transferred to the 
-      // Preferred Bitcoin Address before it can be used for standard transactions"
-      const isXverse = connectorName.includes("xverse");
-      const isOkx = connectorName.includes("okx");
-      const hasTaprootRestriction = isXverse || isOkx;
+      // Check if user selected a Taproot address - most wallets don't support spending from Taproot
+      // Always use the payment address (Native Segwit) for actual transactions
+      const isTaprootSelected = userAddress.startsWith("bc1p") || userAddress.startsWith("tb1p");
       
-      // For restricted wallets, always use payment address for both UTXOs and signing
-      const effectiveAddress = hasTaprootRestriction ? getPaymentAddress(btcWallet) : userAddress;
-      console.log("[sendBitcoin] Effective address:", effectiveAddress, "hasTaprootRestriction:", hasTaprootRestriction);
+      // If Taproot was somehow selected, fall back to payment address
+      const effectiveAddress = isTaprootSelected ? getPaymentAddress(btcWallet) : userAddress;
+      console.log("[sendBitcoin] Effective address:", effectiveAddress, "isTaprootSelected:", isTaprootSelected);
 
       // Step 1: Prepare the PSBT using the effective address
       const psbtResult = await prepareDepositTransaction(

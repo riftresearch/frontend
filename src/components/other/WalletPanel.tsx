@@ -23,22 +23,6 @@ import {
 const isTaprootAddress = (address: string): boolean => {
   return address.startsWith("bc1p") || address.startsWith("tb1p");
 };
-
-// Check if wallet is Xverse
-const isXverseWallet = (wallet: any): boolean => {
-  return wallet?.connector?.name?.toLowerCase().includes("xverse");
-};
-
-// Check if wallet is OKX
-const isOkxWallet = (wallet: any): boolean => {
-  const name = wallet?.connector?.name?.toLowerCase() || "";
-  return name.includes("okx");
-};
-
-// Check if wallet has Taproot spending restrictions (Xverse, OKX)
-const hasTaprootRestriction = (wallet: any): boolean => {
-  return isXverseWallet(wallet) || isOkxWallet(wallet);
-};
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
@@ -503,8 +487,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     // Add expanded BTC wallets (each address type separately)
     for (const expandedWallet of expandedBtcWallets) {
       const balance = btcBalances[expandedWallet.address];
-      // Check if this wallet has Taproot spending restrictions (Xverse, OKX)
-      const isTaprootRestricted = hasTaprootRestriction(expandedWallet.originalWallet) && isTaprootAddress(expandedWallet.address);
+      // Taproot addresses are not supported for spending
+      const isTaprootRestricted = isTaprootAddress(expandedWallet.address);
       wallets.push({
         id: expandedWallet.id,
         address: expandedWallet.address,
@@ -515,7 +499,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
         usdValue: getBtcAddressUsdValue(expandedWallet.address),
         isLoading: balance?.isLoading || false,
         isDisabled: isTaprootRestricted,
-        disabledReason: isTaprootRestricted ? "This wallet requires BTC in the payment address for transactions. Transfer BTC from Taproot to your Segwit address first." : undefined,
+        disabledReason: isTaprootRestricted ? "Taproot addresses are not supported for spending. Transfer BTC to your Segwit address first." : undefined,
       });
     }
 

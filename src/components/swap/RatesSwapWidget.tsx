@@ -1138,16 +1138,39 @@ export const RatesSwapWidget = () => {
                 opacity={isOtcServerDead ? 0.5 : 1}
               />
 
-              <Text
-                color={!displayedInputAmount ? colors.offWhite : colors.textGray}
-                fontSize="14px"
-                mt="6px"
-                letterSpacing="-1px"
-                fontWeight="normal"
-                fontFamily="Aux"
-              >
-                {inputUsdValue}
-              </Text>
+              <Flex align="center" gap="8px" mt="6px">
+                <Text
+                  color={!displayedInputAmount ? colors.offWhite : colors.textGray}
+                  fontSize="14px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                >
+                  {inputUsdValue}
+                </Text>
+                {/* Max button - only show if input token has a balance */}
+                {inputToken.balance && parseFloat(inputToken.balance) > 0 && (
+                  <Text
+                    color={colors.purpleBorder}
+                    fontSize="12px"
+                    fontWeight="600"
+                    fontFamily="Aux"
+                    cursor="pointer"
+                    letterSpacing="-0.5px"
+                    _hover={{ opacity: 0.8 }}
+                    onClick={() => {
+                      const maxBalance = inputToken.balance;
+                      setDisplayedInputAmount(maxBalance);
+                      getQuoteForInputRef.current = true;
+                      const inputTicker = isSwappingForBTC ? inputToken.ticker : "BTC";
+                      const usdValue = calculateUsdValue(maxBalance, inputTicker, ethPrice, btcPrice, inputTokenPrice);
+                      setInputUsdValue(usdValue);
+                    }}
+                  >
+                    Max
+                  </Text>
+                )}
+              </Flex>
             </Flex>
 
             <Flex py="12px" direction="column" align="flex-end" justify="center" gap="8px" flexShrink={0}>

@@ -66,7 +66,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setOutputToken,
     setDisplayedInputAmount,
     setOutputAmount,
-    userTokensByChain,
+    userTokensByWallet,
     setInputTokenPrice,
     setOutputTokenPrice,
     setInputUsdValue,
@@ -107,6 +107,69 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       btcWalletAddresses.map((addr) => `${addr}:${btcBalances[addr]?.balanceBtc ?? 0}`).join(","),
     [btcWalletAddresses, btcBalances]
   );
+
+  // Get all EVM wallet addresses (memoized)
+  const evmWalletAddresses = useMemo(
+    () =>
+      userWallets
+        .filter((w) => w.chain?.toUpperCase() === "EVM")
+        .map((w) => w.address.toLowerCase()),
+    [userWallets]
+  );
+
+  // Aggregate tokens from ALL connected EVM wallets by chain
+  // This replaces the single-wallet userTokensByChain with multi-wallet support
+  const aggregatedTokensByChain = useMemo(() => {
+    const tokensByChain: Record<number, TokenData[]> = {};
+    
+    // Collect all tokens from all wallets
+    for (const walletAddr of evmWalletAddresses) {
+      const walletTokens = userTokensByWallet[walletAddr];
+      if (!walletTokens) continue;
+      
+      for (const [chainIdStr, tokens] of Object.entries(walletTokens)) {
+        const chainId = Number(chainIdStr);
+        if (!tokensByChain[chainId]) {
+          tokensByChain[chainId] = [];
+        }
+        tokensByChain[chainId].push(...tokens);
+      }
+    }
+    
+    // Deduplicate and sum balances for same token across wallets
+    const deduplicatedByChain: Record<number, TokenData[]> = {};
+    for (const [chainIdStr, tokens] of Object.entries(tokensByChain)) {
+      const chainId = Number(chainIdStr);
+      const tokenMap = new Map<string, TokenData>();
+      
+      for (const token of tokens) {
+        const key = token.address.toLowerCase();
+        if (tokenMap.has(key)) {
+          // Sum balances for same token from different wallets
+          const existing = tokenMap.get(key)!;
+          const existingBalance = parseFloat(existing.balance) || 0;
+          const newBalance = parseFloat(token.balance) || 0;
+          const totalBalance = existingBalance + newBalance;
+          
+          const existingUsd = parseFloat(existing.usdValue.replace("$", "").replace(",", "")) || 0;
+          const newUsd = parseFloat(token.usdValue.replace("$", "").replace(",", "")) || 0;
+          const totalUsd = existingUsd + newUsd;
+          
+          tokenMap.set(key, {
+            ...existing,
+            balance: totalBalance.toString(),
+            usdValue: `$${totalUsd.toFixed(2)}`,
+          });
+        } else {
+          tokenMap.set(key, token);
+        }
+      }
+      
+      deduplicatedByChain[chainId] = Array.from(tokenMap.values());
+    }
+    
+    return deduplicatedByChain;
+  }, [evmWalletAddresses, userTokensByWallet]);
 
   // Auto-focus search input when modal opens
   useEffect(() => {
@@ -203,13 +266,13 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         // Get user's wallet tokens
         let userTokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          // Combine tokens from both chains
-          const ethTokens = userTokensByChain[1] || [];
-          const baseTokens = userTokensByChain[8453] || [];
+          // Combine tokens from both chains (aggregated from all wallets)
+          const ethTokens = aggregatedTokensByChain[1] || [];
+          const baseTokens = aggregatedTokensByChain[8453] || [];
           userTokens = [...ethTokens, ...baseTokens];
         } else {
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
-          userTokens = userTokensByChain[chainId] || [];
+          userTokens = aggregatedTokensByChain[chainId] || [];
         }
 
         // Replace balance and usdValue in search results if token is in user's wallet
@@ -300,9 +363,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       if (isEvmConnected && primaryEvmAddress) {
         let tokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          // Combine tokens from both chains
-          const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chain: 1 as const }));
-          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({
+          // Combine tokens from both chains (aggregated from all wallets)
+          const ethTokens = (aggregatedTokensByChain[1] || []).map((t) => ({ ...t, chain: 1 as const }));
+          const baseTokens = (aggregatedTokensByChain[8453] || []).map((t) => ({
             ...t,
             chain: 8453 as const,
           }));
@@ -312,7 +375,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           tokens = [];
         } else {
           const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
-          tokens = (userTokensByChain[chain] || []).map((t) => ({
+          tokens = (aggregatedTokensByChain[chain] || []).map((t) => ({
             ...t,
             chain: chain as 1 | 8453,
           }));
@@ -430,7 +493,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     isEvmConnected,
     primaryEvmAddress,
     selectedNetwork,
-    userTokensByChain,
+    aggregatedTokensByChain,
     debouncedQuery,
     direction,
     btcBalancesKey,

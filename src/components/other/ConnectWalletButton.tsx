@@ -85,15 +85,35 @@ export const ConnectWalletButton: React.FC = () => {
       .map((w) => w.address);
   }, [userWallets]);
 
+  // Track if we've already fetched for current wallet addresses to prevent duplicate fetches
+  const fetchedWalletsRef = React.useRef<string>("");
+
   // Fetch user tokens and populate global store when EVM wallets connect
   useEffect(() => {
+    // Create a stable key from wallet addresses to detect actual changes
+    const walletsKey = evmWalletAddresses.sort().join(",");
+    
+    // Skip if we've already fetched for these exact wallets
+    if (walletsKey === fetchedWalletsRef.current) {
+      return;
+    }
+
     const fetchTokensForWallet = async (walletAddress: string): Promise<TokenData[]> => {
       console.log("[UserTokens] Fetching tokens for wallet:", walletAddress);
 
-      const [walletTokensByChain, ethByChain] = await Promise.all([
-        fetchWalletTokens(walletAddress),
-        fetchUserEth(walletAddress),
-      ]);
+      let walletTokensByChain: Awaited<ReturnType<typeof fetchWalletTokens>>;
+      let ethByChain: Awaited<ReturnType<typeof fetchUserEth>>;
+      
+      try {
+        [walletTokensByChain, ethByChain] = await Promise.all([
+          fetchWalletTokens(walletAddress),
+          fetchUserEth(walletAddress),
+        ]);
+      } catch (error) {
+        console.error("[UserTokens] Failed to fetch tokens for wallet:", walletAddress, error);
+        // Return empty array on fetch failure - don't clear existing data
+        return [];
+      }
 
       const addressesByChain: Partial<Record<Network, string[]>> = {};
       for (const network of SUPPORTED_CHAIN_NETWORKS) {
@@ -196,42 +216,59 @@ export const ConnectWalletButton: React.FC = () => {
     const fetchAllUserTokens = async () => {
       if (evmWalletAddresses.length === 0) return;
 
+      // Mark these wallets as being fetched
+      fetchedWalletsRef.current = walletsKey;
+
       console.log("[UserTokens] Fetching tokens for all EVM wallets:", evmWalletAddresses);
 
-      const allWalletTokens = await Promise.all(
-        evmWalletAddresses.map((addr) => fetchTokensForWallet(addr))
-      );
-
-      const allTokensFlat = allWalletTokens.flat();
-      const combinedSorted = allTokensFlat.sort((a, b) => {
-        const usdValueA = parseFloat(a.usdValue.replace("$", ""));
-        const usdValueB = parseFloat(b.usdValue.replace("$", ""));
-        return usdValueB - usdValueA;
-      });
-
-      setSearchResults(combinedSorted);
-
-      if (primaryEvmAddress) {
-        const primaryWalletTokens = useStore.getState().userTokensByWallet[primaryEvmAddress.toLowerCase()] || {};
-        for (const [chainIdStr, tokens] of Object.entries(primaryWalletTokens)) {
-          setUserTokensForChain(Number(chainIdStr), tokens);
-        }
-      }
-
-      if (inputToken.balance === "0" && primaryEvmAddress) {
-        const inputTokenChain = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
-        const primaryWalletTokens = useStore.getState().userTokensByWallet[primaryEvmAddress.toLowerCase()] || {};
-        const userTokensForChain = primaryWalletTokens[inputTokenChain] || [];
-        const matchingToken = userTokensForChain.find(
-          (t) => t.address.toLowerCase() === inputToken.address.toLowerCase()
+      try {
+        const allWalletTokens = await Promise.all(
+          evmWalletAddresses.map((addr) => fetchTokensForWallet(addr))
         );
-        if (matchingToken) {
-          setInputToken({
-            ...inputToken,
-            balance: matchingToken.balance,
-            usdValue: matchingToken.usdValue,
+
+        const allTokensFlat = allWalletTokens.flat();
+        
+        // Only update search results if we got some data
+        // This prevents clearing existing data on network failures
+        if (allTokensFlat.length > 0) {
+          const combinedSorted = allTokensFlat.sort((a, b) => {
+            const usdValueA = parseFloat(a.usdValue.replace("$", ""));
+            const usdValueB = parseFloat(b.usdValue.replace("$", ""));
+            return usdValueB - usdValueA;
           });
+
+          setSearchResults(combinedSorted);
         }
+
+        if (primaryEvmAddress) {
+          const primaryWalletTokens = useStore.getState().userTokensByWallet[primaryEvmAddress.toLowerCase()] || {};
+          for (const [chainIdStr, tokens] of Object.entries(primaryWalletTokens)) {
+            setUserTokensForChain(Number(chainIdStr), tokens);
+          }
+        }
+
+        // Update input token balance if needed (read current state directly to avoid dependency)
+        const currentInputToken = useStore.getState().inputToken;
+        if (currentInputToken.balance === "0" && primaryEvmAddress) {
+          const inputTokenChain = currentInputToken.chain === "bitcoin" ? 1 : (currentInputToken.chain ?? 1);
+          const primaryWalletTokens = useStore.getState().userTokensByWallet[primaryEvmAddress.toLowerCase()] || {};
+          const userTokensForChain = primaryWalletTokens[inputTokenChain] || [];
+          const matchingToken = userTokensForChain.find(
+            (t) => t.address.toLowerCase() === currentInputToken.address.toLowerCase()
+          );
+          if (matchingToken) {
+            useStore.getState().setInputToken({
+              ...currentInputToken,
+              balance: matchingToken.balance,
+              usdValue: matchingToken.usdValue,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("[UserTokens] Failed to fetch all user tokens:", error);
+        // Don't update state on failure - keep existing data
+        // Reset the ref so we can retry on next render
+        fetchedWalletsRef.current = "";
       }
     };
 
@@ -242,8 +279,6 @@ export const ConnectWalletButton: React.FC = () => {
     setUserTokensForChain,
     setUserTokensForWallet,
     setSearchResults,
-    inputToken,
-    setInputToken,
   ]);
 
   // Handler for opening the Dynamic wallet modal (used as fallback)
