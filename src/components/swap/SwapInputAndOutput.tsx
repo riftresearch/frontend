@@ -152,6 +152,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const [isAtAdjustedMax, setIsAtAdjustedMax] = useState(false);
   const getQuoteForInputRef = useRef(true);
   const [currentInputBalance, setCurrentInputBalance] = useState<string | null>(null);
+  const [adjustedInputBalance, setAdjustedInputBalance] = useState<string | null>(null);
   const [currentInputTicker, setCurrentInputTicker] = useState<string | null>(null);
   const [currentOutputBalance, setCurrentOutputBalance] = useState<string | null>(null);
   const [currentOutputTicker, setCurrentOutputTicker] = useState<string | null>(null);
@@ -264,6 +265,15 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
     return Array.from(tokenMap.values());
   }, [evmWalletAddresses, userTokensByWallet]);
+
+  // Get tokens ONLY from the selected input wallet (for Max button balance)
+  // This prevents showing combined balances from all wallets
+  const selectedWalletTokens = useMemo(() => {
+    if (!primaryEvmAddress) return [];
+    const walletTokens = userTokensByWallet[primaryEvmAddress.toLowerCase()];
+    if (!walletTokens) return [];
+    return Object.values(walletTokens).flat();
+  }, [primaryEvmAddress, userTokensByWallet]);
 
   // Fetch Bitcoin balance whenever a BTC wallet is connected
   const { balanceBtc: btcBalanceBtc, isLoading: isBtcBalanceLoading } =
@@ -925,38 +935,11 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       setExceedsAvailableBTCLiquidity(false);
     }
 
-    // If ETH is selected, fetch gas data and adjust for gas costs
-    if (inputToken.ticker === "ETH") {
-      const gasCostEth = await fetchEthGasCost(
-        inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1)
-      );
-      if (gasCostEth !== null) {
-        const balanceFloat = parseFloat(currentInputBalance);
-        const adjustedAmount = balanceFloat - gasCostEth;
-
-        if (adjustedAmount > 0) {
-          adjustedInputAmount = adjustedAmount.toString();
-          setIsAtAdjustedMax(true);
-        } else {
-          adjustedInputAmount = currentInputBalance;
-          setIsAtAdjustedMax(false);
-        }
-      } else {
-        setIsAtAdjustedMax(false);
-      }
-    } else if (inputToken.ticker === "BTC") {
-      // For BTC input, fetch recommended fee rate from network
-      const feeRate = await getRecommendedFeeRate("medium");
-      // Estimate typical transaction size (1 input, 2 outputs)
-      const estimatedSize = estimateTransactionSize(1, 2);
-      const btcFeeReserveSats = Math.ceil(feeRate * estimatedSize);
-      const btcFeeReserveBtc = btcFeeReserveSats / 100_000_000;
-
-      const balanceFloat = parseFloat(currentInputBalance);
-      const adjustedAmount = balanceFloat - btcFeeReserveBtc;
-
-      if (adjustedAmount > 0) {
-        adjustedInputAmount = adjustedAmount.toFixed(8);
+    // Use pre-calculated gas-adjusted balance for ETH/BTC
+    // This ensures consistency with the displayed balance next to Max button
+    if (inputToken.ticker === "ETH" || inputToken.ticker === "BTC") {
+      if (adjustedInputBalance && adjustedInputBalance !== currentInputBalance) {
+        adjustedInputAmount = adjustedInputBalance;
         setIsAtAdjustedMax(true);
       } else {
         adjustedInputAmount = currentInputBalance;
@@ -1244,18 +1227,18 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       return;
     }
 
-    // Look up balance from aggregated tokens (all wallets) by address+chain for accuracy
-    const matchingToken = aggregatedTokens.find(
+    // Look up balance from SELECTED WALLET ONLY (not aggregated across all wallets)
+    // This ensures Max button shows only what's available in the selected input wallet
+    const matchingToken = selectedWalletTokens.find(
       (t) =>
         t.address.toLowerCase() === inputToken.address.toLowerCase() &&
         t.chain === inputToken.chain
     );
     
-    // Only use the aggregated balance - if token not found, user doesn't own it anymore
-    // Don't fall back to inputToken.balance as it may be stale
+    // Only use the selected wallet's balance - if token not found, user doesn't own it in this wallet
     const balance = matchingToken?.balance || "0";
 
-    // Only show balance if user actually owns the token
+    // Only show balance if user actually owns the token in the selected wallet
     if (balance === "0" || parseFloat(balance) <= 0) {
       setCurrentInputBalance(null);
       setCurrentInputTicker(null);
@@ -1267,11 +1250,49 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     isEvmConnected,
     primaryEvmAddress,
     inputToken,
-    aggregatedTokens,
+    selectedWalletTokens,
     inputAssetIdentifier,
     btcAddress,
     btcBalanceBtc,
   ]);
+
+  // Pre-calculate gas-adjusted balance for display next to Max button
+  // This ensures the displayed balance matches what will appear in input when Max is clicked
+  useEffect(() => {
+    const calculateAdjustedBalance = async () => {
+      if (!currentInputBalance || parseFloat(currentInputBalance) <= 0) {
+        setAdjustedInputBalance(null);
+        return;
+      }
+
+      const balanceFloat = parseFloat(currentInputBalance);
+
+      if (inputToken.ticker === "ETH") {
+        const gasCostEth = await fetchEthGasCost(
+          inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1)
+        );
+        if (gasCostEth !== null && balanceFloat - gasCostEth > 0) {
+          setAdjustedInputBalance((balanceFloat - gasCostEth).toString());
+        } else {
+          setAdjustedInputBalance(currentInputBalance);
+        }
+      } else if (inputToken.ticker === "BTC") {
+        const feeRate = await getRecommendedFeeRate("medium");
+        const estimatedSize = estimateTransactionSize(1, 2);
+        const btcFeeReserveBtc = Math.ceil(feeRate * estimatedSize) / 100_000_000;
+        if (balanceFloat - btcFeeReserveBtc > 0) {
+          setAdjustedInputBalance((balanceFloat - btcFeeReserveBtc).toFixed(8));
+        } else {
+          setAdjustedInputBalance(currentInputBalance);
+        }
+      } else {
+        // Non-native tokens don't need gas adjustment
+        setAdjustedInputBalance(currentInputBalance);
+      }
+    };
+
+    calculateAdjustedBalance();
+  }, [currentInputBalance, inputToken.ticker, inputToken.chain]);
 
   // Update current output balance when wallet connection or token selection changes
   useEffect(() => {
@@ -1304,17 +1325,17 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       return;
     }
 
-    // Look up balance from aggregated tokens (all wallets) by address+chain for accuracy
-    const matchingToken = aggregatedTokens.find(
+    // Look up balance from SELECTED WALLET ONLY (consistent with input balance)
+    const matchingToken = selectedWalletTokens.find(
       (t) =>
         t.address.toLowerCase() === outputToken.address.toLowerCase() &&
         t.chain === outputToken.chain
     );
     
-    // Only use the aggregated balance - don't fall back to stale outputToken.balance
+    // Only use the selected wallet's balance
     const balance = matchingToken?.balance || "0";
 
-    // For output, show null if user doesn't own the token (no "max" button needed for output)
+    // For output, show null if user doesn't own the token in the selected wallet
     if (balance === "0" || parseFloat(balance) <= 0) {
       setCurrentOutputBalance(null);
       setCurrentOutputTicker(null);
@@ -1326,7 +1347,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     isEvmConnected,
     primaryEvmAddress,
     outputToken,
-    aggregatedTokens,
+    selectedWalletTokens,
     isSwappingForBTC,
     resolvedOutputAddress,
     btcAddress,
@@ -2020,7 +2041,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     userSelect="none"
                     whiteSpace="nowrap"
                   >
-                    {currentInputBalance.slice(0, 8)} {currentInputTicker}
+                    {(adjustedInputBalance || currentInputBalance).slice(0, 8)} {currentInputTicker}
                   </Text>
                   <Tooltip
                     show={showMaxTooltip && (inputToken.ticker === "ETH" || !isSwappingForBTC)}
