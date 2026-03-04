@@ -120,6 +120,15 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const switchNetwork = useSwitchNetwork();
   const userWallets = useUserWallets();
 
+  // Get all EVM wallet addresses (memoized)
+  const evmWalletAddresses = useMemo(
+    () =>
+      userWallets
+        .filter((w) => w.chain?.toUpperCase() === "EVM")
+        .map((w) => w.address.toLowerCase()),
+    [userWallets]
+  );
+
   // Rift SDK from store
   const rift = useStore((state) => state.rift);
   const setExecuteSwap = useStore((state) => state.setExecuteSwap);
@@ -163,7 +172,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   const {
     inputToken,
     outputToken,
-    userTokensByChain,
+    userTokensByWallet,
     displayedInputAmount,
     setDisplayedInputAmount,
     fullPrecisionInputAmount,
@@ -221,6 +230,40 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
 
   // Derive EVM chain ID from input token (default to Ethereum mainnet)
   const evmConnectWalletChainId = inputToken.chain === "bitcoin" ? 1 : inputToken.chain;
+
+  // Aggregate tokens from ALL connected EVM wallets for balance lookup
+  // This ensures we find tokens regardless of which wallet they're in
+  const aggregatedTokens = useMemo(() => {
+    const tokens: TokenData[] = [];
+    for (const addr of evmWalletAddresses) {
+      const walletTokens = userTokensByWallet[addr];
+      if (walletTokens) {
+        tokens.push(...Object.values(walletTokens).flat());
+      }
+    }
+    // Deduplicate and sum balances for same token across wallets
+    const tokenMap = new Map<string, TokenData>();
+    for (const t of tokens) {
+      const key = `${t.chain}-${t.address.toLowerCase()}`;
+      if (tokenMap.has(key)) {
+        const existing = tokenMap.get(key)!;
+        const existingBalance = parseFloat(existing.balance) || 0;
+        const newBalance = parseFloat(t.balance) || 0;
+        const totalBalance = existingBalance + newBalance;
+        const existingUsd = parseFloat(existing.usdValue.replace("$", "").replace(",", "")) || 0;
+        const newUsd = parseFloat(t.usdValue.replace("$", "").replace(",", "")) || 0;
+        const totalUsd = existingUsd + newUsd;
+        tokenMap.set(key, {
+          ...existing,
+          balance: totalBalance.toString(),
+          usdValue: `$${totalUsd.toFixed(2)}`,
+        });
+      } else {
+        tokenMap.set(key, t);
+      }
+    }
+    return Array.from(tokenMap.values());
+  }, [evmWalletAddresses, userTokensByWallet]);
 
   // Fetch Bitcoin balance whenever a BTC wallet is connected
   const { balanceBtc: btcBalanceBtc, isLoading: isBtcBalanceLoading } =
@@ -1195,36 +1238,36 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       return;
     }
 
-    const fallbackList = userTokensByChain?.[evmConnectWalletChainId] || [];
-    const fallbackEth = fallbackList.find((t) => t.ticker?.toUpperCase() === "ETH");
-    const token = inputToken || fallbackEth;
-
-    console.log("fallbackList", fallbackList);
-    console.log("fallbackEth", fallbackEth);
-    console.log("token", token);
-    if (!token) {
+    if (!inputToken) {
       setCurrentInputBalance(null);
       setCurrentInputTicker(null);
       return;
     }
 
-    const balance = fallbackList.find((t) => t.ticker === token?.ticker)?.balance || "0";
-    const amt = parseFloat(balance);
+    // Look up balance from aggregated tokens (all wallets) by address+chain for accuracy
+    const matchingToken = aggregatedTokens.find(
+      (t) =>
+        t.address.toLowerCase() === inputToken.address.toLowerCase() &&
+        t.chain === inputToken.chain
+    );
+    
+    // Only use the aggregated balance - if token not found, user doesn't own it anymore
+    // Don't fall back to inputToken.balance as it may be stale
+    const balance = matchingToken?.balance || "0";
 
-    // if (!balance || !Number.isFinite(amt) || amt <= 0) {
-    //   setCurrentInputBalance(null);
-    //   setCurrentInputTicker(null);
-    //   return;
-    // }
-
-    setCurrentInputBalance(balance);
-    setCurrentInputTicker(token.ticker || null);
+    // Only show balance if user actually owns the token
+    if (balance === "0" || parseFloat(balance) <= 0) {
+      setCurrentInputBalance(null);
+      setCurrentInputTicker(null);
+    } else {
+      setCurrentInputBalance(balance);
+      setCurrentInputTicker(inputToken.ticker || null);
+    }
   }, [
     isEvmConnected,
     primaryEvmAddress,
     inputToken,
-    userTokensByChain,
-    evmConnectWalletChainId,
+    aggregatedTokens,
     inputAssetIdentifier,
     btcAddress,
     btcBalanceBtc,
@@ -1255,25 +1298,35 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       return;
     }
 
-    // For EVM output, look up the output token balance from user tokens
-    const tokenList = userTokensByChain?.[evmConnectWalletChainId] || [];
-
     if (!outputToken) {
       setCurrentOutputBalance(null);
       setCurrentOutputTicker(null);
       return;
     }
 
-    const balance = tokenList.find((t) => t.ticker === outputToken.ticker)?.balance || "0";
+    // Look up balance from aggregated tokens (all wallets) by address+chain for accuracy
+    const matchingToken = aggregatedTokens.find(
+      (t) =>
+        t.address.toLowerCase() === outputToken.address.toLowerCase() &&
+        t.chain === outputToken.chain
+    );
+    
+    // Only use the aggregated balance - don't fall back to stale outputToken.balance
+    const balance = matchingToken?.balance || "0";
 
-    setCurrentOutputBalance(balance);
-    setCurrentOutputTicker(outputToken.ticker || null);
+    // For output, show null if user doesn't own the token (no "max" button needed for output)
+    if (balance === "0" || parseFloat(balance) <= 0) {
+      setCurrentOutputBalance(null);
+      setCurrentOutputTicker(null);
+    } else {
+      setCurrentOutputBalance(balance);
+      setCurrentOutputTicker(outputToken.ticker || null);
+    }
   }, [
     isEvmConnected,
     primaryEvmAddress,
     outputToken,
-    userTokensByChain,
-    evmConnectWalletChainId,
+    aggregatedTokens,
     isSwappingForBTC,
     resolvedOutputAddress,
     btcAddress,

@@ -773,6 +773,8 @@ export const AdminChats: React.FC = () => {
                                   asset={startAsset}
                                   iconUrl={swap.startAssetMetadata?.icon}
                                   size={22}
+                                  address={swap.startAssetMetadata?.address}
+                                  chainId={swap.chain === "BASE" ? 8453 : 1}
                                 />
                                 <Text
                                   fontFamily={FONT_FAMILIES.SF_PRO}
@@ -1231,6 +1233,8 @@ export const AdminChats: React.FC = () => {
                                   asset={startAsset}
                                   iconUrl={swap.startAssetMetadata?.icon}
                                   size={20}
+                                  address={swap.startAssetMetadata?.address}
+                                  chainId={swap.chain === "BASE" ? 8453 : 1}
                                 />
                                 <Text
                                   fontFamily={FONT_FAMILIES.SF_PRO}

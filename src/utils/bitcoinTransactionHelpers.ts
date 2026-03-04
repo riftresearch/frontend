@@ -55,16 +55,29 @@ export interface BuildPsbtResult {
  * @returns Array of UTXOs
  */
 export async function fetchUserUtxos(address: string): Promise<UTXO[]> {
-  const utxosUrl = `${GLOBAL_CONFIG.mempoolUrl}/address/${address}/utxo`;
-
-  // console.log("utxosUrl", utxosUrl);
-  const response = await fetch(utxosUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch UTXOs: ${response.status} ${response.statusText}`);
+  // Validate address before making request
+  if (!address || address.length < 26) {
+    console.warn(`[fetchUserUtxos] Invalid or empty address: ${address}`);
+    return [];
   }
 
-  const utxos: UTXO[] = await response.json();
-  return utxos;
+  const utxosUrl = `${GLOBAL_CONFIG.mempoolUrl}/address/${address}/utxo`;
+
+  try {
+    const response = await fetch(utxosUrl);
+    if (!response.ok) {
+      console.warn(`[fetchUserUtxos] HTTP error for ${address}: ${response.status}`);
+      return [];
+    }
+
+    const utxos: UTXO[] = await response.json();
+    return utxos;
+  } catch (error) {
+    // Network errors (CORS, timeout, offline, rate limited) will throw here
+    console.warn(`[fetchUserUtxos] Network error for ${address}:`, error);
+    // Return empty array instead of throwing to prevent UI crashes
+    return [];
+  }
 }
 
 /**

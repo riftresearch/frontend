@@ -567,6 +567,8 @@ const Card: React.FC<{
                       asset={swap.startAssetMetadata.ticker}
                       iconUrl={swap.startAssetMetadata.icon}
                       size={isMobile ? 14 : 18}
+                      address={swap.startAssetMetadata.address}
+                      chainId={swap.chain === "BASE" ? 8453 : 1}
                     />
                   </>
                 ) : (
@@ -920,6 +922,8 @@ const Row: React.FC<{
                           asset={swap.startAssetMetadata.ticker}
                           iconUrl={swap.startAssetMetadata.icon}
                           size={16}
+                          address={swap.startAssetMetadata.address}
+                          chainId={swap.chain === "BASE" ? 8453 : 1}
                         />
                         <Text
                           fontSize="13px"

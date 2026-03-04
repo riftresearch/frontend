@@ -1306,6 +1306,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                               <AssetIcon
                                 asset={swap.startAssetMetadata.ticker}
                                 iconUrl={swap.startAssetMetadata.icon}
+                                address={swap.startAssetMetadata.address}
+                                chainId={swap.chain === "BASE" ? 8453 : 1}
                               />
                               <Text
                                 fontSize="13px"
