@@ -23,7 +23,8 @@ function parseUsdString(usdString: string): number | null {
  *
  * @param inputUsd - Formatted input USD string (e.g. "$1,000.00")
  * @param outputUsd - Formatted output USD string (e.g. "$900.00")
- * @returns Object with `percent` (number) and `display` (formatted string like "-10.00%"), or null if not calculable
+ * @returns Object with `percent` (number) and `display` (formatted string
+ * like "-10.00%"), or null if not calculable
  */
 export function calculatePriceImpact(
   inputUsd: string,
@@ -192,7 +193,7 @@ export function buildFeeOverview(fees: {
 
 /**
  * Check if a USD value is above the minimum swap threshold
- * Minimum is 3000 satoshis worth of value
+ * Minimum is MIN_SWAP_SATS worth of value
  *
  * @param usdValue - The USD value to check
  * @param bitcoinPrice - The current price of Bitcoin in USD
@@ -203,7 +204,7 @@ export function isAboveMinSwap(usdValue: number, bitcoinPrice: number): boolean 
     return false;
   }
 
-  // Calculate the value of 3000 sats in USD
+  // Calculate the value of the minimum satoshi threshold in USD
   const minValueUsd = (MIN_SWAP_SATS / SATS_PER_BTC) * bitcoinPrice;
 
   return usdValue >= minValueUsd;
@@ -431,4 +432,3 @@ export function validatePayoutAddress(
     return validation;
   }
 }
-

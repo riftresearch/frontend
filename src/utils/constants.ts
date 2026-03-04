@@ -22,7 +22,7 @@ export const BITCOIN_DECIMALS = 8;
 
 export const ZERO_USD_DISPLAY = "$0.00";
 
-export const MIN_SWAP_SATS = 3000;
+export const MIN_SWAP_SATS = 2000;
 
 // Chain to network name mapping
 export const CHAIN_NAMES: Record<string | number, string> = {

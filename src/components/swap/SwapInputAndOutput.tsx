@@ -35,6 +35,7 @@ import {
   buildFeeOverview,
   getMinSwapValueUsd,
   satsToBtc,
+  btcToSats,
   truncateAmount,
   getSlippageBpsForNotional,
   formatCurrencyAmount,
@@ -50,6 +51,19 @@ import { getRecommendedFeeRate, estimateTransactionSize } from "@/utils/bitcoinT
 
 // Calculate minimum BTC amount once
 const MIN_BTC = parseFloat(satsToBtc(MIN_SWAP_SATS));
+const MIN_SWAP_SATS_BIGINT = BigInt(MIN_SWAP_SATS);
+
+const isBtcLikeTicker = (ticker: string): boolean => ticker === "BTC" || ticker === "cbBTC";
+
+const isBelowMinBtcAmount = (amount: string): boolean => {
+  if (!amount) return false;
+  const normalizedAmount = amount.startsWith(".") ? `0${amount}` : amount;
+  try {
+    return btcToSats(normalizedAmount) < MIN_SWAP_SATS_BIGINT;
+  } catch {
+    return false;
+  }
+};
 
 // Gas units buffer for ETH transfers (cowswap create order is ~56k, using 10M for safety margin)
 const ETH_GAS_UNITS = BigInt(10_000_000);
@@ -382,6 +396,28 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         return;
       }
 
+      const belowMinInput = isInput && inputToken.ticker === "BTC" && isBelowMinBtcAmount(amount);
+      const belowMinOutput =
+        !isInput && isBtcLikeTicker(outputToken.ticker) && isBelowMinBtcAmount(amount);
+
+      if (belowMinInput) {
+        setOutputAmount("");
+        setOutputUsdValue(ZERO_USD_DISPLAY);
+        setInputBelowMinimum(true);
+        setIsLoadingQuote(false);
+        setRefetchQuote(false);
+        return;
+      }
+
+      if (belowMinOutput) {
+        setDisplayedInputAmount("");
+        setInputUsdValue(ZERO_USD_DISPLAY);
+        setOutputBelowMinimum(true);
+        setIsLoadingQuote(false);
+        setRefetchQuote(false);
+        return;
+      }
+
       setIsLoadingQuote(true);
       setExceedsAvailableLiquidity(false);
       setMaxAvailableLiquidity(null);
@@ -474,22 +510,22 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           setInputUsdValue(ZERO_USD_DISPLAY);
         }
 
-      // Parse insufficient liquidity errors from market maker
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const liquidityMatch = errorMessage.match(
-        /Insufficient liquidity: requires \d+ but max available is (\d+)/
-      );
-      if (liquidityMatch) {
-        const maxAvailable = Number(liquidityMatch[1]);
-        if (outputToken.chain === "bitcoin") {
-          // Output is BTC: apply safety haircut to avoid near-boundary failures
-          setMaxAvailableLiquidity(Math.floor(maxAvailable * 0.995).toString());
-        } else {
-          // Input is BTC: use 99.9%, will set as input
-          setMaxAvailableLiquidity(Math.floor(maxAvailable * 0.999).toString());
+        // Parse insufficient liquidity errors from market maker
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const liquidityMatch = errorMessage.match(
+          /Insufficient liquidity: requires \d+ but max available is (\d+)/
+        );
+        if (liquidityMatch) {
+          const maxAvailable = Number(liquidityMatch[1]);
+          if (outputToken.chain === "bitcoin") {
+            // Output is BTC: apply safety haircut to avoid near-boundary failures
+            setMaxAvailableLiquidity(Math.floor(maxAvailable * 0.995).toString());
+          } else {
+            // Input is BTC: use 99.9%, will set as input
+            setMaxAvailableLiquidity(Math.floor(maxAvailable * 0.999).toString());
+          }
+          setExceedsAvailableLiquidity(true);
         }
-        setExceedsAvailableLiquidity(true);
-      }
 
         // DEX quote failure = not enough DEX liquidity
         if (errorMessage.includes("DEX quote failed")) {
@@ -551,7 +587,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
   };
 
   const getDirectionLiquidity = () => {
-    const maxLiquiditySats = isSwappingForBTC ? liquidity.maxBTCLiquidity : liquidity.maxCbBTCLiquidity;
+    const maxLiquiditySats = isSwappingForBTC
+      ? liquidity.maxBTCLiquidity
+      : liquidity.maxCbBTCLiquidity;
     const maxLiquidityUsd = parseFloat(
       isSwappingForBTC ? liquidity.maxBTCLiquidityInUsd : liquidity.maxCbBTCLiquidityInUsd
     );
@@ -590,7 +628,13 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     if (targetField === "input") {
       setDisplayedInputAmount(truncateAmount(amount));
       setFullPrecisionInputAmount(amount);
-      const usdValue = calculateUsdValue(amount, inputToken.ticker, ethPrice, btcPrice, inputTokenPrice);
+      const usdValue = calculateUsdValue(
+        amount,
+        inputToken.ticker,
+        ethPrice,
+        btcPrice,
+        inputTokenPrice
+      );
       setInputUsdValue(usdValue);
     } else {
       const outputAmountForDisplay = truncateAmount(amount);
@@ -605,6 +649,22 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       );
       setOutputUsdValue(usdValue);
       quoteAmount = outputAmountForDisplay;
+    }
+
+    if (quoteForInput && inputToken.ticker === "BTC" && isBelowMinBtcAmount(quoteAmount)) {
+      setInputBelowMinimum(true);
+      setOutputAmount("");
+      setOutputUsdValue(ZERO_USD_DISPLAY);
+      setIsLoadingQuote(false);
+      return;
+    }
+
+    if (!quoteForInput && isBtcLikeTicker(outputToken.ticker) && isBelowMinBtcAmount(quoteAmount)) {
+      setOutputBelowMinimum(true);
+      setDisplayedInputAmount("");
+      setInputUsdValue(ZERO_USD_DISPLAY);
+      setIsLoadingQuote(false);
+      return;
     }
 
     setIsLoadingQuote(true);
@@ -684,7 +744,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         clearTimeout(debounceTimerRef.current);
       }
 
-      // Pre-check MM liquidity before fetching quotes to avoid spinner flicker and unnecessary requests
+      // Pre-check MM liquidity before fetching quotes to avoid spinner flicker
+      // and unnecessary requests
       if (isInput && value && parseFloat(value) > 0) {
         const { maxLiquiditySats, maxLiquidityUsd } = getDirectionLiquidity();
         const maxLiquiditySatsBigInt = BigInt(maxLiquiditySats || "0");
@@ -717,22 +778,28 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       // Set up debounced quote fetch
       const shouldFetchQuote = isInput
         ? value && parseFloat(value) > 0 && getQuoteForInputRef.current && !hasNoRoutesError
-        : value &&
-          parseFloat(value) > 0 &&
-          !getQuoteForInputRef.current &&
-          canEditOutputField;
+        : value && parseFloat(value) > 0 && !getQuoteForInputRef.current && canEditOutputField;
 
       if (shouldFetchQuote) {
-        // For output, check if below min (3000 sats = 0.00003 BTC)
-        if (!isInput) {
-          const outputFloat = parseFloat(value);
-          if (outputFloat < MIN_BTC) {
-            // Don't fetch quote if below minimum
-            setDisplayedInputAmount("");
-            setInputUsdValue(ZERO_USD_DISPLAY);
+        if (isInput && inputToken.ticker === "BTC") {
+          if (isBelowMinBtcAmount(value)) {
+            // Don't fetch quote if below minimum BTC input
+            setInputBelowMinimum(true);
+            setOutputAmount("");
+            setOutputUsdValue(ZERO_USD_DISPLAY);
             setIsLoadingQuote(false);
             return;
           }
+          setInputBelowMinimum(false);
+        }
+
+        if (!isInput && isBtcLikeTicker(outputToken.ticker) && isBelowMinBtcAmount(value)) {
+          // Don't fetch quote if below minimum BTC-like output
+          setOutputBelowMinimum(true);
+          setDisplayedInputAmount("");
+          setInputUsdValue(ZERO_USD_DISPLAY);
+          setIsLoadingQuote(false);
+          return;
         }
 
         // Show loading state
@@ -954,12 +1021,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
         clearTimeout(approvalDebounceTimerRef.current);
       }
     };
-  }, [
-    setDisplayedInputAmount,
-    setOutputAmount,
-    setInputUsdValue,
-    setOutputUsdValue,
-  ]);
+  }, [setDisplayedInputAmount, setOutputAmount, setInputUsdValue, setOutputUsdValue]);
 
   useEffect(() => {
     if (canEditOutputField) return;
@@ -1018,12 +1080,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       const defaultToken = evmConnectWalletChainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
       setInputToken(defaultToken);
     }
-  }, [
-    setInputToken,
-    evmConnectWalletChainId,
-    inputToken,
-    switchingToInputTokenChain,
-  ]);
+  }, [setInputToken, evmConnectWalletChainId, inputToken, switchingToInputTokenChain]);
 
   // Fetch token prices when selected tokens change
   useEffect(() => {
@@ -1375,7 +1432,8 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
           const balanceUsdValue = balanceFloat * price;
 
           // If user's balance USD value < MM liquidity USD, show "exceeds balance"
-          // If user's balance USD value >= MM liquidity USD, don't show this error (defer to MM liquidity check)
+          // If user's balance USD value >= MM liquidity USD, don't show this
+          // error (defer to MM liquidity check)
           if (balanceUsdValue < mmLiquidityUsd) {
             setExceedsUserBalance(true);
           } else {
@@ -1411,7 +1469,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     exceedsAvailableLiquidity,
   ]);
 
-  // Check if output amount is below minimum swap amount (3000 sats)
+  // Check if output amount is below minimum swap amount
   // Only show this error when user is editing the OUTPUT field
   useEffect(() => {
     // Clear error if output is empty or zero
@@ -1440,12 +1498,18 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     }
 
     // Check if output exists and is below minimum
-    if (outputFloat < MIN_BTC) {
+    if (isBtcLikeTicker(outputToken.ticker) && isBelowMinBtcAmount(outputAmount)) {
       setOutputBelowMinimum(true);
     } else {
       setOutputBelowMinimum(false);
     }
-  }, [outputAmount, exceedsUserBalance, lastEditedField, exceedsAvailableLiquidity]);
+  }, [
+    outputAmount,
+    outputToken.ticker,
+    exceedsUserBalance,
+    lastEditedField,
+    exceedsAvailableLiquidity,
+  ]);
 
   // Check if input amount would result in below minimum output
   // Only show this error when user is editing the INPUT field
@@ -1482,11 +1546,16 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
       return;
     }
 
+    // For BTC input, enforce minimum directly on the entered BTC amount.
+    if (inputToken.ticker === "BTC") {
+      setInputBelowMinimum(isBelowMinBtcAmount(displayedInputAmount));
+      return;
+    }
+
     // Check 1: If output exists and is below minimum (user typed in input, got small output)
     // Also verify input is still > 0 (to handle React batched state updates)
     if (inputFloat > 0 && outputAmount && parseFloat(outputAmount) > 0) {
-      const outputFloat = parseFloat(outputAmount);
-      if (outputFloat < MIN_BTC) {
+      if (isBtcLikeTicker(outputToken.ticker) && isBelowMinBtcAmount(outputAmount)) {
         setInputBelowMinimum(true);
         return;
       }
@@ -1517,6 +1586,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     exceedsUserBalance,
     isSwappingForBTC,
     inputToken,
+    outputToken.ticker,
     ethPrice,
     btcPrice,
     inputTokenPrice,
@@ -1727,9 +1797,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   )}
                 </>
               ) : exceedsUserBalance &&
-              (inputToken.ticker === "ETH" || !isSwappingForBTC) &&
-              currentInputBalance &&
-              parseFloat(displayedInputAmount) <= parseFloat(currentInputBalance) ? (
+                (inputToken.ticker === "ETH" || !isSwappingForBTC) &&
+                currentInputBalance &&
+                parseFloat(displayedInputAmount) <= parseFloat(currentInputBalance) ? (
                 <>
                   <Text
                     color={colors.redHover}
@@ -1768,7 +1838,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                       fontWeight="normal"
                       fontFamily="Aux"
                     >
-                      Below minimum swap -
+                      Below min swap -
                     </Text>
                   )}
                   <Text
@@ -1777,14 +1847,19 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     ml={isMobile ? "0px" : "8px"}
                     color={inputStyle?.border_color_light || colors.textGray}
                     cursor="pointer"
-                    onClick={inputToken.ticker === "BTC" ? handleMinimumInputClick : handleMinimumOutputClick}
+                    onClick={
+                      inputToken.ticker === "BTC"
+                        ? handleMinimumInputClick
+                        : handleMinimumOutputClick
+                    }
                     _hover={{ textDecoration: "underline" }}
                     letterSpacing="-1.5px"
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
                     {(() => {
-                      const ticker = inputToken.ticker === "BTC" ? "BTC" : isSwappingForBTC ? "BTC" : "cbBTC";
+                      const ticker =
+                        inputToken.ticker === "BTC" ? "BTC" : isSwappingForBTC ? "BTC" : "cbBTC";
                       return `${MIN_BTC.toFixed(5)} ${ticker} Min`;
                     })()}
                   </Text>
@@ -2086,7 +2161,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                     fontWeight="normal"
                     fontFamily="Aux"
                   >
-                    {isMobile ? "" : "Below minimum output -"}
+                    {isMobile ? "" : "Below min swap -"}
                   </Text>
                   <Text
                     fontSize="13px"
