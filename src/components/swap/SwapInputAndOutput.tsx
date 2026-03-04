@@ -2030,7 +2030,7 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
               h="21px"
               whiteSpace="nowrap"
             >
-              {currentInputBalance && currentInputTicker && parseFloat(currentInputBalance) > 0 && (
+              {currentInputBalance !== null && currentInputTicker && (
                 <>
                   <Text
                     color={exceedsUserBalance ? colors.redHover : colors.textGray}
@@ -2043,57 +2043,59 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
                   >
                     {(adjustedInputBalance || currentInputBalance).slice(0, 8)} {currentInputTicker}
                   </Text>
-                  <Tooltip
-                    show={showMaxTooltip && (inputToken.ticker === "ETH" || !isSwappingForBTC)}
-                    onMouseEnter={() => setShowMaxTooltip(true)}
-                    onMouseLeave={() => setShowMaxTooltip(false)}
-                    hoverText={
-                      !isSwappingForBTC
-                        ? "Max excludes BTC for network fee"
-                        : "Max excludes ETH for gas"
-                    }
-                    body={
-                      <Button
-                        onClick={handleMaxClick}
-                        size="xs"
-                        h="21px"
-                        px="8px"
-                        bg={
-                          !isSwappingForBTC
-                            ? inputStyle?.dark_bg_color || "#291B0D"
-                            : colors.swapBgColor
-                        }
-                        color={
-                          !isSwappingForBTC
-                            ? inputStyle?.border_color || "#FFA04C"
-                            : colors.textGray
-                        }
-                        fontSize="12px"
-                        fontWeight="bold"
-                        fontFamily="Aux"
-                        letterSpacing="-0.5px"
-                        border="1px solid"
-                        borderColor={
-                          !isSwappingForBTC
-                            ? inputStyle?.border_color || "#FFA04C"
-                            : colors.swapBorderColor
-                        }
-                        borderRadius="8px"
-                        cursor="pointer"
-                        transition="all 0.2s"
-                        _hover={{
-                          bg: !isSwappingForBTC
-                            ? inputStyle?.bg_color || "#9B602F"
-                            : colors.swapBorderColor,
-                        }}
-                        _active={{
-                          transform: "scale(0.95)",
-                        }}
-                      >
-                        MAX
-                      </Button>
-                    }
-                  />
+                  {parseFloat(currentInputBalance) > 0 && (
+                    <Tooltip
+                      show={showMaxTooltip && (inputToken.ticker === "ETH" || !isSwappingForBTC)}
+                      onMouseEnter={() => setShowMaxTooltip(true)}
+                      onMouseLeave={() => setShowMaxTooltip(false)}
+                      hoverText={
+                        !isSwappingForBTC
+                          ? "Max excludes BTC for network fee"
+                          : "Max excludes ETH for gas"
+                      }
+                      body={
+                        <Button
+                          onClick={handleMaxClick}
+                          size="xs"
+                          h="21px"
+                          px="8px"
+                          bg={
+                            !isSwappingForBTC
+                              ? inputStyle?.dark_bg_color || "#291B0D"
+                              : colors.swapBgColor
+                          }
+                          color={
+                            !isSwappingForBTC
+                              ? inputStyle?.border_color || "#FFA04C"
+                              : colors.textGray
+                          }
+                          fontSize="12px"
+                          fontWeight="bold"
+                          fontFamily="Aux"
+                          letterSpacing="-0.5px"
+                          border="1px solid"
+                          borderColor={
+                            !isSwappingForBTC
+                              ? inputStyle?.border_color || "#FFA04C"
+                              : colors.swapBorderColor
+                          }
+                          borderRadius="8px"
+                          cursor="pointer"
+                          transition="all 0.2s"
+                          _hover={{
+                            bg: !isSwappingForBTC
+                              ? inputStyle?.bg_color || "#9B602F"
+                              : colors.swapBorderColor,
+                          }}
+                          _active={{
+                            transform: "scale(0.95)",
+                          }}
+                        >
+                          MAX
+                        </Button>
+                      }
+                    />
+                  )}
                 </>
               )}
             </Flex>
@@ -2320,21 +2322,19 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
             />
             {/* Output balance display */}
             <Flex direction="row" align="center" gap="8px" h="21px" whiteSpace="nowrap">
-              {currentOutputBalance &&
-                currentOutputTicker &&
-                parseFloat(currentOutputBalance) > 0 && (
-                  <Text
-                    color={colors.textGray}
-                    fontSize="14px"
-                    letterSpacing="-1px"
-                    fontWeight="normal"
-                    fontFamily="Aux"
-                    userSelect="none"
-                    whiteSpace="nowrap"
-                  >
-                    {currentOutputBalance.slice(0, 8)} {currentOutputTicker}
-                  </Text>
-                )}
+              {currentOutputBalance !== null && currentOutputTicker && (
+                <Text
+                  color={colors.textGray}
+                  fontSize="14px"
+                  letterSpacing="-1px"
+                  fontWeight="normal"
+                  fontFamily="Aux"
+                  userSelect="none"
+                  whiteSpace="nowrap"
+                >
+                  {currentOutputBalance.slice(0, 8)} {currentOutputTicker}
+                </Text>
+              )}
             </Flex>
           </Flex>
         </Flex>

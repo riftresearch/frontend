@@ -6,7 +6,7 @@ import { usePublicClient } from "wagmi";
 import { colors } from "@/utils/colors";
 import { IS_FRONTEND_PAUSED } from "@/utils/constants";
 import { useStore } from "@/utils/store";
-import { toastInfo, toastError } from "@/utils/toast";
+import { toastInfo, toastError, toastSuccess } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { mainnet, base } from "viem/chains";
@@ -81,6 +81,7 @@ export const SwapButton = () => {
     executeSwap,
     setActiveSwapId,
     setIsSwapInProgress,
+    setUserTokensForChain,
   } = useStore();
 
   // Public clients for swap execution
@@ -252,6 +253,54 @@ export const SwapButton = () => {
       const swap = await executeSwap(executeParams);
       setActiveSwapId(swap.swapId);
       console.log("swap executed", swap);
+
+      const isNonBtcEvmPair = inputToken.chain !== "bitcoin" && outputToken.chain !== "bitcoin";
+      if (isNonBtcEvmPair) {
+        toastSuccess({
+          title:
+            "Transaction confirming. Your new balances will be visible in a few seconds.",
+        });
+
+        // Refresh wallet balances after 30 seconds to reflect the swap
+        if (primaryEvmAddress) {
+          setTimeout(async () => {
+            try {
+              const chainId = inputToken.chain === 8453 ? 8453 : 1;
+              const response = await fetch(
+                `/api/token-balance?wallet=${primaryEvmAddress}&chainId=${chainId}`
+              );
+              const data = await response.json();
+
+              if (data.result?.result && Array.isArray(data.result.result)) {
+                const currentTokens = useStore.getState().userTokensByChain[chainId] || [];
+                const updatedTokens = currentTokens.map((token) => {
+                  const newBalance = data.result.result.find(
+                    (t: { address: string; totalBalance: string }) =>
+                      t.address.toLowerCase() === token.address.toLowerCase()
+                  );
+                  if (newBalance) {
+                    const decimals = token.decimals || 18;
+                    const balanceFormatted = (
+                      Number(BigInt(newBalance.totalBalance)) / Math.pow(10, decimals)
+                    ).toString();
+                    return { ...token, balance: balanceFormatted };
+                  }
+                  return token;
+                });
+                setUserTokensForChain(chainId, updatedTokens);
+              }
+            } catch (error) {
+              console.error("Failed to refresh balances after swap:", error);
+            }
+          }, 30000);
+        }
+
+        setSwapButtonPressed(false);
+        setSwapPhase("idle");
+        setIsSwapInProgress(false);
+        return;
+      }
+
       router.push(`/swap/${swap.swapId}`);
     } catch (error) {
       console.error("startSwap error caught:", error);
@@ -276,9 +325,13 @@ export const SwapButton = () => {
   }, [
     executeSwap,
     getExecuteParams,
+    inputToken.chain,
+    outputToken.chain,
     setActiveSwapId,
     setIsSwapInProgress,
     setRefetchQuote,
+    setUserTokensForChain,
+    primaryEvmAddress,
     router,
   ]);
 
