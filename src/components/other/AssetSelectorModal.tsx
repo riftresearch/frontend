@@ -12,6 +12,8 @@ import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
 import useWindowSize from "@/hooks/useWindowSize";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
+import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
+import { getAllBtcAddresses } from "@/hooks/useBitcoinTransaction";
 import {
   FALLBACK_TOKEN_ICON,
   BASE_POPULAR_TOKENS,
@@ -73,6 +75,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setSwitchingToInputTokenChain,
     setFeeOverview,
     btcPrice,
+    btcAddress,
   } = useStore();
 
   const primaryEvmWallet = useMemo(
@@ -86,17 +89,31 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     [userWallets, primaryEvmAddress]
   );
 
-  // Get BTC wallet addresses from connected wallets (memoized to prevent infinite loops)
-  const btcWalletAddresses = useMemo(
-    () =>
-      userWallets
-        .filter((w) => {
-          const chain = w.chain?.toLowerCase();
-          return chain === "btc" || chain === "bitcoin";
-        })
-        .map((w) => w.address),
+  // Get connected BTC wallets for fallback
+  const connectedBtcWallets = useMemo(
+    () => userWallets.filter((w) => {
+      const chain = w.chain?.toLowerCase();
+      return chain === "btc" || chain === "bitcoin";
+    }),
     [userWallets]
   );
+
+  // Use only the primary BTC wallet address (from store), with fallback to first connected BTC wallet
+  const btcWalletAddresses = useMemo(() => {
+    if (btcAddress) return [btcAddress];
+    
+    // Fallback: use the first address from the first connected BTC wallet
+    if (connectedBtcWallets.length > 0) {
+      const firstWallet = connectedBtcWallets[0];
+      if (isBitcoinWallet(firstWallet)) {
+        const addresses = getAllBtcAddresses(firstWallet);
+        if (addresses.length > 0) return [addresses[0]];
+      }
+      if (firstWallet.address) return [firstWallet.address];
+    }
+    
+    return [];
+  }, [btcAddress, connectedBtcWallets]);
 
   // Fetch BTC balances for all connected BTC wallets
   const btcBalances = useBitcoinBalances(btcWalletAddresses);
@@ -108,68 +125,28 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     [btcWalletAddresses, btcBalances]
   );
 
-  // Get all EVM wallet addresses (memoized)
+  // Use only the primary EVM wallet address (not all connected EVM wallets)
   const evmWalletAddresses = useMemo(
-    () =>
-      userWallets
-        .filter((w) => w.chain?.toUpperCase() === "EVM")
-        .map((w) => w.address.toLowerCase()),
-    [userWallets]
+    () => (primaryEvmAddress ? [primaryEvmAddress.toLowerCase()] : []),
+    [primaryEvmAddress]
   );
 
-  // Aggregate tokens from ALL connected EVM wallets by chain
-  // This replaces the single-wallet userTokensByChain with multi-wallet support
+  // Get tokens from the PRIMARY EVM wallet only (not all connected wallets)
+  // This ensures the asset selector only shows assets from the selected input wallet
   const aggregatedTokensByChain = useMemo(() => {
+    if (!primaryEvmAddress) return {};
+    
+    const walletTokens = userTokensByWallet[primaryEvmAddress.toLowerCase()];
+    if (!walletTokens) return {};
+    
+    // Convert to the expected format (Record<number, TokenData[]>)
     const tokensByChain: Record<number, TokenData[]> = {};
-    
-    // Collect all tokens from all wallets
-    for (const walletAddr of evmWalletAddresses) {
-      const walletTokens = userTokensByWallet[walletAddr];
-      if (!walletTokens) continue;
-      
-      for (const [chainIdStr, tokens] of Object.entries(walletTokens)) {
-        const chainId = Number(chainIdStr);
-        if (!tokensByChain[chainId]) {
-          tokensByChain[chainId] = [];
-        }
-        tokensByChain[chainId].push(...tokens);
-      }
+    for (const [chainIdStr, tokens] of Object.entries(walletTokens)) {
+      tokensByChain[Number(chainIdStr)] = tokens;
     }
     
-    // Deduplicate and sum balances for same token across wallets
-    const deduplicatedByChain: Record<number, TokenData[]> = {};
-    for (const [chainIdStr, tokens] of Object.entries(tokensByChain)) {
-      const chainId = Number(chainIdStr);
-      const tokenMap = new Map<string, TokenData>();
-      
-      for (const token of tokens) {
-        const key = token.address.toLowerCase();
-        if (tokenMap.has(key)) {
-          // Sum balances for same token from different wallets
-          const existing = tokenMap.get(key)!;
-          const existingBalance = parseFloat(existing.balance) || 0;
-          const newBalance = parseFloat(token.balance) || 0;
-          const totalBalance = existingBalance + newBalance;
-          
-          const existingUsd = parseFloat(existing.usdValue.replace("$", "").replace(",", "")) || 0;
-          const newUsd = parseFloat(token.usdValue.replace("$", "").replace(",", "")) || 0;
-          const totalUsd = existingUsd + newUsd;
-          
-          tokenMap.set(key, {
-            ...existing,
-            balance: totalBalance.toString(),
-            usdValue: `$${totalUsd.toFixed(2)}`,
-          });
-        } else {
-          tokenMap.set(key, token);
-        }
-      }
-      
-      deduplicatedByChain[chainId] = Array.from(tokenMap.values());
-    }
-    
-    return deduplicatedByChain;
-  }, [evmWalletAddresses, userTokensByWallet]);
+    return tokensByChain;
+  }, [primaryEvmAddress, userTokensByWallet]);
 
   // Auto-focus search input when modal opens
   useEffect(() => {
