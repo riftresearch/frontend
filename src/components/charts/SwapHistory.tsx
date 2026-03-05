@@ -65,6 +65,14 @@ function parseDurationToSeconds(duration?: string): number {
   return 0;
 }
 
+function getDisplayAmount(metadata: { amount: string; executed_amount?: string; decimals: number }) {
+  const value = metadata.executed_amount || metadata.amount;
+  const decimals = Number.isFinite(metadata.decimals) ? metadata.decimals : 0;
+  const parsed = parseFloat(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return parsed / Math.pow(10, decimals);
+}
+
 function formatSecondsToMinSec(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -559,12 +567,12 @@ const Card: React.FC<{
                       color={colorsAnalytics.offWhite}
                       fontFamily={FONT_FAMILIES.SF_PRO}
                     >
-                      {parseFloat(swap.startAssetMetadata.amount)
+                      {getDisplayAmount(swap.startAssetMetadata)
                         .toFixed(Math.min(swap.startAssetMetadata.decimals, 4))
                         .replace(/\.?0+$/, "")}
                     </Text>
                     <AssetIcon
-                      asset={swap.startAssetMetadata.ticker}
+                      asset={swap.startAssetMetadata.ticker || swap.startAssetMetadata.address}
                       iconUrl={swap.startAssetMetadata.icon}
                       size={isMobile ? 14 : 18}
                       address={swap.startAssetMetadata.address}
@@ -593,16 +601,37 @@ const Card: React.FC<{
                 >
                   →
                 </Text>
-                <Text
-                  fontSize={isMobile ? "11px" : "13px"}
-                  color={colorsAnalytics.offWhite}
-                  fontFamily={FONT_FAMILIES.SF_PRO}
-                >
-                  {isMobile
-                    ? swap.swapInitialAmountBtc.toFixed(6)
-                    : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                </Text>
-                <AssetIcon asset="BTC" size={isMobile ? 14 : 18} />
+                {swap.endAssetMetadata ? (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {getDisplayAmount(swap.endAssetMetadata)
+                        .toFixed(Math.min(swap.endAssetMetadata.decimals, 4))
+                        .replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon
+                      asset={swap.endAssetMetadata.ticker || swap.endAssetMetadata.address}
+                      iconUrl={swap.endAssetMetadata.icon}
+                      size={isMobile ? 14 : 18}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {isMobile
+                        ? swap.swapInitialAmountBtc.toFixed(6)
+                        : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon asset="BTC" size={isMobile ? 14 : 18} />
+                  </>
+                )}
               </>
             ) : (
               // BTC → EVM: Show BTC input → cbBTC output
@@ -624,16 +653,37 @@ const Card: React.FC<{
                 >
                   →
                 </Text>
-                <Text
-                  fontSize={isMobile ? "11px" : "13px"}
-                  color={colorsAnalytics.offWhite}
-                  fontFamily={FONT_FAMILIES.SF_PRO}
-                >
-                  {isMobile
-                    ? swap.swapInitialAmountBtc.toFixed(6)
-                    : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                </Text>
-                <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
+                {swap.endAssetMetadata ? (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {getDisplayAmount(swap.endAssetMetadata)
+                        .toFixed(Math.min(swap.endAssetMetadata.decimals, 4))
+                        .replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon
+                      asset={swap.endAssetMetadata.ticker || swap.endAssetMetadata.address}
+                      iconUrl={swap.endAssetMetadata.icon}
+                      size={isMobile ? 14 : 18}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      fontSize={isMobile ? "11px" : "13px"}
+                      color={colorsAnalytics.offWhite}
+                      fontFamily={FONT_FAMILIES.SF_PRO}
+                    >
+                      {isMobile
+                        ? swap.swapInitialAmountBtc.toFixed(6)
+                        : swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                    </Text>
+                    <AssetIcon asset="cbBTC" size={isMobile ? 14 : 18} />
+                  </>
+                )}
               </>
             )}
           </Flex>
@@ -913,13 +963,13 @@ const Row: React.FC<{
                           color={colorsAnalytics.offWhite}
                           fontFamily={FONT_FAMILIES.SF_PRO}
                         >
-                          {parseFloat(swap.startAssetMetadata.amount).toLocaleString(undefined, {
+                          {getDisplayAmount(swap.startAssetMetadata).toLocaleString(undefined, {
                             minimumFractionDigits: 0,
                             maximumFractionDigits: Math.min(swap.startAssetMetadata.decimals, 6),
                           })}
                         </Text>
                         <AssetIcon
-                          asset={swap.startAssetMetadata.ticker}
+                          asset={swap.startAssetMetadata.ticker || swap.startAssetMetadata.address}
                           iconUrl={swap.startAssetMetadata.icon}
                           size={16}
                           address={swap.startAssetMetadata.address}
@@ -930,7 +980,7 @@ const Row: React.FC<{
                           color={colorsAnalytics.offWhite}
                           fontFamily={FONT_FAMILIES.SF_PRO}
                         >
-                          {swap.startAssetMetadata.ticker}
+                          {swap.startAssetMetadata.ticker || swap.startAssetMetadata.address}
                         </Text>
                       </>
                     ) : (
@@ -1000,6 +1050,41 @@ const Row: React.FC<{
               <Flex direction="column" gap="1px">
                 <Flex align="center" gap="4px">
                   {(() => {
+                    if (swap.endAssetMetadata) {
+                      const outputFormatted = getDisplayAmount(
+                        swap.endAssetMetadata
+                      ).toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: Math.min(swap.endAssetMetadata.decimals, 6),
+                      });
+
+                      return (
+                        <>
+                          <Text
+                            fontSize="13px"
+                            color={colorsAnalytics.offWhite}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {outputFormatted}
+                          </Text>
+                          <AssetIcon
+                            asset={
+                              swap.endAssetMetadata.ticker || swap.endAssetMetadata.address
+                            }
+                            iconUrl={swap.endAssetMetadata.icon}
+                            size={16}
+                          />
+                          <Text
+                            fontSize="13px"
+                            color={colorsAnalytics.offWhite}
+                            fontFamily={FONT_FAMILIES.SF_PRO}
+                          >
+                            {swap.endAssetMetadata.ticker || swap.endAssetMetadata.address}
+                          </Text>
+                        </>
+                      );
+                    }
+
                     const rawData = swap.rawData as any;
                     const toAmount = rawData?.quote?.to_amount;
                     const toDecimals =

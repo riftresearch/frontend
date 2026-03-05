@@ -947,7 +947,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   Direction
                 </Text>
                 <Text fontSize="14px" color={colors.offWhite}>
-                  {selectedSwap.direction === "BTC_TO_EVM" ? "BTC → cbBTC" : "cbBTC → BTC"}
+                  {(() => {
+                    const startAsset =
+                      selectedSwap.startAssetMetadata?.ticker ||
+                      selectedSwap.startAssetMetadata?.address ||
+                      (selectedSwap.direction === "BTC_TO_EVM" ? "BTC" : "cbBTC");
+                    const endAsset =
+                      selectedSwap.endAssetMetadata?.ticker ||
+                      selectedSwap.endAssetMetadata?.address ||
+                      (selectedSwap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC");
+                    return `${startAsset} → ${endAsset}`;
+                  })()}
                 </Text>
               </Flex>
 
