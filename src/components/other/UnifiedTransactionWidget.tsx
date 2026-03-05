@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Text, Flex, Image } from "@chakra-ui/react";
-import { QRCodeSVG } from "qrcode.react";
 import { LuCopy } from "react-icons/lu";
 import { FiExternalLink } from "react-icons/fi";
 import { CountdownTimer } from "./CountdownTimer";
@@ -12,8 +11,6 @@ import { toastSuccess, toastError } from "@/utils/toast";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import router from "next/router";
-import { filterRefunds } from "@/utils/refundHelpers";
-import { mapDbRowToAdminSwap, ANALYTICS_API_URL } from "@/utils/analyticsClient";
 import { AdminSwapItem } from "@/utils/types";
 import { RefundModal } from "./RefundModal";
 import { useRefundModal } from "@/hooks/useRefundModal";
@@ -31,19 +28,13 @@ interface UnifiedTransactionWidgetProps {
   swapId?: string;
   // Bitcoin-specific props (optional, only for BTC->EVM swaps)
   bitcoinAddress?: string;
-  bitcoinAmount?: number;
-  bitcoinUri?: string;
   bitcoinDepositTx?: string;
-  bitcoinDepositAddress?: string;
 }
 
 export function UnifiedTransactionWidget({
   swapId,
   bitcoinAddress,
-  bitcoinAmount,
-  bitcoinUri,
   bitcoinDepositTx,
-  bitcoinDepositAddress,
 }: UnifiedTransactionWidgetProps) {
   const { isMobile } = useWindowSize();
   const {
@@ -81,17 +72,17 @@ export function UnifiedTransactionWidget({
   }, [bitcoinAddress, swapStatusInfo?.quote?.from.currency.chain]);
 
   const isSettled =
-    depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
+    depositFlowState === "confirming_payout" || depositFlowState === "swap_complete";
   const showLoadingDots = countdownValue === 0 && !isSettled;
 
   // Determine current step index for widget logic
   const stepIds = [
-    "1-WaitingUserDepositInitiated",
-    "2-WaitingUserDepositConfirmed",
-    "3-WaitingMMDepositInitiated",
-    "4-WaitingMMDepositConfirmed",
+    "waiting_for_deposit",
+    "deposit_confirming",
+    "initiating_payout",
+    "confirming_payout",
   ];
-  const isSettledStatus = depositFlowState === "5-Settled";
+  const isSettledStatus = depositFlowState === "swap_complete";
   const currentStepIndex = isSettledStatus ? 3 : stepIds.findIndex((id) => id === depositFlowState);
   const validStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
 
@@ -100,22 +91,20 @@ export function UnifiedTransactionWidget({
   const [isSwapRefunded, setIsSwapRefunded] = React.useState(false);
   const [isPartialDeposit, setIsPartialDeposit] = React.useState(false);
   const [showFillingOrderWarning, setShowFillingOrderWarning] = React.useState(false);
-  const [cowSwapFailed, setCowSwapFailed] = React.useState(false);
 
   // Track EVM confirmations for user deposit (for EVM deposits)
-  const userDepositTxHash = swapStatusInfo?.user_deposit_status?.tx_hash;
+  const userDepositTxHash = swapStatusInfo?.depositTransaction;
   const userDepositChain = swapStatusInfo?.quote?.from.currency.chain;
   const userChainId =
     userDepositChain === "ethereum" ? 1 : userDepositChain === "base" ? 8453 : undefined;
   const evmConfirmations = useEvmConfirmations(
     swapType === "evm-deposit" ? userDepositTxHash : undefined,
     userChainId,
-    depositFlowState === "2-WaitingUserDepositConfirmed"
+    depositFlowState === "deposit_confirming"
   );
 
   // Track BTC confirmations
   const [btcConfirmations, setBtcConfirmations] = React.useState<number>(0);
-  const [qrCodeMode, setQrCodeMode] = React.useState<"with-amount" | "address-only">("with-amount");
 
   // Set audio volume on mount
   useEffect(() => {
@@ -134,8 +123,8 @@ export function UnifiedTransactionWidget({
 
     // Transition from "FILLING ORDER" to "SWAP COMPLETE"
     if (
-      previousDepositFlowStateRef.current === "3-WaitingMMDepositInitiated" &&
-      (depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled") &&
+      previousDepositFlowStateRef.current === "initiating_payout" &&
+      (depositFlowState === "confirming_payout" || depositFlowState === "swap_complete") &&
       audioRef.current
     ) {
       console.log("🔊 Playing swap completion sound!");
@@ -149,91 +138,42 @@ export function UnifiedTransactionWidget({
   }, [depositFlowState]);
 
   // Check if swap expired (for Bitcoin deposits only)
+  // Note: SDK doesn't expose created_at, so we check if status indicates the swap failed/expired
   const isExpired = React.useMemo(() => {
-    if (swapType !== "bitcoin-deposit" || validStepIndex !== 0 || !swapStatusInfo?.created_at)
-      return false;
-
-    const createdAt = new Date(swapStatusInfo.created_at);
-    const now = new Date();
-    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-
-    return hoursSinceCreation > 12;
-  }, [swapType, validStepIndex, swapStatusInfo?.created_at]);
+    if (swapType !== "bitcoin-deposit" || validStepIndex !== 0) return false;
+    return swapStatusInfo?.status === "failed";
+  }, [swapType, validStepIndex, swapStatusInfo?.status]);
 
   // Check if stuck on "FILLING ORDER"
   useEffect(() => {
-    if (depositFlowState !== "3-WaitingMMDepositInitiated") {
+    if (depositFlowState !== "initiating_payout") {
       setShowFillingOrderWarning(false);
       return;
     }
 
-    const swapCreatedAt = swapStatusInfo?.created_at;
-    if (!swapCreatedAt) return;
+    // Track how long we've been in the filling order state using a local timer
+    const enteredAt = Date.now();
 
     const checkTimer = () => {
-      const createdTime = new Date(swapCreatedAt);
-      const now = new Date();
-      const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
-
-      if (minutesSinceCreated >= 30) {
+      const minutesSinceEntered = (Date.now() - enteredAt) / (1000 * 60);
+      if (minutesSinceEntered >= 30) {
         setShowFillingOrderWarning(true);
       }
     };
 
-    checkTimer();
     const interval = setInterval(checkTimer, 30000);
 
     return () => clearInterval(interval);
-  }, [depositFlowState, swapStatusInfo?.created_at]);
-
-  // Check for CowSwap quote expiry (EVM deposits only, step 1)
-  useEffect(() => {
-    // Only check for EVM deposits in step 1
-    if (swapType !== "evm-deposit" || depositFlowState !== "1-WaitingUserDepositInitiated") {
-      setCowSwapFailed(false);
-      return;
-    }
-
-    const swapCreatedAt = swapStatusInfo?.created_at;
-    if (!swapCreatedAt || !currentSwapId) return;
-
-    // Set cookie with swap creation time
-    const cookieKey = `cowswap_${currentSwapId}`;
-    document.cookie = `${cookieKey}=${encodeURIComponent(swapCreatedAt)}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
-
-    const checkExpiry = () => {
-      // Read created time from specific cookie
-      const match = document.cookie.match(new RegExp(`(?:^|; )${cookieKey}=([^;]*)`));
-      const cookieValue = match?.[1];
-
-      // If cookie doesn't exist, just return
-      if (!cookieValue) return;
-
-      // Parse the URL-encoded date value (e.g., 2025-12-10T21%3A55%3A35.533Z)
-      const decodedDate = decodeURIComponent(cookieValue);
-      const createdTime = new Date(decodedDate);
-      const now = new Date();
-      const minutesSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60);
-
-      if (minutesSinceCreated >= 60) {
-        setCowSwapFailed(true);
-      }
-    };
-
-    checkExpiry(); // Check immediately
-    const interval = setInterval(checkExpiry, 60000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, [swapType, depositFlowState, swapStatusInfo?.created_at, currentSwapId]);
+  }, [depositFlowState]);
 
   // Poll for Bitcoin confirmations
   useEffect(() => {
     // For Bitcoin deposits: track user deposit confirmations during step 2
     // For EVM deposits: track MM deposit confirmations during step 4 (if MM deposits BTC)
     const shouldTrackBtc =
-      (swapType === "bitcoin-deposit" && depositFlowState === "2-WaitingUserDepositConfirmed") ||
+      (swapType === "bitcoin-deposit" && depositFlowState === "deposit_confirming") ||
       (swapType === "evm-deposit" &&
-        (depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled") &&
+        (depositFlowState === "confirming_payout" || depositFlowState === "swap_complete") &&
         swapStatusInfo?.quote?.to.currency.chain === "bitcoin");
 
     if (!shouldTrackBtc) {
@@ -244,7 +184,7 @@ export function UnifiedTransactionWidget({
     const txHash =
       swapType === "bitcoin-deposit"
         ? userDepositTxHash || bitcoinDepositTx
-        : swapStatusInfo?.mm_deposit_status?.tx_hash;
+        : swapStatusInfo?.payoutTransaction;
 
     if (!txHash) {
       setBtcConfirmations(0);
@@ -277,7 +217,7 @@ export function UnifiedTransactionWidget({
     depositFlowState,
     userDepositTxHash,
     bitcoinDepositTx,
-    swapStatusInfo?.mm_deposit_status?.tx_hash,
+    swapStatusInfo?.payoutTransaction,
     swapStatusInfo?.quote?.to.currency.chain,
   ]);
 
@@ -296,54 +236,54 @@ export function UnifiedTransactionWidget({
     claimRefund,
   } = useRefundModal({ redirectOnSuccess: true });
 
-  // Check refund eligibility whenever swap data updates
+  // Check refund status from SDK status directly
   React.useEffect(() => {
-    async function checkRefundEligibility() {
-      if (!swapStatusInfo) {
-        setIsRefundAvailable(false);
-        setIsSwapRefunded(false);
-        setFailedSwapData(null);
-        return;
-      }
+    if (!swapStatusInfo) {
+      setIsRefundAvailable(false);
+      setIsSwapRefunded(false);
+      setFailedSwapData(null);
+      return;
+    }
 
+    // SDK provides status directly - use it for refund detection
+    if (swapStatusInfo.status === "refunding_user") {
+      setIsSwapRefunded(true);
+      setIsRefundAvailable(false);
+      console.log(`[REFUND CHECK] Swap ${currentSwapId} has been refunded`);
+    } else if (swapStatusInfo.status === "failed") {
+      // Failed swaps may be eligible for refund
+      setIsRefundAvailable(true);
+      setIsSwapRefunded(false);
+      console.log(`[REFUND CHECK] Swap ${currentSwapId} failed, refund may be available`);
+    } else {
+      setIsRefundAvailable(false);
+      setIsSwapRefunded(false);
+    }
+  }, [swapStatusInfo, currentSwapId]);
+
+  // Format amounts - handles large numbers safely using BigInt for precision
+  const formatAmount = (amount: string | number | undefined, decimals: number): string => {
+    if (!amount) return "0";
+
+    // For string amounts that look like raw base-unit integers (no decimal point),
+    // use BigInt arithmetic to avoid floating-point precision loss
+    if (typeof amount === "string" && !amount.includes(".") && decimals > 0) {
       try {
-        // Map to admin swap format and check refund status
-        const mappedSwap = mapDbRowToAdminSwap(swapStatusInfo, btcPrice);
-        const {
-          isRefundAvailable: refundAvailable,
-          shouldMarkAsRefunded,
-          isPartialDeposit: partialDeposit,
-        } = await filterRefunds(swapStatusInfo, mappedSwap);
-
-        // Update refund availability
-        setIsRefundAvailable(refundAvailable);
-        setIsSwapRefunded(shouldMarkAsRefunded);
-        setIsPartialDeposit(partialDeposit || false);
-        setFailedSwapData(refundAvailable ? mappedSwap : null);
-
-        if (refundAvailable) {
-          console.log(`[REFUND CHECK] Refund available for swap ${currentSwapId}`, {
-            partialDeposit,
-          });
-        }
-        if (shouldMarkAsRefunded) {
-          console.log(`[REFUND CHECK] Swap ${currentSwapId} has been refunded (balance = 0)`);
-        }
-      } catch (error) {
-        console.error(`Error checking refund eligibility for ${currentSwapId}:`, error);
-        setIsRefundAvailable(false);
-        setIsSwapRefunded(false);
-        setIsPartialDeposit(false);
-        setFailedSwapData(null);
+        const raw = BigInt(amount);
+        const divisor = BigInt(10 ** decimals);
+        const wholePart = raw / divisor;
+        const remainder = raw % divisor;
+        if (remainder === 0n) return wholePart.toString();
+        const remainderStr = remainder.toString().padStart(decimals, "0");
+        const trimmed = remainderStr.replace(/0+$/, "");
+        const maxDecimals = decimals === 8 ? 8 : Math.min(decimals, 6);
+        const truncated = trimmed.slice(0, maxDecimals);
+        return `${wholePart}.${truncated}`;
+      } catch {
+        // Fall through to parseFloat path
       }
     }
 
-    checkRefundEligibility();
-  }, [swapStatusInfo, currentSwapId]);
-
-  // Format amounts
-  const formatAmount = (amount: string | number | undefined, decimals: number): string => {
-    if (!amount) return "0";
     const numAmount = typeof amount === "string" ? parseFloat(amount) : amount;
     const decimalPlaces = decimals === 8 ? 8 : Math.min(decimals, 6);
     return numAmount.toFixed(decimalPlaces).replace(/\.?0+$/, "");
@@ -353,12 +293,7 @@ export function UnifiedTransactionWidget({
   // Note: inputAmountFromMetadata is calculated after getInputAssetFromMetadata() below
   // This variable will be reassigned after metadata parsing
   let inputAmount = formatAmount(
-    swapStatusInfo?.quote?.from.amount
-      ? parseInt(swapStatusInfo.quote.from.amount) /
-          Math.pow(10, swapStatusInfo.quote.from.currency.decimals)
-      : swapType === "bitcoin-deposit"
-        ? bitcoinAmount
-        : undefined,
+    swapStatusInfo?.quote?.from.amount || undefined,
     swapStatusInfo?.quote?.from.currency.decimals || (swapType === "bitcoin-deposit" ? 8 : 18)
   );
 
@@ -376,47 +311,29 @@ export function UnifiedTransactionWidget({
     return tokenMap[tokenAddress] || "ERC20";
   };
 
-  // Parse start_asset from metadata
-  // New format (JSON): {"ticker":"USDC","address":"0x...","icon":"https://...","amount":"123.45","decimals":6}
-  // Legacy format (colon-separated): "TICKER:ADDRESS:ICON_URL"
-  const getInputAssetFromMetadata = (): {
+  // Derive input asset info from the SDK quote currency data
+  const getInputAssetInfo = (): {
     ticker: string;
     iconUrl?: string;
-    amount?: string;
-    decimals?: number;
   } => {
-    const startAsset = swapStatusInfo?.metadata?.start_asset;
-    if (!startAsset || typeof startAsset !== "string") {
-      return { ticker: "" };
-    }
+    if (swapType === "bitcoin-deposit") return { ticker: "BTC" };
 
-    // Try parsing as JSON first (new format)
-    try {
-      const parsed = JSON.parse(startAsset);
-      // console.log("parsed input asset", parsed);
-      if (parsed && typeof parsed === "object") {
-        return {
-          ticker: parsed.ticker || "",
-          iconUrl: parsed.icon,
-          amount: parsed.amount,
-          decimals: parsed.decimals,
-        };
-      }
-    } catch (e) {
-      // Not JSON, try legacy format
-      const parts = startAsset.split(":");
-      if (parts.length >= 1 && parts[0]) {
-        return {
-          ticker: parts[0], // Return the ticker (e.g., "USDC", "WETH", etc.)
-          iconUrl: parts.length >= 3 ? parts[2] : undefined, // Return icon URL if available
-        };
-      }
+    const token = swapStatusInfo?.quote?.from.currency.token;
+    if (!token) return { ticker: "" };
+
+    // For native tokens (ETH), return ETH
+    if (token.type === "Native") return { ticker: "ETH" };
+
+    // For ERC20 tokens, look up by address
+    if (token.type === "Address" && token.data) {
+      const symbol = getAssetSymbol(token.data, "");
+      return { ticker: symbol };
     }
 
     return { ticker: "" };
   };
 
-  const inputAssetMetadata = getInputAssetFromMetadata();
+  const inputAssetInfo = getInputAssetInfo();
 
   // Helper to extract token address from the currency token structure
   const getTokenAddress = (
@@ -428,29 +345,18 @@ export function UnifiedTransactionWidget({
     return undefined;
   };
 
-  // For EVM deposits, prioritize metadata, then fallback to token address lookup
-  // Don't use "ETH" as default to avoid showing wrong icon while loading
+  // Derive input asset from SDK quote data
   const fromTokenAddress = getTokenAddress(swapStatusInfo?.quote?.from.currency.token);
   const inputAsset =
     swapType === "bitcoin-deposit"
       ? "BTC"
-      : inputAssetMetadata.ticker || (fromTokenAddress ? getAssetSymbol(fromTokenAddress, "") : "");
+      : inputAssetInfo.ticker || (fromTokenAddress ? getAssetSymbol(fromTokenAddress, "") : "");
 
-  // For icon URL, use metadata if available, otherwise don't provide one
-  // This prevents showing wrong icon while data loads
-  const inputAssetIconUrl = swapType === "bitcoin-deposit" ? undefined : inputAssetMetadata.iconUrl;
-
-  // For input amount, prioritize metadata amount (human-readable) over quote amount (raw)
-  // If metadata has amount, use it directly; otherwise keep the calculated amount from quote
-  if (swapType === "evm-deposit" && inputAssetMetadata.amount) {
-    inputAmount = formatAmount(inputAssetMetadata.amount, inputAssetMetadata.decimals || 18);
-  }
+  // Icon URL - the SDK doesn't provide custom icons, rely on AssetIcon component defaults
+  const inputAssetIconUrl = inputAssetInfo.iconUrl;
 
   const outputAmount = formatAmount(
-    swapStatusInfo?.quote?.to.amount
-      ? parseInt(swapStatusInfo.quote.to.amount) /
-          Math.pow(10, swapStatusInfo.quote.to.currency.decimals)
-      : undefined,
+    swapStatusInfo?.quote?.to.amount || undefined,
     swapStatusInfo?.quote?.to.currency.decimals || (swapType === "bitcoin-deposit" ? 18 : 8)
   );
 
@@ -459,7 +365,7 @@ export function UnifiedTransactionWidget({
     swapType === "bitcoin-deposit" ? getAssetSymbol(toTokenAddress, "cbBTC") : "BTC";
 
   const handleViewUserTransaction = () => {
-    const txnId = swapStatusInfo?.user_deposit_status?.tx_hash;
+    const txnId = swapStatusInfo?.depositTransaction;
     const chain = swapStatusInfo?.quote?.from.currency.chain;
 
     if (txnId) {
@@ -493,173 +399,6 @@ export function UnifiedTransactionWidget({
       });
     }
   };
-
-  // COWSWAP QUOTE EXPIRED VIEW
-  if (cowSwapFailed) {
-    return (
-      <Flex direction="column" alignItems="center" gap="20px" w="100%">
-        {isMobile && (
-          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
-            <SwapDetailsPill
-              width="100%"
-              inputAmount={inputAmount}
-              inputAsset={inputAsset}
-              inputAssetIconUrl={inputAssetIconUrl}
-              outputAmount={outputAmount}
-              outputAsset={outputAsset}
-              isMobile={isMobile}
-            />
-          </Box>
-        )}
-
-        <Box
-          w={isMobile ? "100%" : "805px"}
-          h={isMobile ? "600px" : "510px"}
-          borderRadius="40px"
-          mt="70px"
-          boxShadow="0 7px 20px rgba(120, 78, 159, 0.7)"
-          backdropFilter="blur(9px)"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          position="relative"
-          _before={{
-            content: '""',
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: "40px",
-            padding: "3px",
-            background:
-              "linear-gradient(40deg, #443467 0%, #A187D7 50%, #09175A 79%, #443467 100%)",
-            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            maskComposite: "xor",
-            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            WebkitMaskComposite: "xor",
-          }}
-        >
-          <Box
-            w="100%"
-            h="50%"
-            borderRadius="40px"
-            position="absolute"
-            top="0px"
-            background="linear-gradient(40deg, rgba(171, 125, 255, 0.34) 1.46%, rgba(0, 26, 144, 0.35) 98.72%)"
-            display="flex"
-            backdropFilter="blur(20px)"
-            alignItems="center"
-            justifyContent="center"
-            _before={{
-              content: '""',
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              borderRadius: "40px",
-              padding: "3px",
-              background:
-                "linear-gradient(-40deg,rgb(43, 36, 111) 0%,rgb(55, 50, 97) 10%, rgba(109, 89, 169, 0.5) 100%)",
-              mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-              maskComposite: "xor",
-              WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-              WebkitMaskComposite: "xor",
-            }}
-          >
-            {!isMobile && (
-              <Box position="absolute" top="15px" zIndex={2}>
-                <SwapDetailsPill
-                  inputAmount={inputAmount}
-                  inputAsset={inputAsset}
-                  inputAssetIconUrl={inputAssetIconUrl}
-                  outputAmount={outputAmount}
-                  outputAsset={outputAsset}
-                  isMobile={isMobile}
-                />
-              </Box>
-            )}
-
-            <Box
-              width="110px"
-              height="110px"
-              borderRadius="50%"
-              bg="rgba(251, 191, 36, 0.2)"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              border="3px solid rgba(251, 191, 36, 0.5)"
-              zIndex={1}
-            >
-              <svg
-                width="60"
-                height="60"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#fbbf24"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-            </Box>
-          </Box>
-
-          <Box
-            h="50%"
-            bottom="0px"
-            position="absolute"
-            padding="20px"
-            w="100%"
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            gap="20px"
-          >
-            <Text
-              fontSize="16px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.offWhite}
-              textAlign="center"
-              px="40px"
-              lineHeight="1.6"
-            >
-              Quote expired, please try swap again.
-            </Text>
-
-            <Box
-              as="button"
-              onClick={handleNewSwap}
-              borderRadius="16px"
-              width={isMobile ? "240px" : "180px"}
-              border="2px solid #6651B3"
-              background="rgba(86, 50, 168, 0.30)"
-              padding="12px 16px"
-              cursor="pointer"
-              transition="all 0.2s"
-              zIndex={1}
-              _hover={{
-                transform: "translateY(-2px)",
-                boxShadow: "0 4px 12px rgba(102, 81, 179, 0.3)",
-              }}
-            >
-              <Text
-                color="white"
-                fontFamily={FONT_FAMILIES.NOSTROMO}
-                fontSize="14px"
-                fontWeight="normal"
-                letterSpacing="0.5px"
-              >
-                NEW SWAP
-              </Text>
-            </Box>
-          </Box>
-        </Box>
-      </Flex>
-    );
-  }
 
   // REFUNDED VIEW
   if (isSwapRefunded) {
@@ -794,7 +533,7 @@ export function UnifiedTransactionWidget({
               px="40px"
               lineHeight="1.6"
             >
-              This swap has been refunded. You can view details in the swap history page.
+              This swap has been refunded. You can view details in the Activity tab of your wallet.
             </Text>
 
             <Flex
@@ -806,7 +545,7 @@ export function UnifiedTransactionWidget({
             >
               <Box
                 as="button"
-                onClick={() => router.push("/history")}
+                onClick={() => router.push("/")}
                 border="2px solid rgba(255, 255, 255, 0.3)"
                 borderRadius="16px"
                 width={isMobile ? "240px" : "180px"}
@@ -827,7 +566,7 @@ export function UnifiedTransactionWidget({
                   fontWeight="normal"
                   letterSpacing="0.5px"
                 >
-                  SWAP HISTORY
+                  BACK TO SWAP
                 </Text>
               </Box>
 
@@ -990,8 +729,8 @@ export function UnifiedTransactionWidget({
               lineHeight="1.6"
             >
               {isPartialDeposit
-                ? `You sent too little ${inputAsset} to complete the swap. You can initiate a refund in the swap history page or with the button below.`
-                : "The market maker failed to fill your order. You can initiate a refund in the swap history page or with the button below."}
+                ? `You sent too little ${inputAsset} to complete the swap. You can initiate a refund in the Activity tab of your wallet or with the button below.`
+                : "The market maker failed to fill your order. You can initiate a refund in the Activity tab of your wallet or with the button below."}
             </Text>
 
             <Flex
@@ -1001,7 +740,7 @@ export function UnifiedTransactionWidget({
               direction={isMobile ? "column" : "row"}
               alignItems="center"
             >
-              {swapStatusInfo?.user_deposit_status?.tx_hash && (
+              {swapStatusInfo?.depositTransaction && (
                 <Box
                   as="button"
                   onClick={handleViewUserTransaction}
@@ -1253,20 +992,19 @@ export function UnifiedTransactionWidget({
   return (
     <Flex direction="column" alignItems="center" w="100%">
       {/* Swap Details Pill - mobile: above widget, desktop: inside widget */}
-      {!(swapType === "bitcoin-deposit" && validStepIndex === 0 && bitcoinAddress && bitcoinUri) &&
-        isMobile && (
-          <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
-            <SwapDetailsPill
-              width="100%"
-              inputAmount={inputAmount}
-              inputAsset={inputAsset}
-              inputAssetIconUrl={inputAssetIconUrl}
-              outputAmount={outputAmount}
-              outputAsset={outputAsset}
-              isMobile={isMobile}
-            />
-          </Box>
-        )}
+      {isMobile && (
+        <Box mb="-70px" pt="12%" w="100%" display="flex" justifyContent="center" zIndex={2}>
+          <SwapDetailsPill
+            width="100%"
+            inputAmount={inputAmount}
+            inputAsset={inputAsset}
+            inputAssetIconUrl={inputAssetIconUrl}
+            outputAmount={outputAmount}
+            outputAsset={outputAsset}
+            isMobile={isMobile}
+          />
+        </Box>
+      )}
 
       <Box
         w={isMobile ? "100%" : "810px"}
@@ -1325,25 +1063,19 @@ export function UnifiedTransactionWidget({
             WebkitMaskComposite: "xor",
           }}
         >
-          {/* Swap Details Pill - hide when showing Bitcoin QR code, show only on desktop (mobile version is above widget) */}
-          {!(
-            swapType === "bitcoin-deposit" &&
-            validStepIndex === 0 &&
-            bitcoinAddress &&
-            bitcoinUri
-          ) &&
-            !isMobile && (
-              <Box position="absolute" top="15px" zIndex={2}>
-                <SwapDetailsPill
-                  inputAmount={inputAmount}
-                  inputAsset={inputAsset}
-                  inputAssetIconUrl={inputAssetIconUrl}
-                  outputAmount={outputAmount}
-                  outputAsset={outputAsset}
-                  isMobile={isMobile}
-                />
-              </Box>
-            )}
+          {/* Swap Details Pill - show only on desktop (mobile version is above widget) */}
+          {!isMobile && (
+            <Box position="absolute" top="15px" zIndex={2}>
+              <SwapDetailsPill
+                inputAmount={inputAmount}
+                inputAsset={inputAsset}
+                inputAssetIconUrl={inputAssetIconUrl}
+                outputAmount={outputAmount}
+                outputAsset={outputAsset}
+                isMobile={isMobile}
+              />
+            </Box>
+          )}
 
           {/* Corner decorations */}
           <img
@@ -1396,186 +1128,60 @@ export function UnifiedTransactionWidget({
           />
 
           {/* Conditional Top Half Content */}
-          {swapType === "bitcoin-deposit" &&
-          validStepIndex === 0 &&
-          bitcoinAddress &&
-          bitcoinUri ? (
-            // Bitcoin QR Code View
+          {swapType === "bitcoin-deposit" && validStepIndex === 0 ? (
+            // Bitcoin deposit waiting for confirmation
             <Flex
-              direction={isMobile ? "column" : "row"}
-              align="center"
-              justify="center"
-              gap={isMobile ? "20px" : "40px"}
+              direction="column"
+              alignItems="center"
+              justifyContent="center"
+              marginTop={isMobile ? "20px" : "100px"}
+              gap="24px"
               zIndex={1}
-              px={isMobile ? "50px" : "100px"}
             >
-              {!isMobile && (
-                <Flex direction="column" align="center" gap="12px">
-                  <Flex
-                    py="10px"
-                    px="12px"
-                    borderRadius="12px"
-                    bg="white"
-                    boxShadow="0px 8px 20px rgba(0, 16, 118, 0.3)"
-                    justify="center"
-                    align="center"
-                    flexShrink={0}
-                  >
-                    <QRCodeSVG
-                      value={qrCodeMode === "with-amount" ? bitcoinUri : bitcoinAddress}
-                      size={160}
-                    />
-                  </Flex>
-
-                  {/* QR Code Mode Toggle */}
-                  <Flex
-                    bg="rgba(255, 255, 255, 0.05)"
-                    borderRadius="11px"
-                    padding="3px"
-                    gap="3px"
-                    border="1px solid rgba(255, 255, 255, 0.1)"
-                  >
-                    <Box
-                      as="button"
-                      onClick={() => setQrCodeMode("with-amount")}
-                      px="10px"
-                      py="4px"
-                      borderRadius="8px"
-                      bg={
-                        qrCodeMode === "with-amount" ? "rgba(255, 255, 255, 0.15)" : "transparent"
-                      }
-                      color={
-                        qrCodeMode === "with-amount" ? colors.offWhite : "rgba(255, 255, 255, 0.5)"
-                      }
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      fontSize="9px"
-                      letterSpacing="0.3px"
-                      cursor="pointer"
-                      transition="all 0.2s"
-                      _hover={{
-                        bg:
-                          qrCodeMode === "with-amount"
-                            ? "rgba(255, 255, 255, 0.15)"
-                            : "rgba(255, 255, 255, 0.08)",
-                      }}
-                    >
-                      WITH AMOUNT
-                    </Box>
-                    <Box
-                      as="button"
-                      onClick={() => setQrCodeMode("address-only")}
-                      px="11px"
-                      py="4px"
-                      borderRadius="8px"
-                      bg={
-                        qrCodeMode === "address-only" ? "rgba(255, 255, 255, 0.15)" : "transparent"
-                      }
-                      color={
-                        qrCodeMode === "address-only" ? colors.offWhite : "rgba(255, 255, 255, 0.5)"
-                      }
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      fontSize="9px"
-                      letterSpacing="0.3px"
-                      cursor="pointer"
-                      transition="all 0.2s"
-                      _hover={{
-                        bg:
-                          qrCodeMode === "address-only"
-                            ? "rgba(255, 255, 255, 0.15)"
-                            : "rgba(255, 255, 255, 0.08)",
-                      }}
-                    >
-                      ADDRESS
-                    </Box>
-                  </Flex>
-                </Flex>
-              )}
-
-              <Flex
-                direction="column"
-                gap={isMobile ? "16px" : "24px"}
-                flex="1"
-                maxW={isMobile ? "92%" : "500px"}
+              <motion.div
+                key="waiting"
+                initial={{ y: -30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                }}
               >
-                <Flex direction="column" w="100%">
-                  <Text
-                    fontSize={isMobile ? "10px" : "11px"}
-                    color="rgba(255,255,255,0.5)"
-                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                    letterSpacing="1px"
-                    mb="8px"
-                  >
-                    BITCOIN ADDRESS
-                  </Text>
-                  <Flex
-                    alignItems="flex-end"
-                    gap="12px"
-                    position="relative"
-                    role="group"
-                    cursor="pointer"
-                    onClick={() => copyToClipboard(bitcoinAddress, "Bitcoin Address")}
-                  >
-                    <Text
-                      color={colors.offWhite}
-                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                      fontSize={isMobile ? "18px" : "26px"}
-                      letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                      fontWeight="500"
-                      flex="1"
-                      lineHeight="1.3"
-                      wordBreak="break-all"
-                    >
-                      {bitcoinAddress}
-                    </Text>
-                    <Box
-                      opacity={0.6}
-                      _groupHover={{ opacity: 1 }}
-                      transition="opacity 0.2s"
-                      mb="6px"
-                    >
-                      <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
-                    </Box>
-                  </Flex>
-                </Flex>
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{
+                      y: [0, -10, 0],
+                      opacity: [0.4, 1, 0.4],
+                    }}
+                    transition={{
+                      duration: 0.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: i * 0.2,
+                    }}
+                    style={{
+                      width: isMobile ? "16.8px" : "18px",
+                      height: isMobile ? "16.8px" : "18px",
+                      borderRadius: "50%",
+                      backgroundColor: "rgba(255, 143, 40, 0.8)",
+                    }}
+                  />
+                ))}
+              </motion.div>
 
-                {bitcoinAmount !== undefined && (
-                  <Flex direction="column" w="100%">
-                    <Text
-                      fontSize={isMobile ? "10px" : "11px"}
-                      color="rgba(255,255,255,0.5)"
-                      fontFamily={FONT_FAMILIES.NOSTROMO}
-                      letterSpacing="1px"
-                      mb="8px"
-                    >
-                      DEPOSIT AMOUNT
-                    </Text>
-                    <Flex
-                      alignItems="center"
-                      gap="12px"
-                      position="relative"
-                      role="group"
-                      cursor="pointer"
-                      onClick={() => copyToClipboard(bitcoinAmount.toFixed(8), "Bitcoin Amount")}
-                    >
-                      <Text
-                        color={colors.offWhite}
-                        fontFamily={FONT_FAMILIES.AUX_MONO}
-                        fontSize={isMobile ? "18px" : "26px"}
-                        letterSpacing={isMobile ? "-1.2px" : "-1.8px"}
-                        fontWeight="500"
-                      >
-                        {bitcoinAmount.toFixed(8)}
-                      </Text>
-                      <Box opacity={0.6} _groupHover={{ opacity: 1 }} transition="opacity 0.2s">
-                        <LuCopy color="rgba(255, 255, 255, 0.8)" size={20} />
-                      </Box>
-                      <Box transform="scale(0.7)" transformOrigin="left center">
-                        <WebAssetTag asset="BTC" />
-                      </Box>
-                    </Flex>
-                  </Flex>
-                )}
-              </Flex>
+              <Text
+                color="rgba(255, 255, 255, 0.7)"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                fontSize={isMobile ? "13px" : "14px"}
+                letterSpacing="-0.5px"
+                textAlign="center"
+              >
+                Waiting for Bitcoin transaction...
+              </Text>
             </Flex>
           ) : swapType === "bitcoin-deposit" && validStepIndex > 0 && bitcoinDepositTx ? (
             // Bitcoin deposit in progress - show loading or checkmark
@@ -1709,7 +1315,7 @@ export function UnifiedTransactionWidget({
                   direction="column"
                   alignItems="center"
                   justifyContent="center"
-                  marginTop={isMobile ? "20px" : "100px"}
+                  marginTop={isMobile ? "20px" : userDepositTxHash ? "100px" : "30px"}
                   gap="24px"
                   zIndex={1}
                 >

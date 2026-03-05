@@ -744,11 +744,9 @@ export const AdminChats: React.FC = () => {
                         const currentStep =
                           swap.flow.find((s) => s.state === "inProgress") ||
                           swap.flow[swap.flow.length - 1];
-                        const isCompleted = currentStep?.status === "settled";
+                        const isCompleted = currentStep?.status === "swap_complete";
                         const isRefunded =
-                          currentStep?.status === "refunding_user" ||
-                          currentStep?.status === "refunding_mm" ||
-                          currentStep?.status === "user_refunded_detected";
+                          currentStep?.status === "refunding_user";
                         const isFailed =
                           (swap.rawData as any)?.isRefundAvailable ||
                           (swap.rawData as any)?.is_refund_available;
@@ -778,6 +776,8 @@ export const AdminChats: React.FC = () => {
                                   asset={startAsset}
                                   iconUrl={swap.startAssetMetadata?.icon}
                                   size={22}
+                                  address={swap.startAssetMetadata?.address}
+                                  chainId={swap.chain === "BASE" ? 8453 : 1}
                                 />
                                 <Text
                                   fontFamily={FONT_FAMILIES.SF_PRO}
@@ -1210,11 +1210,9 @@ export const AdminChats: React.FC = () => {
                         const currentStep =
                           swap.flow.find((s) => s.state === "inProgress") ||
                           swap.flow[swap.flow.length - 1];
-                        const isCompleted = currentStep?.status === "settled";
+                        const isCompleted = currentStep?.status === "swap_complete";
                         const isRefunded =
-                          currentStep?.status === "refunding_user" ||
-                          currentStep?.status === "refunding_mm" ||
-                          currentStep?.status === "user_refunded_detected";
+                          currentStep?.status === "refunding_user";
                         const isFailed =
                           (swap.rawData as any)?.isRefundAvailable ||
                           (swap.rawData as any)?.is_refund_available;
@@ -1245,6 +1243,8 @@ export const AdminChats: React.FC = () => {
                                   asset={startAsset}
                                   iconUrl={swap.startAssetMetadata?.icon}
                                   size={20}
+                                  address={swap.startAssetMetadata?.address}
+                                  chainId={swap.chain === "BASE" ? 8453 : 1}
                                 />
                                 <Text
                                   fontFamily={FONT_FAMILIES.SF_PRO}

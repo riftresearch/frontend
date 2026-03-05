@@ -22,13 +22,20 @@ export const BITCOIN_DECIMALS = 8;
 
 export const ZERO_USD_DISPLAY = "$0.00";
 
-export const MIN_SWAP_SATS = 3000;
+export const MIN_SWAP_SATS = 2000;
+
+// Chain to network name mapping
+export const CHAIN_NAMES: Record<string | number, string> = {
+  bitcoin: "Bitcoin",
+  1: "Ethereum",
+  8453: "Base",
+  42161: "Arbitrum",
+  10: "Optimism",
+  137: "Polygon",
+  56: "BNB",
+};
 
 export const bitcoinStyle: TokenStyle = {
-  name: "Bitcoin",
-  display_name: "BTC",
-  symbol: "BTC",
-  icon_svg: null,
   bg_color: "#9B602F",
   border_color: "#FFA04C",
   border_color_light: "#FFA04F",
@@ -36,16 +43,12 @@ export const bitcoinStyle: TokenStyle = {
   light_text_color: "#7d572e",
 };
 
-export const cbBTCStyle: TokenStyle = {
-  name: "Coinbase Bitcoin",
-  display_name: "cbBTC",
-  symbol: "cbBTC",
+export const evmStyle: TokenStyle = {
   bg_color: "#2E59BB",
   border_color: "#1C61FD",
   border_color_light: "#3B70E8",
   dark_bg_color: "rgba(9, 36, 97, 0.3)",
   light_text_color: "#365B9F",
-  logoURI: "https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp",
 };
 export const opaqueBackgroundColor = {
   bg: "rgba(15, 15, 15, 0.55)",
@@ -56,7 +59,8 @@ export const GLOBAL_CONFIG: Config = {
   etherscanUrl: "https://etherscan.io",
   mainnetRpcUrl: "https://eth0.riftnodes.com",
   esploraUrl: "https://blockstream.info/api",
-  riftApiUrl: "https://swap-router-production.up.railway.app",
+  mempoolUrl: "https://mempool.space/api",
+  riftApiUrl: "https://api.rift.trade",
   rfqUrl: "https://rfq-server-v2-production.up.railway.app",
   underlyingSwappingAssets: [
     {
@@ -79,7 +83,7 @@ export const GLOBAL_CONFIG: Config = {
           decimals: 8,
         },
       },
-      style: cbBTCStyle,
+      style: evmStyle,
     },
   ],
 };
@@ -95,7 +99,7 @@ export const rfqClient = createRfqClient({
 // Popular tokens list
 const POPULAR_TOKENS = ["ETH", "USDC", "USDT", "WBTC", "WETH", "cbBTC", "USDe", "DAI", "UNI"];
 
-export const ETH_TOKEN = {
+export const ETH_TOKEN: TokenData = {
   name: "Ethereum",
   ticker: "ETH",
   address: "0x0000000000000000000000000000000000000000",
@@ -103,13 +107,68 @@ export const ETH_TOKEN = {
   usdValue: "$0.00",
   icon: ETH_ICON,
   decimals: 18,
-  chainId: 1,
+  chain: 1,
 };
 
-export const ETH_TOKEN_BASE = {
+export const ETH_TOKEN_BASE: TokenData = {
   ...ETH_TOKEN,
-  chainId: 8453,
+  chain: 8453,
 };
+
+// Bitcoin token (native BTC)
+export const BTC_TOKEN: TokenData = {
+  name: "Bitcoin",
+  ticker: "BTC",
+  address: "Native",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: BTC_ICON,
+  decimals: 8,
+  chain: "bitcoin",
+};
+
+// cbBTC tokens for Ethereum and Base
+export const CBBTC_TOKEN: TokenData = {
+  name: "Coinbase Bitcoin",
+  ticker: "cbBTC",
+  address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.coingecko.com/coins/images/40143/standard/cbbtc.webp",
+  decimals: 8,
+  chain: 1,
+};
+
+export const CBBTC_TOKEN_BASE: TokenData = {
+  ...CBBTC_TOKEN,
+  chain: 8453,
+};
+
+// USDC tokens for Ethereum and Base
+export const USDC_TOKEN: TokenData = {
+  name: "USD Coin",
+  ticker: "USDC",
+  address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+  decimals: 6,
+  chain: 1,
+};
+
+export const USDC_TOKEN_BASE: TokenData = {
+  name: "USD Coin",
+  ticker: "USDC",
+  address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.smold.app/api/token/8453/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913/logo-128.png",
+  decimals: 6,
+  chain: 8453,
+};
+
+// Popular output tokens (BTC and cbBTC from both chains)
+export const POPULAR_OUTPUT_TOKENS: TokenData[] = [BTC_TOKEN, CBBTC_TOKEN, CBBTC_TOKEN_BASE];
 
 // Create network-specific popular tokens
 export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
@@ -126,7 +185,7 @@ export const BASE_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) => {
     usdValue: "$0.00",
     icon: token.icon || FALLBACK_TOKEN_ICON,
     decimals: token.decimals || 18,
-    chainId: 8453,
+    chain: 8453,
   };
 });
 
@@ -144,7 +203,7 @@ export const ETHEREUM_POPULAR_TOKENS: TokenData[] = POPULAR_TOKENS.map((ticker) 
     usdValue: "$0.00",
     icon: token.icon || FALLBACK_TOKEN_ICON,
     decimals: token.decimals || 18,
-    chainId: 1,
+    chain: 1,
   };
 });
 
@@ -186,8 +245,8 @@ export const ALL_POPULAR_TOKENS: TokenData[] = [
       usdValue: "$0.00",
       icon: token.icon || FALLBACK_TOKEN_ICON,
       decimals: token.decimals || 18,
-      chainId: 1,
-    };
+      chain: 1,
+    } as TokenData;
   }),
   // Base tokens
   ...ALL_POPULAR_TICKERS.map((ticker) => {
@@ -204,10 +263,7 @@ export const ALL_POPULAR_TOKENS: TokenData[] = [
       usdValue: "$0.00",
       icon: token.icon || FALLBACK_TOKEN_ICON,
       decimals: token.decimals || 18,
-      chainId: 8453,
-    };
+      chain: 8453,
+    } as TokenData;
   }),
 ];
-
-// CowSwap Universal Router (used by cowswapClient for approvals)
-export const COWSWAP_VAULT_RELAYER = "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110";

@@ -1,26 +1,19 @@
 import { Flex, Text, Spinner, Box, Button } from "@chakra-ui/react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FONT_FAMILIES } from "@/utils/font";
 import { useRouter } from "next/router";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useSendTransaction,
-} from "wagmi";
+import { usePublicClient } from "wagmi";
 import { colors } from "@/utils/colors";
-import { GLOBAL_CONFIG, riftApiClient, IS_FRONTEND_PAUSED } from "@/utils/constants";
-import { QuoteResponse } from "@/utils/riftApiClient";
-import { generateBitcoinURI } from "@/utils/bitcoinUtils";
-import { useStore, CowswapOrderStatus } from "@/utils/store";
-import { toastInfo, toastSuccess, toastError } from "@/utils/toast";
+import { IS_FRONTEND_PAUSED } from "@/utils/constants";
+import { useStore } from "@/utils/store";
+import { toastInfo, toastError, toastSuccess } from "@/utils/toast";
 import useWindowSize from "@/hooks/useWindowSize";
-import { reownModal } from "@/utils/wallet";
-import { Address, erc20Abi, parseUnits } from "viem";
-import { ApprovalState } from "@/utils/types";
-import { fetchGasParams, getSlippageBpsForNotional } from "@/utils/swapHelpers";
-import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
-import { SupportedChainId } from "@cowprotocol/cow-sdk";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
+import { mainnet, base } from "viem/chains";
+import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
+import { getDynamicWalletClient } from "@/utils/wallet";
+import { validatePayoutAddress } from "@/utils/swapHelpers";
+import type { ExecuteSwapStepType } from "@riftresearch/sdk";
 
 export const SwapButton = () => {
   // ============================================================================
@@ -28,17 +21,18 @@ export const SwapButton = () => {
   // ============================================================================
 
   const { isMobile } = useWindowSize();
-  const { isConnected: isWalletConnected, address: userEvmAccountAddress } = useAccount();
   const router = useRouter();
+  const { setShowAuthFlow } = useDynamicContext();
+  const userWallets = useUserWallets();
 
-  // CowSwap client
-  const cowswapClient = useCowSwapClient();
+  // Bitcoin transaction hook for BTC->cbBTC auto-send
+  const { sendBitcoin, isLoading: isBtcTxLoading } = useBitcoinTransaction();
 
   // Local state
-  const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>(undefined);
-  const [isApprovingToken, setIsApprovingToken] = useState(false);
   const [swapButtonPressed, setSwapButtonPressed] = useState(false);
-  const [isCbBTCTransferPending, setIsCbBTCTransferPending] = useState(false);
+  const [swapPhase, setSwapPhase] = useState<
+    "idle" | "approving" | "signing" | "confirming"
+  >("idle");
 
   // Terms of Service modal state
   const [showTosModal, setShowTosModal] = useState(false);
@@ -66,589 +60,279 @@ export const SwapButton = () => {
 
   // Global store
   const {
-    swapResponse,
-    setSwapResponse,
-    setTransactionConfirmed,
-    selectedInputToken,
-    evmConnectWalletChainId,
+    inputToken,
+    outputToken,
     displayedInputAmount,
-    fullPrecisionInputAmount,
     outputAmount,
-    isSwappingForBTC,
-    cowswapQuote,
-    rfqQuote,
-    quoteType,
-    payoutAddress,
-    addressValidation,
-    btcRefundAddress,
-    btcRefundAddressValidation,
-    setBitcoinDepositInfo,
-    bitcoinDepositInfo,
-    approvalState,
-    setApprovalState,
     isOtcServerDead,
     isRetryingOtcServer,
-    hasNoRoutesError,
     exceedsAvailableBTCLiquidity,
     exceedsAvailableCBBTCLiquidity,
+    exceedsAvailableLiquidity,
     exceedsUserBalance,
     inputBelowMinimum,
-    refetchQuote,
     setRefetchQuote,
-    clearQuotes,
-    cowswapOrderStatus,
-    setCowswapOrderStatus,
-    cowswapOrderData,
-    setCowswapOrderData,
-    isAwaitingOptimalQuote,
-    btcPrice,
-    ethPrice,
-    erc20Price,
+    evmWalletClients,
+    setEvmWalletClientForAddress,
+    btcAddress,
+    pastedBTCAddress,
+    primaryEvmAddress,
+    outputEvmAddress,
+    executeSwap,
+    setActiveSwapId,
+    setIsSwapInProgress,
+    setUserTokensForChain,
   } = useStore();
-  // Ref to track previous refetchQuote value for retry detection
-  const prevRefetchQuoteRef = useRef(refetchQuote);
 
-  // Helper function to handle swap errors with specific messaging
-  // Defined inside component to access state setters for loading cancellation
-  const handleSwapError = (error: unknown) => {
-    console.error("Swap Error:", error);
+  // Public clients for swap execution
+  const mainnetPublicClient = usePublicClient({ chainId: mainnet.id });
+  const basePublicClient = usePublicClient({ chainId: base.id });
 
-    // Cancel all loading states on the button
-    setSwapButtonPressed(false);
-    setIsApprovingToken(false);
-    setCowswapOrderStatus(CowswapOrderStatus.NO_ORDER);
+  // Derive swap direction and chain ID from token chains
+  const isSwappingForBTC = outputToken.chain === "bitcoin";
+  const evmClientChainId =
+    inputToken.chain === 1 || inputToken.chain === 8453
+      ? inputToken.chain
+      : outputToken.chain === 1 || outputToken.chain === 8453
+        ? outputToken.chain
+        : null;
+  const activeEvmWalletClient =
+    primaryEvmAddress && evmClientChainId
+      ? evmWalletClients[primaryEvmAddress.toLowerCase()]?.[evmClientChainId] || null
+      : null;
 
-    // Clear and refetch the quote
-    clearQuotes();
-    setRefetchQuote(true);
-
-    // Check if it's an OFAC-related error by examining the error message
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (
-      errorMessage.toLowerCase().includes("ofac") ||
-      errorMessage.toLowerCase().includes("sanction")
-    ) {
-      toastError(error, {
-        title: "Address Blocked",
-        description:
-          "This address is blocked due to sanctions compliance. We cannot process swaps for sanctioned addresses.",
-      });
-      return;
-    }
-
-    // Default error message
-    toastError(error, {
-      title: "Swap Failed",
-      description: "Try refreshing the quote and try again.",
-    });
-  };
-
-  // Wagmi hooks for contract interactions
-  const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
-  const {
-    data: sendTxHash,
-    sendTransaction,
-    isPending: isSendTxPending,
-    error: sendTxError,
-  } = useSendTransaction();
-
-  // Wait for approval transaction confirmation
-  const {
-    isLoading: isApprovalConfirming,
-    isSuccess: isApprovalConfirmed,
-    error: approvalTxError,
-  } = useWaitForTransactionReceipt({
-    hash: approvalTxHash,
-  });
-
-  // Wait for transaction confirmation
-  const {
-    isLoading: isConfirming,
-    isSuccess: isConfirmed,
-    error: txError,
-  } = useWaitForTransactionReceipt({
-    hash: sendTxHash,
-  });
-
-  // Check token allowance
-  const isNativeETH = selectedInputToken.ticker === "ETH";
-
-  const isCbBTC = selectedInputToken.ticker === "cbBTC";
-
-  // Button loading state combines pending transaction, approval, and confirmation waiting
-  const isButtonLoading =
-    isPending || isSendTxPending || isConfirming || isApprovingToken || isApprovalConfirming;
+  // Button loading state combines BTC transaction loading and SDK swap
+  const isButtonLoading = isBtcTxLoading || swapButtonPressed;
 
   // Check if all required fields are filled
+  const destinationBtcAddress = pastedBTCAddress || btcAddress;
+  const destinationEvmAddress = outputEvmAddress || primaryEvmAddress;
+  const isDestinationReady = isSwappingForBTC
+    ? !!destinationBtcAddress && validatePayoutAddress(destinationBtcAddress, true).isValid
+    : !!destinationEvmAddress;
   const allFieldsFilled =
     displayedInputAmount &&
     outputAmount &&
     parseFloat(displayedInputAmount) > 0 &&
     parseFloat(outputAmount) > 0 &&
-    payoutAddress &&
-    addressValidation.isValid;
+    isDestinationReady;
 
   // ============================================================================
   // SWAP-RELATED FUNCTIONS
   // ============================================================================
 
-  // Approve CowSwap to spend tokens using the SDK (unlimited approval)
-  const approveCowSwap = useCallback(async () => {
-    if (!selectedInputToken.address || !cowswapClient) {
-      console.error("No token selected or CowSwap client not available");
-      return;
-    }
+  // Helper to build execute params for SDK
+  const getExecuteParams = useCallback(async () => {
+    const publicClient = inputToken.chain === 8453 ? basePublicClient : mainnetPublicClient;
+    let walletClient = activeEvmWalletClient;
+    const shouldRefreshWalletClient =
+      !walletClient ||
+      !walletClient.chain ||
+      (evmClientChainId !== null && walletClient.chain.id !== evmClientChainId);
 
-    try {
-      setSwapButtonPressed(true);
-      setApprovalState(ApprovalState.APPROVING);
-      setIsApprovingToken(true);
-      console.log("Approving CowSwap for token:", selectedInputToken.address);
-
-      // Determine chain ID for the SDK
-      const chainId =
-        evmConnectWalletChainId === 8453 ? SupportedChainId.BASE : SupportedChainId.MAINNET;
-
-      // Use unlimited approval (maxUint256) for better UX - no need to approve again
-      const txHash = await cowswapClient.approveCowProtocol({
-        tokenAddress: selectedInputToken.address as Address,
-        chainId,
-      });
-
-      console.log("CowSwap approval transaction:", txHash);
-      setApprovalTxHash(txHash);
-    } catch (error) {
-      console.error("CowSwap approval failed:", error);
-      let errorDescription =
-        error instanceof Error && error.message.includes("User rejected the request")
-          ? "User rejected the transaction"
-          : undefined;
-      setApprovalState(ApprovalState.NEEDS_APPROVAL);
-      setIsApprovingToken(false);
-      setSwapButtonPressed(false);
-      toastError(undefined, {
-        title: "Approval Failed",
-        description: undefined,
-      });
-    }
-  }, [selectedInputToken, evmConnectWalletChainId, cowswapClient, setApprovalState]);
-
-  // Handle cbBTC->BTC swap using direct OTC transfer
-  const executeCBBTCtoBTCSwap = useCallback(async () => {
-    if (!rfqQuote || !userEvmAccountAddress) {
-      setRefetchQuote(true);
-      return;
-    }
-
-    try {
-      // Step 1: Create OTC swap to get deposit address
-      // Use full precision amount if available, otherwise use displayed amount
-      const amountToTransfer = fullPrecisionInputAmount || displayedInputAmount;
-      console.log("amountToTransfer", amountToTransfer);
-
-      const startAssetMetadata = {
-        ticker: selectedInputToken.ticker,
-        address: selectedInputToken.address || "native",
-        icon: selectedInputToken.icon,
-        amount: amountToTransfer,
-        decimals: selectedInputToken.decimals,
-      };
-
-      console.log("🔵 [METADATA] Creating cbBTC->BTC swap with metadata:");
-      console.log("  - Amount in metadata:", amountToTransfer);
-
-      console.log("Creating swap order for cbBTC...");
-      const orderResult = await riftApiClient.createOrder({
-        id: rfqQuote.id,
-        userDestinationAddress: payoutAddress,
-        refundAddress: userEvmAccountAddress,
-      });
-
-      if (!orderResult.ok) {
-        throw new Error(orderResult.error?.error ?? "Failed to create swap order");
-      }
-
-      const otcSwap = orderResult.data;
-      const depositAddress = otcSwap.deposit_vault_address;
-      console.log("Swap deposit address:", depositAddress);
-
-      // Store swap response in state
-      setSwapResponse(otcSwap);
-
-      // Step 2: Initiate ERC20 transfer of cbBTC to deposit address
-      const decimals = selectedInputToken.decimals;
-      const transferAmount = parseUnits(amountToTransfer, decimals);
-
-      console.log("Initiating cbBTC transfer to deposit address...");
-
-      // Get cbBTC token address from selectedInputToken
-      const cbBTCAddress = selectedInputToken.address as Address;
-
-      if (!cbBTCAddress) {
-        throw new Error("cbBTC token address not found");
-      }
-
-      // Prompt user to sign the transfer transaction
-      const gasParams = await fetchGasParams(evmConnectWalletChainId);
-      console.log(
-        "Gas params for cbBTC transfer:",
-        gasParams
-          ? {
-              maxFeePerGas: `${Number(gasParams.maxFeePerGas) / 1e9} gwei`,
-              maxPriorityFeePerGas: `${Number(gasParams.maxPriorityFeePerGas) / 1e9} gwei`,
-            }
-          : undefined
+    // Lazy fallback: if cache is cold/stale, fetch the required chain client on demand.
+    if (shouldRefreshWalletClient && primaryEvmAddress && evmClientChainId) {
+      const primaryEvmWallet = userWallets.find(
+        (wallet) =>
+          wallet.chain?.toUpperCase() === "EVM" &&
+          wallet.address.toLowerCase() === primaryEvmAddress.toLowerCase()
       );
 
-      const txConfig: any = {
-        address: cbBTCAddress,
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [depositAddress as Address, transferAmount],
-      };
-
-      // Add gas params if available
-      if (gasParams) {
-        txConfig.maxFeePerGas = gasParams.maxFeePerGas;
-        txConfig.maxPriorityFeePerGas = gasParams.maxPriorityFeePerGas;
-      }
-
-      // Mark that we're doing a cbBTC transfer so the effect can redirect on tx confirmation
-      setIsCbBTCTransferPending(true);
-      writeContract(txConfig);
-    } catch (error) {
-      console.error("cbBTC->BTC swap failed:", error);
-      setSwapResponse(null);
-      setIsCbBTCTransferPending(false);
-      handleSwapError(error);
-    }
-  }, [
-    rfqQuote,
-    userEvmAccountAddress,
-    selectedInputToken,
-    payoutAddress,
-    fullPrecisionInputAmount,
-    setSwapResponse,
-    displayedInputAmount,
-    evmConnectWalletChainId,
-    writeContract,
-  ]);
-
-  // Handle ERC20->BTC swap using CowSwap + OTC
-  const executeERC20ToBTCSwap = useCallback(async () => {
-    // Wait for optimal quote and executable quote type before proceeding
-    if (isAwaitingOptimalQuote || quoteType !== "executable") {
-      console.log("Waiting for executable optimal quote to arrive...");
-      // Poll until optimal quote arrives and quote is executable (check every 100ms, timeout after 10s)
-      const maxWaitMs = 60000;
-      const pollIntervalMs = 100;
-      let waited = 0;
-      while (
-        (useStore.getState().isAwaitingOptimalQuote ||
-          useStore.getState().quoteType !== "executable") &&
-        waited < maxWaitMs
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-        waited += pollIntervalMs;
-      }
-      // If still waiting after timeout, abort
-      const state = useStore.getState();
-      if (state.isAwaitingOptimalQuote || state.quoteType !== "executable") {
-        console.error("Timed out waiting for executable optimal quote");
-        toastError(new Error("Quote timeout"), {
-          title: "Quote Timeout",
-          description: "Unable to fetch optimal price. Please try again.",
-        });
-        return;
-      }
-      console.log("Executable optimal quote received, proceeding with swap");
-    }
-
-    // Check fake mode environment variables
-    const FAKE_RFQ = process.env.NEXT_PUBLIC_FAKE_RFQ === "true";
-    const FAKE_OTC = process.env.NEXT_PUBLIC_FAKE_OTC === "true";
-
-    // Validate userEvmAccountAddress first
-    if (!userEvmAccountAddress) {
-      toastError(new Error("Wallet not connected"), {
-        title: "Swap Failed",
-        description: "Please connect your wallet",
-      });
-      return;
-    }
-
-    // Check RFQ quote if not in fake mode
-    if (!FAKE_RFQ && !rfqQuote) {
-      setRefetchQuote(true);
-      return;
-    }
-
-    try {
-      let depositAddress: string;
-      let otcSwap: any = null;
-
-      if (FAKE_OTC) {
-        // In fake OTC mode, use user's wallet address as deposit address
-        console.log("FAKE_OTC mode enabled - using user wallet as deposit address");
-        depositAddress = userEvmAccountAddress;
-      } else {
-        // Step 1: Create OTC swap to get deposit address
-        // Use full precision amount if available, otherwise use displayed amount
-        const amountForMetadata = fullPrecisionInputAmount || displayedInputAmount;
-
-        const startAssetMetadata = {
-          ticker: selectedInputToken.ticker,
-          address: selectedInputToken.address || "native",
-          icon: selectedInputToken.icon,
-          amount: amountForMetadata,
-          decimals: selectedInputToken.decimals,
-        };
-
-        console.log("🟠 [METADATA] Creating ERC20->BTC swap with metadata:");
-        console.log("  - Amount in metadata:", amountForMetadata);
-
-        const orderResult = await riftApiClient.createOrder({
-          id: rfqQuote!.id,
-          userDestinationAddress: payoutAddress,
-          refundAddress: userEvmAccountAddress,
-        });
-
-        if (!orderResult.ok) {
-          throw new Error(orderResult.error?.error ?? "Failed to create swap order");
-        }
-
-        otcSwap = orderResult.data;
-        depositAddress = otcSwap.deposit_vault_address;
-
-        // Store swap response in state
-        setSwapResponse(otcSwap);
-      }
-
-      // Step 2: Submit CowSwap order
-      console.log("Submitting CowSwap order to deposit address:", depositAddress);
-
-      if (!cowswapClient) {
-        throw new Error("CowSwap client not available");
-      }
-
-      if (!cowswapQuote) {
-        setRefetchQuote(true);
-        return;
-      }
-
-      // Set status to signing
-      setCowswapOrderStatus(CowswapOrderStatus.SIGNING);
-
-      // Submit order using CowSwap client
-      const sellToken = selectedInputToken.address;
-      const decimals = selectedInputToken.decimals;
-
-      // Use buyAmount from the quote (exact output)
-      const buyAmount = cowswapQuote.amountsAndCosts.afterSlippage.buyAmount.toString();
-
-      // Calculate dynamic slippage based on notional USD value
-      let usdValue = 0;
-      const inputAmount = parseFloat(displayedInputAmount || "0");
-      if (selectedInputToken.ticker === "ETH" && ethPrice) {
-        usdValue = inputAmount * ethPrice;
-      } else if (selectedInputToken.ticker === "cbBTC" && btcPrice) {
-        usdValue = inputAmount * btcPrice;
-      } else if (erc20Price) {
-        usdValue = inputAmount * erc20Price;
-      }
-      const dynamicSlippageBps = getSlippageBpsForNotional(usdValue);
-      console.log(
-        "Order submission - dynamicSlippageBps:",
-        dynamicSlippageBps,
-        "for usdValue:",
-        usdValue
-      );
-
-      // Derive chainId from RFQ quote (source of truth for the swap chain)
-      const quoteChain = rfqQuote!.from.currency.chain;
-      const quoteChainId = quoteChain.kind === "EVM" ? quoteChain.chainId : null;
-
-      // Validate quote chain is supported and matches connected wallet
-      if (quoteChainId === null || quoteChainId !== evmConnectWalletChainId) {
-        toastError(new Error("Wrong chain connected"), {
-          title: "Wrong chain connected",
-          description: "Please connect your wallet to the correct chain",
-        });
-        setSwapButtonPressed(false);
-        setIsApprovingToken(false);
-        setIsCbBTCTransferPending(false);
-        setCowswapOrderStatus(CowswapOrderStatus.NO_ORDER);
-        return;
-      }
-
-      const orderId = await cowswapClient.submitOrder({
-        sellToken,
-        buyAmount,
-        decimals,
-        slippageBps: dynamicSlippageBps,
-        userAddress: userEvmAccountAddress,
-        receiver: depositAddress, // Send cbBTC to OTC deposit address
-        chainId: quoteChainId as any,
-      });
-
-      console.log("CowSwap order submitted:", orderId);
-
-      // Store order ID and set status to signed
-      setCowswapOrderData({ id: orderId, order: null });
-      setCowswapOrderStatus(CowswapOrderStatus.SIGNED);
-
-      // Store CowSwap order ID in swap metadata
-      if (otcSwap?.id) {
+      if (primaryEvmWallet) {
         try {
-          await fetch(`/api/swap/${otcSwap.id}/metadata`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              metadata: {
-                cowswapOrderId: orderId,
-              },
-            }),
-          });
-          console.log("CowSwap order ID stored in swap metadata");
+          walletClient = await getDynamicWalletClient(
+            primaryEvmWallet,
+            primaryEvmAddress,
+            evmClientChainId
+          );
+          setEvmWalletClientForAddress(primaryEvmAddress, evmClientChainId, walletClient);
         } catch (error) {
-          console.error("Failed to store CowSwap order ID in metadata:", error);
-          // Don't fail the swap if metadata update fails
+          console.error("[SwapButton] Failed to lazily fetch EVM wallet client:", error);
         }
       }
-
-      // Redirect to swap tracking page
-      if (otcSwap?.id) {
-        console.log("Redirecting to swap page with ID:", otcSwap.id);
-        router.push(`/swap/${otcSwap.id}`);
-      }
-    } catch (error) {
-      console.error("ERC20->BTC swap failed:", error);
-      setSwapResponse(null);
-      handleSwapError(error);
-    }
-  }, [
-    cowswapQuote,
-    rfqQuote,
-    quoteType,
-    userEvmAccountAddress,
-    selectedInputToken,
-    payoutAddress,
-    setSwapResponse,
-    displayedInputAmount,
-    evmConnectWalletChainId,
-    fullPrecisionInputAmount,
-    cowswapClient,
-    setCowswapOrderStatus,
-    setCowswapOrderData,
-    isAwaitingOptimalQuote,
-    btcPrice,
-    ethPrice,
-    erc20Price,
-  ]);
-
-  // Handle BTC->cbBTC swap using OTC
-  const executeBTCtoCBBTCSwap = useCallback(async () => {
-    if (!rfqQuote || !userEvmAccountAddress) {
-      setRefetchQuote(true);
-      return;
     }
 
-    if (!btcRefundAddress || !btcRefundAddressValidation.isValid) {
-      toastError(new Error("Invalid refund address"), {
-        title: "Swap Failed",
-        description: "Please enter a valid Bitcoin refund address.",
-      });
-      return;
+    if (!walletClient) {
+      throw new Error("EVM wallet client not available");
     }
-
-    try {
-      // Step 1: Create swap order to get Bitcoin deposit address
-      console.log("Creating swap order for BTC->cbBTC...");
-      const orderResult = await riftApiClient.createOrder({
-        id: rfqQuote.id,
-        userDestinationAddress: userEvmAccountAddress,
-        refundAddress: btcRefundAddress,
-      });
-
-      if (!orderResult.ok) {
-        throw new Error(orderResult.error?.error ?? "Failed to create swap order");
-      }
-
-      const otcSwap = orderResult.data;
-      console.log("Swap order created:", otcSwap);
-
-      // Store swap response in state
-      setSwapResponse(otcSwap);
-
-      // Step 2: Generate Bitcoin URI and show QR code
-      const amount = BigInt(otcSwap.quote.from.amount);
-      const decimals = otcSwap.quote.from.currency.decimals;
-      const amountInBTC = Number(amount) / Math.pow(10, decimals);
-      const bitcoinUri = generateBitcoinURI(
-        otcSwap.deposit_vault_address,
-        amountInBTC,
-        "Rift Swap"
+    if (
+      !walletClient.chain ||
+      (evmClientChainId !== null && walletClient.chain.id !== evmClientChainId)
+    ) {
+      throw new Error(
+        "EVM wallet client is missing chain config. Please reconnect your EVM wallet and try again."
       );
-
-      setBitcoinDepositInfo({
-        address: otcSwap.deposit_vault_address,
-        amount: amountInBTC,
-        uri: bitcoinUri,
-      });
-
-      // Step 3: Redirect to swap tracking page
-      console.log("Redirecting to swap page with ID:", otcSwap.id);
-      router.push(`/swap/${otcSwap.id}`);
-    } catch (error) {
-      console.error("BTC->cbBTC swap failed:", error);
-      setSwapResponse(null);
-      handleSwapError(error);
     }
+
+    const destinationAddress = isSwappingForBTC
+      ? pastedBTCAddress || btcAddress
+      : outputEvmAddress || primaryEvmAddress;
+    if (!destinationAddress) {
+      throw new Error(
+        isSwappingForBTC
+          ? "No Bitcoin address available. Please connect or paste a Bitcoin destination address."
+          : "No EVM address available. Please connect an Ethereum wallet."
+      );
+    }
+
+    const refundAddress = inputToken.chain === "bitcoin" ? btcAddress : primaryEvmAddress;
+    if (!refundAddress) {
+      throw new Error(
+        inputToken.chain === "bitcoin"
+          ? "No Bitcoin refund address available. Please connect a Bitcoin wallet or provide a refund address."
+          : "No EVM refund address available. Please connect an Ethereum wallet."
+      );
+    }
+
+    return {
+      destinationAddress,
+      refundAddress,
+      publicClient,
+      walletClient,
+      onExecuteStep: async (type: ExecuteSwapStepType) => {
+        // The SDK calls this immediately before prompting the wallet UI.
+        setSwapPhase(type === "approval" ? "approving" : "signing");
+      },
+      sendBitcoin: async ({
+        recipient,
+        amountSats,
+      }: {
+        recipient: string;
+        amountSats: string;
+      }): Promise<void> => {
+        if (!btcAddress) {
+          throw new Error("No BTC wallet connected");
+        }
+        await sendBitcoin(btcAddress, recipient, parseInt(amountSats, 10));
+      },
+    };
   }, [
-    rfqQuote,
-    userEvmAccountAddress,
-    btcRefundAddress,
-    btcRefundAddressValidation.isValid,
-    selectedInputToken,
-    payoutAddress,
-    setSwapResponse,
-    setBitcoinDepositInfo,
+    inputToken.chain,
+    basePublicClient,
+    mainnetPublicClient,
+    activeEvmWalletClient,
+    evmClientChainId,
+    primaryEvmAddress,
+    outputEvmAddress,
+    isSwappingForBTC,
+    pastedBTCAddress,
+    setEvmWalletClientForAddress,
+    userWallets,
+    btcAddress,
+    sendBitcoin,
   ]);
 
-  // Main swap handler - routes to appropriate swap function
+  // Helper to detect if an error is a user wallet rejection
+  const isUserRejectionError = (error: unknown): boolean => {
+    const msg = error instanceof Error ? error.message : String(error);
+    const lower = msg.toLowerCase();
+    return (
+      lower.includes("user rejected") ||
+      lower.includes("user denied") ||
+      lower.includes("rejected the request") ||
+      lower.includes("user cancelled") ||
+      lower.includes("user canceled") ||
+      (error as any)?.code === 4001
+    );
+  };
+
+  // Main swap handler - uses Rift SDK for execution
   const startSwap = useCallback(async () => {
     try {
-      // For cbBTC->BTC swaps, use the direct OTC flow
-      if (isSwappingForBTC && selectedInputToken.ticker === "cbBTC") {
-        setSwapButtonPressed(true);
-        await executeCBBTCtoBTCSwap();
+      setSwapButtonPressed(true);
+      setSwapPhase("signing");
+      setIsSwapInProgress(true);
+
+      if (!executeSwap) {
+        throw new Error("No quote available. Please get a quote first.");
+      }
+
+      const executeParams = await getExecuteParams();
+
+      console.log("executing swap", executeParams);
+      const swap = await executeSwap(executeParams);
+      setActiveSwapId(swap.swapId);
+      console.log("swap executed", swap);
+
+      const isNonBtcEvmPair = inputToken.chain !== "bitcoin" && outputToken.chain !== "bitcoin";
+      if (isNonBtcEvmPair) {
+        toastSuccess({
+          title:
+            "Transaction confirming. Your new balances will be visible in a few seconds.",
+        });
+
+        // Refresh wallet balances after 30 seconds to reflect the swap
+        if (primaryEvmAddress) {
+          setTimeout(async () => {
+            try {
+              const chainId = inputToken.chain === 8453 ? 8453 : 1;
+              const response = await fetch(
+                `/api/token-balance?wallet=${primaryEvmAddress}&chainId=${chainId}`
+              );
+              const data = await response.json();
+
+              if (data.result?.result && Array.isArray(data.result.result)) {
+                const currentTokens = useStore.getState().userTokensByChain[chainId] || [];
+                const updatedTokens = currentTokens.map((token) => {
+                  const newBalance = data.result.result.find(
+                    (t: { address: string; totalBalance: string }) =>
+                      t.address.toLowerCase() === token.address.toLowerCase()
+                  );
+                  if (newBalance) {
+                    const decimals = token.decimals || 18;
+                    const balanceFormatted = (
+                      Number(BigInt(newBalance.totalBalance)) / Math.pow(10, decimals)
+                    ).toString();
+                    return { ...token, balance: balanceFormatted };
+                  }
+                  return token;
+                });
+                setUserTokensForChain(chainId, updatedTokens);
+              }
+            } catch (error) {
+              console.error("Failed to refresh balances after swap:", error);
+            }
+          }, 30000);
+        }
+
+        setSwapButtonPressed(false);
+        setSwapPhase("idle");
+        setIsSwapInProgress(false);
         return;
       }
 
-      // For ERC20->BTC swaps, use the CowSwap flow
-      if (isSwappingForBTC) {
-        setSwapButtonPressed(true);
-        await executeERC20ToBTCSwap();
-        return;
-      }
-
-      // For BTC->cbBTC swaps
-      if (!isSwappingForBTC) {
-        setSwapButtonPressed(true);
-        await executeBTCtoCBBTCSwap();
-        return;
-      }
+      router.push(`/swap/${swap.swapId}`);
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
-      // Errors will be handled by the writeError useEffect
+      setSwapPhase("idle");
+      setIsSwapInProgress(false);
+
+      if (isUserRejectionError(error)) {
+        toastError(null, {
+          title: "Transaction declined",
+          description: "Sign the transaction to complete the swap",
+        });
+        // Fetch a new quote after rejection
+        setRefetchQuote(true);
+      } else {
+        toastError(error as Error, {
+          title: "Swap Failed",
+          description: "Failed to execute swap. Please try again.",
+        });
+      }
     }
   }, [
-    isSwappingForBTC,
-    selectedInputToken,
-    executeCBBTCtoBTCSwap,
-    executeERC20ToBTCSwap,
-    executeBTCtoCBBTCSwap,
+    executeSwap,
+    getExecuteParams,
+    inputToken.chain,
+    outputToken.chain,
+    setActiveSwapId,
+    setIsSwapInProgress,
+    setRefetchQuote,
+    setUserTokensForChain,
+    primaryEvmAddress,
+    router,
   ]);
 
   // Unified handler that checks approval and routes to appropriate action
@@ -667,302 +351,83 @@ export const SwapButton = () => {
       return;
     }
 
-    if (!isWalletConnected) {
-      await reownModal.open();
-      return;
-    }
-
+    // Wallet connection checks
     if (isSwappingForBTC) {
-      if (!payoutAddress) {
+      // EVM->BTC: Need EVM wallet to send, BTC address to receive
+      if (!primaryEvmAddress) {
         toastInfo({
-          title: "Enter Bitcoin Address",
-          description: "Please enter your Bitcoin address to receive BTC",
+          title: "Connect Ethereum Wallet",
+          description: "Please connect an Ethereum wallet to swap",
+        });
+        setShowAuthFlow(true);
+        return;
+      }
+      const destinationBtcAddress = pastedBTCAddress || btcAddress;
+      if (!destinationBtcAddress) {
+        toastInfo({
+          title: "Paste or Connect Bitcoin Wallet",
+          description: "Please connect a Bitcoin wallet or paste a Bitcoin address to receive BTC",
         });
         return;
       }
-      if (!addressValidation.isValid) {
+      if (!validatePayoutAddress(destinationBtcAddress, true).isValid) {
         toastInfo({
           title: "Invalid Bitcoin Address",
           description: "Please enter a valid Bitcoin address",
         });
         return;
       }
+    } else {
+      // Non-BTC output: check wallet connections based on input asset
+      if (inputToken.chain === "bitcoin") {
+        // BTC->EVM: Need BTC wallet to send
+        if (!btcAddress) {
+          toastInfo({
+            title: "Connect Bitcoin Wallet",
+            description: "Please connect a Bitcoin wallet to send BTC",
+          });
+          setShowAuthFlow(true);
+          return;
+        }
+      }
+      if (!primaryEvmAddress) {
+        toastInfo({
+          title: "Connect Ethereum Wallet",
+          description: "Please connect an Ethereum wallet to receive",
+        });
+        setShowAuthFlow(true);
+        return;
+      }
+      const destinationEvmAddress = outputEvmAddress || primaryEvmAddress;
+      if (!destinationEvmAddress) {
+        toastInfo({
+          title: "Connect Ethereum Wallet",
+          description: "Please connect an Ethereum wallet to receive",
+        });
+        setShowAuthFlow(true);
+        return;
+      }
     }
 
-    // Native ETH, cbBTC, or BTC->cbBTC swaps don't need approval
-    if (isNativeETH || isCbBTC || !isSwappingForBTC) {
-      await startSwap();
-      return;
-    }
-
-    // For ERC20 tokens, check if we need approval
-    if (approvalState === ApprovalState.NEEDS_APPROVAL) {
-      await approveCowSwap();
-      return;
-    }
-
-    // Already approved, proceed with swap
-    if (approvalState === ApprovalState.APPROVED) {
-      await startSwap();
-    }
+    // Start the swap
+    console.log("Starting swap...");
+    await startSwap();
   }, [
-    approvalState,
-    approveCowSwap,
     startSwap,
-    payoutAddress,
-    addressValidation,
-    isSwappingForBTC,
-    isWalletConnected,
     displayedInputAmount,
     outputAmount,
-    isNativeETH,
-    isCbBTC,
+    isSwappingForBTC,
+    primaryEvmAddress,
+    btcAddress,
+    pastedBTCAddress,
+    inputToken.chain,
+    outputEvmAddress,
+    setShowAuthFlow,
   ]);
 
   // ============================================================================
   // USE EFFECTS
   // ============================================================================
-
-  // Handle transaction pending state
-  useEffect(() => {
-    if (isPending || isSendTxPending) {
-      console.log("Transaction pending...");
-    }
-  }, [isPending, isSendTxPending]);
-
-  // Update store when transaction is confirmed
-  useEffect(() => {
-    console.log("isConfirmed", isConfirmed);
-    if (isConfirmed) {
-      setTransactionConfirmed(true);
-    }
-  }, [isConfirmed, setTransactionConfirmed]);
-
-  // Handle user declined transaction in wallet
-  useEffect(() => {
-    if (writeError || sendTxError) {
-      const error = writeError || sendTxError;
-      console.warn("Transaction error:", error);
-
-      // Check if user rejected the request
-      const errorMessage = error?.message || "";
-      const isUserRejection = errorMessage.includes("User rejected the request");
-      const isInternalError = errorMessage.includes("An internal error was received");
-
-      // Custom BTC orange toast based on error type
-      if (isUserRejection) {
-        toastInfo({
-          title: "Transaction Declined",
-          description: "The user declined the transaction request",
-          customStyle: {
-            background: `${colors.assetTag.btc.background}`,
-          },
-        });
-      } else if (isInternalError) {
-        toastInfo({
-          title: "Transaction Failed",
-          description: errorMessage,
-          customStyle: {
-            background: `${colors.assetTag.btc.background}`,
-          },
-        });
-      } else {
-        // Fallback for other errors
-        toastInfo({
-          title: "Transaction Failed",
-          description: "The transaction could not be completed",
-          customStyle: {
-            background: `${colors.assetTag.btc.background}`,
-          },
-        });
-      }
-
-      // Reset swap button state
-      setSwapButtonPressed(false);
-      setIsApprovingToken(false);
-      setIsCbBTCTransferPending(false);
-      clearQuotes();
-      setRefetchQuote(true);
-    }
-  }, [writeError, sendTxError, clearQuotes, setRefetchQuote]);
-
-  // Handle transaction receipt errors
-  useEffect(() => {
-    if (txError) {
-      console.error("Transaction error:", txError);
-      // Custom BTC orange toast for transaction failed
-      toastInfo({
-        title: "Transaction Failed",
-        description: "The transaction failed on the network",
-        customStyle: {
-          background: `${colors.assetTag.btc.background}`,
-        },
-      });
-      // Reset swap button state
-      setSwapButtonPressed(false);
-      setIsApprovingToken(false);
-    }
-  }, [txError]);
-
-  // Capture approval transaction hash
-  useEffect(() => {
-    if (hash && isApprovingToken) {
-      console.log("Approval transaction hash:", hash);
-      setApprovalTxHash(hash);
-      setIsApprovingToken(false);
-    }
-  }, [hash, isApprovingToken]);
-
-  // Handle cbBTC transfer: redirect to swap monitoring page when transaction is signed
-  useEffect(() => {
-    if (hash && isCbBTCTransferPending && swapResponse?.id) {
-      console.log("cbBTC transfer signed, redirecting to swap page:", swapResponse.id);
-      setIsCbBTCTransferPending(false);
-      router.push(`/swap/${swapResponse.id}`);
-    }
-  }, [hash, isCbBTCTransferPending, swapResponse?.id, router]);
-
-  // Handle approval confirmation and errors
-  useEffect(() => {
-    if (isApprovalConfirmed) {
-      console.log("CowSwap approval confirmed");
-      setApprovalState(ApprovalState.APPROVED);
-      setIsApprovingToken(false);
-      // Auto-execute swap after approval is confirmed
-      if (swapButtonPressed) {
-        startSwap();
-      }
-    } else if (approvalTxError) {
-      console.error("Approval transaction error:", approvalTxError);
-      setApprovalState(ApprovalState.NEEDS_APPROVAL);
-      toastInfo({
-        title: "Approval Failed",
-        description: "The approval transaction failed on the network",
-        customStyle: {
-          background: `${colors.assetTag.btc.background}`,
-        },
-      });
-      // Reset swap button state
-      setSwapButtonPressed(false);
-      setIsApprovingToken(false);
-      setApprovalTxHash(undefined);
-    }
-  }, [isApprovalConfirmed, approvalTxError, setApprovalState, swapButtonPressed, startSwap]);
-
-  // Auto-retry swap after quote refetch completes
-  useEffect(() => {
-    const wasRefetching = prevRefetchQuoteRef.current === true;
-    const isDoneRefetching = refetchQuote === false;
-
-    // Detect transition from refetching → done refetching
-    if (wasRefetching && isDoneRefetching && rfqQuote !== null && swapButtonPressed) {
-      console.log("Auto-retrying swap after quote refetch completed");
-      startSwap();
-      // Update ref to prevent re-triggering on subsequent renders
-      prevRefetchQuoteRef.current = false;
-    } else {
-      // Update ref with current value
-      prevRefetchQuoteRef.current = refetchQuote;
-    }
-  }, [refetchQuote, rfqQuote, swapButtonPressed, startSwap]);
-
-  // Track previous wallet connection state for detecting connection events
-  const wasWalletConnectedRef = useRef(isWalletConnected);
-
-  // Auto-trigger swap when wallet connects while an executable quote exists
-  useEffect(() => {
-    const justConnected = !wasWalletConnectedRef.current && isWalletConnected;
-    wasWalletConnectedRef.current = isWalletConnected;
-
-    if (justConnected && rfqQuote !== null && quoteType !== null) {
-      console.log("Wallet connected with executable quote - triggering swap");
-      handleSwapButtonClick();
-    }
-  }, [isWalletConnected, rfqQuote, quoteType, handleSwapButtonClick]);
-
-  // CowSwap order status polling with visibility-aware behavior
-  // This fixes the bug where background tabs throttle setInterval, causing the app
-  // to appear stuck when users switch away and return
-  useEffect(() => {
-    // Only poll when order is signed
-    if (
-      cowswapOrderStatus !== CowswapOrderStatus.SIGNED ||
-      !cowswapOrderData?.id ||
-      !cowswapClient
-    ) {
-      return;
-    }
-
-    console.log("Starting CowSwap order status polling for order:", cowswapOrderData.id);
-
-    // Get chainId from selected token for correct SDK
-    const tokenChainId = selectedInputToken.chainId ?? 1;
-    const sdk = cowswapClient.getSdk(tokenChainId as any);
-
-    let isPollingActive = true;
-
-    const pollOrderStatus = async () => {
-      if (!isPollingActive) return;
-
-      try {
-        const order = await sdk.getOrder({ orderUid: cowswapOrderData.id! });
-        console.log("Order status:", order.status);
-        console.log("Sell amount:", order.sellAmount);
-        console.log("Buy amount:", order.buyAmount);
-
-        // Update order data
-        setCowswapOrderData({ id: cowswapOrderData.id, order });
-
-        // Check order status and update accordingly
-        if (order.status === "fulfilled" || order.status === "presignaturePending") {
-          console.log("CowSwap order succeeded");
-          setCowswapOrderStatus(CowswapOrderStatus.SUCCESS);
-          setTransactionConfirmed(true);
-        } else if (order.status === "cancelled" || order.status === "expired") {
-          console.log("CowSwap order failed or cancelled");
-          setCowswapOrderStatus(CowswapOrderStatus.FAIL);
-        }
-        // For other statuses (open, scheduled), continue polling
-      } catch (error) {
-        console.error("Error polling order status:", error);
-        // Don't fail on polling errors, just log them
-      }
-    };
-
-    // Handle visibility change - poll immediately when tab becomes visible
-    // This fixes the issue where browsers throttle setInterval in background tabs
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && isPollingActive) {
-        console.log("Tab became visible, polling CowSwap order status immediately");
-        pollOrderStatus();
-      }
-    };
-
-    // Poll immediately on mount
-    pollOrderStatus();
-
-    // Then poll every 10 seconds
-    const intervalId = setInterval(pollOrderStatus, 10000);
-
-    // Listen for visibility changes to recover from background tab throttling
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // Cleanup interval and event listener on unmount or when status changes
-    return () => {
-      console.log("Stopping CowSwap order status polling");
-      isPollingActive = false;
-      clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [
-    cowswapOrderStatus,
-    cowswapOrderData?.id,
-    cowswapClient,
-    setCowswapOrderData,
-    setCowswapOrderStatus,
-    setTransactionConfirmed,
-    selectedInputToken.chainId,
-  ]);
 
   // Handle keyboard events (Enter to submit)
   useEffect(() => {
@@ -986,7 +451,11 @@ export const SwapButton = () => {
   // Determine button text and click handler
   const getButtonTextAndHandler = () => {
     // Check validation errors first
-    if (exceedsAvailableBTCLiquidity || exceedsAvailableCBBTCLiquidity) {
+    if (
+      exceedsAvailableBTCLiquidity ||
+      exceedsAvailableCBBTCLiquidity ||
+      exceedsAvailableLiquidity
+    ) {
       return {
         text: "Not enough liquidity",
         handler: undefined,
@@ -994,18 +463,9 @@ export const SwapButton = () => {
       };
     }
 
-    // If there's a "no routes found" error, disable button with message
-    if (hasNoRoutesError) {
-      return {
-        text: "No routes found",
-        handler: undefined,
-        showSpinner: false,
-      };
-    }
-
     if (exceedsUserBalance) {
       return {
-        text: `Not enough ${selectedInputToken.ticker}`,
+        text: `Not enough ${inputToken.ticker}`,
         handler: undefined,
         showSpinner: false,
       };
@@ -1019,35 +479,24 @@ export const SwapButton = () => {
       };
     }
 
-    // If approving CowSwap
-    if (approvalState === ApprovalState.APPROVING || isApprovalConfirming || isApprovingToken) {
+    // SDK-based swap phases (signing in wallet → confirming on-chain)
+    if (swapPhase === "approving") {
       return {
-        text: "Approving...",
+        text: "approving...",
         handler: undefined,
         showSpinner: true,
       };
     }
-
-    // If swap transaction is pending/confirming
-    if (isPending || isSendTxPending) {
+    if (swapPhase === "signing") {
       return {
-        text: "Signing Swap...",
+        text: "signing transaction...",
         handler: undefined,
         showSpinner: true,
       };
     }
-    if (isConfirming) {
+    if (swapPhase === "confirming") {
       return {
-        text: "Signing Swap...",
-        handler: undefined,
-        showSpinner: true,
-      };
-    }
-
-    // If signing CowSwap order
-    if (cowswapOrderStatus === CowswapOrderStatus.SIGNING) {
-      return {
-        text: "Signing Order...",
+        text: "confirming deposit...",
         handler: undefined,
         showSpinner: true,
       };
@@ -1075,27 +524,11 @@ export const SwapButton = () => {
     exceedsUserBalance ||
     exceedsAvailableBTCLiquidity ||
     exceedsAvailableCBBTCLiquidity ||
+    exceedsAvailableLiquidity ||
     inputBelowMinimum;
 
   const isButtonDisabled =
-    isButtonLoading ||
-    isOtcServerDead ||
-    isRetryingOtcServer ||
-    hasNoRoutesError ||
-    hasValidationError;
-
-  console.log("[DEBUG] Button state:", {
-    exceedsUserBalance,
-    exceedsAvailableBTCLiquidity,
-    exceedsAvailableCBBTCLiquidity,
-    inputBelowMinimum,
-    hasValidationError,
-    isButtonLoading,
-    isOtcServerDead,
-    isRetryingOtcServer,
-    hasNoRoutesError,
-    isButtonDisabled,
-  });
+    isButtonLoading || isOtcServerDead || isRetryingOtcServer || hasValidationError;
 
   const handleButtonClick = () => {
     if (isRetryingOtcServer) {

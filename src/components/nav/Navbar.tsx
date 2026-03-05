@@ -20,14 +20,12 @@ import { useStore } from "@/utils/store";
 import React, { useEffect, useState } from "react";
 import { isDismissWarning, onDismiss } from "@/utils/warningHelper";
 import GlowingShimmerText from "@/components/other/GlowingText";
-import { useAccount } from "wagmi";
 
 export const Navbar = ({}) => {
   const { isMobile, isTablet, isSmallLaptop, windowSize } = useWindowSize();
   const router = useRouter();
   const fontSize = isMobile ? "20px" : "20px";
   const [isLocalhost, setIsLocalhost] = useState(false);
-  const { address, isConnected } = useAccount();
 
   const depositFlowState = useStore((state) => state.depositFlowState);
   const transactionConfirmed = useStore((state) => state.transactionConfirmed);
@@ -49,14 +47,8 @@ export const Navbar = ({}) => {
       // Clear swap state when navigating back to main page
       const { setSwapResponse, setDepositFlowState, setTransactionConfirmed } = useStore.getState();
       setSwapResponse(null);
-      setDepositFlowState("0-not-started");
+      setDepositFlowState("not_started");
       setTransactionConfirmed(false);
-    }
-
-    // If navigating to "/" (swap page), clear Bitcoin deposit info
-    if (route === "/") {
-      const { setBitcoinDepositInfo } = useStore.getState();
-      setBitcoinDepositInfo(null);
     }
 
     router.push(route);
@@ -104,36 +96,33 @@ export const Navbar = ({}) => {
   const mapStateNumberToString = (
     stateNumber: number
   ):
-    | "0-not-started"
-    | "1-WaitingUserDepositInitiated"
-    | "2-WaitingUserDepositConfirmed"
-    | "3-WaitingMMDepositInitiated"
-    | "4-WaitingMMDepositConfirmed"
-    | "5-Settled"
-    | "6-RefundingUser"
-    | "7-RefundingMM"
-    | "8-Failed" => {
+    | "not_started"
+    | "waiting_for_deposit"
+    | "deposit_confirming"
+    | "initiating_payout"
+    | "confirming_payout"
+    | "swap_complete"
+    | "refunding_user"
+    | "failed" => {
     switch (stateNumber) {
       case 0:
-        return "0-not-started";
+        return "not_started";
       case 1:
-        return "1-WaitingUserDepositInitiated";
+        return "waiting_for_deposit";
       case 2:
-        return "2-WaitingUserDepositConfirmed";
+        return "deposit_confirming";
       case 3:
-        return "3-WaitingMMDepositInitiated";
+        return "initiating_payout";
       case 4:
-        return "4-WaitingMMDepositConfirmed";
+        return "confirming_payout";
       case 5:
-        return "5-Settled";
+        return "swap_complete";
       case 6:
-        return "6-RefundingUser";
+        return "refunding_user";
       case 7:
-        return "7-RefundingMM";
-      case 8:
-        return "8-Failed";
+        return "failed";
       default:
-        return "0-not-started"; // Default case
+        return "not_started"; // Default case
     }
   };
 
@@ -168,32 +157,50 @@ export const Navbar = ({}) => {
         zIndex={400}
       >
         {isMobile ? (
-          <Flex>
-            <Button
-              onClick={() => handleNavigation(router.pathname === "/history" ? "/" : "/history")}
-              type="button"
-              bg={colors.swapBgColor}
-              _hover={{ bg: colors.swapHoverColor }}
-              _active={{ bg: colors.swapBgColor }}
-              borderRadius="30px"
-              fontFamily="Nostromo"
-              fontSize="14px"
-              color={colors.offWhite}
-              px="20px"
-              pt="0px"
-              h="36px"
-              border={`2px solid ${colors.swapBorderColor}`}
-              letterSpacing="-1px"
-            >
-              {router.pathname === "/history" ? "Swap" : "History"}
-            </Button>
+          <Flex align="center">
+            {(router.pathname === "/" || router.pathname.includes("/swap")) ? (
+              <Flex
+                as="button"
+                onClick={() => handleNavigation("/history")}
+                align="center"
+                gap="6px"
+                cursor="pointer"
+                _hover={{ opacity: 0.8 }}
+              >
+                <Text
+                  color="white"
+                  fontSize="15px"
+                  fontFamily="Nostromo"
+                >
+                  History
+                </Text>
+                <IoChevronForward size={20} color="white" />
+              </Flex>
+            ) : (
+              <Flex
+                as="button"
+                onClick={() => handleNavigation("/")}
+                align="center"
+                gap="6px"
+                cursor="pointer"
+                _hover={{ opacity: 0.8 }}
+              >
+                <IoChevronBack size={20} color="white" />
+                <Text
+                  color="white"
+                  fontSize="15px"
+                  fontFamily="Nostromo"
+                >
+                  Swap
+                </Text>
+              </Flex>
+            )}
           </Flex>
         ) : (
           <>
             <Flex gap="12px">
               {navItem("Swap", "/")}
               {navItem("History", "/history")}
-              {navItem("Stats", "/stats")}
               {/* {navItem("Rates", "/rates")} */}
               {/* {navItem('OTC', '/otc')} */}
             </Flex>
@@ -226,7 +233,7 @@ export const Navbar = ({}) => {
           right={0}
         >
           {!isMobile &&
-            depositFlowState !== "0-not-started" &&
+            depositFlowState !== "not_started" &&
             transactionConfirmed &&
             !router.pathname.includes("/swap/") && (
               <Flex justify="center" align="center" mt="25px">

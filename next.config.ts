@@ -9,6 +9,14 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
+  webpack: (config) => {
+    // tiny-secp256k1 ships a `.wasm` binary that needs WebAssembly enabled in webpack 5.
+    config.experiments = { ...(config.experiments || {}), asyncWebAssembly: true };
+    // Only treat the tiny-secp256k1 wasm as a WebAssembly module. Other deps (e.g. wasm-bindgen)
+    // may reference `.wasm` via `new URL(..., import.meta.url)` and expect it to be emitted as an asset.
+    config.module.rules.push({ test: /secp256k1\\.wasm$/, type: "webassembly/async" });
+    return config;
+  },
 
   async headers() {
     return [

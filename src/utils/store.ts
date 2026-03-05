@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { Swap, QuoteResponse } from "./riftApiClient";
-import { TokenData, ApprovalState } from "./types";
-import { FeeOverview } from "./swapHelpers";
-import type { QuoteResults } from "@cowprotocol/sdk-trading";
+import { Swap } from "./riftApiClient";
+import { TokenData, ApprovalState, FeeOverview } from "./types";
+import type { WalletClient } from "viem";
+import type { RiftSdk } from "@riftresearch/sdk";
 
 // Inline to avoid circular dependency with constants.ts
 const DEFAULT_INPUT_TOKEN: TokenData = {
@@ -13,49 +13,61 @@ const DEFAULT_INPUT_TOKEN: TokenData = {
   usdValue: "$0.00",
   icon: "https://assets.smold.app/api/chains/1/logo-128.png",
   decimals: 18,
-  chainId: 1,
+  chain: 1,
+};
+
+// Default output token is BTC (mirrors BTC_TOKEN from constants.ts)
+const DEFAULT_OUTPUT_TOKEN: TokenData = {
+  name: "Bitcoin",
+  ticker: "BTC",
+  address: "native",
+  balance: "0",
+  usdValue: "$0.00",
+  icon: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1696501400",
+  decimals: 8,
+  chain: "bitcoin",
 };
 
 type DepositFlowState =
-  | "0-not-started"
-  | "1-WaitingUserDepositInitiated"
-  | "2-WaitingUserDepositConfirmed"
-  | "3-WaitingMMDepositInitiated"
-  | "4-WaitingMMDepositConfirmed"
-  | "5-Settled"
-  | "6-RefundingUser"
-  | "7-RefundingMM"
-  | "8-Failed";
+  | "not_started"
+  | "waiting_for_deposit"
+  | "deposit_confirming"
+  | "initiating_payout"
+  | "confirming_payout"
+  | "swap_complete"
+  | "refunding_user"
+  | "failed";
 
-export enum CowswapOrderStatus {
-  NO_ORDER = "NO_ORDER",
-  SIGNING = "SIGNING",
-  SIGNED = "SIGNED",
-  SUCCESS = "SUCCESS",
-  FAIL = "FAIL",
-}
-
-export interface CowswapOrderData {
-  id: string | null;
-  order: any | null; // EnrichedOrder from SDK - using any to avoid direct dependency import
-}
-
-/** Quote confidence level - indicative quotes use placeholder address, executable quotes use real user address */
-export type QuoteType = "indicative" | "executable";
-
-export const DEFAULT_CONNECT_WALLET_CHAIN_ID = 1;
+type EvmChainId = 1 | 8453;
+type EvmWalletClientByChain = Record<EvmChainId, WalletClient | null>;
 
 export const useStore = create<{
-  evmConnectWalletChainId: number;
-  setEvmConnectWalletChainId: (chainId: number) => void;
+  primaryEvmAddress: string | null;
+  setPrimaryEvmAddress: (address: string | null) => void;
+  outputEvmAddress: string | null;
+  setOutputEvmAddress: (address: string | null) => void;
+  btcAddress: string | null;
+  setBtcAddress: (address: string | null) => void;
+  pastedBTCAddress: string | null;
+  setPastedBTCAddress: (address: string | null) => void;
+  evmWalletClients: Record<string, EvmWalletClientByChain>;
+  setEvmWalletClientsForAddress: (address: string, clients: EvmWalletClientByChain) => void;
+  setEvmWalletClientForAddress: (
+    address: string,
+    chainId: EvmChainId,
+    client: WalletClient | null
+  ) => void;
+  removeEvmWalletClientsForAddress: (address: string) => void;
+  clearEvmWalletClients: () => void;
   userTokensByChain: Record<number, TokenData[]>;
   setUserTokensForChain: (chainId: number, tokens: TokenData[]) => void;
-  selectedInputToken: TokenData;
-  setSelectedInputToken: (token: TokenData) => void;
-  selectedOutputToken: TokenData | null;
-  setSelectedOutputToken: (token: TokenData | null) => void;
-  isSwappingForBTC: boolean;
-  setIsSwappingForBTC: (value: boolean) => void;
+  userTokensByWallet: Record<string, Record<number, TokenData[]>>;
+  setUserTokensForWallet: (walletAddress: string, chainId: number, tokens: TokenData[]) => void;
+  clearUserTokensForWallet: (walletAddress: string) => void;
+  inputToken: TokenData;
+  setInputToken: (token: TokenData) => void;
+  outputToken: TokenData;
+  setOutputToken: (token: TokenData) => void;
   displayedInputAmount: string;
   setDisplayedInputAmount: (value: string) => void;
   fullPrecisionInputAmount: string | null;
@@ -76,47 +88,24 @@ export const useStore = create<{
   setBtcPrice: (price: number | null) => void;
   ethPrice: number | null;
   setEthPrice: (price: number | null) => void;
-  erc20Price: number | null;
-  setErc20Price: (price: number | null) => void;
+  inputTokenPrice: number | null;
+  setInputTokenPrice: (price: number | null) => void;
+  outputTokenPrice: number | null;
+  setOutputTokenPrice: (price: number | null) => void;
   inputUsdValue: string;
   setInputUsdValue: (value: string) => void;
   outputUsdValue: string;
   setOutputUsdValue: (value: string) => void;
-  cowswapQuote: QuoteResults | null;
-  rfqQuote: QuoteResponse | null;
-  quoteType: QuoteType | null;
-  /** Atomically update quotes and quote type together. Pass null to clear all. */
-  setQuotes: (params: {
-    cowswapQuote: QuoteResults | null;
-    rfqQuote: QuoteResponse | null;
-    quoteType: QuoteType | null;
-  }) => void;
-  /** Clear all quotes atomically (sets cowswapQuote, rfqQuote, and quoteType to null) */
-  clearQuotes: () => void;
+  quote: any | null;
+  setQuote: (quote: any | null) => void;
+  rift: RiftSdk | null;
+  setRift: (rift: RiftSdk | null) => void;
+  executeSwap: ((params: any) => Promise<any>) | null;
+  setExecuteSwap: (fn: ((params: any) => Promise<any>) | null) => void;
+  activeSwapId: string | null;
+  setActiveSwapId: (id: string | null) => void;
   slippageBips: number;
   setSlippageBips: (value: number) => void;
-  bitcoinDepositInfo: { address: string; amount: number; uri: string } | null;
-  setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) => void;
-  payoutAddress: string;
-  setPayoutAddress: (address: string) => void;
-  addressValidation: { isValid: boolean; networkMismatch?: boolean; detectedNetwork?: string };
-  setAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => void;
-  btcRefundAddress: string;
-  setBtcRefundAddress: (address: string) => void;
-  btcRefundAddressValidation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  };
-  setBtcRefundAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => void;
   approvalState: ApprovalState;
   setApprovalState: (state: ApprovalState) => void;
   feeOverview: FeeOverview | null;
@@ -137,30 +126,105 @@ export const useStore = create<{
   setExceedsUserBalance: (value: boolean) => void;
   inputBelowMinimum: boolean;
   setInputBelowMinimum: (value: boolean) => void;
+  exceedsAvailableLiquidity: boolean;
+  setExceedsAvailableLiquidity: (value: boolean) => void;
+  maxAvailableLiquidity: string | null;
+  setMaxAvailableLiquidity: (value: string | null) => void;
   refetchQuote: boolean;
   setRefetchQuote: (value: boolean) => void;
   isAwaitingOptimalQuote: boolean;
   setIsAwaitingOptimalQuote: (value: boolean) => void;
-  cowswapOrderStatus: CowswapOrderStatus;
-  setCowswapOrderStatus: (status: CowswapOrderStatus) => void;
-  cowswapOrderData: CowswapOrderData | null;
-  setCowswapOrderData: (data: CowswapOrderData | null) => void;
   switchingToInputTokenChain: boolean;
   setSwitchingToInputTokenChain: (value: boolean) => void;
+  isSwapInProgress: boolean;
+  setIsSwapInProgress: (value: boolean) => void;
 }>((set) => ({
-  evmConnectWalletChainId: DEFAULT_CONNECT_WALLET_CHAIN_ID,
-  setEvmConnectWalletChainId: (chainId: number) => set({ evmConnectWalletChainId: chainId }),
+  primaryEvmAddress: typeof window !== "undefined" ? localStorage.getItem("rift_selectedEvmAddress") : null,
+  setPrimaryEvmAddress: (address: string | null) => {
+    if (typeof window !== "undefined") {
+      if (address) {
+        localStorage.setItem("rift_selectedEvmAddress", address);
+      } else {
+        localStorage.removeItem("rift_selectedEvmAddress");
+      }
+    }
+    set({ primaryEvmAddress: address });
+  },
+  outputEvmAddress: null,
+  setOutputEvmAddress: (address: string | null) => set({ outputEvmAddress: address }),
+  btcAddress: typeof window !== "undefined" ? localStorage.getItem("rift_selectedBtcAddress") : null,
+  setBtcAddress: (address: string | null) => {
+    if (typeof window !== "undefined") {
+      if (address) {
+        localStorage.setItem("rift_selectedBtcAddress", address);
+      } else {
+        localStorage.removeItem("rift_selectedBtcAddress");
+      }
+    }
+    set({ btcAddress: address });
+  },
+  pastedBTCAddress: null,
+  setPastedBTCAddress: (address: string | null) => set({ pastedBTCAddress: address }),
+  evmWalletClients: {},
+  setEvmWalletClientsForAddress: (address: string, clients: EvmWalletClientByChain) =>
+    set((state) => ({
+      evmWalletClients: { ...state.evmWalletClients, [address.toLowerCase()]: clients },
+    })),
+  setEvmWalletClientForAddress: (
+    address: string,
+    chainId: EvmChainId,
+    client: WalletClient | null
+  ) =>
+    set((state) => {
+      const key = address.toLowerCase();
+      const existing = state.evmWalletClients[key] || { 1: null, 8453: null };
+      return {
+        evmWalletClients: {
+          ...state.evmWalletClients,
+          [key]: {
+            ...existing,
+            [chainId]: client,
+          },
+        },
+      };
+    }),
+  removeEvmWalletClientsForAddress: (address: string) =>
+    set((state) => {
+      const key = address.toLowerCase();
+      const { [key]: _removed, ...rest } = state.evmWalletClients;
+      return { evmWalletClients: rest };
+    }),
+  clearEvmWalletClients: () => set({ evmWalletClients: {} }),
   userTokensByChain: {},
   setUserTokensForChain: (chainId: number, tokens) =>
     set((state) => ({
       userTokensByChain: { ...state.userTokensByChain, [chainId]: tokens },
     })),
-  selectedInputToken: DEFAULT_INPUT_TOKEN,
-  setSelectedInputToken: (token: TokenData) => set({ selectedInputToken: token }),
-  selectedOutputToken: null,
-  setSelectedOutputToken: (token: TokenData | null) => set({ selectedOutputToken: token }),
-  isSwappingForBTC: true,
-  setIsSwappingForBTC: (value: boolean) => set({ isSwappingForBTC: value }),
+  userTokensByWallet: {},
+  setUserTokensForWallet: (walletAddress: string, chainId: number, tokens: TokenData[]) =>
+    set((state) => {
+      const key = walletAddress.toLowerCase();
+      const existingWalletTokens = state.userTokensByWallet[key] || {};
+      return {
+        userTokensByWallet: {
+          ...state.userTokensByWallet,
+          [key]: {
+            ...existingWalletTokens,
+            [chainId]: tokens,
+          },
+        },
+      };
+    }),
+  clearUserTokensForWallet: (walletAddress: string) =>
+    set((state) => {
+      const key = walletAddress.toLowerCase();
+      const { [key]: _removed, ...rest } = state.userTokensByWallet;
+      return { userTokensByWallet: rest };
+    }),
+  inputToken: DEFAULT_INPUT_TOKEN,
+  setInputToken: (token: TokenData) => set({ inputToken: token }),
+  outputToken: DEFAULT_OUTPUT_TOKEN,
+  setOutputToken: (token: TokenData) => set({ outputToken: token }),
   displayedInputAmount: "",
   setDisplayedInputAmount: (value: string) => set({ displayedInputAmount: value }),
   fullPrecisionInputAmount: null,
@@ -169,7 +233,7 @@ export const useStore = create<{
   setOutputAmount: (value: string) => set({ outputAmount: value }),
   searchResults: [],
   setSearchResults: (tokens: TokenData[]) => set({ searchResults: tokens }),
-  depositFlowState: "0-not-started",
+  depositFlowState: "not_started",
   setDepositFlowState: (s: DepositFlowState) => set({ depositFlowState: s }),
   countdownValue: 99,
   setCountdownValue: (value: number) => set({ countdownValue: value }),
@@ -181,43 +245,24 @@ export const useStore = create<{
   setBtcPrice: (price: number | null) => set({ btcPrice: price }),
   ethPrice: null,
   setEthPrice: (price: number | null) => set({ ethPrice: price }),
-  erc20Price: null,
-  setErc20Price: (price: number | null) => set({ erc20Price: price }),
+  inputTokenPrice: null,
+  setInputTokenPrice: (price: number | null) => set({ inputTokenPrice: price }),
+  outputTokenPrice: null,
+  setOutputTokenPrice: (price: number | null) => set({ outputTokenPrice: price }),
   inputUsdValue: "$0.00",
   setInputUsdValue: (value: string) => set({ inputUsdValue: value }),
   outputUsdValue: "$0.00",
   setOutputUsdValue: (value: string) => set({ outputUsdValue: value }),
-  cowswapQuote: null,
-  rfqQuote: null,
-  quoteType: null,
-  setQuotes: (params) =>
-    set({
-      cowswapQuote: params.cowswapQuote,
-      rfqQuote: params.rfqQuote,
-      quoteType: params.quoteType,
-    }),
-  clearQuotes: () => set({ cowswapQuote: null, rfqQuote: null, quoteType: null }),
-  slippageBips: 5,
+  quote: null,
+  setQuote: (quote: any | null) => set({ quote }),
+  rift: null,
+  setRift: (rift: RiftSdk | null) => set({ rift }),
+  executeSwap: null,
+  setExecuteSwap: (fn: ((params: any) => Promise<any>) | null) => set({ executeSwap: fn }),
+  activeSwapId: null,
+  setActiveSwapId: (id: string | null) => set({ activeSwapId: id }),
+  slippageBips: 100,
   setSlippageBips: (value: number) => set({ slippageBips: value }),
-  bitcoinDepositInfo: null,
-  setBitcoinDepositInfo: (info: { address: string; amount: number; uri: string } | null) =>
-    set({ bitcoinDepositInfo: info }),
-  payoutAddress: "",
-  setPayoutAddress: (address: string) => set({ payoutAddress: address }),
-  addressValidation: { isValid: false },
-  setAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => set({ addressValidation: validation }),
-  btcRefundAddress: "",
-  setBtcRefundAddress: (address: string) => set({ btcRefundAddress: address }),
-  btcRefundAddressValidation: { isValid: false },
-  setBtcRefundAddressValidation: (validation: {
-    isValid: boolean;
-    networkMismatch?: boolean;
-    detectedNetwork?: string;
-  }) => set({ btcRefundAddressValidation: validation }),
   approvalState: ApprovalState.UNKNOWN,
   setApprovalState: (state: ApprovalState) => set({ approvalState: state }),
   feeOverview: null,
@@ -239,14 +284,16 @@ export const useStore = create<{
   setExceedsUserBalance: (value: boolean) => set({ exceedsUserBalance: value }),
   inputBelowMinimum: false,
   setInputBelowMinimum: (value: boolean) => set({ inputBelowMinimum: value }),
+  exceedsAvailableLiquidity: false,
+  setExceedsAvailableLiquidity: (value: boolean) => set({ exceedsAvailableLiquidity: value }),
+  maxAvailableLiquidity: null,
+  setMaxAvailableLiquidity: (value: string | null) => set({ maxAvailableLiquidity: value }),
   refetchQuote: false,
   setRefetchQuote: (value: boolean) => set({ refetchQuote: value }),
   isAwaitingOptimalQuote: false,
   setIsAwaitingOptimalQuote: (value: boolean) => set({ isAwaitingOptimalQuote: value }),
-  cowswapOrderStatus: CowswapOrderStatus.NO_ORDER,
-  setCowswapOrderStatus: (status: CowswapOrderStatus) => set({ cowswapOrderStatus: status }),
-  cowswapOrderData: null,
-  setCowswapOrderData: (data: CowswapOrderData | null) => set({ cowswapOrderData: data }),
   switchingToInputTokenChain: false,
   setSwitchingToInputTokenChain: (value: boolean) => set({ switchingToInputTokenChain: value }),
+  isSwapInProgress: false,
+  setIsSwapInProgress: (value: boolean) => set({ isSwapInProgress: value }),
 }));

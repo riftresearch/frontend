@@ -328,10 +328,20 @@ export async function filterRefunds(
 
   const userDepositAddress = row.user_deposit_address;
   const userDepositChain = row.quote.from_chain; // ethereum or bitcoin
-  const swapStatus = row.status;
+  // Normalize legacy API statuses to new format
+  const legacyStatusMap: Record<string, string> = {
+    waiting_user_deposit_initiated: "waiting_for_deposit",
+    waiting_user_deposit_confirmed: "deposit_confirming",
+    waiting_mm_deposit_initiated: "initiating_payout",
+    waiting_mm_deposit_confirmed: "confirming_payout",
+    settling: "swap_complete",
+    settled: "swap_complete",
+    refunding_user: "refunding_user",
+  };
+  const swapStatus = legacyStatusMap[row.status] || row.status;
 
-  // If status is already refunding_user or refunding_mm, mark as refunded immediately
-  if (swapStatus === "refunding_user" || swapStatus === "refunding_mm") {
+  // If status is already refunding_user, mark as refunded immediately
+  if (swapStatus === "refunding_user") {
     console.log(
       `[REFUND STATUS] Swap ${mappedSwap.id}: Status is ${swapStatus}, marking as refunded`
     );
@@ -341,10 +351,8 @@ export async function filterRefunds(
   // Special case: Partial deposit detection
   // If swap is still waiting for user deposit but user sent less than required amount
   if (
-    swapStatus === "waiting_user_deposit_initiated" ||
-    swapStatus === "waiting_user_deposit_confirmed" ||
-    swapStatus === "WaitingUserDepositInitiated" ||
-    swapStatus === "WaitingUserDepositConfirmed"
+    swapStatus === "waiting_for_deposit" ||
+    swapStatus === "deposit_confirming"
   ) {
     console.log(`[PARTIAL DEPOSIT CHECK] Swap ${mappedSwap.id}: Checking for partial deposit...`);
 

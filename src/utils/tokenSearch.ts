@@ -77,6 +77,8 @@ type Ranked = {
   isPopular: boolean;
 };
 
+type SupportedEvmChainId = Extract<TokenData["chain"], number>;
+
 function rankItem(
   item: TokenIndexItem,
   qRaw: string,
@@ -134,7 +136,7 @@ function rankItem(
   return { item, score, exactTicker, exactName, addrPrefixLen, isPopular: false };
 }
 
-type RankedWithChain = Ranked & { chainId: number };
+type RankedWithChain = Ranked & { chainId: SupportedEvmChainId };
 
 function getPopularAddresses(network: Network): Set<string> {
   switch (network) {
@@ -145,6 +147,8 @@ function getPopularAddresses(network: Network): Set<string> {
     case Network.ALL:
       // Combine both sets for "all" network
       return new Set([...ETHEREUM_POPULAR_ADDRESSES, ...BASE_POPULAR_ADDRESSES]);
+    case Network.BITCOIN:
+      return new Set();
   }
 }
 
@@ -160,7 +164,7 @@ export function searchTokens(network: Network, query: string, limit = 10): Token
   const ranked: RankedWithChain[] = [];
 
   // Determine which chains to search
-  const chainsToSearch: { key: ChainKey; chainId: number }[] =
+  const chainsToSearch: { key: ChainKey; chainId: SupportedEvmChainId }[] =
     network === Network.ALL
       ? [
           { key: "ethereum", chainId: 1 },
@@ -205,6 +209,6 @@ export function searchTokens(network: Network, query: string, limit = 10): Token
     usdValue: "$0.00",
     icon: item.icon,
     decimals: item.decimals,
-    chainId,
+    chain: chainId,
   }));
 }

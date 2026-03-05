@@ -42,6 +42,11 @@ const NETWORK_CONFIG: Record<Network, NetworkConfig> = {
     chainId: 8453,
     metadata: BASE_ADDRESS_METADATA as unknown as Record<string, TokenMetadataEntry>,
   },
+  [Network.BITCOIN]: {
+    defiLlamaChain: "coingecko",
+    chainId: 0,
+    metadata: {},
+  },
 };
 
 // Derived reverse lookup: chainId -> Network
@@ -146,12 +151,11 @@ export async function fetchBtcEthPrices(): Promise<{
 export async function fetchWalletTokens(
   walletAddress: string
 ): Promise<Record<Network, TokenBalance[]>> {
-  console.log("[Balance Check] Fetching token balances for address:", walletAddress);
-
   const result: Record<Network, TokenBalance[]> = {
     [Network.ALL]: [],
     [Network.ETHEREUM]: [],
     [Network.BASE]: [],
+    [Network.BITCOIN]: [],
   };
 
   try {
@@ -209,6 +213,7 @@ export async function fetchAllTokenPrices(
     [Network.ALL]: {},
     [Network.ETHEREUM]: {},
     [Network.BASE]: {},
+    [Network.BITCOIN]: {},
   };
 
   const BATCH_SIZE = 100;
@@ -279,6 +284,7 @@ export async function fetchUserEth(
     [Network.ALL]: null,
     [Network.ETHEREUM]: null,
     [Network.BASE]: null,
+    [Network.BITCOIN]: null,
   };
 
   try {
@@ -300,7 +306,13 @@ export async function fetchUserEth(
       for (const [chainIdStr, balanceData] of Object.entries<any>(data.balances)) {
         const chainId = Number(chainIdStr);
         const network = CHAIN_ID_TO_NETWORK[chainId];
-        if (!network || network === Network.ALL) continue;
+        if (
+          !network ||
+          network === Network.ALL ||
+          (network !== Network.ETHEREUM && network !== Network.BASE)
+        ) {
+          continue;
+        }
 
         const balanceEth = Number(formatUnits(BigInt(balanceData.balance), 18));
         const usdValue = balanceEth * ethPrice;
@@ -316,7 +328,7 @@ export async function fetchUserEth(
           usdValue: `$${usdValue.toFixed(2)}`,
           icon: ETH_ICON,
           decimals: 18,
-          chainId,
+          chain: network === Network.BASE ? 8453 : 1,
         };
       }
     }

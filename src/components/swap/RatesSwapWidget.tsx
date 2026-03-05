@@ -1,9 +1,7 @@
 import { Flex, Text, Input, Spacer, Spinner, Image } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
-import { useAccount } from "wagmi";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import { useCowSwapClient } from "@/components/providers/CowSwapProvider";
 import {
   GLOBAL_CONFIG,
   ZERO_USD_DISPLAY,
@@ -12,21 +10,23 @@ import {
   BITCOIN_DECIMALS,
   MIN_SWAP_SATS,
   opaqueBackgroundColor,
+  BTC_TOKEN,
+  CBBTC_TOKEN,
 } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
+import { AddressSelector } from "@/components/other/AddressSelector";
+import { PasteAddressModal } from "@/components/other/PasteAddressModal";
 import { useStore } from "@/utils/store";
 import { TokenData } from "@/utils/types";
 import {
-  getERC20ToBTCQuote,
-  callRFQ,
   isAboveMinSwap,
   calculateUsdValue,
   satsToBtc,
   getSlippageBpsForNotional,
   formatCurrencyAmount,
+  validatePayoutAddress,
 } from "@/utils/swapHelpers";
-import { PriceQuality } from "@cowprotocol/cow-sdk";
 import { formatUnits, parseUnits } from "viem";
 import { useMaxLiquidity } from "@/hooks/useLiquidity";
 import { saveSwapStateToCookie, loadSwapStateFromCookie } from "@/utils/swapStateCookies";
@@ -254,14 +254,23 @@ async function fetchRelayQuote(
 }
 
 export const RatesSwapWidget = () => {
-  const { address: userEvmAccountAddress } = useAccount();
-  const cowswapClient = useCowSwapClient();
+  // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const setPrimaryEvmAddress = useStore((state) => state.setPrimaryEvmAddress);
+  const outputEvmAddress = useStore((state) => state.outputEvmAddress);
+  const setOutputEvmAddress = useStore((state) => state.setOutputEvmAddress);
+  const btcAddress = useStore((state) => state.btcAddress);
+  const setBtcAddress = useStore((state) => state.setBtcAddress);
+  const pastedBTCAddress = useStore((state) => state.pastedBTCAddress);
+  const setPastedBTCAddress = useStore((state) => state.setPastedBTCAddress);
+
   const liquidity = useMaxLiquidity();
   useBtcEthPrices();
   const { isMobile } = useWindowSize();
 
   // Local state
   const [isAssetSelectorOpen, setIsAssetSelectorOpen] = useState(false);
+  const [assetSelectorDirection, setAssetSelectorDirection] = useState<"input" | "output">("input");
   const [isLoadingRiftQuote, setIsLoadingRiftQuote] = useState(false);
   const [isLoadingRelayQuote, setIsLoadingRelayQuote] = useState(false);
   const [isLoadingChainflipQuote, setIsLoadingChainflipQuote] = useState(false);
@@ -292,33 +301,50 @@ export const RatesSwapWidget = () => {
 
   // Global store
   const {
-    selectedInputToken,
-    selectedOutputToken,
-    evmConnectWalletChainId,
+    inputToken,
+    outputToken,
     displayedInputAmount,
     setDisplayedInputAmount,
     outputAmount,
     setOutputAmount,
-    isSwappingForBTC,
-    setIsSwappingForBTC,
     btcPrice,
     ethPrice,
-    erc20Price,
-    setErc20Price,
+    inputTokenPrice,
+    setInputTokenPrice,
+    outputTokenPrice,
+    setOutputTokenPrice,
     inputUsdValue,
     setInputUsdValue,
     outputUsdValue,
     setOutputUsdValue,
-    setQuotes,
-    clearQuotes,
-    setSelectedInputToken,
-    setSelectedOutputToken,
+    setQuote,
+    setInputToken,
+    setOutputToken,
     setFeeOverview,
     isOtcServerDead,
     setHasNoRoutesError,
     setExceedsAvailableBTCLiquidity,
     setIsAwaitingOptimalQuote,
   } = useStore();
+
+  // Derive swap direction and chain ID from token chains
+  const isSwappingForBTC = outputToken.chain === "bitcoin";
+  const evmConnectWalletChainId = inputToken.chain === "bitcoin" ? 1 : inputToken.chain;
+
+  // State for paste address modal
+  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
+  const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
+
+  const resolvedInputAddress = isSwappingForBTC ? primaryEvmAddress : btcAddress;
+  const resolvedOutputAddress = isSwappingForBTC
+    ? pastedBTCAddress || btcAddress
+    : outputEvmAddress || primaryEvmAddress;
+
+  useEffect(() => {
+    if (!isSwappingForBTC && pastedBTCAddress) {
+      setPastedBTCAddress(null);
+    }
+  }, [isSwappingForBTC, pastedBTCAddress, setPastedBTCAddress]);
 
   // Define styles based on swap direction
   const inputStyle = isSwappingForBTC
@@ -335,30 +361,50 @@ export const RatesSwapWidget = () => {
   const actualBorderColor = "#323232";
   const borderColor = `2px solid ${actualBorderColor}`;
 
-  // Fetch ERC20 token price from API
-  const fetchErc20TokenPrice = useCallback(
-    async (tokenData: TokenData | null) => {
-      if (
-        !tokenData?.address ||
-        tokenData.address === "0x0000000000000000000000000000000000000000"
-      ) {
-        setErc20Price(null);
+  // Fetch token price - uses store btcPrice/ethPrice for native tokens, fetches from API for ERC20s
+  const fetchTokenPriceForDirection = useCallback(
+    async (tokenData: TokenData | null, direction: "input" | "output") => {
+      const setPrice = direction === "input" ? setInputTokenPrice : setOutputTokenPrice;
+
+      if (!tokenData) {
+        setPrice(null);
         return;
       }
 
-      const tokenChainId = tokenData.chainId ?? evmConnectWalletChainId ?? 1;
+      // For BTC/cbBTC, use btcPrice from store
+      if (tokenData.ticker === "BTC" || tokenData.ticker === "cbBTC") {
+        setPrice(btcPrice);
+        return;
+      }
+
+      // For ETH, use ethPrice from store
+      if (
+        tokenData.ticker === "ETH" ||
+        tokenData.address === "0x0000000000000000000000000000000000000000"
+      ) {
+        setPrice(ethPrice);
+        return;
+      }
+
+      // Skip for native tokens without an address
+      if (!tokenData.address || tokenData.address === "Native") {
+        setPrice(null);
+        return;
+      }
+
+      const tokenChainId = tokenData.chain === "bitcoin" ? 1 : (tokenData.chain ?? evmConnectWalletChainId ?? 1);
       const chainName = tokenChainId === 8453 ? "base" : "ethereum";
 
       try {
-        const tokenPrice = await fetchTokenPrice(chainName, tokenData.address);
-        if (tokenPrice && typeof tokenPrice.price === "number") {
-          setErc20Price(tokenPrice.price);
+        const tokenPriceResult = await fetchTokenPrice(chainName, tokenData.address);
+        if (tokenPriceResult && typeof tokenPriceResult.price === "number") {
+          setPrice(tokenPriceResult.price);
         }
       } catch (error) {
-        console.error("Failed to fetch ERC20 price:", error);
+        console.error(`Failed to fetch ${direction} token price:`, error);
       }
     },
-    [evmConnectWalletChainId, setErc20Price]
+    [evmConnectWalletChainId, setInputTokenPrice, setOutputTokenPrice, btcPrice, ethPrice]
   );
 
   // Fetch Relay quote for comparison
@@ -373,14 +419,14 @@ export const RatesSwapWidget = () => {
       setIsLoadingRelayQuote(true);
       setRelayError(null);
 
-      const decimals = selectedInputToken.decimals;
+      const decimals = inputToken.decimals;
       const sellAmount = parseUnits(inputAmount, decimals).toString();
       const sellToken =
-        selectedInputToken.ticker === "ETH"
+        inputToken.ticker === "ETH"
           ? "0x0000000000000000000000000000000000000000"
-          : selectedInputToken.address;
-      const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-      const tokenChainId = selectedInputToken.chainId ?? 1;
+          : inputToken.address;
+      const userAddr = primaryEvmAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+      const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
 
       try {
         const quote = await fetchRelayQuote(tokenChainId, sellToken, sellAmount, userAddr);
@@ -404,7 +450,7 @@ export const RatesSwapWidget = () => {
         setIsLoadingRelayQuote(false);
       }
     },
-    [isSwappingForBTC, selectedInputToken, userEvmAccountAddress]
+    [isSwappingForBTC, inputToken, primaryEvmAddress]
   );
 
   // Fetch Chainflip quote for comparison using the SDK
@@ -417,7 +463,7 @@ export const RatesSwapWidget = () => {
       }
 
       // Chainflip only supports Ethereum mainnet
-      const tokenChainId = selectedInputToken.chainId ?? 1;
+      const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
       if (tokenChainId !== 1) {
         setChainflipQuote(null);
         setChainflipError("Ethereum only");
@@ -426,7 +472,7 @@ export const RatesSwapWidget = () => {
       }
 
       // Map the asset to Chainflip SDK asset
-      const chainflipAsset = CHAINFLIP_ASSET_MAP[selectedInputToken.ticker];
+      const chainflipAsset = CHAINFLIP_ASSET_MAP[inputToken.ticker];
       if (!chainflipAsset) {
         setChainflipQuote(null);
         setChainflipError("Asset not supported");
@@ -439,7 +485,7 @@ export const RatesSwapWidget = () => {
 
       try {
         const sdk = getChainflipSDK();
-        const decimals = selectedInputToken.decimals;
+        const decimals = inputToken.decimals;
         const amountInBaseUnits = parseUnits(inputAmount, decimals).toString();
 
         let response;
@@ -496,7 +542,7 @@ export const RatesSwapWidget = () => {
         setIsLoadingChainflipQuote(false);
       }
     },
-    [isSwappingForBTC, selectedInputToken, btcPrice]
+    [isSwappingForBTC, inputToken, btcPrice]
   );
 
   // Fetch Thorchain quote for comparison
@@ -508,9 +554,9 @@ export const RatesSwapWidget = () => {
         return;
       }
 
-      const tokenChainId = selectedInputToken.chainId ?? 1;
-      const tokenAddress = selectedInputToken.address;
-      const ticker = selectedInputToken.ticker;
+      const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
+      const tokenAddress = inputToken.address;
+      const ticker = inputToken.ticker;
 
       // Get Thorchain asset format
       const thorchainAsset = getThorchainAsset(ticker, tokenAddress, tokenChainId);
@@ -558,7 +604,7 @@ export const RatesSwapWidget = () => {
         setIsLoadingThorchainQuote(false);
       }
     },
-    [isSwappingForBTC, selectedInputToken, btcPrice]
+    [isSwappingForBTC, inputToken, btcPrice]
   );
 
   // Fetch ThorSwap quote for comparison
@@ -570,9 +616,9 @@ export const RatesSwapWidget = () => {
         return;
       }
 
-      const tokenChainId = selectedInputToken.chainId ?? 1;
-      const tokenAddress = selectedInputToken.address;
-      const ticker = selectedInputToken.ticker;
+      const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
+      const tokenAddress = inputToken.address;
+      const ticker = inputToken.ticker;
 
       // Get ThorSwap asset format
       const thorswapAsset = getThorswapAsset(ticker, tokenAddress, tokenChainId);
@@ -620,7 +666,7 @@ export const RatesSwapWidget = () => {
         setIsLoadingThorswapQuote(false);
       }
     },
-    [isSwappingForBTC, selectedInputToken, btcPrice]
+    [isSwappingForBTC, inputToken, btcPrice]
   );
 
   // Fetch quote for ERC20/ETH -> BTC
@@ -634,20 +680,12 @@ export const RatesSwapWidget = () => {
       }
 
       const inputValue = parseFloat(amountToQuote);
-      let price: number | null = null;
-
-      if (selectedInputToken.ticker === "ETH") {
-        price = ethPrice;
-      } else if (selectedInputToken.ticker === "cbBTC") {
-        price = btcPrice;
-      } else {
-        price = erc20Price;
-      }
+      const price = inputTokenPrice;
 
       if (price && btcPrice) {
         const usdValue = inputValue * price;
         if (!isAboveMinSwap(usdValue, btcPrice)) {
-          clearQuotes();
+          setQuote(null);
           setOutputAmount("");
           setRiftQuote(null);
           setIsLoadingRiftQuote(false);
@@ -658,11 +696,11 @@ export const RatesSwapWidget = () => {
         setHasNoRoutesError(false);
         setIsAwaitingOptimalQuote(true);
 
-        const decimals = selectedInputToken.decimals;
+        const decimals = inputToken.decimals;
         const sellAmount = parseUnits(amountToQuote, decimals).toString();
-        const sellToken = selectedInputToken.address;
-        const userAddr = userEvmAccountAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-        const tokenChainId = selectedInputToken.chainId ?? 1;
+        const sellToken = inputToken.address;
+        const userAddr = primaryEvmAddress || "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+        const tokenChainId = inputToken.chain === "bitcoin" ? 1 : (inputToken.chain ?? 1);
 
         // Also fetch Relay, Chainflip, Thorchain, and ThorSwap quotes in parallel
         fetchRelayQuoteForComparison(amountToQuote, requestId);
@@ -678,8 +716,8 @@ export const RatesSwapWidget = () => {
             userAddr,
             dynamicSlippageBps,
             undefined,
-            cowswapClient,
-            PriceQuality.OPTIMAL,
+            null, // cowswapClient - deprecated, SDK handles quotes
+            "optimal",
             tokenChainId
           );
 
@@ -689,11 +727,8 @@ export const RatesSwapWidget = () => {
           }
 
           if (quoteResponse) {
-            setQuotes({
-              cowswapQuote: quoteResponse.cowswapQuote || null,
-              rfqQuote: quoteResponse.rfqQuote,
-              quoteType: "indicative",
-            });
+            // Note: Old setQuotes removed - using stub getQuote for now
+            // TODO: Convert to new SwapQuote format when SDK is integrated
             setOutputAmount(quoteResponse.btcOutputAmount || "");
             setIsAwaitingOptimalQuote(false);
 
@@ -715,7 +750,7 @@ export const RatesSwapWidget = () => {
             setExceedsAvailableBTCLiquidity(true);
           }
           setIsAwaitingOptimalQuote(false);
-          clearQuotes();
+          setQuote(null);
           setOutputAmount("");
           setFeeOverview(null);
           setRiftQuote(null);
@@ -728,15 +763,14 @@ export const RatesSwapWidget = () => {
     [
       isSwappingForBTC,
       displayedInputAmount,
-      userEvmAccountAddress,
-      selectedInputToken,
-      clearQuotes,
+      primaryEvmAddress,
+      inputToken,
+      setQuote(null),
       setOutputAmount,
       ethPrice,
-      erc20Price,
+      inputTokenPrice,
       btcPrice,
       setFeeOverview,
-      cowswapClient,
       setIsAwaitingOptimalQuote,
       fetchRelayQuoteForComparison,
       fetchChainflipQuoteForComparison,
@@ -757,12 +791,7 @@ export const RatesSwapWidget = () => {
 
       const amountValue = parseFloat(amountToQuote);
 
-      let price;
-      if (selectedOutputToken?.ticker === "cbBTC") {
-        price = btcPrice;
-      } else if (erc20Price) {
-        price = erc20Price;
-      }
+      const price = outputTokenPrice;
       if (!btcPrice || !price) {
         return;
       }
@@ -770,7 +799,7 @@ export const RatesSwapWidget = () => {
       const usdValue = amountValue * btcPrice;
 
       if (!isAboveMinSwap(usdValue, btcPrice)) {
-        clearQuotes();
+        setQuote(null);
         setRiftQuote(null);
         setIsLoadingRiftQuote(false);
         return;
@@ -780,7 +809,7 @@ export const RatesSwapWidget = () => {
         parseFloat(liquidity.maxCbBTCLiquidityInUsd) > 0 &&
         usdValue > parseFloat(liquidity.maxCbBTCLiquidityInUsd)
       ) {
-        clearQuotes();
+        setQuote(null);
         setRiftQuote(null);
         setIsLoadingRiftQuote(false);
         return;
@@ -788,7 +817,7 @@ export const RatesSwapWidget = () => {
 
       try {
         const quoteAmount = parseUnits(amountToQuote, BITCOIN_DECIMALS).toString();
-        const tokenChainId = selectedOutputToken?.chainId ?? 1;
+        const tokenChainId = outputToken?.chain === "bitcoin" ? 1 : (outputToken?.chain ?? 1);
         const rfqQuoteResponse = await callRFQ(quoteAmount, "ExactInput", false, tokenChainId);
 
         if (requestId !== undefined && requestId !== quoteRequestIdRef.current) {
@@ -796,11 +825,8 @@ export const RatesSwapWidget = () => {
         }
 
         if (rfqQuoteResponse) {
-          setQuotes({
-            cowswapQuote: null,
-            rfqQuote: rfqQuoteResponse,
-            quoteType: "indicative",
-          });
+          // Note: Old setQuotes removed - using stub getQuote for now
+          // TODO: Convert to new SwapQuote format when SDK is integrated
 
           const outputAmount = formatCurrencyAmount(rfqQuoteResponse.to);
           const truncatedOutput = (() => {
@@ -822,14 +848,14 @@ export const RatesSwapWidget = () => {
           });
           setIsLoadingRiftQuote(false);
         } else {
-          clearQuotes();
+          setQuote(null);
           setFeeOverview(null);
           setRiftQuote(null);
           setIsLoadingRiftQuote(false);
         }
       } catch (error) {
         console.error("Failed to fetch BTC->ERC20 quote:", error);
-        clearQuotes();
+        setQuote(null);
         setFeeOverview(null);
         setRiftQuote(null);
         setIsLoadingRiftQuote(false);
@@ -838,19 +864,20 @@ export const RatesSwapWidget = () => {
     [
       isSwappingForBTC,
       displayedInputAmount,
-      selectedInputToken,
-      clearQuotes,
+      inputToken,
+      setQuote(null),
       btcPrice,
-      erc20Price,
+      outputTokenPrice,
       setFeeOverview,
       liquidity,
-      selectedOutputToken?.decimals,
-      selectedOutputToken?.chainId,
+      outputToken?.decimals,
+      outputToken?.chain,
     ]
   );
 
   // Event handlers
-  const openAssetSelector = () => {
+  const openAssetSelector = (direction: "input" | "output") => {
+    setAssetSelectorDirection(direction);
     setIsAssetSelectorOpen(true);
   };
 
@@ -859,18 +886,12 @@ export const RatesSwapWidget = () => {
   };
 
   const handleSwapReverse = () => {
-    performSwapReverse(!isSwappingForBTC);
-  };
+    // Swap input and output tokens
+    const previousInput = inputToken;
+    const previousOutput = outputToken;
 
-  const performSwapReverse = (newIsSwappingForBTC: boolean) => {
-    setIsSwappingForBTC(newIsSwappingForBTC);
-
-    if (newIsSwappingForBTC) {
-      setSelectedOutputToken(null);
-    } else {
-      const cbBTC = ETHEREUM_POPULAR_TOKENS.find((token) => token.ticker === "cbBTC");
-      setSelectedOutputToken(cbBTC || null);
-    }
+    setInputToken(previousOutput);
+    setOutputToken(previousInput);
 
     setDisplayedInputAmount("");
     setOutputAmount("");
@@ -899,11 +920,11 @@ export const RatesSwapWidget = () => {
       setDisplayedInputAmount(value);
       getQuoteForInputRef.current = true;
 
-      const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
-      const usdValue = calculateUsdValue(value, inputTicker, ethPrice, btcPrice, erc20Price);
+      const inputTicker = isSwappingForBTC ? inputToken.ticker : "BTC";
+      const usdValue = calculateUsdValue(value, inputTicker, ethPrice, btcPrice, inputTokenPrice);
       setInputUsdValue(usdValue);
 
-      clearQuotes();
+      setQuote(null);
       setRiftQuote(null);
       setRelayQuote(null);
       setRelayError(null);
@@ -992,59 +1013,52 @@ export const RatesSwapWidget = () => {
 
     const savedState = loadSwapStateFromCookie();
     if (savedState) {
-      setIsSwappingForBTC(savedState.isSwappingForBTC);
-      if (savedState.selectedInputToken) {
-        setSelectedInputToken(savedState.selectedInputToken);
+      if (savedState.inputToken) {
+        setInputToken(savedState.inputToken);
       }
-      if (savedState.selectedOutputToken) {
-        setSelectedOutputToken(savedState.selectedOutputToken);
+      if (savedState.outputToken) {
+        setOutputToken(savedState.outputToken);
       }
       hasLoadedFromCookieRef.current = true;
     }
     isInitialMountRef.current = false;
-  }, [setIsSwappingForBTC, setSelectedInputToken, setSelectedOutputToken]);
+  }, [setInputToken, setOutputToken]);
 
   useEffect(() => {
     if (!isInitialMountRef.current && !hasLoadedFromCookieRef.current) {
       const ETH_TOKEN = ETHEREUM_POPULAR_TOKENS[0];
-      setSelectedInputToken(ETH_TOKEN);
+      setInputToken(ETH_TOKEN);
     }
-  }, [selectedInputToken, setSelectedInputToken]);
+  }, [inputToken, setInputToken]);
+
+  // Note: Output token is now set directly via setOutputToken, not derived from isSwappingForBTC
+
+  // Fetch token prices when selected tokens change
+  useEffect(() => {
+    fetchTokenPriceForDirection(inputToken, "input");
+  }, [inputToken, fetchTokenPriceForDirection]);
 
   useEffect(() => {
-    if (isInitialMountRef.current) return;
-
-    if (isSwappingForBTC) {
-      setSelectedOutputToken(null);
-    } else {
-      const popularTokens =
-        evmConnectWalletChainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS;
-      const cbBTC = popularTokens.find((token) => token.ticker === "cbBTC");
-      setSelectedOutputToken(cbBTC || null);
-    }
-  }, [isSwappingForBTC, setSelectedOutputToken, evmConnectWalletChainId]);
+    fetchTokenPriceForDirection(outputToken, "output");
+  }, [outputToken, fetchTokenPriceForDirection]);
 
   useEffect(() => {
-    fetchErc20TokenPrice(selectedInputToken);
-  }, [selectedInputToken, fetchErc20TokenPrice]);
-
-  useEffect(() => {
-    const inputTicker = isSwappingForBTC ? selectedInputToken.ticker : "BTC";
+    const inputTicker = isSwappingForBTC ? inputToken.ticker : "BTC";
     const inputUsd = calculateUsdValue(
       displayedInputAmount,
       inputTicker,
       ethPrice,
       btcPrice,
-      erc20Price
+      inputTokenPrice
     );
     setInputUsdValue(inputUsd);
   }, [
-    erc20Price,
+    inputTokenPrice,
     btcPrice,
     ethPrice,
     displayedInputAmount,
     isSwappingForBTC,
-    selectedInputToken,
+    inputToken,
     setInputUsdValue,
   ]);
 
@@ -1052,11 +1066,10 @@ export const RatesSwapWidget = () => {
     if (isInitialMountRef.current) return;
 
     saveSwapStateToCookie({
-      isSwappingForBTC,
-      selectedInputToken,
-      selectedOutputToken,
+      inputToken,
+      outputToken,
     });
-  }, [isSwappingForBTC, selectedInputToken, selectedOutputToken]);
+  }, [inputToken, outputToken]);
 
   // Render
   return (
@@ -1089,7 +1102,7 @@ export const RatesSwapWidget = () => {
             borderColor={inputStyle?.bg_color || "#255283"}
             borderRadius="16px"
           >
-            <Flex direction="column" py="12px" px="8px" flex="1">
+            <Flex direction="column" py="12px" px="8px" flex="1" minW="0" overflow="hidden">
               <Text
                 color={!displayedInputAmount ? colors.offWhite : colors.textGray}
                 fontSize="14px"
@@ -1137,11 +1150,25 @@ export const RatesSwapWidget = () => {
               </Text>
             </Flex>
 
-            <Flex py="12px" direction="column" align="flex-end" justify="center">
+            <Flex py="12px" direction="column" align="flex-end" justify="center" gap="8px" flexShrink={0}>
+              {/* Address Selector - above token selector */}
+              <AddressSelector
+                chainType={isSwappingForBTC ? "EVM" : "BTC"}
+                selectedAddress={resolvedInputAddress}
+                onSelect={(address) => {
+                  if (!address) return;
+                  if (isSwappingForBTC) {
+                    setPrimaryEvmAddress(address);
+                  } else {
+                    setBtcAddress(address);
+                  }
+                }}
+                showPasteOption={false}
+              />
               <WebAssetTag
-                cursor={inputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                cursor="pointer"
                 asset={inputAssetIdentifier}
-                onDropDown={inputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                onDropDown={() => openAssetSelector("input")}
               />
             </Flex>
           </Flex>
@@ -1208,11 +1235,67 @@ export const RatesSwapWidget = () => {
             >
               You Receive
             </Text>
+
+            {/* Address Selector for output - different behavior based on direction */}
+            <Flex mt="6px">
+              {isSwappingForBTC ? (
+                // EVM → BTC: Show BTC address selector with paste option
+                <AddressSelector
+                  chainType="BTC"
+                  selectedAddress={resolvedOutputAddress}
+                  onSelect={(address) => {
+                    if (!address) return;
+                    if (!validatePayoutAddress(address, true).isValid) return;
+                    setPastedBTCAddress(null);
+                    setBtcAddress(address);
+                  }}
+                  onPasteAddress={() => {
+                    setPasteModalType("BTC");
+                    setIsPasteModalOpen(true);
+                  }}
+                  showPasteOption={true}
+                />
+              ) : (
+                // BTC → EVM: Show paste-only button for EVM address
+                <Flex
+                  align="center"
+                  gap="6px"
+                  px="10px"
+                  py="6px"
+                  bg="#1f1f1f"
+                  borderRadius="10px"
+                  cursor="pointer"
+                  border="1px solid #333"
+                  transition="all 0.15s ease"
+                  _hover={{ bg: "#282828", borderColor: "#444" }}
+                  onClick={() => {
+                    setPasteModalType("EVM");
+                    setIsPasteModalOpen(true);
+                  }}
+                >
+                  {resolvedOutputAddress ? (
+                    <Text color="#788CFF" fontSize="13px" fontWeight="500" fontFamily="Inter">
+                      {`${resolvedOutputAddress.slice(0, 6)}...${resolvedOutputAddress.slice(-4)}`}
+                    </Text>
+                  ) : (
+                    <Text
+                      color={colors.textGray}
+                      fontSize="13px"
+                      fontWeight="500"
+                      fontFamily="Inter"
+                    >
+                      Paste EVM address
+                    </Text>
+                  )}
+                </Flex>
+              )}
+            </Flex>
+
             <Flex mt="6px">
               <WebAssetTag
-                cursor={outputAssetIdentifier !== "BTC" ? "pointer" : "default"}
+                cursor="pointer"
                 asset={outputAssetIdentifier}
-                onDropDown={outputAssetIdentifier !== "BTC" ? openAssetSelector : undefined}
+                onDropDown={() => openAssetSelector("output")}
                 isOutput={true}
               />
             </Flex>
@@ -1229,6 +1312,23 @@ export const RatesSwapWidget = () => {
             </Text>
           </Flex>
         </Flex>
+
+        {/* Paste Address Modal */}
+        <PasteAddressModal
+          isOpen={isPasteModalOpen}
+          onClose={() => setIsPasteModalOpen(false)}
+          addressType={pasteModalType}
+          onConfirm={(address) => {
+            if (pasteModalType === "BTC") {
+              if (!validatePayoutAddress(address, true).isValid) return;
+              setPastedBTCAddress(address);
+              return;
+            }
+
+            if (!validatePayoutAddress(address, false).isValid) return;
+            setOutputEvmAddress(address);
+          }}
+        />
 
         {/* Exchange Quotes List - Always visible */}
         <Flex direction="column" mt="20px" gap="10px">
@@ -1888,6 +1988,7 @@ export const RatesSwapWidget = () => {
         isOpen={isAssetSelectorOpen}
         onClose={closeAssetSelector}
         currentAsset={inputAssetIdentifier}
+        direction={assetSelectorDirection}
       />
     </Flex>
   );

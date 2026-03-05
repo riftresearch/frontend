@@ -29,22 +29,22 @@ const getSteps = (swapType: SwapType) => {
   if (swapType === "bitcoin-deposit") {
     return [
       {
-        id: "1-WaitingUserDepositInitiated",
+        id: "waiting_for_deposit",
         label: "AWAITING DEPOSIT",
         description: "Waiting for your Bitcoin deposit...",
       },
       {
-        id: "2-WaitingUserDepositConfirmed",
+        id: "deposit_confirming",
         label: "CONFIRMING DEPOSIT",
         description: "Waiting for 2 block confirmations...",
       },
       {
-        id: "3-WaitingMMDepositInitiated",
+        id: "initiating_payout",
         label: "FILLING ORDER",
         description: "Market makers are filling your order...",
       },
       {
-        id: "4-WaitingMMDepositConfirmed",
+        id: "confirming_payout",
         label: "SWAP COMPLETE",
         description: "Assets are headed your way!",
       },
@@ -52,22 +52,22 @@ const getSteps = (swapType: SwapType) => {
   } else {
     return [
       {
-        id: "1-WaitingUserDepositInitiated",
+        id: "waiting_for_deposit",
         label: "AWAITING DEPOSIT",
         description: "Waiting for your ERC-20 deposit...",
       },
       {
-        id: "2-WaitingUserDepositConfirmed",
+        id: "deposit_confirming",
         label: "CONFIRMING DEPOSIT",
         description: "Waiting for block confirmations...",
       },
       {
-        id: "3-WaitingMMDepositInitiated",
+        id: "initiating_payout",
         label: "FILLING ORDER",
         description: "Market makers are filling your order...",
       },
       {
-        id: "4-WaitingMMDepositConfirmed",
+        id: "confirming_payout",
         label: "SWAP COMPLETE",
         description: "Bitcoin is headed your way!",
       },
@@ -104,12 +104,12 @@ export function StepCarousel({
 
   const steps = getSteps(swapType);
 
-  // Check if we're in the settled state (step 4 or 5)
+  // Check if we're in the settled state
   const isSettled =
-    depositFlowState === "4-WaitingMMDepositConfirmed" || depositFlowState === "5-Settled";
+    depositFlowState === "confirming_payout" || depositFlowState === "swap_complete";
 
   // Find current step index
-  const isSettledStatus = depositFlowState === "5-Settled";
+  const isSettledStatus = depositFlowState === "swap_complete";
   const currentStepIndex = isSettledStatus
     ? 3
     : steps.findIndex((step) => step.id === depositFlowState);
@@ -192,7 +192,7 @@ export function StepCarousel({
   if (currentStepIndex === -1) return null;
 
   const handleViewTransaction = () => {
-    const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
+    const txnId = swapStatusInfo?.payoutTransaction;
     const chain = swapStatusInfo?.quote?.to.currency.chain;
 
     if (txnId) {
@@ -209,7 +209,7 @@ export function StepCarousel({
   };
 
   const handleCopyTxn = async () => {
-    const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
+    const txnId = swapStatusInfo?.payoutTransaction;
     if (txnId) {
       try {
         await navigator.clipboard.writeText(txnId);
@@ -228,7 +228,7 @@ export function StepCarousel({
   };
 
   const getShortTxnId = () => {
-    const txnId = swapStatusInfo?.mm_deposit_status?.tx_hash;
+    const txnId = swapStatusInfo?.payoutTransaction;
     if (!txnId) return "";
     return isMobile
       ? `${txnId.slice(0, 6)}...${txnId.slice(-6)}`
@@ -269,7 +269,7 @@ export function StepCarousel({
           let stepDescription = step.description;
 
           // Step 2: Confirmation tracking based on swap type
-          if (step.id === "2-WaitingUserDepositConfirmed" && isCurrent) {
+          if (step.id === "deposit_confirming" && isCurrent) {
             if (swapType === "bitcoin-deposit") {
               const requiredConfs = 2; // BTC->EVM needs 2 confirmations
               const currentConfs = Math.min(btcConfirmations, requiredConfs);
@@ -291,7 +291,7 @@ export function StepCarousel({
           }
 
           // Step 3: Filling order warning
-          if (step.id === "3-WaitingMMDepositInitiated" && showFillingOrderWarning) {
+          if (step.id === "initiating_payout" && showFillingOrderWarning) {
             stepDescription =
               "Market makers are taking longer than usual to fill your order... you order will be refunded if not filled.";
           }
@@ -299,7 +299,7 @@ export function StepCarousel({
           // Step 4: MM deposit confirmation (for BTC deposits from MM)
           // Only show confirmation count if NOT settled yet
           if (
-            step.id === "4-WaitingMMDepositConfirmed" &&
+            step.id === "confirming_payout" &&
             isCurrent &&
             mmDepositChain === "bitcoin" &&
             !isSettled
@@ -428,7 +428,7 @@ export function StepCarousel({
                   >
                     {stepDescription}
                   </Text>
-                  {step.id === "4-WaitingMMDepositConfirmed" && isSettled && (
+                  {step.id === "confirming_payout" && isSettled && (
                     <Text
                       color="rgba(255,255,255,0.5)"
                       fontSize="12px"

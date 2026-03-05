@@ -3,14 +3,17 @@ import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
 import { BASE_LOGO } from "./SVGs";
 import { NetworkBadge } from "./NetworkBadge";
-import { useState, useEffect, useRef } from "react";
-import { useAccount, useSwitchChain } from "wagmi";
+import { TokenDisplay } from "./TokenDisplay";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useSwitchNetwork, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { useStore } from "@/utils/store";
-import { mainnet, base } from "@reown/appkit/networks";
 import { TokenData, Network } from "@/utils/types";
 import { searchTokens } from "@/utils/tokenSearch";
 import { preloadImages } from "@/utils/imagePreload";
 import useWindowSize from "@/hooks/useWindowSize";
+import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
+import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
+import { getAllBtcAddresses } from "@/hooks/useBitcoinTransaction";
 import {
   FALLBACK_TOKEN_ICON,
   BASE_POPULAR_TOKENS,
@@ -19,20 +22,25 @@ import {
   ZERO_USD_DISPLAY,
   ETH_TOKEN,
   ETH_TOKEN_BASE,
+  BTC_TOKEN,
+  BTC_ICON,
+  USDC_TOKEN,
+  USDC_TOKEN_BASE,
 } from "@/utils/constants";
 
 interface AssetSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentAsset: string;
+  direction: "input" | "output";
 }
 
 export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   isOpen,
   onClose,
   currentAsset,
+  direction,
 }) => {
-  const { evmConnectWalletChainId } = useStore();
   const { isMobile } = useWindowSize();
 
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(Network.ALL);
@@ -42,27 +50,103 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
   const [popularTokens, setPopularTokens] = useState<TokenData[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Wagmi hooks for chain switching
-  const { isConnected, address } = useAccount();
-  const { switchChain } = useSwitchChain();
+  // Get EVM wallet state from global store (set via Dynamic's onAuthSuccess callback)
+  const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
+  const isEvmConnected = !!primaryEvmAddress;
+
+  // Dynamic hooks for wallet detection
+  const switchNetwork = useSwitchNetwork();
+  const userWallets = useUserWallets();
 
   // Zustand store
   const {
     searchResults,
     setSearchResults,
-    setEvmConnectWalletChainId,
-    selectedInputToken,
-    setSelectedInputToken,
-    selectedOutputToken,
-    setSelectedOutputToken,
-    isSwappingForBTC,
+    inputToken,
+    setInputToken,
+    outputToken,
+    setOutputToken,
     setDisplayedInputAmount,
     setOutputAmount,
-    userTokensByChain,
-    setErc20Price,
+    userTokensByWallet,
+    setInputTokenPrice,
+    setOutputTokenPrice,
     setInputUsdValue,
     setSwitchingToInputTokenChain,
+    setFeeOverview,
+    btcPrice,
+    btcAddress,
   } = useStore();
+
+  const primaryEvmWallet = useMemo(
+    () =>
+      userWallets.find(
+        (wallet) =>
+          wallet.chain?.toUpperCase() === "EVM" &&
+          !!primaryEvmAddress &&
+          wallet.address.toLowerCase() === primaryEvmAddress.toLowerCase()
+      ) || null,
+    [userWallets, primaryEvmAddress]
+  );
+
+  // Get connected BTC wallets for fallback
+  const connectedBtcWallets = useMemo(
+    () => userWallets.filter((w) => {
+      const chain = w.chain?.toLowerCase();
+      return chain === "btc" || chain === "bitcoin";
+    }),
+    [userWallets]
+  );
+
+  // Use only the primary BTC wallet address (from store), with fallback to first connected BTC wallet
+  const btcWalletAddresses = useMemo(() => {
+    if (btcAddress) return [btcAddress];
+    
+    // Fallback: use the first address from the first connected BTC wallet
+    if (connectedBtcWallets.length > 0) {
+      const firstWallet = connectedBtcWallets[0];
+      if (isBitcoinWallet(firstWallet)) {
+        const addresses = getAllBtcAddresses(firstWallet);
+        if (addresses.length > 0) return [addresses[0]];
+      }
+      if (firstWallet.address) return [firstWallet.address];
+    }
+    
+    return [];
+  }, [btcAddress, connectedBtcWallets]);
+
+  // Fetch BTC balances for all connected BTC wallets
+  const btcBalances = useBitcoinBalances(btcWalletAddresses);
+
+  // Create a stable string for dependency comparison (prevents infinite loops)
+  const btcBalancesKey = useMemo(
+    () =>
+      btcWalletAddresses.map((addr) => `${addr}:${btcBalances[addr]?.balanceBtc ?? 0}`).join(","),
+    [btcWalletAddresses, btcBalances]
+  );
+
+  // Use only the primary EVM wallet address (not all connected EVM wallets)
+  const evmWalletAddresses = useMemo(
+    () => (primaryEvmAddress ? [primaryEvmAddress.toLowerCase()] : []),
+    [primaryEvmAddress]
+  );
+
+  // Get tokens from the PRIMARY EVM wallet only (not all connected wallets)
+  // This ensures the asset selector only shows assets from the selected input wallet
+  const aggregatedTokensByChain = useMemo(() => {
+    if (!primaryEvmAddress) return {};
+    
+    const walletTokens = userTokensByWallet[primaryEvmAddress.toLowerCase()];
+    if (!walletTokens) return {};
+    
+    // Convert to the expected format (Record<number, TokenData[]>)
+    const tokensByChain: Record<number, TokenData[]> = {};
+    for (const [chainIdStr, tokens] of Object.entries(walletTokens)) {
+      tokensByChain[Number(chainIdStr)] = tokens;
+    }
+    
+    return tokensByChain;
+  }, [primaryEvmAddress, userTokensByWallet]);
 
   // Auto-focus search input when modal opens
   useEffect(() => {
@@ -84,26 +168,41 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
 
   // Auto-switch chain when wallet connects or address changes
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isEvmConnected || !primaryEvmWallet) return;
 
-    const targetChainId = isSwappingForBTC
-      ? selectedInputToken?.chainId
-      : selectedOutputToken?.chainId;
+    // Determine target chain from input token if it's an EVM token
+    const targetChain = inputToken?.chain;
+    if (targetChain === "bitcoin" || !targetChain) return;
 
-    if (!targetChainId) return;
-
+    let isCancelled = false;
     const switchToChain = async () => {
+      setSwitchingToInputTokenChain(true);
       try {
-        const chainId = targetChainId === 1 ? mainnet.id : base.id;
-        await switchChain({ chainId });
-        setEvmConnectWalletChainId(chainId);
+        const currentNetwork = await primaryEvmWallet.getNetwork();
+        if (Number(currentNetwork) !== targetChain) {
+          await switchNetwork({ wallet: primaryEvmWallet, network: targetChain });
+        }
       } catch (error) {
         console.error("Failed to auto-switch chain:", error);
+      } finally {
+        if (!isCancelled) {
+          setSwitchingToInputTokenChain(false);
+        }
       }
     };
 
-    switchToChain();
-  }, [isConnected, address]);
+    void switchToChain();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    isEvmConnected,
+    primaryEvmWallet,
+    inputToken?.chain,
+    setSwitchingToInputTokenChain,
+    switchNetwork,
+  ]);
 
   // Debounce search input
   useEffect(() => {
@@ -136,51 +235,6 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     if (!isOpen) return;
     setIsLoading(true);
     try {
-      // When swapping FROM BTC (not for BTC), only show cbBTC options
-      if (!isSwappingForBTC) {
-        // Get cbBTC from both chains with user balances if available
-        const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
-        const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
-        const allUserTokens = [...ethTokens, ...baseTokens];
-
-        // Filter to only cbBTC tokens from user's wallet
-        let cbBTCTokens = filterToCbBTCOnly(allUserTokens);
-
-        // If user doesn't have cbBTC in wallet, show from popular tokens
-        if (cbBTCTokens.length === 0) {
-          cbBTCTokens = filterToCbBTCOnly(ALL_POPULAR_TOKENS);
-        } else {
-          // Merge with popular tokens to ensure both chains are shown
-          const userCbBTCChains = new Set(cbBTCTokens.map((t) => t.chainId));
-          const missingChainCbBTC = filterToCbBTCOnly(ALL_POPULAR_TOKENS).filter(
-            (t) => !userCbBTCChains.has(t.chainId)
-          );
-          cbBTCTokens = [...cbBTCTokens, ...missingChainCbBTC];
-        }
-
-        // Deduplicate by chainId + address (user tokens come first, so they're preserved)
-        const seen = new Set<string>();
-        cbBTCTokens = cbBTCTokens.filter((t) => {
-          const key = `${t.chainId}-${t.address.toLowerCase()}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        // Sort by USD value (descending) so chain with balance appears first
-        cbBTCTokens.sort((a, b) => {
-          const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
-          const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
-          return bValue - aValue;
-        });
-
-        preloadImages(cbBTCTokens.map((t) => t.icon).filter(Boolean));
-        setSearchResults(cbBTCTokens);
-        setPopularTokens([]);
-        setIsLoading(false);
-        return;
-      }
-
       // If there's an active query, use the search index top-10
       if (debouncedQuery.length > 0) {
         // Search tokens using the Network enum directly
@@ -189,13 +243,13 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         // Get user's wallet tokens
         let userTokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          // Combine tokens from both chains
-          const ethTokens = userTokensByChain[1] || [];
-          const baseTokens = userTokensByChain[8453] || [];
+          // Combine tokens from both chains (aggregated from all wallets)
+          const ethTokens = aggregatedTokensByChain[1] || [];
+          const baseTokens = aggregatedTokensByChain[8453] || [];
           userTokens = [...ethTokens, ...baseTokens];
         } else {
           const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
-          userTokens = userTokensByChain[chainId] || [];
+          userTokens = aggregatedTokensByChain[chainId] || [];
         }
 
         // Replace balance and usdValue in search results if token is in user's wallet
@@ -203,10 +257,10 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           // Use canonical ETH token for native ETH (zero address)
           const isNativeEth = t.address === "0x0000000000000000000000000000000000000000";
           if (isNativeEth) {
-            const baseToken = t.chainId === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
+            const baseToken = t.chain === 8453 ? ETH_TOKEN_BASE : ETH_TOKEN;
             // Still merge wallet balance if available
             const walletToken = userTokens.find(
-              (token) => token.address === t.address && token.chainId === t.chainId
+              (token) => token.address === t.address && token.chain === t.chain
             );
             if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
               return { ...baseToken, balance: walletToken.balance, usdValue: walletToken.usdValue };
@@ -215,7 +269,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           }
 
           const walletToken = userTokens.find(
-            (token) => token.address === t.address && token.chainId === t.chainId
+            (token) => token.address === t.address && token.chain === t.chain
           );
           if (walletToken && parseFloat(walletToken.usdValue.replace("$", "")) > 1) {
             // Only populate the balance if its USD value is > 1
@@ -256,7 +310,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   price: number;
                   decimals: number;
                 };
-                const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+                const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
                 const built: TokenData = {
                   name: t.name,
                   ticker: t.ticker,
@@ -265,7 +319,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   usdValue: "$0.00",
                   icon: t.icon || FALLBACK_TOKEN_ICON,
                   decimals: t.decimals,
-                  chainId,
+                  chain,
                 };
                 setSearchResults([built]);
                 setPopularTokens([]);
@@ -283,22 +337,31 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       }
 
       // No query: show wallet tokens if connected and available; otherwise popular tokens
-      if (isConnected && address) {
+      if (isEvmConnected && primaryEvmAddress) {
         let tokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          // Combine tokens from both chains
-          const ethTokens = (userTokensByChain[1] || []).map((t) => ({ ...t, chainId: 1 }));
-          const baseTokens = (userTokensByChain[8453] || []).map((t) => ({ ...t, chainId: 8453 }));
+          // Combine tokens from both chains (aggregated from all wallets)
+          const ethTokens = (aggregatedTokensByChain[1] || []).map((t) => ({ ...t, chain: 1 as const }));
+          const baseTokens = (aggregatedTokensByChain[8453] || []).map((t) => ({
+            ...t,
+            chain: 8453 as const,
+          }));
           tokens = [...ethTokens, ...baseTokens];
+        } else if (selectedNetwork === Network.BITCOIN) {
+          // Bitcoin network: no EVM tokens, BTC will be added separately
+          tokens = [];
         } else {
-          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
-          tokens = (userTokensByChain[chainId] || []).map((t) => ({ ...t, chainId }));
+          const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          tokens = (aggregatedTokensByChain[chain] || []).map((t) => ({
+            ...t,
+            chain: chain as 1 | 8453,
+          }));
         }
 
-        // Deduplicate by chainId + address (user tokens come first, so they're preserved)
+        // Deduplicate by chain + address (user tokens come first, so they're preserved)
         const seenTokens = new Set<string>();
         tokens = tokens.filter((t) => {
-          const key = `${t.chainId}-${t.address.toLowerCase()}`;
+          const key = `${t.chain}-${t.address.toLowerCase()}`;
           if (seenTokens.has(key)) return false;
           seenTokens.add(key);
           return true;
@@ -311,23 +374,64 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
           return bValue - aValue;
         });
 
-        // Get popular tokens for the selected network
+        // Add BTC token with user's balance for Bitcoin and ALL networks
+        if (selectedNetwork === Network.BITCOIN || selectedNetwork === Network.ALL) {
+          // Calculate total BTC balance from all connected BTC wallets
+          let totalBtcBalance = 0;
+          btcWalletAddresses.forEach((addr) => {
+            const balance = btcBalances[addr];
+            if (balance?.balanceBtc > 0) {
+              totalBtcBalance += balance.balanceBtc;
+            }
+          });
+
+          if (totalBtcBalance > 0) {
+            const btcUsdValue = totalBtcBalance * (btcPrice || 0);
+            const btcTokenWithBalance: TokenData = {
+              name: "Bitcoin",
+              ticker: "BTC",
+              address: "Native",
+              balance: totalBtcBalance.toFixed(8),
+              usdValue: `$${btcUsdValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`,
+              icon: BTC_ICON,
+              decimals: 8,
+              chain: "bitcoin",
+            };
+            // Add BTC at the beginning, then re-sort by USD value
+            tokens = [btcTokenWithBalance, ...tokens];
+            tokens.sort((a, b) => {
+              const aValue = parseFloat(a.usdValue.replace("$", "").replace(",", "")) || 0;
+              const bValue = parseFloat(b.usdValue.replace("$", "").replace(",", "")) || 0;
+              return bValue - aValue;
+            });
+          }
+        }
+
+        // Get popular tokens for the selected network (BTC only in ALL and BITCOIN)
         let networkPopularTokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          networkPopularTokens = ALL_POPULAR_TOKENS;
+          networkPopularTokens = [BTC_TOKEN, ...ALL_POPULAR_TOKENS];
+        } else if (selectedNetwork === Network.BITCOIN) {
+          networkPopularTokens = [BTC_TOKEN];
         } else {
-          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           networkPopularTokens = (
-            chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
-          ).map((t) => ({ ...t, chainId }));
+            chain === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
+          ).map((t) => ({
+            ...t,
+            chain: chain as 1 | 8453,
+          }));
         }
 
         // Filter popular tokens to exclude tokens user already has
         const userTokenAddresses = new Set(
-          tokens.map((t) => `${t.chainId}-${t.address.toLowerCase()}`)
+          tokens.map((t) => `${t.chain}-${t.address.toLowerCase()}`)
         );
         const filteredPopularTokens = networkPopularTokens.filter(
-          (t) => !userTokenAddresses.has(`${t.chainId}-${t.address.toLowerCase()}`)
+          (t) => !userTokenAddresses.has(`${t.chain}-${t.address.toLowerCase()}`)
         );
 
         // Set user tokens
@@ -339,12 +443,17 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
       } else {
         let networkPopularTokens: TokenData[] = [];
         if (selectedNetwork === Network.ALL) {
-          networkPopularTokens = ALL_POPULAR_TOKENS;
+          networkPopularTokens = [BTC_TOKEN, ...ALL_POPULAR_TOKENS];
+        } else if (selectedNetwork === Network.BITCOIN) {
+          networkPopularTokens = [BTC_TOKEN];
         } else {
-          const chainId = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
+          const chain = selectedNetwork === Network.ETHEREUM ? 1 : 8453;
           networkPopularTokens = (
-            chainId === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
-          ).map((t) => ({ ...t, chainId }));
+            chain === 8453 ? BASE_POPULAR_TOKENS : ETHEREUM_POPULAR_TOKENS
+          ).map((t) => ({
+            ...t,
+            chain: chain as 1 | 8453,
+          }));
         }
         preloadImages(networkPopularTokens.map((t) => t.icon).filter(Boolean));
         setSearchResults(networkPopularTokens);
@@ -358,12 +467,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     }
   }, [
     isOpen,
-    isConnected,
-    address,
+    isEvmConnected,
+    primaryEvmAddress,
     selectedNetwork,
-    userTokensByChain,
+    aggregatedTokensByChain,
     debouncedQuery,
-    isSwappingForBTC,
+    direction,
+    btcBalancesKey,
+    btcPrice,
   ]);
 
   if (!isOpen) return null;
@@ -385,45 +496,92 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     );
   };
 
-  const handleAssetSelect = async (asset: string, tokenData?: TokenData) => {
-    console.log("handleAssetSelect", asset, tokenData);
-    if (tokenData) {
-      // When swapping FOR BTC, set input token; when swapping FROM BTC, set output token
-      if (isSwappingForBTC) {
-        setSelectedInputToken(tokenData);
-        setErc20Price(null);
-      } else {
-        setSelectedOutputToken(tokenData);
-      }
+  const handleAssetSelect = async (
+    asset: string,
+    tokenData: TokenData | undefined,
+    selectionDirection: "input" | "output"
+  ) => {
+    console.log("handleAssetSelect", asset, tokenData, selectionDirection);
 
-      // Switch network to the selected token's chainId
-      if (tokenData.chainId && isConnected) {
-        const targetNetwork = tokenData.chainId === 1 ? Network.ETHEREUM : Network.BASE;
-        setSelectedNetwork(targetNetwork);
-
-        // Switch wallet chain if needed
-        try {
-          const targetChainId = tokenData.chainId === 1 ? mainnet.id : base.id;
-          // Set flag to indicate chain is being switched from asset selector
-          if (targetChainId !== evmConnectWalletChainId) {
-            setSwitchingToInputTokenChain(true);
-            await switchChain({ chainId: targetChainId });
-            setEvmConnectWalletChainId(targetChainId);
-          } else {
-            setSwitchingToInputTokenChain(false);
-          }
-        } catch (error) {
-          console.error("Failed to switch chain:", error);
-        }
-      }
+    if (!tokenData) {
+      onClose();
+      return;
     }
-    if (isSwappingForBTC) {
-      setDisplayedInputAmount("");
-      setOutputAmount("");
-      setInputUsdValue(ZERO_USD_DISPLAY);
+
+    // Set the token based on selectionDirection
+    if (selectionDirection === "input") {
+      setInputToken(tokenData);
+      setInputTokenPrice(null);
     } else {
-      // recalculate output based on input btc
+      setOutputToken(tokenData);
+      setOutputTokenPrice(null);
     }
+
+    // --- Constraint: resolve opposite token for duplicate-ticker & chain-consistency ---
+    const oppositeToken = selectionDirection === "input" ? outputToken : inputToken;
+    const setOppositeToken = selectionDirection === "input" ? setOutputToken : setInputToken;
+    const setOppositeTokenPrice =
+      selectionDirection === "input" ? setOutputTokenPrice : setInputTokenPrice;
+    let resolvedOpposite = oppositeToken;
+
+    // No duplicate tickers: if same ticker, switch opposite to BTC (or ETH if ticker is BTC)
+    if (tokenData.ticker === resolvedOpposite.ticker) {
+      if (tokenData.ticker !== "BTC") {
+        resolvedOpposite = BTC_TOKEN;
+      } else {
+        resolvedOpposite = ETH_TOKEN;
+      }
+    }
+
+    // EVM chain consistency: if both are EVM and on different chains, fix the opposite
+    if (
+      tokenData.chain !== "bitcoin" &&
+      resolvedOpposite.chain !== "bitcoin" &&
+      tokenData.chain !== resolvedOpposite.chain
+    ) {
+      const targetChain = tokenData.chain;
+      if (tokenData.ticker === "ETH") {
+        resolvedOpposite = targetChain === 1 ? USDC_TOKEN : USDC_TOKEN_BASE;
+      } else {
+        resolvedOpposite = targetChain === 1 ? ETH_TOKEN : ETH_TOKEN_BASE;
+      }
+    }
+
+    // Apply opposite token change if it was modified
+    if (resolvedOpposite !== oppositeToken) {
+      setOppositeToken(resolvedOpposite);
+      setOppositeTokenPrice(null);
+    }
+
+    // Clear fee overview since the quote is no longer valid for the new asset
+    setFeeOverview(null);
+
+    // Switch network for the primary EVM wallet based on the resulting input token chain.
+    // For EVM<>EVM swaps this ensures the input wallet chain is the active one.
+    const resultingInputToken = selectionDirection === "input" ? tokenData : resolvedOpposite;
+    if (resultingInputToken.chain !== "bitcoin" && isEvmConnected && primaryEvmWallet) {
+      const targetNetwork = resultingInputToken.chain === 1 ? Network.ETHEREUM : Network.BASE;
+      setSelectedNetwork(targetNetwork);
+
+      try {
+        const targetChainId = resultingInputToken.chain;
+        const currentChainId = Number(await primaryEvmWallet.getNetwork());
+        if (targetChainId !== currentChainId) {
+          setSwitchingToInputTokenChain(true);
+          await switchNetwork({ wallet: primaryEvmWallet, network: targetChainId });
+        }
+      } catch (error) {
+        console.error("Failed to switch chain:", error);
+      } finally {
+        setSwitchingToInputTokenChain(false);
+      }
+    }
+
+    // Reset amounts when changing tokens
+    setDisplayedInputAmount("");
+    setOutputAmount("");
+    setInputUsdValue(ZERO_USD_DISPLAY);
+
     onClose();
   };
 
@@ -437,18 +595,11 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
     setSelectedNetwork(network);
 
     // If "all" is selected or wallet not connected, just update the filter
-    if (network === Network.ALL || !isConnected) {
+    if (network === Network.ALL || !isEvmConnected) {
       return;
     }
 
-    // Switch wallet to the selected network
-    // try {
-    //   const targetChainId = network === Network.ETHEREUM ? mainnet.id : base.id;
-    //   await switchChain({ chainId: targetChainId });
-    //   setEvmConnectWalletChainId(targetChainId);
-    // } catch (error) {
-    //   console.error("Failed to switch chain:", error);
-    // }
+    // Chain switching is handled by token selection and primary-wallet synchronization.
   };
 
   return (
@@ -466,9 +617,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
         justifyContent="center"
         onClick={onClose}
       >
-        <Flex gap="20px" align="stretch">
-          {/* Chain Selector Panel - only show when swapping FOR BTC */}
-          {isSwappingForBTC && !isMobile && (
+        <Flex gap="18px" align="stretch">
+          {/* Chain Selector Panel - show for all token selections */}
+          {!isMobile && (
             <Box
               bg="#131313"
               borderRadius="30px"
@@ -481,9 +632,9 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
               {/* Chain Selector Header */}
               <Box mx="20px" mb="16px">
                 <Text
-                  fontSize="14px"
+                  fontSize="16px"
                   fontFamily={FONT_FAMILIES.NOSTROMO}
-                  color={colors.textGray}
+                  color={colors.offWhite}
                   fontWeight="bold"
                   textTransform="uppercase"
                   letterSpacing="0.5px"
@@ -551,7 +702,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     >
                       <BASE_LOGO width="10" height="10" />
                     </Box>
-                    {/* Bottom-left: Placeholder A */}
+                    {/* Bottom-left: Bitcoin */}
                     <Box
                       position="absolute"
                       bottom="0"
@@ -559,16 +710,15 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                       w="16px"
                       h="16px"
                       borderRadius="50%"
-                      bg="#2a2a2a"
+                      bg="#F7931A"
                       border="1.5px solid #131313"
                       display="flex"
                       alignItems="center"
                       justifyContent="center"
+                      overflow="hidden"
                       zIndex={2}
                     >
-                      <Text fontSize="8px" color={colors.textGray} fontWeight="bold">
-                        A
-                      </Text>
+                      <Image src={BTC_ICON} w="16px" h="16px" alt="Bitcoin" objectFit="cover" />
                     </Box>
                     {/* Bottom-right: Placeholder S */}
                     <Box
@@ -597,6 +747,42 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     fontWeight="bold"
                   >
                     All Networks
+                  </Text>
+                </Flex>
+
+                {/* Bitcoin */}
+                <Flex
+                  align="center"
+                  gap="12px"
+                  px="12px"
+                  py="12px"
+                  cursor="pointer"
+                  borderRadius="12px"
+                  bg={selectedNetwork === Network.BITCOIN ? "#1f1f1f" : "transparent"}
+                  _hover={{ bg: "#1f1f1f" }}
+                  onClick={() => handleNetworkSelect(Network.BITCOIN)}
+                  transition="background 0.15s ease"
+                >
+                  <Box
+                    w="24px"
+                    h="24px"
+                    borderRadius="50%"
+                    bg="#F7931A"
+                    border="2px solid #131313"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    overflow="hidden"
+                  >
+                    <Image src={BTC_ICON} w="24px" h="24px" alt="Bitcoin" objectFit="cover" />
+                  </Box>
+                  <Text
+                    fontSize="14px"
+                    fontFamily={FONT_FAMILIES.NOSTROMO}
+                    color={colors.offWhite}
+                    fontWeight="bold"
+                  >
+                    Bitcoin
                   </Text>
                 </Flex>
 
@@ -695,13 +881,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
             overflow="hidden"
           >
             {/* Sticky Header Section */}
-            <Box
-              bg="#131313"
-              pt="24px"
-              pb={isSwappingForBTC ? "0" : "12px"}
-              flexShrink={0}
-              borderTopRadius="28px"
-            >
+            <Box bg="#131313" pt="24px" pb="0" flexShrink={0} borderTopRadius="28px">
               {/* Header */}
               <Flex justify="space-between" align="center" mb="12px" mt="-2px" mx="24px">
                 <Text
@@ -710,7 +890,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                   color={colors.offWhite}
                   fontWeight="bold"
                 >
-                  {isSwappingForBTC ? "Select token to send" : "Select token to receive"}
+                  {direction === "input" ? "Select token to send" : "Select token to receive"}
                 </Text>
                 <Box
                   cursor="pointer"
@@ -724,8 +904,8 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 </Box>
               </Flex>
 
-              {/* Search Bar - only show when swapping FOR BTC */}
-              {isSwappingForBTC && (
+              {/* Search Bar - show for all token selections */}
+              {
                 <Box position="relative" mb="18px" mx="24px">
                   {/* Search Icon */}
                   <Box
@@ -762,7 +942,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                     bg="#212121"
                     borderRadius="30px"
                     pl="48px"
-                    pr="20px"
+                    pr="44px"
                     py="12px"
                     letterSpacing="-0.9px"
                     border="none"
@@ -782,11 +962,51 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                       outline: "none",
                     }}
                   />
+
+                  {/* Clear Search Button */}
+                  {searchQuery && (
+                    <Box
+                      position="absolute"
+                      right="14px"
+                      top="50%"
+                      transform="translateY(-50%)"
+                      zIndex={1}
+                      cursor="pointer"
+                      onClick={() => {
+                        setSearchQuery("");
+                        searchInputRef.current?.focus();
+                      }}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      borderRadius="50%"
+                      w="22px"
+                      h="22px"
+                      bg="rgba(255,255,255,0.1)"
+                      _hover={{ bg: "rgba(255,255,255,0.2)" }}
+                      transition="background 0.15s"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M1 1L11 11M11 1L1 11"
+                          stroke={colors.textGray}
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </Box>
+                  )}
                 </Box>
-              )}
+              }
 
               {/* Mobile Network Selector - horizontal scrollable list */}
-              {isSwappingForBTC && isMobile && (
+              {isMobile && (
                 <Flex
                   mx="24px"
                   mb="16px"
@@ -1052,7 +1272,7 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                 ) : (
                   <>
                     {/* Your Tokens Section - only show if wallet connected and has tokens */}
-                    {isConnected && searchResults.length > 0 && (
+                    {isEvmConnected && searchResults.length > 0 && (
                       <>
                         <Box mx="24px" mb="8px" mt="4px">
                           <Text
@@ -1067,129 +1287,20 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           </Text>
                         </Box>
                         {searchResults.map((token, index) => (
-                          <Box
+                          <TokenDisplay
                             key={`user-${token.address || token.ticker}-${index}`}
-                            mx="12px"
-                            cursor="pointer"
-                            onClick={() => handleAssetSelect(token.ticker, token)}
-                          >
-                            <Flex
-                              align="center"
-                              py="12px"
-                              px="12px"
-                              letterSpacing="-0.6px"
-                              borderRadius="12px"
-                              bg="#131313"
-                              transition="background 0.15s ease"
-                              _hover={{ bg: "#1f1f1f" }}
-                            >
-                              {/* Token Icon with Network Badge */}
-                              <Box position="relative" mr="12px">
-                                <Flex
-                                  w="40px"
-                                  h="40px"
-                                  borderRadius="50%"
-                                  bg="#404040"
-                                  align="center"
-                                  justify="center"
-                                  overflow="hidden"
-                                >
-                                  <Image
-                                    src={token.icon}
-                                    w="100%"
-                                    h="100%"
-                                    alt={`${token.ticker} icon`}
-                                    objectFit="cover"
-                                  />
-                                  <Text
-                                    fontSize="12px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.offWhite}
-                                    display="none"
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                </Flex>
-
-                                {/* Network Badge */}
-                                {token.chainId && (
-                                  <Box
-                                    position="absolute"
-                                    bottom="-2px"
-                                    right="-2px"
-                                    w="20px"
-                                    h="20px"
-                                    borderRadius="50%"
-                                    bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                    border="2px solid #131313"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    overflow="hidden"
-                                  >
-                                    <NetworkBadge chainId={token.chainId} />
-                                  </Box>
-                                )}
-                              </Box>
-
-                              {/* Token Info */}
-                              <Flex direction="column" flex="1">
-                                <Text
-                                  fontSize="16px"
-                                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                                  color={colors.offWhite}
-                                  fontWeight="bold"
-                                >
-                                  {token.name}
-                                </Text>
-                                <Flex align="center" gap="8px">
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                  {!isMobile && token.address && (
-                                    <Text
-                                      fontSize="14px"
-                                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                                      color={colors.darkerGray}
-                                    >
-                                      {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                                    </Text>
-                                  )}
-                                </Flex>
-                              </Flex>
-
-                              {/* Balance Info - show for wallet tokens with balance > 0 */}
-                              {isConnected && token.balance !== "0" && (
-                                <Flex direction="column" align="flex-end">
-                                  <Text
-                                    fontSize="16px"
-                                    fontFamily={FONT_FAMILIES.NOSTROMO}
-                                    color={colors.offWhite}
-                                    fontWeight="bold"
-                                  >
-                                    {formatUsdValue(token.usdValue)}
-                                  </Text>
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.balance.slice(0, 9)}
-                                  </Text>
-                                </Flex>
-                              )}
-                            </Flex>
-                          </Box>
+                            token={token}
+                            onClick={() => handleAssetSelect(token.ticker, token, direction)}
+                            showBalance={true}
+                            isMobile={isMobile}
+                            formatUsdValue={formatUsdValue}
+                          />
                         ))}
                       </>
                     )}
 
                     {/* Popular Section - show if wallet connected and there are popular tokens to display */}
-                    {isConnected && popularTokens.length > 0 && (
+                    {isEvmConnected && popularTokens.length > 0 && (
                       <>
                         <Box mx="24px" mb="8px" mt={searchResults.length > 0 ? "16px" : "4px"}>
                           <Text
@@ -1204,108 +1315,20 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           </Text>
                         </Box>
                         {popularTokens.map((token, index) => (
-                          <Box
+                          <TokenDisplay
                             key={`popular-${token.address || token.ticker}-${index}`}
-                            mx="12px"
-                            cursor="pointer"
-                            onClick={() => handleAssetSelect(token.ticker, token)}
-                          >
-                            <Flex
-                              align="center"
-                              py="12px"
-                              px="12px"
-                              letterSpacing="-0.6px"
-                              borderRadius="12px"
-                              bg="#131313"
-                              transition="background 0.15s ease"
-                              _hover={{ bg: "#1f1f1f" }}
-                            >
-                              {/* Token Icon with Network Badge */}
-                              <Box position="relative" mr="12px">
-                                <Flex
-                                  w="40px"
-                                  h="40px"
-                                  borderRadius="50%"
-                                  bg="#404040"
-                                  align="center"
-                                  justify="center"
-                                  overflow="hidden"
-                                >
-                                  <Image
-                                    src={token.icon}
-                                    w="100%"
-                                    h="100%"
-                                    alt={`${token.ticker} icon`}
-                                    objectFit="cover"
-                                  />
-                                  <Text
-                                    fontSize="12px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.offWhite}
-                                    display="none"
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                </Flex>
-
-                                {/* Network Badge */}
-                                {token.chainId && (
-                                  <Box
-                                    position="absolute"
-                                    bottom="-2px"
-                                    right="-2px"
-                                    w="20px"
-                                    h="20px"
-                                    borderRadius="50%"
-                                    bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                    border="2px solid #131313"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    overflow="hidden"
-                                  >
-                                    <NetworkBadge chainId={token.chainId} />
-                                  </Box>
-                                )}
-                              </Box>
-
-                              {/* Token Info */}
-                              <Flex direction="column" flex="1">
-                                <Text
-                                  fontSize="16px"
-                                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                                  color={colors.offWhite}
-                                  fontWeight="bold"
-                                >
-                                  {token.name}
-                                </Text>
-                                <Flex align="center" gap="8px">
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                  {!isMobile && token.address && (
-                                    <Text
-                                      fontSize="14px"
-                                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                                      color={colors.darkerGray}
-                                    >
-                                      {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                                    </Text>
-                                  )}
-                                </Flex>
-                              </Flex>
-                            </Flex>
-                          </Box>
+                            token={token}
+                            onClick={() => handleAssetSelect(token.ticker, token, direction)}
+                            showBalance={false}
+                            isMobile={isMobile}
+                            formatUsdValue={formatUsdValue}
+                          />
                         ))}
                       </>
                     )}
 
                     {/* When not connected, show popular tokens with section header */}
-                    {!isConnected && searchResults.length > 0 && (
+                    {!isEvmConnected && searchResults.length > 0 && (
                       <>
                         <Box mx="24px" mb="8px" mt="4px">
                           <Text
@@ -1320,102 +1343,14 @@ export const AssetSelectorModal: React.FC<AssetSelectorModalProps> = ({
                           </Text>
                         </Box>
                         {searchResults.map((token, index) => (
-                          <Box
+                          <TokenDisplay
                             key={`${token.address || token.ticker}-${index}`}
-                            mx="12px"
-                            cursor="pointer"
-                            onClick={() => handleAssetSelect(token.ticker, token)}
-                          >
-                            <Flex
-                              align="center"
-                              py="12px"
-                              px="12px"
-                              letterSpacing="-0.6px"
-                              borderRadius="12px"
-                              bg="#131313"
-                              transition="background 0.15s ease"
-                              _hover={{ bg: "#1f1f1f" }}
-                            >
-                              {/* Token Icon with Network Badge */}
-                              <Box position="relative" mr="12px">
-                                <Flex
-                                  w="40px"
-                                  h="40px"
-                                  borderRadius="50%"
-                                  bg="#404040"
-                                  align="center"
-                                  justify="center"
-                                  overflow="hidden"
-                                >
-                                  <Image
-                                    src={token.icon}
-                                    w="100%"
-                                    h="100%"
-                                    alt={`${token.ticker} icon`}
-                                    objectFit="cover"
-                                  />
-                                  <Text
-                                    fontSize="12px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.offWhite}
-                                    display="none"
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                </Flex>
-
-                                {/* Network Badge */}
-                                {token.chainId && (
-                                  <Box
-                                    position="absolute"
-                                    bottom="-2px"
-                                    right="-2px"
-                                    w="20px"
-                                    h="20px"
-                                    borderRadius="50%"
-                                    bg={token.chainId === 8453 ? "white" : "#1a1a2e"}
-                                    border="2px solid #131313"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    overflow="hidden"
-                                  >
-                                    <NetworkBadge chainId={token.chainId} />
-                                  </Box>
-                                )}
-                              </Box>
-
-                              {/* Token Info */}
-                              <Flex direction="column" flex="1">
-                                <Text
-                                  fontSize="16px"
-                                  fontFamily={FONT_FAMILIES.NOSTROMO}
-                                  color={colors.offWhite}
-                                  fontWeight="bold"
-                                >
-                                  {token.name}
-                                </Text>
-                                <Flex align="center" gap="8px">
-                                  <Text
-                                    fontSize="14px"
-                                    fontFamily={FONT_FAMILIES.AUX_MONO}
-                                    color={colors.textGray}
-                                  >
-                                    {token.ticker}
-                                  </Text>
-                                  {!isMobile && token.address && (
-                                    <Text
-                                      fontSize="14px"
-                                      fontFamily={FONT_FAMILIES.AUX_MONO}
-                                      color={colors.darkerGray}
-                                    >
-                                      {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
-                                    </Text>
-                                  )}
-                                </Flex>
-                              </Flex>
-                            </Flex>
-                          </Box>
+                            token={token}
+                            onClick={() => handleAssetSelect(token.ticker, token, direction)}
+                            showBalance={false}
+                            isMobile={isMobile}
+                            formatUsdValue={formatUsdValue}
+                          />
                         ))}
                       </>
                     )}

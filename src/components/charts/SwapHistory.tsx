@@ -100,7 +100,7 @@ const Pill: React.FC<{
   previousStep?: AdminSwapFlowStep;
   isMobile?: boolean;
 }> = ({ step, isRefundAvailable, isLastStep, isRefunded, previousStep, isMobile }) => {
-  // Use the step label directly (it will be "Refunded" if status is user_refunded_detected)
+  // Use the step label directly (it will be "Refunded" if status is refunding_user)
   let displayedLabel = step.label;
 
   // Shorten labels on mobile
@@ -116,8 +116,8 @@ const Pill: React.FC<{
 
   const isClickable =
     (hasTx &&
-      (step.status === "waiting_user_deposit_initiated" ||
-        step.status === "waiting_mm_deposit_initiated")) ||
+      (step.status === "waiting_for_deposit" ||
+        step.status === "initiating_payout")) ||
     (isConfsPill && hasPreviousTx);
 
   const handleClick = (e: React.MouseEvent) => {
@@ -151,9 +151,7 @@ const Pill: React.FC<{
   const styleByState = () => {
     // Yellow pill for refunded status
     if (
-      step.status === "user_refunded_detected" ||
-      step.status === "refunding_user" ||
-      step.status === "refunding_mm"
+      step.status === "refunding_user"
     ) {
       return {
         bg: "rgba(251, 191, 36, 0.15)",
@@ -209,8 +207,8 @@ const Pill: React.FC<{
       <Text fontSize="11px" fontFamily={FONT_FAMILIES.SF_PRO} whiteSpace="nowrap">
         {displayedLabel}
       </Text>
-      {(step.status === "waiting_user_deposit_initiated" ||
-        step.status === "waiting_mm_deposit_initiated") && (
+      {(step.status === "waiting_for_deposit" ||
+        step.status === "initiating_payout") && (
         <AssetIcon asset={step.badge} iconUrl={step.badgeIconUrl} size={15} />
       )}
     </Flex>
@@ -366,7 +364,7 @@ const Card: React.FC<{
   onClick?: () => void;
   isMobile?: boolean;
 }> = React.memo(({ swap, currentTime, onClick, isMobile }) => {
-  const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
+  const filteredFlow = swap.flow.filter((s) => s.status !== "swap_complete");
   const totalSeconds = React.useMemo(
     () => swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
     [swap.flow]
@@ -385,10 +383,7 @@ const Card: React.FC<{
 
   const currentStep =
     swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
-  const isRefunded =
-    currentStep?.status === "refunding_user" ||
-    currentStep?.status === "refunding_mm" ||
-    (currentStep?.status as string) === "user_refunded_detected";
+  const isRefunded = currentStep?.status === "refunding_user";
 
   const getPreviousStepTimestamp = (index: number): number | undefined => {
     const timestamps = swap.stepTimestamps;
@@ -580,6 +575,8 @@ const Card: React.FC<{
                       asset={swap.startAssetMetadata.ticker || swap.startAssetMetadata.address}
                       iconUrl={swap.startAssetMetadata.icon}
                       size={isMobile ? 14 : 18}
+                      address={swap.startAssetMetadata.address}
+                      chainId={swap.chain === "BASE" ? 8453 : 1}
                     />
                   </>
                 ) : (
@@ -805,7 +802,7 @@ const Row: React.FC<{
 }> = React.memo(
   ({ swap, currentTime, onClick, isMobile }) => {
     const [isDragging, setIsDragging] = React.useState(false);
-    const filteredFlow = swap.flow.filter((s) => s.status !== "settled");
+    const filteredFlow = swap.flow.filter((s) => s.status !== "swap_complete");
     const totalSeconds = React.useMemo(
       () => swap.flow.reduce((acc, s) => acc + parseDurationToSeconds(s.duration), 0),
       [swap.flow]
@@ -835,10 +832,7 @@ const Row: React.FC<{
     // Check if swap has been refunded (detect by status)
     const currentStep =
       swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
-    const isRefunded =
-      currentStep?.status === "refunding_user" ||
-      currentStep?.status === "refunding_mm" ||
-      (currentStep?.status as string) === "user_refunded_detected";
+    const isRefunded = currentStep?.status === "refunding_user";
 
     // Get timestamp for previous step to calculate live duration
     const getPreviousStepTimestamp = (index: number): number | undefined => {
@@ -978,6 +972,8 @@ const Row: React.FC<{
                           asset={swap.startAssetMetadata.ticker || swap.startAssetMetadata.address}
                           iconUrl={swap.startAssetMetadata.icon}
                           size={16}
+                          address={swap.startAssetMetadata.address}
+                          chainId={swap.chain === "BASE" ? 8453 : 1}
                         />
                         <Text
                           fontSize="13px"
@@ -1289,9 +1285,9 @@ function timeAgoFrom(nowMs: number, tsMs: number): string {
 }
 
 function getSwapCategory(status: string): "created" | "completed" | "failed" | "in-progress" {
-  if (status === "waiting_user_deposit_initiated") return "created";
-  if (status === "settled") return "completed";
-  if (status === "refunding_user" || status === "refunding_mm" || status === "failed")
+  if (status === "waiting_for_deposit") return "created";
+  if (status === "swap_complete") return "completed";
+  if (status === "refunding_user" || status === "failed")
     return "failed";
   return "in-progress";
 }
@@ -1316,27 +1312,27 @@ function buildAverageFlowSteps(
       state: "completed",
     },
     {
-      status: "waiting_user_deposit_initiated",
+      status: "waiting_for_deposit",
       label: "User Sent",
       state: "completed",
       badge: userAsset,
       duration: formatSecondsToMinSec(Math.round(avgData.time_created_to_user_sent_ms / 1000)),
     },
     {
-      status: "waiting_user_deposit_confirmed",
+      status: "deposit_confirming",
       label: "Confs",
       state: "completed",
       duration: formatSecondsToMinSec(Math.round(avgData.time_user_sent_to_confs_ms / 1000)),
     },
     {
-      status: "waiting_mm_deposit_initiated",
+      status: "initiating_payout",
       label: "MM Sent",
       state: "completed",
       badge: mmAsset,
       duration: formatSecondsToMinSec(Math.round(avgData.time_user_confs_to_mm_sent_ms / 1000)),
     },
     {
-      status: "waiting_mm_deposit_confirmed",
+      status: "confirming_payout",
       label: "Confs",
       state: "completed",
       duration: formatSecondsToMinSec(Math.round(avgData.time_mm_sent_to_mm_confs_ms / 1000)),
@@ -1499,27 +1495,27 @@ export const SwapHistory: React.FC<{
           state: "completed",
         },
         {
-          status: "waiting_user_deposit_initiated",
+          status: "waiting_for_deposit",
           label: "User Sent",
           state: "completed",
           badge: dir === "BTC_TO_EVM" ? "BTC" : "cbBTC",
           duration: avgDuration(list, 1),
         },
         {
-          status: "waiting_user_deposit_confirmed",
+          status: "deposit_confirming",
           label: `${Math.max(avgUserConfs, 0)} Confs`,
           state: "completed",
           duration: avgDuration(list, 2),
         },
         {
-          status: "waiting_mm_deposit_initiated",
+          status: "initiating_payout",
           label: "MM Sent",
           state: "completed",
           badge: dir === "BTC_TO_EVM" ? "cbBTC" : "BTC",
           duration: avgDuration(list, 3),
         },
         {
-          status: "waiting_mm_deposit_confirmed",
+          status: "confirming_payout",
           label: `${Math.max(avgMmConfs, 0)}+ Confs`,
           state: "completed",
           duration: avgDuration(list, 4),
@@ -1581,7 +1577,7 @@ export const SwapHistory: React.FC<{
                 ...stepsBeforeFailed,
                 failedStep,
                 {
-                  status: "user_refunded_detected" as any,
+                  status: "refunding_user",
                   label: "Refunded",
                   state: "completed",
                 },
@@ -1681,7 +1677,7 @@ export const SwapHistory: React.FC<{
             ...stepsBeforeFailed,
             failedStep,
             {
-              status: "user_refunded_detected" as any,
+              status: "refunding_user",
               label: "Refunded",
               state: "completed",
             },
@@ -1782,7 +1778,7 @@ export const SwapHistory: React.FC<{
             ...stepsBeforeFailed,
             failedStep,
             {
-              status: "user_refunded_detected" as any,
+              status: "refunding_user",
               label: "Refunded",
               state: "completed",
             },
@@ -3032,7 +3028,7 @@ export const SwapHistory: React.FC<{
                     </Text>
                     <Flex direction="column" gap="8px">
                       {selectedSwap.flow
-                        .filter((s) => s.status !== "settled")
+                        .filter((s) => s.status !== "swap_complete")
                         .map((step, idx) => (
                           <Flex key={idx} align="center" gap="12px">
                             <Box>

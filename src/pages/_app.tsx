@@ -1,34 +1,35 @@
 import "@/styles/globals.css";
 import "@/styles/custom-fonts.css";
+import { useEffect } from "react";
 import { ChakraProvider } from "@chakra-ui/react";
 import type { AppProps } from "next/app";
-import { useRouter } from "next/router";
 import theme from "@/components/other/Theme";
 import { CustomToastProvider } from "@/components/other/CustomToastProvider";
-import { ConditionalWagmiProvider } from "@/components/providers/ConditionalWagmiProvider";
-import { CowSwapProvider } from "@/components/providers/CowSwapProvider";
+import { DynamicProvider } from "@/components/providers/DynamicProvider";
+import { RiftSdk } from "@riftresearch/sdk";
+import { useStore } from "@/utils/store";
 
 export default function App({ Component, pageProps }: AppProps) {
-  const router = useRouter();
-  const isAdminPage = router.pathname === "/admin";
+  const rift = useStore((state) => state.rift);
+  const setRift = useStore((state) => state.setRift);
+
+  // Initialize Rift SDK globally so it's available on all pages
+  useEffect(() => {
+    if (!rift) {
+      const sdk = new RiftSdk({
+        integratorName: "app.rift.trade",
+        debug: true,
+      });
+      setRift(sdk);
+    }
+  }, [rift, setRift]);
 
   return (
-    <>
-      <ConditionalWagmiProvider>
-        {isAdminPage ? (
-          <ChakraProvider value={theme}>
-            <CustomToastProvider />
-            <Component {...pageProps} />
-          </ChakraProvider>
-        ) : (
-          <CowSwapProvider>
-            <ChakraProvider value={theme}>
-              <CustomToastProvider />
-              <Component {...pageProps} />
-            </ChakraProvider>
-          </CowSwapProvider>
-        )}
-      </ConditionalWagmiProvider>
-    </>
+    <DynamicProvider>
+      <ChakraProvider value={theme}>
+        <CustomToastProvider />
+        <Component {...pageProps} />
+      </ChakraProvider>
+    </DynamicProvider>
   );
 }

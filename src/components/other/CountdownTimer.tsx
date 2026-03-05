@@ -12,7 +12,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   const depositFlowState = useStore((state) => state.depositFlowState);
   const [smoothProgress, setSmoothProgress] = useState(100);
   const [isAnimatingToZero, setIsAnimatingToZero] = useState(false);
-  const [previousState, setPreviousState] = useState("0-not-started");
+  const [previousState, setPreviousState] = useState("not_started");
   const [showTimer, setShowTimer] = useState(false);
   const [hideNumber, setHideNumber] = useState(false);
   const [initialCountdownValue, setInitialCountdownValue] = useState(99); // Track the starting value
@@ -20,9 +20,9 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
   useEffect(() => {
     // Initialize timer when coming from step 0 to step 1 or step 2
     if (
-      (depositFlowState === "1-WaitingUserDepositInitiated" ||
-        depositFlowState === "2-WaitingUserDepositConfirmed") &&
-      previousState === "0-not-started"
+      (depositFlowState === "waiting_for_deposit" ||
+        depositFlowState === "deposit_confirming") &&
+      previousState === "not_started"
     ) {
       // Capture the initial countdown value for progress calculations
       setInitialCountdownValue(countdownValue);
@@ -33,7 +33,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
     }
 
     // Show timer for any active state
-    if (depositFlowState !== "0-not-started") {
+    if (depositFlowState !== "not_started") {
       setShowTimer(true);
     } else {
       setShowTimer(false);
@@ -44,7 +44,7 @@ export function CountdownTimer({ onComplete }: CountdownTimerProps) {
 
   useEffect(() => {
     // Only run countdown if we're in an active state and countdown > 0
-    if (depositFlowState === "0-not-started" || countdownValue <= 0) {
+    if (depositFlowState === "not_started" || countdownValue <= 0) {
       if (countdownValue <= 0) {
         onComplete?.();
       }

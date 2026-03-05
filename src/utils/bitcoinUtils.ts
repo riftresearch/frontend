@@ -357,7 +357,7 @@ export function convertToBitcoinLockingScript(address: string): string {
         ]);
       }
 
-      // P2SH (check for mainnet, testnet, and regtest)
+      // P2SH (check for mainnet, testnet, and regtest) test
       else if (version === network.scriptHash) {
         script = bitcoin.script.compile([
           bitcoin.opcodes.OP_HASH160,

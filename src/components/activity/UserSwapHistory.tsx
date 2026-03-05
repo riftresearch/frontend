@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Box, Flex, Text, Spinner, Button, Image } from "@chakra-ui/react";
-import { useAccount } from "wagmi";
 import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
 import { mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { ANALYTICS_API_URL } from "@/utils/analyticsClient";
-import { reownModal } from "@/utils/wallet";
+import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { FiClock, FiCheck, FiX, FiExternalLink } from "react-icons/fi";
 import { GridFlex } from "@/components/other/GridFlex";
 import { useRouter } from "next/router";
@@ -17,15 +16,49 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { RefundModal } from "@/components/other/RefundModal";
 import { useRefundModal } from "@/hooks/useRefundModal";
 import { AssetIcon } from "@/components/other/AssetIcon";
+import { NetworkBadge } from "@/components/other/NetworkBadge";
+import { Chain } from "@/utils/types";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
+
+/** Asset icon with a small chain badge overlay in the bottom-right corner */
+const AssetIconWithChain: React.FC<{
+  asset: string;
+  iconUrl?: string;
+  size?: number;
+  chain: "ETH" | "BASE" | "BTC";
+}> = ({ asset, iconUrl, size = 16, chain }) => {
+  const badgeSize = Math.round(size * 0.55);
+  const chainValue = chain === "BTC" ? Chain.Bitcoin : chain === "BASE" ? Chain.Base : Chain.Ethereum;
+  const badgeBg = chain === "BTC" ? "#F7931A" : chain === "BASE" ? "white" : "#1a1a2e";
+  return (
+    <Box position="relative" display="inline-flex" flexShrink={0}>
+      <AssetIcon asset={asset} iconUrl={iconUrl} size={size} />
+      <Box
+        position="absolute"
+        bottom="-2px"
+        right="-3px"
+        w={`${badgeSize}px`}
+        h={`${badgeSize}px`}
+        borderRadius="50%"
+        bg={badgeBg}
+        border="1.5px solid #0a0a0a"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        overflow="hidden"
+        p={chain === "BTC" ? "1px" : "0"}
+      >
+        <NetworkBadge chain={chainValue} size={`${badgeSize - 2}px`} />
+      </Box>
+    </Box>
+  );
+};
 
 function displayShortTxHash(hash: string, isMobile: boolean = false): string {
   if (!hash || hash.length < 12) return hash;
   const prefix = hash.startsWith("0x") ? "0x" : "";
   const hex = hash.replace(/^0x/, "");
-  // Mobile: show 6 chars at start and 6 at end (20% shorter)
-  // Desktop: show 8 chars at start and 8 at end
-  const chars = isMobile ? 6 : 8;
+  const chars = isMobile ? 4 : 4;
   return `${prefix}${hex.slice(0, chars)}...${hex.slice(-chars)}`;
 }
 
@@ -42,6 +75,29 @@ function formatBTC(n: number) {
     .toFixed(8)
     .replace(/\.0+$/, "")
     .replace(/(\.[0-9]*?)0+$/, "$1")} BTC`;
+}
+
+/**
+ * Format a raw base-unit amount string (e.g. wei) into a human-readable decimal.
+ * Uses BigInt to avoid floating-point precision loss for large numbers.
+ */
+function formatBaseUnitAmount(rawAmount: string, decimals: number, maxDecimals?: number): string {
+  const max = maxDecimals ?? Math.min(decimals, 6);
+  try {
+    const raw = BigInt(rawAmount);
+    const divisor = BigInt(10 ** decimals);
+    const wholePart = raw / divisor;
+    const remainder = raw % divisor;
+    if (remainder === 0n) return wholePart.toString();
+    const remainderStr = remainder.toString().padStart(decimals, "0");
+    const trimmed = remainderStr.replace(/0+$/, "");
+    const truncated = trimmed.slice(0, max);
+    return `${wholePart}.${truncated}`;
+  } catch {
+    // Fallback for non-integer strings (already human-readable)
+    const num = parseFloat(rawAmount);
+    return num.toFixed(max).replace(/\.?0+$/, "");
+  }
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -68,12 +124,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
   const currentStatus = currentStep?.status;
   const isRefundAvailable = (swap as any).isRefundAvailable;
 
-  // Refunded: refunding_user, refunding_mm, or user_refunded_detected (regardless of isRefundAvailable)
-  if (
-    currentStatus === "refunding_user" ||
-    currentStatus === "refunding_mm" ||
-    currentStatus === "user_refunded_detected"
-  ) {
+  // Refunded: refunding_user (regardless of isRefundAvailable)
+  if (currentStatus === "refunding_user") {
     return (
       <Flex
         align="center"
@@ -130,8 +182,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Completed: waiting_mm_deposit_confirmed or settled
-  if (currentStatus === "waiting_mm_deposit_confirmed" || currentStatus === "settled") {
+  // Completed: confirming_payout or swap_complete
+  if (currentStatus === "confirming_payout" || currentStatus === "swap_complete") {
     return (
       <Flex
         align="center"
@@ -156,8 +208,8 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Confirming: waiting_user_deposit_confirmed
-  if (currentStatus === "waiting_user_deposit_confirmed") {
+  // Confirming: deposit_confirming
+  if (currentStatus === "deposit_confirming") {
     return (
       <Flex
         align="center"
@@ -185,7 +237,7 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
     );
   }
 
-  // Swapping: waiting_mm_deposit_initiated (default for other in-progress states)
+  // Swapping: initiating_payout (default for other in-progress states)
   return (
     <Flex
       align="center"
@@ -269,7 +321,7 @@ async function fetchUserSwaps(
               ...stepsBeforeFailed,
               failedStep,
               {
-                status: "user_refunded_detected",
+                status: "refunding_user",
                 label: "Refunded",
                 state: "completed",
               },
@@ -289,9 +341,9 @@ async function fetchUserSwaps(
       })
     );
 
-    // Filter out swaps that are pending or at waiting_user_deposit_initiated WITHOUT a refund available
+    // Filter out swaps that are pending or at waiting_for_deposit WITHOUT a refund available
     // (these are created but user never deposited)
-    // But KEEP waiting_user_deposit_initiated swaps that have refund available (partial deposits)
+    // But KEEP waiting_for_deposit swaps that have refund available (partial deposits)
 
     const swaps = allSwaps.filter((swap: AdminSwapItem) => {
       const currentStep =
@@ -308,8 +360,8 @@ async function fetchUserSwaps(
       // Exclude pending swaps
       if (currentStatus === "pending") return false;
 
-      // Exclude waiting_user_deposit_initiated UNLESS refund is available (partial deposit case)
-      if (currentStatus === "waiting_user_deposit_initiated") {
+      // Exclude waiting_for_deposit UNLESS refund is available (partial deposit case)
+      if (currentStatus === "waiting_for_deposit") {
         return swapIsRefundAvailable === true;
       }
 
@@ -327,20 +379,69 @@ async function fetchUserSwaps(
   }
 }
 
+/**
+ * Fetch swaps for multiple addresses in parallel, merge and deduplicate by swap ID,
+ * sorted by most recent first.
+ */
+async function fetchSwapsForAllAddresses(
+  addresses: string[],
+  limit: number,
+  offset: number,
+  btcPrice?: number | null
+): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> {
+  if (addresses.length === 0) return { swaps: [], hasMore: false };
+
+  // Fetch for all addresses in parallel
+  const results = await Promise.all(
+    addresses.map((addr) => fetchUserSwaps(addr, limit, offset, btcPrice))
+  );
+
+  // Merge and deduplicate by swap ID
+  const swapMap = new Map<string, AdminSwapItem>();
+  let anyHasMore = false;
+
+  for (const result of results) {
+    if (result.hasMore) anyHasMore = true;
+    for (const swap of result.swaps) {
+      if (!swapMap.has(swap.id)) {
+        swapMap.set(swap.id, swap);
+      }
+    }
+  }
+
+  // Sort by timestamp descending (most recent first)
+  const merged = Array.from(swapMap.values()).sort((a, b) => {
+    return (b.swapCreationTimestamp || 0) - (a.swapCreationTimestamp || 0);
+  });
+
+  return { swaps: merged, hasMore: anyHasMore };
+}
+
 interface UserSwapHistoryProps {
   onInitialLoadComplete?: () => void;
   simulatedAddress?: string; // Optional simulated address for admin view
+  embedded?: boolean; // When true, renders in compact mode for WalletPanel
+  onSwapClick?: () => void; // Callback when a swap is clicked (for closing panel etc.)
 }
 
 export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   onInitialLoadComplete,
   simulatedAddress,
+  embedded = false,
+  onSwapClick,
 }) => {
-  const { address: walletAddress, isConnected } = useAccount();
+  // Get all EVM wallet addresses directly from Dynamic (supports multiple wallets)
+  const { setShowAuthFlow } = useDynamicContext();
+  const userWallets = useUserWallets();
+  const evmAddresses = React.useMemo(
+    () => userWallets.filter((w) => w.chain?.toUpperCase() === "EVM").map((w) => w.address),
+    [userWallets]
+  );
+  const isEvmConnected = evmAddresses.length > 0;
 
-  // Use simulated address if provided, otherwise use wallet address
-  const address = simulatedAddress || walletAddress;
+  // Use simulated address if provided, otherwise use all connected EVM addresses
   const isSimulating = !!simulatedAddress;
+  const addresses: string[] = isSimulating ? [simulatedAddress!] : evmAddresses;
   const router = useRouter();
   const { isMobile } = useWindowSize();
   const { btcPrice } = useBtcEthPrices(); // Fetch current BTC price as fallback
@@ -368,8 +469,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   } = useRefundModal({
     onSuccess: () => {
       // Refresh the swaps list to update the status after successful refund
-      if (address) {
-        fetchUserSwaps(address, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
+      if (addresses.length > 0) {
+        fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
           setSwaps(newSwaps);
         });
       }
@@ -392,8 +493,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
   // Fetch initial swaps with retry logic and set up polling
   useEffect(() => {
-    // Skip if no address (not connected and not simulating)
-    if (!address || (!isConnected && !isSimulating)) {
+    // Skip if no addresses (not connected and not simulating)
+    if (addresses.length === 0 && !isSimulating) {
       setSwaps([]);
       setHasMore(true);
       return;
@@ -404,16 +505,16 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       setLoading(true);
 
       // First attempt
-      let result = await fetchUserSwaps(address, pageSize, 0, btcPrice);
+      let result = await fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
 
       // If no swaps found, retry 2 more times with 100ms delay
       if (result.swaps.length === 0) {
         await new Promise((resolve) => setTimeout(resolve, 100));
-        result = await fetchUserSwaps(address, pageSize, 0, btcPrice);
+        result = await fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
 
         if (result.swaps.length === 0) {
           await new Promise((resolve) => setTimeout(resolve, 100));
-          result = await fetchUserSwaps(address, pageSize, 0, btcPrice);
+          result = await fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
         }
       }
 
@@ -426,7 +527,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
     // Set up polling every 3 seconds - refresh and merge intelligently
     const pollInterval = setInterval(() => {
-      fetchUserSwaps(address, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
+      fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
         setSwaps((prev) => {
           if (prev.length === 0) return newSwaps;
 
@@ -462,13 +563,13 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       });
     }, 3000);
 
-    // Cleanup interval on unmount or when address/connection changes
+    // Cleanup interval on unmount or when addresses/connection changes
     return () => clearInterval(pollInterval);
-  }, [address, isConnected, isSimulating]);
+  }, [addresses.join(","), isEvmConnected, isSimulating]);
 
   // Fetch next page - use actual swaps count as offset to handle filtered items correctly
   const fetchNextPage = useCallback(async () => {
-    if (loadingMore || !hasMore || fetchingRef.current || !address) return;
+    if (loadingMore || !hasMore || fetchingRef.current || addresses.length === 0) return;
 
     fetchingRef.current = true;
     setLoadingMore(true);
@@ -477,8 +578,8 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       // Use actual swaps length as offset instead of page * pageSize
       // This handles cases where filtering reduced the count
       const currentSwapsCount = swaps.length;
-      const { swaps: newSwaps, hasMore: more } = await fetchUserSwaps(
-        address,
+      const { swaps: newSwaps, hasMore: more } = await fetchSwapsForAllAddresses(
+        addresses,
         pageSize,
         currentSwapsCount,
         btcPrice
@@ -509,7 +610,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       fetchingRef.current = false;
       setLoadingMore(false);
     }
-  }, [address, pageSize, loadingMore, hasMore, swaps.length]);
+  }, [addresses.join(","), pageSize, loadingMore, hasMore, swaps.length]);
 
   // Handle scroll for infinite loading
   const handleScroll = useCallback(
@@ -524,21 +625,52 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     [loadingMore, hasMore, fetchNextPage]
   );
 
-  const handleConnectWallet = async () => {
-    await reownModal.open();
+  const handleConnectWallet = () => {
+    setShowAuthFlow(true);
   };
 
   // Show loading spinner during initial mount
   if (isInitialMount) {
     return (
-      <Flex w="100%" h="60vh" align="center" justify="center" mt={isMobile ? "80px" : "0"}>
-        <Spinner size="xl" color={colors.offWhite} />
+      <Flex
+        w="100%"
+        h={embedded ? "200px" : "60vh"}
+        align="center"
+        justify="center"
+        mt={isMobile && !embedded ? "80px" : "0"}
+      >
+        <Spinner size={embedded ? "md" : "xl"} color={colors.offWhite} />
       </Flex>
     );
   }
 
   // Only show "not connected" UI if not simulating and not connected
-  if (!isConnected && !isSimulating) {
+  if (!isEvmConnected && !isSimulating) {
+    if (embedded) {
+      return (
+        <Flex direction="column" align="center" justify="center" py="40px" px="20px" gap="16px">
+          <Text color={colors.textGray} fontSize="14px" fontFamily="Inter" textAlign="center">
+            Connect your EVM wallet to view swap history
+          </Text>
+          <Flex
+            justify="center"
+            align="center"
+            py="10px"
+            px="20px"
+            borderRadius="12px"
+            bg="rgba(167, 139, 250, 0.08)"
+            border="2px solid #A78BFA"
+            cursor="pointer"
+            _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
+            onClick={handleConnectWallet}
+          >
+            <Text color="#A78BFA" fontSize="14px" fontWeight="600" fontFamily="Inter">
+              Connect Wallet
+            </Text>
+          </Flex>
+        </Flex>
+      );
+    }
     return (
       <GridFlex
         width={isMobile ? "100%" : "100%"}
@@ -564,7 +696,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
             mb="32px"
             textAlign="center"
           >
-            Connect your wallet to view your swap history and track the status of your current and
+            Connect your EVM wallet to view your swap history and track the status of your current and
             previous Rift swaps.
           </Text>
           <Button
@@ -588,6 +720,353 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
           </Button>
         </Flex>
       </GridFlex>
+    );
+  }
+
+  // Embedded mode - compact rendering for WalletPanel
+  if (embedded) {
+    return (
+      <Box w="100%" h="100%" overflow="auto" px="12px" pb="12px">
+        {loading ? (
+          <Flex w="100%" justify="center" align="center" py="40px">
+            <Spinner size="md" color={colors.offWhite} />
+          </Flex>
+        ) : swaps.length === 0 ? (
+          <Flex w="100%" direction="column" align="center" justify="center" py="40px">
+            <Text
+              fontSize="14px"
+              fontFamily="Inter"
+              color={colors.textGray}
+              mb="16px"
+              textAlign="center"
+            >
+              No swap history found
+            </Text>
+            <Flex
+              justify="center"
+              align="center"
+              py="10px"
+              px="20px"
+              borderRadius="12px"
+              bg="rgba(167, 139, 250, 0.08)"
+              border="2px solid #A78BFA"
+              cursor="pointer"
+              _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
+              onClick={() => router.push("/")}
+            >
+              <Text color="#A78BFA" fontSize="14px" fontWeight="600" fontFamily="Inter">
+                Create Swap
+              </Text>
+            </Flex>
+          </Flex>
+        ) : (
+          <Flex direction="column" w="100%" gap="10px">
+            {swaps.map((swap) => {
+              const isBTCtoEVM = swap.direction === "BTC_TO_EVM";
+              const timestamp = swap.swapCreationTimestamp || Date.now();
+
+              // Get transaction hashes
+              const userDepositStep = swap.flow.find(
+                (s) => s.status === "waiting_for_deposit"
+              );
+              const mmDepositStep = swap.flow.find(
+                (s) => s.status === "initiating_payout"
+              );
+              let userTxHash = userDepositStep?.txHash;
+              const userTxChain = userDepositStep?.txChain;
+              let mmTxHash = mmDepositStep?.txHash;
+              const mmTxChain = mmDepositStep?.txChain;
+
+              // Add 0x prefix to Ethereum transaction hashes if missing
+              if (userTxHash && userTxChain !== "BTC" && !userTxHash.startsWith("0x")) {
+                userTxHash = `0x${userTxHash}`;
+              }
+              if (mmTxHash && mmTxChain !== "BTC" && !mmTxHash.startsWith("0x")) {
+                mmTxHash = `0x${mmTxHash}`;
+              }
+
+              // Colors based on direction
+              const userBg = isBTCtoEVM ? "rgba(255, 143, 40, 0.15)" : "rgba(57, 74, 255, 0.2)";
+              const userBorder = isBTCtoEVM ? "rgba(255, 143, 40, 0.4)" : "rgba(57, 74, 255, 0.7)";
+              const mmBg = isBTCtoEVM ? "rgba(57, 74, 255, 0.2)" : "rgba(255, 143, 40, 0.15)";
+              const mmBorder = isBTCtoEVM ? "rgba(57, 74, 255, 0.7)" : "rgba(255, 143, 40, 0.4)";
+
+              // Determine input/output based on direction
+              let inputAsset: string;
+              let inputAmount: string;
+              let inputIcon: string | undefined;
+              let outputAsset: string;
+
+              if (isBTCtoEVM) {
+                inputAsset = "BTC";
+                inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
+                outputAsset = "cbBTC";
+              } else {
+                if (swap.startAssetMetadata) {
+                  inputAsset = swap.startAssetMetadata.ticker;
+                  inputAmount = formatBaseUnitAmount(
+                    swap.startAssetMetadata.amount,
+                    swap.startAssetMetadata.decimals
+                  );
+                  inputIcon = swap.startAssetMetadata.icon;
+                } else {
+                  inputAsset = "cbBTC";
+                  inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
+                }
+                outputAsset = "BTC";
+              }
+
+              // Check refund status
+              const lastStep = swap.flow[swap.flow.length - 1];
+              const isCompleted = lastStep?.state === "completed" && lastStep?.status === "swap_complete";
+              const isRefundAvailable = (swap as any).isRefundAvailable;
+              const currentStep =
+                swap.flow.find((s) => s.state === "inProgress") || swap.flow[swap.flow.length - 1];
+              const isRefunded =
+                currentStep?.status === "refunding_user";
+
+              return (
+                <Flex
+                  key={swap.id}
+                  p="18px"
+                  borderRadius="12px"
+                  bg="rgba(40, 40, 40, 0.6)"
+                  _hover={{ bg: "rgba(50, 50, 50, 0.7)" }}
+                  cursor="pointer"
+                  onClick={() => {
+                    onSwapClick?.();
+                    router.push(`/swap/${swap.id}`);
+                  }}
+                  direction="column"
+                  gap="14px"
+                >
+                  {/* Row 1: Status (left) + USD (center) + Time (right) */}
+                  <Flex justify="space-between" align="center">
+                    <StatusBadge swap={swap} onClaimRefund={() => openRefundModal(swap)} />
+                    <Text
+                      fontSize="15px"
+                      color={colors.offWhite}
+                      fontFamily="Inter"
+                      fontWeight="600"
+                    >
+                      {formatUSD(swap.swapInitialAmountUsd)}
+                    </Text>
+                    <Text fontSize="13px" color={colors.textGray} fontFamily="Inter">
+                      {formatTimeAgo(timestamp)}
+                    </Text>
+                  </Flex>
+
+                  {/* Row 2: Input amount → Output amount */}
+                  <Flex align="center" gap="8px">
+                    <Flex align="center" gap="6px">
+                      <AssetIcon asset={inputAsset} iconUrl={inputIcon} size={22} />
+                      <Text
+                        fontSize="14px"
+                        color={colors.offWhite}
+                        fontFamily="Inter"
+                        fontWeight="500"
+                      >
+                        {inputAmount} {inputAsset}
+                      </Text>
+                    </Flex>
+                    <Text fontSize="14px" color={colors.textGray} fontFamily="Inter">
+                      →
+                    </Text>
+                    <Flex align="center" gap="6px">
+                      <AssetIcon asset={outputAsset} size={22} />
+                      <Text
+                        fontSize="14px"
+                        color={colors.offWhite}
+                        fontFamily="Inter"
+                        fontWeight="500"
+                      >
+                        {outputAsset}
+                      </Text>
+                    </Flex>
+                  </Flex>
+
+                  {/* Row 3: Transaction links */}
+                  <Flex justify="space-between" align="center" gap="10px">
+                    {/* User Deposit TX */}
+                    {userTxHash ? (
+                      <Flex
+                        as="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url =
+                            userTxChain === "BTC"
+                              ? `https://mempool.space/tx/${userTxHash}`
+                              : userTxChain === "ETH"
+                                ? `https://etherscan.io/tx/${userTxHash}`
+                                : `https://basescan.org/tx/${userTxHash}`;
+                          window.open(url, "_blank");
+                        }}
+                        bg={userBg}
+                        border={`1.5px solid ${userBorder}`}
+                        borderRadius="12px"
+                        px="10px"
+                        h="34px"
+                        _hover={{ filter: "brightness(1.2)" }}
+                        fontSize="11px"
+                        fontFamily="Inter"
+                        color={colors.offWhite}
+                        fontWeight="500"
+                        cursor="pointer"
+                        align="center"
+                        gap="5px"
+                        flex="1"
+                        justify="center"
+                      >
+                        {displayShortTxHash(userTxHash, true)}
+                        <FiExternalLink size={11} />
+                      </Flex>
+                    ) : (
+                      <Flex
+                        flex="1"
+                        h="34px"
+                        align="center"
+                        justify="center"
+                        bg={userBg}
+                        border={`1.5px solid ${userBorder}`}
+                        borderRadius="12px"
+                        opacity={0.5}
+                      >
+                        <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                          Pending
+                        </Text>
+                      </Flex>
+                    )}
+
+                    {/* MM Payout TX */}
+                    {isRefunded ? (
+                      <Flex
+                        flex="1"
+                        h="34px"
+                        align="center"
+                        justify="center"
+                        bg={mmBg}
+                        border={`1.5px solid ${mmBorder}`}
+                        borderRadius="12px"
+                      >
+                        <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                          Refunded
+                        </Text>
+                      </Flex>
+                    ) : isRefundAvailable ? (
+                      <Flex
+                        flex="1"
+                        h="34px"
+                        align="center"
+                        justify="center"
+                        bg="rgba(178, 50, 50, 0.15)"
+                        border="1.5px solid rgba(178, 50, 50, 0.4)"
+                        borderRadius="12px"
+                      >
+                        <Text fontSize="11px" color="#B23232" fontFamily="Inter">
+                          Failed
+                        </Text>
+                      </Flex>
+                    ) : mmTxHash ? (
+                      <Flex
+                        as="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url =
+                            mmTxChain === "BTC"
+                              ? `https://mempool.space/tx/${mmTxHash}`
+                              : mmTxChain === "ETH"
+                                ? `https://etherscan.io/tx/${mmTxHash}`
+                                : `https://basescan.org/tx/${mmTxHash}`;
+                          window.open(url, "_blank");
+                        }}
+                        bg={mmBg}
+                        border={`1.5px solid ${mmBorder}`}
+                        borderRadius="12px"
+                        px="10px"
+                        h="34px"
+                        _hover={{ filter: "brightness(1.2)" }}
+                        fontSize="11px"
+                        fontFamily="Inter"
+                        color={colors.offWhite}
+                        fontWeight="500"
+                        cursor="pointer"
+                        align="center"
+                        gap="5px"
+                        flex="1"
+                        justify="center"
+                      >
+                        {displayShortTxHash(mmTxHash, true)}
+                        <FiExternalLink size={11} />
+                      </Flex>
+                    ) : (
+                      <Flex
+                        flex="1"
+                        h="34px"
+                        align="center"
+                        justify="center"
+                        bg={mmBg}
+                        border={`1.5px solid ${mmBorder}`}
+                        borderRadius="12px"
+                        opacity={0.5}
+                      >
+                        <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                          {isCompleted ? "Settled" : "Pending"}
+                        </Text>
+                      </Flex>
+                    )}
+                  </Flex>
+                </Flex>
+              );
+            })}
+
+            {/* Loading More Indicator */}
+            {loadingMore && (
+              <Flex justify="center" py="12px">
+                <Spinner size="sm" color={colors.offWhite} />
+              </Flex>
+            )}
+
+            {/* Load More Button */}
+            {!loadingMore && hasMore && swaps.length > 0 && (
+              <Flex justify="center" py="12px">
+                <Text
+                  fontSize="13px"
+                  color="#A78BFA"
+                  fontFamily="Inter"
+                  cursor="pointer"
+                  _hover={{ textDecoration: "underline" }}
+                  onClick={fetchNextPage}
+                >
+                  Load more
+                </Text>
+              </Flex>
+            )}
+
+            {/* End of List */}
+            {!hasMore && swaps.length > 0 && (
+              <Flex justify="center" py="8px">
+                <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                  No more swaps
+                </Text>
+              </Flex>
+            )}
+          </Flex>
+        )}
+
+        {/* Refund Modal */}
+        <RefundModal
+          isOpen={refundModalOpen}
+          selectedSwap={selectedFailedSwap}
+          refundAddress={refundAddress}
+          setRefundAddress={setRefundAddress}
+          isClaimingRefund={isClaimingRefund}
+          refundStatus={refundStatus}
+          currentBitcoinFee={currentBitcoinFee}
+          fetchingFee={fetchingFee}
+          onClose={closeRefundModal}
+          onClaimRefund={claimRefund}
+        />
+      </Box>
     );
   }
 
@@ -666,10 +1145,10 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
               {/* Mobile Card Layout */}
               {swaps.map((swap) => {
                 const userDepositStep = swap.flow.find(
-                  (s) => s.status === "waiting_user_deposit_initiated"
+                  (s) => s.status === "waiting_for_deposit"
                 );
                 const mmDepositStep = swap.flow.find(
-                  (s) => s.status === "waiting_mm_deposit_initiated"
+                  (s) => s.status === "initiating_payout"
                 );
                 let userTxHash = userDepositStep?.txHash;
                 const userTxChain = userDepositStep?.txChain;
@@ -709,17 +1188,14 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
                 const lastStep = swap.flow[swap.flow.length - 1];
                 const isCompleted =
-                  lastStep?.state === "completed" && lastStep?.status === "settled";
+                  lastStep?.state === "completed" && lastStep?.status === "swap_complete";
                 const isRefundAvailable = (swap as any).isRefundAvailable;
 
                 // Check if swap is refunded
                 const currentStep =
                   swap.flow.find((s) => s.state === "inProgress") ||
                   swap.flow[swap.flow.length - 1];
-                const isRefunded =
-                  currentStep?.status === "refunding_user" ||
-                  currentStep?.status === "refunding_mm" ||
-                  (currentStep?.status as string) === "user_refunded_detected";
+                const isRefunded = currentStep?.status === "refunding_user";
 
                 return (
                   <Flex
@@ -822,13 +1298,16 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                                 fontWeight="500"
                                 letterSpacing="-0.5px"
                               >
-                                {parseFloat(swap.startAssetMetadata.amount)
-                                  .toFixed(Math.min(swap.startAssetMetadata.decimals, 6))
-                                  .replace(/\.?0+$/, "")}
+                                {formatBaseUnitAmount(
+                                  swap.startAssetMetadata.amount,
+                                  swap.startAssetMetadata.decimals
+                                )}
                               </Text>
                               <AssetIcon
                                 asset={swap.startAssetMetadata.ticker}
                                 iconUrl={swap.startAssetMetadata.icon}
+                                address={swap.startAssetMetadata.address}
+                                chainId={swap.chain === "BASE" ? 8453 : 1}
                               />
                               <Text
                                 fontSize="13px"
@@ -1195,7 +1674,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                   bg="#090909"
                   borderBottom={`1px solid ${colors.borderGray}`}
                   fontSize="11px"
-                  fontFamily={FONT_FAMILIES.SF_PRO}
+                  fontFamily="Inter"
                   color={colors.textGray}
                   fontWeight="600"
                   textTransform="uppercase"
@@ -1205,22 +1684,21 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                   zIndex={10}
                   flexShrink={0}
                 >
-                  <Text flex="0 0 122px">Time</Text>
-                  <Text flex="0 0 135px">USD</Text>
-                  <Text flex="0 0 218px">Amount</Text>
-                  <Text flex="0 0 246px">Deposit Txn</Text>
-                  <Text flex="0 0 188px">Direction</Text>
-                  <Text flex="0 0 230px">Payout Txn</Text>
+                  <Text flex="0 0 105px">Created</Text>
+                  <Text flex="0 0 278px">Address</Text>
+                  <Text flex="0 0 367px">Txns</Text>
+                  <Text flex="0 0 276px">Asset</Text>
+                  <Text flex="0 0 125px">Value</Text>
                   <Text flex="1">Status</Text>
                 </Flex>
 
                 {/* Table Rows */}
                 {swaps.map((swap) => {
                   const userDepositStep = swap.flow.find(
-                    (s) => s.status === "waiting_user_deposit_initiated"
+                    (s) => s.status === "waiting_for_deposit"
                   );
                   const mmDepositStep = swap.flow.find(
-                    (s) => s.status === "waiting_mm_deposit_initiated"
+                    (s) => s.status === "initiating_payout"
                   );
                   let userTxHash = userDepositStep?.txHash;
                   const userTxChain = userDepositStep?.txChain;
@@ -1255,17 +1733,14 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
                   const lastStep = swap.flow[swap.flow.length - 1];
                   const isCompleted =
-                    lastStep?.state === "completed" && lastStep?.status === "settled";
+                    lastStep?.state === "completed" && lastStep?.status === "swap_complete";
                   const isRefundAvailable = (swap as any).isRefundAvailable;
 
                   // Check if swap is refunded
                   const currentStep =
                     swap.flow.find((s) => s.state === "inProgress") ||
                     swap.flow[swap.flow.length - 1];
-                  const isRefunded =
-                    currentStep?.status === "refunding_user" ||
-                    currentStep?.status === "refunding_mm" ||
-                    (currentStep?.status as string) === "user_refunded_detected";
+                  const isRefunded = currentStep?.status === "refunding_user";
 
                   return (
                     <Flex
@@ -1275,14 +1750,15 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       py="16px"
                       borderBottom={`1px solid ${colors.borderGray}`}
                       align="center"
+                      fontFamily="Inter"
                       _hover={{ bg: "rgba(255, 255, 255, 0.02)" }}
                       transition="background 0.15s ease"
                       cursor="pointer"
                       onClick={() => router.push(`/swap/${swap.id}`)}
                     >
-                      {/* Time - Clickable to open details modal */}
+                      {/* Created */}
                       <Flex
-                        flex="0 0 122px"
+                        flex="0 0 105px"
                         cursor="pointer"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1293,7 +1769,6 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       >
                         <Text
                           fontSize="12px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
                           color={colors.textGray}
                           letterSpacing="-0.5px"
                         >
@@ -1301,241 +1776,226 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         </Text>
                       </Flex>
 
-                      {/* USD */}
-                      <Flex flex="0 0 135px">
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.offWhite}
-                          fontWeight="500"
-                          letterSpacing="-0.5px"
-                        >
-                          {formatUSD(swap.swapInitialAmountUsd)}
-                        </Text>
+                      {/* Address: sender → payout */}
+                      <Flex flex="0 0 278px" align="center" gap="8px">
+                        {(() => {
+                          const senderAddr = swap.evmAccountAddress;
+                          const payoutAddr = swap.rawData?.user_destination_address;
+                          const senderShort = senderAddr ? `${senderAddr.slice(0, 6)}...${senderAddr.slice(-4)}` : "-";
+                          const payoutShort = payoutAddr ? `${payoutAddr.slice(0, 6)}...${payoutAddr.slice(-4)}` : "-";
+
+                          // Sender is always EVM, payout depends on direction
+                          const senderExplorerUrl = senderAddr
+                            ? swap.chain === "BASE"
+                              ? `https://basescan.org/address/${senderAddr}`
+                              : `https://etherscan.io/address/${senderAddr}`
+                            : undefined;
+                          const isBtcAddress = payoutAddr
+                            ? payoutAddr.startsWith("bc1") || payoutAddr.startsWith("1") || payoutAddr.startsWith("3")
+                            : false;
+                          const payoutExplorerUrl = payoutAddr
+                            ? isBtcAddress
+                              ? `https://mempool.space/address/${payoutAddr}`
+                              : swap.chain === "BASE"
+                                ? `https://basescan.org/address/${payoutAddr}`
+                                : `https://etherscan.io/address/${payoutAddr}`
+                            : undefined;
+
+                          return (
+                            <>
+                              <Flex
+                                as="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (senderExplorerUrl) window.open(senderExplorerUrl, "_blank");
+                                }}
+                                bg={userBg}
+                                border={`1.5px solid ${userBorder}`}
+                                borderRadius="16px"
+                                px="10px"
+                                h="32px"
+                                _hover={{ filter: "brightness(1.2)" }}
+                                fontSize="11px"
+                                color={colors.offWhite}
+                                fontWeight="500"
+                                cursor="pointer"
+                                align="center"
+                                gap="4px"
+                                letterSpacing="-0.5px"
+                              >
+                                {senderShort}
+                                <FiExternalLink size={10} />
+                              </Flex>
+                              <Text fontSize="12px" color={colors.textGray}>→</Text>
+                              <Flex
+                                as="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (payoutExplorerUrl) window.open(payoutExplorerUrl, "_blank");
+                                }}
+                                bg={mmBg}
+                                border={`1.5px solid ${mmBorder}`}
+                                borderRadius="16px"
+                                px="10px"
+                                h="32px"
+                                _hover={{ filter: "brightness(1.2)" }}
+                                fontSize="11px"
+                                color={colors.offWhite}
+                                fontWeight="500"
+                                cursor="pointer"
+                                align="center"
+                                gap="4px"
+                                letterSpacing="-0.5px"
+                              >
+                                {payoutShort}
+                                <FiExternalLink size={10} />
+                              </Flex>
+                            </>
+                          );
+                        })()}
                       </Flex>
 
-                      {/* Amount */}
-                      <Flex flex="0 0 218px" gap="4px" align="center">
-                        {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
-                          // Show ERC20 amount from metadata for EVM->BTC swaps
-                          <>
-                            <Text
-                              fontSize="13px"
-                              fontFamily={FONT_FAMILIES.AUX_MONO}
-                              color={colors.offWhite}
-                              fontWeight="500"
-                              letterSpacing="-0.5px"
-                            >
-                              {parseFloat(swap.startAssetMetadata.amount)
-                                .toFixed(Math.min(swap.startAssetMetadata.decimals, 6))
-                                .replace(/\.?0+$/, "")}
-                            </Text>
-                            <AssetIcon
-                              asset={swap.startAssetMetadata.ticker}
-                              iconUrl={swap.startAssetMetadata.icon}
-                            />
-                            <Text
-                              fontSize="13px"
-                              fontFamily={FONT_FAMILIES.AUX_MONO}
-                              color={colors.textGray}
-                              fontWeight="500"
-                              letterSpacing="-0.5px"
-                            >
-                              {swap.startAssetMetadata.ticker}
-                            </Text>
-                          </>
-                        ) : (
-                          // Show BTC amount for BTC->EVM swaps or legacy swaps
-                          <>
-                            <Text
-                              fontSize="13px"
-                              fontFamily={FONT_FAMILIES.AUX_MONO}
-                              color={colors.offWhite}
-                              fontWeight="500"
-                              letterSpacing="-0.5px"
-                            >
-                              {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                            </Text>
-                            <AssetIcon asset={isBTCtoEVM ? "BTC" : "cbBTC"} />
-                            <Text
-                              fontSize="13px"
-                              fontFamily={FONT_FAMILIES.AUX_MONO}
-                              color={colors.textGray}
-                              fontWeight="500"
-                              letterSpacing="-0.5px"
-                            >
-                              {isBTCtoEVM ? "BTC" : "cbBTC"}
-                            </Text>
-                          </>
-                        )}
-                      </Flex>
-
-                      {/* User Deposit Transaction */}
-                      <Flex flex="0 0 246px">
+                      {/* Txns: deposit tx → payout tx */}
+                      <Flex flex="0 0 367px" align="center" gap="8px">
                         {userTxHash ? (
                           <Flex
                             as="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const url =
                                 userTxChain === "BTC"
                                   ? `https://mempool.space/tx/${userTxHash}`
-                                  : userTxChain === "ETH"
-                                    ? `https://etherscan.io/tx/${userTxHash}`
-                                    : `https://basescan.org/tx/${userTxHash}`;
+                                  : swap.chain === "BASE"
+                                    ? `https://basescan.org/tx/${userTxHash}`
+                                    : `https://etherscan.io/tx/${userTxHash}`;
                               window.open(url, "_blank");
                             }}
                             bg={userBg}
                             border={`1.5px solid ${userBorder}`}
                             borderRadius="16px"
                             px="10px"
-                            h="35px"
+                            h="32px"
                             _hover={{ filter: "brightness(1.2)" }}
                             fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
                             color={colors.offWhite}
                             fontWeight="500"
                             cursor="pointer"
-                            w="fit-content"
                             align="center"
                             gap="4px"
                             letterSpacing="-0.5px"
                           >
-                            {displayShortTxHash(userTxHash)}
-                            <Box ml="4px">
-                              <FiExternalLink size={11} />
-                            </Box>
+                            Deposit - {displayShortTxHash(userTxHash)}
+                            <FiExternalLink size={10} />
                           </Flex>
                         ) : (
-                          <Text
-                            fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.textGray}
-                            letterSpacing="-0.5px"
-                          >
-                            -
-                          </Text>
+                          <Text fontSize="11px" color={colors.textGray}>-</Text>
                         )}
-                      </Flex>
-
-                      {/* Direction */}
-                      <Flex flex="0 0 188px" align="center" gap="6px">
-                        {/* From Asset */}
-                        <AssetIcon
-                          asset={
-                            swap.direction === "BTC_TO_EVM"
-                              ? "BTC"
-                              : swap.startAssetMetadata?.ticker || "cbBTC"
-                          }
-                          iconUrl={
-                            swap.direction === "EVM_TO_BTC"
-                              ? swap.startAssetMetadata?.icon
-                              : undefined
-                          }
-                        />
-                        <Text
-                          fontSize="12px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          {swap.direction === "BTC_TO_EVM"
-                            ? "BTC"
-                            : swap.startAssetMetadata?.ticker || "cbBTC"}
-                        </Text>
-                        <Text
-                          fontSize="13px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          →
-                        </Text>
-                        {/* To Asset */}
-                        <AssetIcon asset={swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"} />
-                        <Text
-                          fontSize="12px"
-                          fontFamily={FONT_FAMILIES.AUX_MONO}
-                          color={colors.textGray}
-                          letterSpacing="-0.5px"
-                        >
-                          {swap.direction === "BTC_TO_EVM" ? "cbBTC" : "BTC"}
-                        </Text>
-                      </Flex>
-
-                      {/* MM Payout Transaction */}
-                      <Flex flex="0 0 230px">
-                        {isRefunded ? (
-                          <Text
-                            fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.textGray}
-                            letterSpacing="-0.5px"
-                            fontWeight="500"
-                          >
-                            Swap refunded
-                          </Text>
-                        ) : isRefundAvailable ? (
-                          <Text
-                            fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color="#B23232"
-                            letterSpacing="-0.5px"
-                            fontWeight="500"
-                          >
-                            Market Maker failed to fill
-                          </Text>
-                        ) : mmTxHash ? (
+                        <Text fontSize="12px" color={colors.textGray}>→</Text>
+                        {mmTxHash ? (
                           <Flex
                             as="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const url =
                                 mmTxChain === "BTC"
                                   ? `https://mempool.space/tx/${mmTxHash}`
-                                  : mmTxChain === "ETH"
-                                    ? `https://etherscan.io/tx/${mmTxHash}`
-                                    : `https://basescan.org/tx/${mmTxHash}`;
+                                  : swap.chain === "BASE"
+                                    ? `https://basescan.org/tx/${mmTxHash}`
+                                    : `https://etherscan.io/tx/${mmTxHash}`;
                               window.open(url, "_blank");
                             }}
                             bg={mmBg}
                             border={`1.5px solid ${mmBorder}`}
                             borderRadius="16px"
                             px="10px"
-                            h="35px"
+                            h="32px"
                             _hover={{ filter: "brightness(1.2)" }}
                             fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
                             color={colors.offWhite}
                             fontWeight="500"
                             cursor="pointer"
-                            w="fit-content"
                             align="center"
                             gap="4px"
                             letterSpacing="-0.5px"
                           >
-                            {displayShortTxHash(mmTxHash)}
-                            <Box ml="4px">
-                              <FiExternalLink size={11} />
-                            </Box>
+                            Payout - {displayShortTxHash(mmTxHash)}
+                            <FiExternalLink size={10} />
                           </Flex>
-                        ) : isCompleted ? (
-                          <Text
-                            fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.textGray}
-                            letterSpacing="-0.5px"
-                          >
-                            -
-                          </Text>
                         ) : (
+                          <Text fontSize="11px" color={colors.textGray}>-</Text>
+                        )}
+                      </Flex>
+
+                      {/* Asset: input amount+icon → output amount+icon */}
+                      <Flex flex="0 0 276px" gap="5px" align="center">
+                        {/* Input */}
+                        {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+                          <>
+                            <Text
+                              fontSize="13px"
+                              color={colors.offWhite}
+                              fontWeight="500"
+                              letterSpacing="-0.5px"
+                            >
+                              {formatBaseUnitAmount(
+                                swap.startAssetMetadata.amount,
+                                swap.startAssetMetadata.decimals
+                              )}
+                            </Text>
+                            <AssetIconWithChain
+                              asset={swap.startAssetMetadata.ticker}
+                              iconUrl={swap.startAssetMetadata.icon}
+                              size={24}
+                              chain={swap.chain}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <Text
+                              fontSize="13px"
+                              color={colors.offWhite}
+                              fontWeight="500"
+                              letterSpacing="-0.5px"
+                            >
+                              {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
+                            </Text>
+                            <AssetIconWithChain
+                              asset={isBTCtoEVM ? "BTC" : "cbBTC"}
+                              size={24}
+                              chain={isBTCtoEVM ? "BTC" : swap.chain}
+                            />
+                          </>
+                        )}
+
+                        <Text fontSize="13px" color={colors.textGray} mx="1px">→</Text>
+
+                        {/* Output */}
+                        {swap.outputAmount ? (
                           <Text
-                            fontSize="11px"
-                            fontFamily={FONT_FAMILIES.AUX_MONO}
-                            color={colors.textGray}
+                            fontSize="13px"
+                            color={colors.offWhite}
+                            fontWeight="500"
                             letterSpacing="-0.5px"
                           >
-                            -
+                            {formatBaseUnitAmount(swap.outputAmount, swap.outputDecimals || 8)}
                           </Text>
-                        )}
+                        ) : null}
+                        <AssetIconWithChain
+                          asset={swap.outputAsset || (isBTCtoEVM ? "cbBTC" : "BTC")}
+                          size={24}
+                          chain={isBTCtoEVM ? swap.chain : "BTC"}
+                        />
+                      </Flex>
+
+                      {/* Value */}
+                      <Flex flex="0 0 125px">
+                        <Text
+                          fontSize="13px"
+                          color={colors.offWhite}
+                          fontWeight="500"
+                        >
+                          {formatUSD(swap.swapInitialAmountUsd)}
+                        </Text>
                       </Flex>
 
                       {/* Status */}
@@ -1763,7 +2223,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                 </Text>
                 <Flex direction="column" gap="4px" pl="12px">
                   {selectedSwap.flow
-                    .filter((s) => s.status !== "settled")
+                    .filter((s) => s.status !== "swap_complete")
                     .map((step, idx) => (
                       <Flex key={idx} justify="space-between" align="center">
                         <Text fontSize="13px" color={colors.textGray}>

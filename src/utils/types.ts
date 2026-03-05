@@ -2,16 +2,11 @@ import { Address } from "viem";
 import { Currency } from "./riftApiClient";
 
 export type TokenStyle = {
-  name: string;
-  symbol: string;
-  display_name?: string;
-  icon_svg?: any;
-  bg_color?: string;
-  border_color?: string;
-  border_color_light?: string;
-  dark_bg_color?: string;
-  light_text_color?: string;
-  logoURI?: string;
+  bg_color: string;
+  border_color: string;
+  border_color_light: string;
+  dark_bg_color: string;
+  light_text_color: string;
 };
 
 export type Asset = {
@@ -33,6 +28,16 @@ export type SVM = {
   name: "SVM";
 };
 
+/** Chain identifier constants */
+export const Chain = {
+  Bitcoin: "bitcoin",
+  Ethereum: 1,
+  Base: 8453,
+} as const;
+
+/** Chain identifier type - "bitcoin" for Bitcoin, or EVM chain ID (1 for Ethereum, 8453 for Base) */
+export type Chain = (typeof Chain)[keyof typeof Chain];
+
 export type TokenData = {
   name: string;
   ticker: string;
@@ -41,7 +46,7 @@ export type TokenData = {
   usdValue: string;
   icon: string;
   decimals: number;
-  chainId: number; // 1 for Ethereum, 8453 for Base
+  chain: Chain;
 };
 
 export type TokenMetadata = {
@@ -76,6 +81,7 @@ export enum Network {
   ALL = "0",
   ETHEREUM = "1",
   BASE = "8453",
+  BITCOIN = "btc",
 }
 
 export type VirtualMachine = EVM | Bitcoin | SVM;
@@ -92,10 +98,27 @@ export type Config = {
   etherscanUrl: string;
   mainnetRpcUrl: string;
   esploraUrl: string;
+  mempoolUrl: string;
+
   riftApiUrl: string;
   rfqUrl: string;
   underlyingSwappingAssets: Asset[];
 };
+
+/**
+ * Fee breakdown overview for a swap
+ */
+export interface FeeOverview {
+  gasFee: {
+    fee: string;
+    description: string;
+  };
+  riftFee: {
+    fee: string;
+    description: string;
+  };
+  totalFees: string;
+}
 
 export type RouteButton = "Swap" | "Manage" | "About";
 
@@ -182,7 +205,7 @@ export interface AnalyticsSwapData {
   id: string;
   quote_id: string;
   market_maker_id: string;
-  status: string; // "settled", "waiting_user_deposit_initiated", etc.
+  status: string; // "swap_complete", "waiting_for_deposit", etc.
   created_at: string; // ISO 8601
   updated_at: string; // ISO 8601
   failure_at: string | null;
@@ -215,17 +238,15 @@ export interface AnalyticsSwapData {
   settlement_status: any | null;
 }
 
-// Admin dashboard swap history types - aligned to OTC DB statuses
+// Admin dashboard swap history types - aligned to Rift API/SDK statuses
 export type AdminSwapFlowStatus =
   | "pending" // swap created
-  | "waiting_user_deposit_initiated"
-  | "waiting_user_deposit_confirmed"
-  | "waiting_mm_deposit_initiated"
-  | "waiting_mm_deposit_confirmed"
-  | "settled"
-  | "refunding_user" // refund in progress to user
-  | "refunding_mm" // refund in progress to market maker
-  | "user_refunded_detected"; // refund detected (balance withdrawn)
+  | "waiting_for_deposit"
+  | "deposit_confirming"
+  | "initiating_payout"
+  | "confirming_payout"
+  | "swap_complete"
+  | "refunding_user"; // user has been refunded
 
 export interface AdminSwapFlowStep {
   status: AdminSwapFlowStatus;
@@ -301,6 +322,13 @@ export interface AdminSwapItem {
     executed_amount?: string;
     decimals: number;
   };
+  /** Output amount in base units (string to preserve precision) */
+  outputAmount?: string;
+  /** Output asset symbol (e.g. "BTC", "cbBTC") */
+  outputAsset?: string;
+  /** Output asset decimals */
+  outputDecimals?: number;
   /** Raw swap data from backend */
   rawData?: any;
 }
+

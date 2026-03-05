@@ -58,22 +58,12 @@ export const CustomToastProvider = () => {
             const title = messages[0];
             const description = messages.length > 1 ? messages[1] : null;
             return (
-              <>
-                <Flex
-                  fontFamily={"Aux"}
-                  h="100%"
-                  // pt='5px'
-                >
+              <Flex align="center" w="100%" gap="8px">
+                <Flex fontFamily={"Aux"} align="center" justify="center" flexShrink={0}>
                   {icon}
                 </Flex>
-                <Flex
-                  // bg='black'
-                  flex={1}
-                  pl="10px"
-                  pr="10px"
-                  flexDir="column"
-                >
-                  <Text fontFamily={"Aux"} fontSize="0.9rem" fontWeight="600">
+                <Flex flex={1} flexDir="column" minW={0}>
+                  <Text fontFamily={"Aux"} fontSize="0.9rem" fontWeight="600" noOfLines={1}>
                     {title}
                   </Text>
                   {description && description != "undefined" && (
@@ -82,6 +72,7 @@ export const CustomToastProvider = () => {
                       fontSize="0.8rem"
                       fontWeight="300"
                       color={colors.offWhite}
+                      noOfLines={1}
                     >
                       {description}
                     </Text>
@@ -94,6 +85,7 @@ export const CustomToastProvider = () => {
                     onClick={() => toast.dismiss(t.id)}
                     color={colors.offWhite}
                     transition="0.2s color ease-in-out"
+                    flexShrink={0}
                     _hover={{
                       color: colors.textGray,
                     }}
@@ -101,7 +93,7 @@ export const CustomToastProvider = () => {
                     <MdClose />
                   </Flex>
                 )}
-              </>
+              </Flex>
             );
           }}
         </ToastBar>

@@ -1,11 +1,11 @@
-import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { createAppKit } from "@reown/appkit";
-import { mainnet, arbitrum, base, type AppKitNetwork } from "@reown/appkit/networks";
-import { createStorage, cookieStorage, http, fallback } from "wagmi";
+import { createConfig, createStorage, cookieStorage, http, fallback } from "wagmi";
+import { mainnet, base } from "viem/chains";
 import { QueryClient } from "@tanstack/react-query";
+import { createWalletClient, custom, type WalletClient } from "viem";
+import type { Chain } from "viem/chains";
 
 // Define a custom Anvil network for local development
-export const anvilNetwork: AppKitNetwork = {
+export const anvilNetwork: Chain = {
   id: 1337,
   name: "Rift Devnet",
   nativeCurrency: {
@@ -17,9 +17,6 @@ export const anvilNetwork: AppKitNetwork = {
     default: {
       http: ["http://localhost:50101"],
     },
-    public: {
-      http: ["http://localhost:50101"],
-    },
   },
   blockExplorers: {
     default: {
@@ -28,33 +25,23 @@ export const anvilNetwork: AppKitNetwork = {
     },
   },
   testnet: true,
-  contracts: {},
 };
 
-// Change this to your actual project ID from Reown Cloud
-export const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID;
+// Dynamic environment ID (Live environment)
+export const dynamicEnvironmentId =
+  process.env.NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID || "77346493-99a4-4378-8602-e14ee71821c7";
 
-// Define the networks your app will support - add anvilNetwork as the first network
-// TODO: Disable anvilNetwork in production
-export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
-  //anvilNetwork,
-  mainnet,
-  base,
-];
+// Define the networks your app will support
+export const networks = [mainnet, base] as const;
 
-// Create the Wagmi Adapter
-export const wagmiAdapter = new WagmiAdapter({
+// Create the Wagmi config (standard Wagmi, not Reown adapter)
+export const wagmiConfig = createConfig({
+  chains: [mainnet, base],
+  multiInjectedProviderDiscovery: false, // Dynamic handles wallet discovery
   storage: createStorage({
     storage: cookieStorage,
   }),
   ssr: true,
-  networks,
-  projectId: projectId || "",
-  chains: [
-    mainnet,
-    base,
-    // anvilNetwork
-  ],
   transports: {
     [mainnet.id]: fallback([
       http("https://rpc.mevblocker.io"),
@@ -62,53 +49,134 @@ export const wagmiAdapter = new WagmiAdapter({
       http("https://eth.drpc.org"),
     ]),
     [base.id]: fallback([http("https://mainnet.base.org"), http("https://base.drpc.org")]),
-    //[anvilNetwork.id]: http(CHAIN_SCOPED_CONFIGS[anvilNetwork.id].rpcUrl),
   },
 });
 
 // Create a query client
 export const queryClient = new QueryClient();
 
-// Set up metadata for your app
-const metadata = {
+// RPC URLs for wallet client configuration
+export const RPC_URLS: Record<number, string> = {
+  1: "https://rpc.mevblocker.io", // Ethereum mainnet
+  8453: "https://mainnet.base.org", // Base
+};
+
+type SupportedEvmChainId = 1 | 8453;
+const SUPPORTED_EVM_CHAINS: Record<SupportedEvmChainId, (typeof networks)[number]> = {
+  1: mainnet,
+  8453: base,
+};
+
+/**
+ * Get wallet client configuration for a given chainId
+ * Used when calling Dynamic's getWalletClient with explicit chain config
+ */
+export function getWalletClientConfig(accountAddress: string, chainId: number = 1) {
+  const rpcUrl = RPC_URLS[chainId] || RPC_URLS[1];
+  return {
+    accountAddress,
+    chainId,
+    rpcUrl,
+  };
+}
+
+const MOBILE_PROVIDER_NOT_READY_ERROR = "SDK state invalid -- undefined mobile provider";
+const DYNAMIC_PROVIDER_NOT_READY_ERROR = "Dynamic wallet provider not ready";
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const isSupportedEvmChainId = (chainId: number): chainId is SupportedEvmChainId =>
+  chainId === 1 || chainId === 8453;
+
+type Eip1193ProviderLike = {
+  request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>;
+};
+
+const getEip1193Provider = (dynamicClient: any): Eip1193ProviderLike | null => {
+  if (typeof dynamicClient?.request === "function") {
+    return {
+      request: dynamicClient.request.bind(dynamicClient),
+    };
+  }
+
+  const transportValue = dynamicClient?.transport?.value;
+  if (transportValue && typeof transportValue.request === "function") {
+    return transportValue;
+  }
+
+  const transport = dynamicClient?.transport;
+  if (transport && typeof transport.request === "function") {
+    return transport;
+  }
+
+  return null;
+};
+
+const getMetaMaskSdkInitPromise = (wallet: any): Promise<unknown> | null => {
+  const connector = wallet?.connector ?? wallet?._connector;
+  const sdkInitPromise = connector?.metaMaskSDK?.sdkInitPromise;
+  return typeof sdkInitPromise?.then === "function" ? sdkInitPromise : null;
+};
+
+/**
+ * Dynamic's MetaMask connector can race on hydration, where getWalletClient is called
+ * before the SDK provider is fully initialized. Wait for SDK init and retry transient failures.
+ * We then build an explicit chain-aware viem wallet client so `client.chain` is always present.
+ */
+export async function getDynamicWalletClient(
+  wallet: any,
+  accountAddress: string,
+  chainId: number = 1,
+  maxRetries: number = 5
+): Promise<WalletClient | null> {
+  const resolvedChainId: SupportedEvmChainId = isSupportedEvmChainId(chainId) ? chainId : 1;
+
+  const sdkInitPromise = getMetaMaskSdkInitPromise(wallet);
+  if (sdkInitPromise) {
+    await sdkInitPromise;
+  }
+
+  const config = getWalletClientConfig(accountAddress, resolvedChainId);
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      const dynamicClient = await wallet.getWalletClient(config);
+      if (!dynamicClient) {
+        return null;
+      }
+
+      const provider = getEip1193Provider(dynamicClient);
+      if (!provider) {
+        throw new Error(DYNAMIC_PROVIDER_NOT_READY_ERROR);
+      }
+
+      return createWalletClient({
+        account: accountAddress as `0x${string}`,
+        chain: SUPPORTED_EVM_CHAINS[resolvedChainId],
+        transport: custom(provider),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const shouldRetry =
+        message.includes(MOBILE_PROVIDER_NOT_READY_ERROR) ||
+        message.includes(DYNAMIC_PROVIDER_NOT_READY_ERROR);
+      const isLastAttempt = attempt === maxRetries;
+
+      if (!shouldRetry || isLastAttempt) {
+        throw error;
+      }
+
+      await wait(200 * (attempt + 1));
+    }
+  }
+
+  return null;
+}
+
+// Set up metadata for your app (can be used by Dynamic if needed)
+export const metadata = {
   name: "Rift",
   description: "P2P Bitcoin Trading",
   url: "https://app.rift.trade",
   icons: ["https://app.rift.trade/icon.png"],
-};
-
-// Create the modal
-export const reownModal = createAppKit({
-  adapters: [wagmiAdapter],
-  projectId: projectId || "",
-  networks,
-  metadata,
-  enableWalletGuide: false,
-  featuredWalletIds: [
-    "a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393",
-    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0",
-    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
-  ],
-  features: {
-    analytics: true,
-    email: true, // Enable email login
-    swaps: false,
-    socials: ["google", "apple", "x"], // Enable social logins
-    emailShowWallets: true, // Show wallets directly without email prompt
-    connectMethodsOrder: ["wallet", "social", "email"],
-  },
-  allWallets: "SHOW", // Display all available wallets
-  enableEIP6963: true, // Enable modern wallet discovery to prevent conflicts
-  enableInjected: true, // Ensure injected wallets are enabled
-});
-
-// Override the modal open method to prevent it from opening on admin page
-const originalOpen = reownModal.open;
-reownModal.open = (options?: any) => {
-  // Check if we're on admin page
-  if (typeof window !== "undefined" && window.location.pathname === "/admin") {
-    console.warn("Reown modal blocked on admin page");
-    return Promise.resolve();
-  }
-  return originalOpen.call(reownModal, options);
 };

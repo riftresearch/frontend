@@ -29,7 +29,7 @@ export const StatsOverview: React.FC = () => {
     return (
       <Flex justify="space-between" align="center" gap="12px" w="100%" direction="column">
         {/* TOTAL VOLUME - Full width on mobile */}
-        <GridFlex width="100%" heightBlocks={3}>
+        <GridFlex width="100%" heightBlocks={2}>
           <Box position="relative" w="100%" h="100%">
             <Button
               size="sm"
@@ -54,13 +54,13 @@ export const StatsOverview: React.FC = () => {
               <Text
                 color={colorsAnalytics.textGray}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="19px"
+                fontSize="14px"
                 fontWeight="bold"
-                mb="8px"
+                mb="6px"
               >
                 All User Volume
               </Text>
-              <Box mt="-11px">
+              <Box mt="-8px">
                 {hasDataLoaded ? (
                   <NumberFlow
                     value={
@@ -81,7 +81,7 @@ export const StatsOverview: React.FC = () => {
                     suffix={volumeCurrency === "usd" ? undefined : " sats"}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
-                      fontSize: "49px",
+                      fontSize: "36px",
                       fontWeight: "bold",
                       color: colorsAnalytics.offWhite,
                       textShadow: "0 0 18px rgba(255,255,255,0.22)",
@@ -90,7 +90,7 @@ export const StatsOverview: React.FC = () => {
                 ) : (
                   <Text
                     fontFamily={FONT_FAMILIES.SF_PRO}
-                    fontSize="49px"
+                    fontSize="36px"
                     fontWeight="bold"
                     color="#3a3a3a"
                   >
@@ -105,19 +105,19 @@ export const StatsOverview: React.FC = () => {
         {/* Bottom row - SWAPS and USERS side by side */}
         <Flex w="100%" gap="12px">
           {/* COMPLETED SWAPS */}
-          <GridFlex width="50%" heightBlocks={3}>
-            <Flex direction="column" pl="25px" pt="18px">
+          <GridFlex width="50%" heightBlocks={2}>
+            <Flex direction="column" pl="25px" pt="14px">
               <Text
                 color={colorsAnalytics.textGray}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="19px"
+                fontSize="14px"
                 fontWeight="bold"
-                mb="8px"
+                mb="6px"
               >
                 Total Swaps
               </Text>
               <Box
-                mt="-12px"
+                mt="-8px"
                 cursor="pointer"
                 onClick={() => {
                   navigator.clipboard.writeText(completedSwaps.toString());
@@ -133,7 +133,7 @@ export const StatsOverview: React.FC = () => {
                     format={{ notation: "compact" }}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
-                      fontSize: "49px",
+                      fontSize: "36px",
                       fontWeight: "bold",
                       color: colorsAnalytics.offWhite,
                       textShadow: "0 0 18px rgba(255,255,255,0.22)",
@@ -142,7 +142,7 @@ export const StatsOverview: React.FC = () => {
                 ) : (
                   <Text
                     fontFamily={FONT_FAMILIES.SF_PRO}
-                    fontSize="49px"
+                    fontSize="36px"
                     fontWeight="bold"
                     color="#3a3a3a"
                   >
@@ -154,19 +154,19 @@ export const StatsOverview: React.FC = () => {
           </GridFlex>
 
           {/* UNIQUE USERS */}
-          <GridFlex width="50%" heightBlocks={3}>
-            <Flex direction="column" pl="25px" pt="18px">
+          <GridFlex width="50%" heightBlocks={2}>
+            <Flex direction="column" pl="25px" pt="14px">
               <Text
                 color={colorsAnalytics.textGray}
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="19px"
+                fontSize="14px"
                 fontWeight="bold"
-                mb="8px"
+                mb="6px"
               >
                 Unique Users
               </Text>
               <Box
-                mt="-12px"
+                mt="-8px"
                 cursor="pointer"
                 onClick={() => {
                   navigator.clipboard.writeText(uniqueUsers.toString());
@@ -182,7 +182,7 @@ export const StatsOverview: React.FC = () => {
                     format={{ notation: "compact" }}
                     style={{
                       fontFamily: FONT_FAMILIES.SF_PRO,
-                      fontSize: "49px",
+                      fontSize: "36px",
                       fontWeight: "bold",
                       color: colorsAnalytics.offWhite,
                       textShadow: "0 0 18px rgba(255,255,255,0.22)",
@@ -191,7 +191,7 @@ export const StatsOverview: React.FC = () => {
                 ) : (
                   <Text
                     fontFamily={FONT_FAMILIES.SF_PRO}
-                    fontSize="49px"
+                    fontSize="36px"
                     fontWeight="bold"
                     color="#3a3a3a"
                   >
@@ -210,7 +210,7 @@ export const StatsOverview: React.FC = () => {
   return (
     <Flex justify="space-between" align="center" gap="20px" w="100%" alignSelf="center">
       {/* TOTAL VOLUME */}
-      <GridFlex widthBlocks={10} heightBlocks={3}>
+      <GridFlex widthBlocks={10} heightBlocks={2.2}>
         <Box position="relative" w="100%" h="100%">
           <Button
             size="sm"
@@ -231,17 +231,17 @@ export const StatsOverview: React.FC = () => {
           >
             {volumeCurrency === "usd" ? <FaDollarSign /> : <FaBitcoin />}
           </Button>
-          <Flex direction="column" pl="25px" pt="18px">
+          <Flex direction="column" pl="25px" pt="14px">
             <Text
               color={colorsAnalytics.textGray}
               fontFamily={FONT_FAMILIES.SF_PRO}
-              fontSize="19px"
+              fontSize="14px"
               fontWeight="bold"
-              mb="8px"
+              mb="6px"
             >
               All User Volume
             </Text>
-            <Box mt="-11px">
+            <Box mt="-8px">
               <Tooltip.Root openDelay={200} closeDelay={0}>
                 <Tooltip.Trigger asChild>
                   <Box
@@ -287,7 +287,7 @@ export const StatsOverview: React.FC = () => {
                         suffix={volumeCurrency === "usd" ? undefined : " sats"}
                         style={{
                           fontFamily: FONT_FAMILIES.SF_PRO,
-                          fontSize: "49px",
+                          fontSize: "36px",
                           fontWeight: "bold",
                           color: colorsAnalytics.offWhite,
                           textShadow: "0 0 18px rgba(255,255,255,0.22)",
@@ -296,7 +296,7 @@ export const StatsOverview: React.FC = () => {
                     ) : (
                       <Text
                         fontFamily={FONT_FAMILIES.SF_PRO}
-                        fontSize="49px"
+                        fontSize="36px"
                         fontWeight="bold"
                         color="#3a3a3a"
                       >
@@ -332,19 +332,19 @@ export const StatsOverview: React.FC = () => {
       </GridFlex>
 
       {/* COMPLETED SWAPS */}
-      <GridFlex widthBlocks={10} heightBlocks={3}>
-        <Flex direction="column" pl="25px" pt="18px">
+      <GridFlex widthBlocks={10} heightBlocks={2.2}>
+        <Flex direction="column" pl="25px" pt="14px">
           <Text
             color={colorsAnalytics.textGray}
             fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="19px"
+            fontSize="14px"
             fontWeight="bold"
-            mb="8px"
+            mb="6px"
           >
             Total Swaps
           </Text>
           <Box
-            mt="-12px"
+            mt="-8px"
             cursor="pointer"
             onClick={() => {
               navigator.clipboard.writeText(completedSwaps.toString());
@@ -360,7 +360,7 @@ export const StatsOverview: React.FC = () => {
                 format={{ notation: "compact" }}
                 style={{
                   fontFamily: FONT_FAMILIES.SF_PRO,
-                  fontSize: "49px",
+                  fontSize: "36px",
                   fontWeight: "bold",
                   color: colorsAnalytics.offWhite,
                   textShadow: "0 0 18px rgba(255,255,255,0.22)",
@@ -369,7 +369,7 @@ export const StatsOverview: React.FC = () => {
             ) : (
               <Text
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="49px"
+                fontSize="36px"
                 fontWeight="bold"
                 color="#3a3a3a"
               >
@@ -381,19 +381,19 @@ export const StatsOverview: React.FC = () => {
       </GridFlex>
 
       {/* UNIQUE USERS */}
-      <GridFlex widthBlocks={10} heightBlocks={3}>
-        <Flex direction="column" pl="25px" pt="18px">
+      <GridFlex widthBlocks={10} heightBlocks={2.2}>
+        <Flex direction="column" pl="25px" pt="14px">
           <Text
             color={colorsAnalytics.textGray}
             fontFamily={FONT_FAMILIES.SF_PRO}
-            fontSize="19px"
+            fontSize="14px"
             fontWeight="bold"
-            mb="8px"
+            mb="6px"
           >
             Unique Users
           </Text>
           <Box
-            mt="-12px"
+            mt="-8px"
             cursor="pointer"
             onClick={() => {
               navigator.clipboard.writeText(uniqueUsers.toString());
@@ -409,7 +409,7 @@ export const StatsOverview: React.FC = () => {
                 format={{ notation: "compact" }}
                 style={{
                   fontFamily: FONT_FAMILIES.SF_PRO,
-                  fontSize: "49px",
+                  fontSize: "36px",
                   fontWeight: "bold",
                   color: colorsAnalytics.offWhite,
                   textShadow: "0 0 18px rgba(255,255,255,0.22)",
@@ -418,7 +418,7 @@ export const StatsOverview: React.FC = () => {
             ) : (
               <Text
                 fontFamily={FONT_FAMILIES.SF_PRO}
-                fontSize="49px"
+                fontSize="36px"
                 fontWeight="bold"
                 color="#3a3a3a"
               >

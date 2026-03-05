@@ -346,13 +346,14 @@ export const VolumeTxnChart: React.FC<VolumeTxnChartProps> = ({ defaultTimeframe
                 radius={[15, 15, 8, 8]}
                 isAnimationActive={false}
               />
-              <Bar
+              {/* Transaction bars commented out - txn count still shows on hover via tooltip */}
+              {/* <Bar
                 yAxisId="volume"
                 dataKey="txnsNorm"
                 fill="url(#txnGrad)"
                 radius={[15, 15, 8, 8]}
                 isAnimationActive={false}
-              />
+              /> */}
             </BarChart>
           </ResponsiveContainer>
         </Box>

@@ -1,0 +1,382 @@
+/**
+ * Hook for signing and broadcasting Bitcoin transactions using Dynamic Labs SDK
+ */
+
+import { useState, useCallback } from "react";
+import { useUserWallets } from "@dynamic-labs/sdk-react-core";
+import { isBitcoinWallet, BitcoinWallet } from "@dynamic-labs/bitcoin";
+import * as bitcoin from "bitcoinjs-lib";
+import {
+  prepareDepositTransaction,
+  broadcastBitcoinTransaction,
+  fetchUserUtxos,
+  getUtxoBalance,
+} from "@/utils/bitcoinTransactionHelpers";
+
+/**
+ * Get the payment address from a Bitcoin wallet
+ * Xverse and some other wallets have separate payment and ordinal addresses.
+ * The payment address is needed for sending BTC transactions.
+ */
+export function getPaymentAddress(wallet: BitcoinWallet): string {
+  // Check additionalAddresses for a payment address
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string; publicKey?: string }>
+    | undefined;
+
+  if (additionalAddresses && additionalAddresses.length > 0) {
+    const paymentAddr = additionalAddresses.find((addr) => addr.type === "payment");
+    if (paymentAddr) {
+      return paymentAddr.address;
+    }
+  }
+
+  // Fallback to the default wallet address
+  return wallet.address;
+}
+
+/**
+ * Get ALL addresses from a Bitcoin wallet (for balance fetching)
+ * This includes both the primary address and any additional addresses (Taproot, Native Segwit, etc.)
+ */
+export function getAllBtcAddresses(wallet: BitcoinWallet): string[] {
+  const addresses: string[] = [];
+  
+  // Add the primary wallet address
+  if (wallet.address) {
+    addresses.push(wallet.address);
+  }
+
+  // Check for additional addresses (Phantom, Xverse, etc. may have multiple address types)
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string; publicKey?: string }>
+    | undefined;
+
+  if (additionalAddresses && additionalAddresses.length > 0) {
+    for (const addr of additionalAddresses) {
+      if (addr.address && !addresses.includes(addr.address)) {
+        addresses.push(addr.address);
+      }
+    }
+  }
+
+  return addresses;
+}
+
+/**
+ * Address info with type label for display
+ */
+export interface BtcAddressInfo {
+  address: string;
+  type: string;
+  label: string;
+}
+
+/**
+ * Get address type label from address prefix (short labels for compact display)
+ */
+function getAddressTypeLabel(address: string): string {
+  if (address.startsWith("bc1p") || address.startsWith("tb1p")) {
+    return "Taproot";
+  } else if (address.startsWith("bc1q") || address.startsWith("tb1q")) {
+    return "Segwit";
+  } else if (address.startsWith("3") || address.startsWith("2")) {
+    return "P2SH";
+  } else if (address.startsWith("1") || address.startsWith("m") || address.startsWith("n")) {
+    return "Legacy";
+  }
+  return "";
+}
+
+/**
+ * Get ALL addresses from a Bitcoin wallet with type info
+ * Returns array of { address, type, label } for each address
+ */
+export function getAllBtcAddressesWithInfo(wallet: BitcoinWallet): BtcAddressInfo[] {
+  const addressInfos: BtcAddressInfo[] = [];
+  const seenAddresses = new Set<string>();
+
+  // Check for additional addresses first (these have explicit type info)
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string; publicKey?: string }>
+    | undefined;
+
+  if (additionalAddresses && additionalAddresses.length > 0) {
+    for (const addr of additionalAddresses) {
+      if (addr.address && !seenAddresses.has(addr.address)) {
+        seenAddresses.add(addr.address);
+        addressInfos.push({
+          address: addr.address,
+          type: addr.type || "unknown",
+          label: getAddressTypeLabel(addr.address),
+        });
+      }
+    }
+  }
+
+  // Add the primary wallet address if not already added
+  if (wallet.address && !seenAddresses.has(wallet.address)) {
+    addressInfos.push({
+      address: wallet.address,
+      type: "primary",
+      label: getAddressTypeLabel(wallet.address),
+    });
+  }
+
+  return addressInfos;
+}
+
+/**
+ * Check if an address belongs to a Bitcoin wallet (either primary or additional)
+ */
+export function walletHasAddress(wallet: BitcoinWallet, address: string): boolean {
+  // Check primary address
+  if (wallet.address === address) {
+    return true;
+  }
+
+  // Check additional addresses
+  const additionalAddresses = (wallet as any).additionalAddresses as
+    | Array<{ address: string; type: string }>
+    | undefined;
+
+  if (additionalAddresses) {
+    return additionalAddresses.some((addr) => addr.address === address);
+  }
+
+  return false;
+}
+
+export interface UseBitcoinTransactionResult {
+  /**
+   * Send Bitcoin to a deposit address
+   * @param userAddress - User's Bitcoin address to send from
+   * @param depositAddress - Vault deposit address
+   * @param amountSats - Amount to send in satoshis
+   * @returns Transaction ID
+   */
+  sendBitcoin: (userAddress: string, depositAddress: string, amountSats: number) => Promise<string>;
+
+  /**
+   * Check if the user has sufficient balance
+   * @param address - Bitcoin address to check
+   * @param amountSats - Amount needed in satoshis
+   * @param estimatedFee - Estimated fee in satoshis (default 2000)
+   * @returns Object with balance info
+   */
+  checkBalance: (
+    address: string,
+    amountSats: number,
+    estimatedFee?: number
+  ) => Promise<{
+    hasSufficientBalance: boolean;
+    availableBalance: number;
+    requiredAmount: number;
+  }>;
+
+  /**
+   * Get all connected Bitcoin wallets
+   */
+  getBitcoinWallets: () => BitcoinWallet[];
+
+  /**
+   * Check if any Bitcoin wallet is connected
+   */
+  isBitcoinWalletConnected: () => boolean;
+
+  /**
+   * Loading state
+   */
+  isLoading: boolean;
+
+  /**
+   * Error state
+   */
+  error: Error | null;
+
+  /**
+   * Transaction state for UI
+   */
+  transactionState: "idle" | "preparing" | "signing" | "broadcasting" | "success" | "error";
+}
+
+export function useBitcoinTransaction(): UseBitcoinTransactionResult {
+  const userWallets = useUserWallets();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [transactionState, setTransactionState] = useState<
+    "idle" | "preparing" | "signing" | "broadcasting" | "success" | "error"
+  >("idle");
+
+  /**
+   * Get all Bitcoin wallets from connected wallets
+   */
+  const getBitcoinWallets = useCallback((): BitcoinWallet[] => {
+    return userWallets.filter((wallet) => isBitcoinWallet(wallet)) as BitcoinWallet[];
+  }, [userWallets]);
+
+  /**
+   * Find a Bitcoin wallet by address (checks both primary and additional addresses)
+   */
+  const findBitcoinWalletByAddress = useCallback(
+    (address: string): BitcoinWallet | null => {
+      const btcWallets = getBitcoinWallets();
+      return btcWallets.find((wallet) => walletHasAddress(wallet, address)) || null;
+    },
+    [getBitcoinWallets]
+  );
+
+  /**
+   * Check if any Bitcoin wallet is connected
+   */
+  const isBitcoinWalletConnected = useCallback((): boolean => {
+    return getBitcoinWallets().length > 0;
+  }, [getBitcoinWallets]);
+
+  /**
+   * Check if user has sufficient balance
+   */
+  const checkBalance = useCallback(
+    async (
+      address: string,
+      amountSats: number,
+      estimatedFee: number = 2000
+    ): Promise<{
+      hasSufficientBalance: boolean;
+      availableBalance: number;
+      requiredAmount: number;
+    }> => {
+      if (!address) {
+        return {
+          hasSufficientBalance: false,
+          availableBalance: 0,
+          requiredAmount: amountSats + estimatedFee,
+        };
+      }
+
+      try {
+        const utxos = await fetchUserUtxos(address);
+        const availableBalance = getUtxoBalance(utxos);
+        const requiredAmount = amountSats + estimatedFee;
+
+        return {
+          hasSufficientBalance: availableBalance >= requiredAmount,
+          availableBalance,
+          requiredAmount,
+        };
+      } catch {
+        return {
+          hasSufficientBalance: false,
+          availableBalance: 0,
+          requiredAmount: amountSats + estimatedFee,
+        };
+      }
+    },
+    []
+  );
+
+  /**
+   * Send Bitcoin to a deposit address
+   */
+  const sendBitcoin = useCallback(
+    async (userAddress: string, depositAddress: string, amountSats: number): Promise<string> => {
+      setIsLoading(true);
+      setError(null);
+      setTransactionState("preparing");
+
+      try {
+        // Validate user address
+        if (!userAddress) {
+          throw new Error("No Bitcoin address provided");
+        }
+
+      // Find the Bitcoin wallet that matches the user address
+      const btcWallet = findBitcoinWalletByAddress(userAddress);
+      if (!btcWallet) {
+        throw new Error(
+          `No Bitcoin wallet found for address ${userAddress}. Please ensure your Bitcoin wallet is connected.`
+        );
+      }
+
+      // Log wallet info for debugging
+      const connectorName = btcWallet.connector?.name?.toLowerCase() || "";
+      console.log("[sendBitcoin] Wallet connector:", connectorName);
+      console.log("[sendBitcoin] User address:", userAddress);
+      console.log("[sendBitcoin] Payment address:", getPaymentAddress(btcWallet));
+      console.log("[sendBitcoin] All addresses:", getAllBtcAddresses(btcWallet));
+
+      // Check if user selected a Taproot address - most wallets don't support spending from Taproot
+      // Always use the payment address (Native Segwit) for actual transactions
+      const isTaprootSelected = userAddress.startsWith("bc1p") || userAddress.startsWith("tb1p");
+      
+      // If Taproot was somehow selected, fall back to payment address
+      const effectiveAddress = isTaprootSelected ? getPaymentAddress(btcWallet) : userAddress;
+      console.log("[sendBitcoin] Effective address:", effectiveAddress, "isTaprootSelected:", isTaprootSelected);
+
+      // Step 1: Prepare the PSBT using the effective address
+      const psbtResult = await prepareDepositTransaction(
+        effectiveAddress, // Use payment address for Xverse, selected address for others
+        depositAddress,
+        amountSats,
+        "medium" // Use medium fee priority
+      );
+
+      // Step 2: Sign the PSBT using Dynamic Labs SDK
+      setTransactionState("signing");
+
+      // Build the signing request
+      const psbt = bitcoin.Psbt.fromBase64(psbtResult.psbtBase64);
+      const signingIndexes = psbt.data.inputs.map((_, index) => index);
+
+      const signPsbtRequest = {
+        allowedSighash: [1], // SIGHASH_ALL
+        unsignedPsbtBase64: psbtResult.psbtBase64,
+        signature: [
+          {
+            address: effectiveAddress, // Same address for both UTXO fetching and signing
+            signingIndexes,
+          },
+        ],
+      };
+
+        console.log("[sendBitcoin] Sign PSBT request:", JSON.stringify(signPsbtRequest, null, 2));
+        const signedPsbtResponse = await btcWallet.signPsbt(signPsbtRequest);
+        console.log("[sendBitcoin] Signed PSBT response:", signedPsbtResponse);
+
+        if (!signedPsbtResponse?.signedPsbt) {
+          throw new Error("Failed to sign PSBT - no signed PSBT returned");
+        }
+
+        // Step 3: Finalize and extract raw transaction
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtResponse.signedPsbt);
+        signedPsbt.finalizeAllInputs();
+        const rawTxHex = signedPsbt.extractTransaction().toHex();
+
+        // Step 4: Broadcast the transaction
+        setTransactionState("broadcasting");
+
+        const txid = await broadcastBitcoinTransaction(rawTxHex);
+
+        setTransactionState("success");
+        setIsLoading(false);
+        return txid;
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        setTransactionState("error");
+        setIsLoading(false);
+        throw err;
+      }
+    },
+    [findBitcoinWalletByAddress]
+  );
+
+  return {
+    sendBitcoin,
+    checkBalance,
+    getBitcoinWallets,
+    isBitcoinWalletConnected,
+    isLoading,
+    error,
+    transactionState,
+  };
+}
