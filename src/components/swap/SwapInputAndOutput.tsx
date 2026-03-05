@@ -1238,14 +1238,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // Only use the selected wallet's balance - if token not found, user doesn't own it in this wallet
     const balance = matchingToken?.balance || "0";
 
-    // Only show balance if user actually owns the token in the selected wallet
-    if (balance === "0" || parseFloat(balance) <= 0) {
-      setCurrentInputBalance(null);
-      setCurrentInputTicker(null);
-    } else {
-      setCurrentInputBalance(balance);
-      setCurrentInputTicker(inputToken.ticker || null);
-    }
+    // Show balance (including "0") when wallet is connected
+    setCurrentInputBalance(balance);
+    setCurrentInputTicker(inputToken.ticker || null);
   }, [
     isEvmConnected,
     primaryEvmAddress,
@@ -1335,14 +1330,9 @@ export const SwapInputAndOutput = ({ hidePayoutAddress = false }: SwapInputAndOu
     // Only use the selected wallet's balance
     const balance = matchingToken?.balance || "0";
 
-    // For output, show null if user doesn't own the token in the selected wallet
-    if (balance === "0" || parseFloat(balance) <= 0) {
-      setCurrentOutputBalance(null);
-      setCurrentOutputTicker(null);
-    } else {
-      setCurrentOutputBalance(balance);
-      setCurrentOutputTicker(outputToken.ticker || null);
-    }
+    // Show balance (including "0") when wallet is connected
+    setCurrentOutputBalance(balance);
+    setCurrentOutputTicker(outputToken.ticker || null);
   }, [
     isEvmConnected,
     primaryEvmAddress,
