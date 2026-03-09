@@ -1,25 +1,19 @@
 import { Flex } from "@chakra-ui/react";
-import { useRouter } from "next/router";
 import { opaqueBackgroundColor } from "@/utils/constants";
 import useWindowSize from "@/hooks/useWindowSize";
 import { SwapInputAndOutput } from "./SwapInputAndOutput";
 import { SwapButton } from "./SwapButton";
+import { LimitOrderPanel } from "./LimitOrderPanel";
+import { LimitOrderButton } from "./LimitOrderButton";
+import { OrderModeToggle } from "./OrderModeToggle";
+import { useStore } from "@/utils/store";
 
 export const SwapWidget = () => {
-  // ============================================================================
-  // HOOKS
-  // ============================================================================
-
   const { isMobile } = useWindowSize();
-  const router = useRouter();
+  const orderMode = useStore((s) => s.orderMode);
 
-  // Styling constants
   const actualBorderColor = "#323232";
   const borderColor = `2px solid ${actualBorderColor}`;
-
-  // ============================================================================
-  // RENDER
-  // ============================================================================
 
   return (
     <Flex
@@ -35,8 +29,18 @@ export const SwapWidget = () => {
       borderRight={borderColor}
     >
       <Flex w="91.5%" direction="column">
-        <SwapInputAndOutput />
-        <SwapButton />
+        <OrderModeToggle />
+        {orderMode === "market" ? (
+          <>
+            <SwapInputAndOutput />
+            <SwapButton />
+          </>
+        ) : (
+          <>
+            <LimitOrderPanel />
+            <LimitOrderButton />
+          </>
+        )}
       </Flex>
     </Flex>
   );
