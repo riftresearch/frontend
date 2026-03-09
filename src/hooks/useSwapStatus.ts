@@ -104,9 +104,9 @@ function mapSdkResponse(sdkResponse: RiftSwap): NormalizedSwapStatus {
         amount: sdkResponse.quote.to.expected,
       },
     },
-    depositTransaction: (sdkResponse as any).depositTransaction,
-    payoutTransaction: (sdkResponse as any).payoutTransaction,
-    destinationAddress: (sdkResponse as any).destinationAddress,
+    depositTransaction: sdkResponse.depositTransaction,
+    payoutTransaction: sdkResponse.payoutTransaction,
+    destinationAddress: sdkResponse.destinationAddress,
     _raw: sdkResponse,
   };
 }

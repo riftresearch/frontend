@@ -191,7 +191,8 @@ export const SwapButton = () => {
       walletClient,
       onExecuteStep: async (type: ExecuteSwapStepType) => {
         // The SDK calls this immediately before prompting the wallet UI.
-        setSwapPhase(type === "approval" ? "approving" : "signing");
+        if (type === "approval") setSwapPhase("approving");
+        else setSwapPhase("signing");
       },
       sendBitcoin: async ({
         recipient,
