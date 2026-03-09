@@ -4,6 +4,9 @@ import { TokenData, ApprovalState, FeeOverview } from "./types";
 import type { WalletClient } from "viem";
 import type { RiftSdk } from "@riftresearch/sdk";
 
+export type OrderMode = "market" | "limit";
+export type LimitExpiry = "1h" | "1d" | "1w" | "1mo";
+
 // Inline to avoid circular dependency with constants.ts
 const DEFAULT_INPUT_TOKEN: TokenData = {
   name: "Ethereum",
@@ -138,6 +141,20 @@ export const useStore = create<{
   setSwitchingToInputTokenChain: (value: boolean) => void;
   isSwapInProgress: boolean;
   setIsSwapInProgress: (value: boolean) => void;
+
+  // Limit order state
+  orderMode: OrderMode;
+  setOrderMode: (mode: OrderMode) => void;
+  limitPrice: string;
+  setLimitPrice: (price: string) => void;
+  limitExpiry: LimitExpiry;
+  setLimitExpiry: (expiry: LimitExpiry) => void;
+  marketRate: number | null;
+  setMarketRate: (rate: number | null) => void;
+  isLoadingMarketRate: boolean;
+  setIsLoadingMarketRate: (value: boolean) => void;
+  limitLastEditedField: "sell" | "buy" | "price";
+  setLimitLastEditedField: (field: "sell" | "buy" | "price") => void;
 }>((set) => ({
   primaryEvmAddress: typeof window !== "undefined" ? localStorage.getItem("rift_selectedEvmAddress") : null,
   setPrimaryEvmAddress: (address: string | null) => {
@@ -296,4 +313,18 @@ export const useStore = create<{
   setSwitchingToInputTokenChain: (value: boolean) => set({ switchingToInputTokenChain: value }),
   isSwapInProgress: false,
   setIsSwapInProgress: (value: boolean) => set({ isSwapInProgress: value }),
+
+  // Limit order state
+  orderMode: "market",
+  setOrderMode: (mode: OrderMode) => set({ orderMode: mode }),
+  limitPrice: "",
+  setLimitPrice: (price: string) => set({ limitPrice: price }),
+  limitExpiry: "1d",
+  setLimitExpiry: (expiry: LimitExpiry) => set({ limitExpiry: expiry }),
+  marketRate: null,
+  setMarketRate: (rate: number | null) => set({ marketRate: rate }),
+  isLoadingMarketRate: false,
+  setIsLoadingMarketRate: (value: boolean) => set({ isLoadingMarketRate: value }),
+  limitLastEditedField: "sell",
+  setLimitLastEditedField: (field: "sell" | "buy" | "price") => set({ limitLastEditedField: field }),
 }));
