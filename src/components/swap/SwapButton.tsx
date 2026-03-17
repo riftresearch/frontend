@@ -252,7 +252,7 @@ export const SwapButton = () => {
 
       console.log("executing swap", executeParams);
       const swap = await executeSwap(executeParams);
-      setActiveSwapId(swap.swapId);
+      setActiveSwapId(swap.orderId);
       console.log("swap executed", swap);
 
       const isNonBtcEvmPair = inputToken.chain !== "bitcoin" && outputToken.chain !== "bitcoin";
@@ -302,7 +302,7 @@ export const SwapButton = () => {
         return;
       }
 
-      router.push(`/swap/${swap.swapId}`);
+      router.push(`/swap/${swap.orderId}`);
     } catch (error) {
       console.error("startSwap error caught:", error);
       setSwapButtonPressed(false);
