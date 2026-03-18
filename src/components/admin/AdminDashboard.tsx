@@ -27,6 +27,7 @@ import { useRouter } from "next/router";
 import { getSwap, mapDbRowToAdminSwap } from "@/utils/analyticsClient";
 import { AdminSwapItem } from "@/utils/types";
 import { colors } from "@/utils/colors";
+import { LimitOrdersPanel } from "./LimitOrdersPanel";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -70,6 +71,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [selectedSwap, setSelectedSwap] = React.useState<AdminSwapItem | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = React.useState(false);
+  const [dashboardView, setDashboardView] = React.useState<"market" | "limit">("market");
 
   const cycleFees = () => {
     setFeesDisplayMode((prev) => {
@@ -218,10 +220,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       >
         {/* HEADER */}
         <Flex justify="space-between" align="center" flexWrap="wrap" gap="16px">
-          <Box cursor="pointer" onClick={() => window.location.reload()}>
+          {/* Left: Logo */}
+          <Box cursor="pointer" onClick={() => window.location.reload()} flex="1">
             <RiftLogo width="110" height="28" fill={colorsAnalytics.offWhite} />
           </Box>
-          <Flex align="center" gap="24px" flexWrap="wrap">
+
+          {/* Center: Market/Limit Switcher */}
+          <Flex
+            gap="0"
+            bg="#0a0a0a"
+            borderRadius="20px"
+            p="4px"
+            border={`2px solid ${colorsAnalytics.borderGray}`}
+          >
+            <Button
+              onClick={() => setDashboardView("market")}
+              bg={dashboardView === "market" ? "#252525" : "transparent"}
+              color={colorsAnalytics.offWhite}
+              borderRadius="16px"
+              h="32px"
+              px="18px"
+              fontSize="13px"
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontWeight={dashboardView === "market" ? "600" : "400"}
+              _hover={dashboardView === "market" ? {} : { bg: "rgba(255, 255, 255, 0.03)" }}
+              minW="auto"
+            >
+              Market
+            </Button>
+            <Button
+              onClick={() => setDashboardView("limit")}
+              bg={dashboardView === "limit" ? "#252525" : "transparent"}
+              color={colorsAnalytics.offWhite}
+              borderRadius="16px"
+              h="32px"
+              px="18px"
+              fontSize="13px"
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontWeight={dashboardView === "limit" ? "600" : "400"}
+              _hover={dashboardView === "limit" ? {} : { bg: "rgba(255, 255, 255, 0.03)" }}
+              minW="auto"
+            >
+              Limit
+            </Button>
+          </Flex>
+
+          {/* Right: Search, User, Admin text */}
+          <Flex align="center" gap="24px" flexWrap="wrap" flex="1" justify="flex-end">
             {/* Swap ID Search - Collapsible */}
             <Flex align="center" gap="12px">
               {isSearchExpanded ? (
@@ -304,6 +349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <FiUser size={18} />
               </Button>
             </Flex>
+
             <Text fontSize="sm" color={colorsAnalytics.textGray} fontFamily={FONT_FAMILIES.SF_PRO}>
               Admin Dashboard &nbsp;|&nbsp;{" "}
               {new Date().toLocaleTimeString([], {
@@ -314,6 +360,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </Text>
           </Flex>
         </Flex>
+
+        {dashboardView === "market" ? (
+          <>
         {/* OVERVIEW */}
         <Flex
           justify="space-between"
@@ -842,6 +891,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         <Flex justify="center" mt="60px" mb="60px">
           <RiftLogo width="80" height="20" fill={colorsAnalytics.textGray} />
         </Flex>
+          </>
+        ) : (
+          <Flex mt="40px" direction="column">
+            <Text
+              ml="5px"
+              color={colorsAnalytics.offWhite}
+              fontFamily={FONT_FAMILIES.SF_PRO}
+              fontWeight="bold"
+              mt="18px"
+              fontSize="35px"
+              style={{ textShadow: "0 0 18px rgba(255,255,255,0.18)" }}
+              mb="28px"
+            >
+              Limit Orders
+            </Text>
+            <LimitOrdersPanel />
+          </Flex>
+        )}
 
         {/* MARKET MAKERS */}
         {/* <Flex mt="20px" mb="20px" direction="column">
