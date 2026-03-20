@@ -6,6 +6,7 @@ export const FONT_FAMILIES = {
   NOSTROMO:
     "Nostromo, Nostromo-fallback, Arial, Helvetica, 'Segoe UI', sans-serif",
   SF_PRO: "SFPro, SFPro-fallback, 'Helvetica Neue', Arial, sans-serif",
+  INTER: "Inter, Inter-fallback, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   CUTIVE_MONO: "'Cutive Mono', 'Courier New', Monaco, monospace",
   RETRO_GAMING: "'Retro Gaming', 'Courier New', monospace",
   SOMETYPE: "SomeType, Arial, sans-serif",

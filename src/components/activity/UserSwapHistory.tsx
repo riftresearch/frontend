@@ -649,7 +649,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     if (embedded) {
       return (
         <Flex direction="column" align="center" justify="center" py="40px" px="20px" gap="16px">
-          <Text color={colors.textGray} fontSize="14px" fontFamily="Inter" textAlign="center">
+          <Text color={colors.textGray} fontSize="14px" fontFamily={FONT_FAMILIES.INTER} textAlign="center">
             Connect your EVM wallet to view swap history
           </Text>
           <Flex
@@ -664,7 +664,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
             _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
             onClick={handleConnectWallet}
           >
-            <Text color="#A78BFA" fontSize="14px" fontWeight="600" fontFamily="Inter">
+            <Text color="#A78BFA" fontSize="14px" fontWeight="600" fontFamily={FONT_FAMILIES.INTER}>
               Connect Wallet
             </Text>
           </Flex>
@@ -735,7 +735,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
           <Flex w="100%" direction="column" align="center" justify="center" py="40px">
             <Text
               fontSize="14px"
-              fontFamily="Inter"
+              fontFamily={FONT_FAMILIES.INTER}
               color={colors.textGray}
               mb="16px"
               textAlign="center"
@@ -754,7 +754,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
               _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
               onClick={() => router.push("/")}
             >
-              <Text color="#A78BFA" fontSize="14px" fontWeight="600" fontFamily="Inter">
+              <Text color="#A78BFA" fontSize="14px" fontWeight="600" fontFamily={FONT_FAMILIES.INTER}>
                 Create Swap
               </Text>
             </Flex>
@@ -846,12 +846,12 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                     <Text
                       fontSize="15px"
                       color={colors.offWhite}
-                      fontFamily="Inter"
+                      fontFamily={FONT_FAMILIES.INTER}
                       fontWeight="600"
                     >
                       {formatUSD(swap.swapInitialAmountUsd)}
                     </Text>
-                    <Text fontSize="13px" color={colors.textGray} fontFamily="Inter">
+                    <Text fontSize="13px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                       {formatTimeAgo(timestamp)}
                     </Text>
                   </Flex>
@@ -863,13 +863,13 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       <Text
                         fontSize="14px"
                         color={colors.offWhite}
-                        fontFamily="Inter"
+                        fontFamily={FONT_FAMILIES.INTER}
                         fontWeight="500"
                       >
                         {inputAmount} {inputAsset}
                       </Text>
                     </Flex>
-                    <Text fontSize="14px" color={colors.textGray} fontFamily="Inter">
+                    <Text fontSize="14px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                       →
                     </Text>
                     <Flex align="center" gap="6px">
@@ -877,7 +877,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       <Text
                         fontSize="14px"
                         color={colors.offWhite}
-                        fontFamily="Inter"
+                        fontFamily={FONT_FAMILIES.INTER}
                         fontWeight="500"
                       >
                         {outputAsset}
@@ -908,7 +908,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         h="34px"
                         _hover={{ filter: "brightness(1.2)" }}
                         fontSize="11px"
-                        fontFamily="Inter"
+                        fontFamily={FONT_FAMILIES.INTER}
                         color={colors.offWhite}
                         fontWeight="500"
                         cursor="pointer"
@@ -931,7 +931,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         borderRadius="12px"
                         opacity={0.5}
                       >
-                        <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                        <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                           Pending
                         </Text>
                       </Flex>
@@ -948,7 +948,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         border={`1.5px solid ${mmBorder}`}
                         borderRadius="12px"
                       >
-                        <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                        <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                           Refunded
                         </Text>
                       </Flex>
@@ -962,7 +962,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         border="1.5px solid rgba(178, 50, 50, 0.4)"
                         borderRadius="12px"
                       >
-                        <Text fontSize="11px" color="#B23232" fontFamily="Inter">
+                        <Text fontSize="11px" color="#B23232" fontFamily={FONT_FAMILIES.INTER}>
                           Failed
                         </Text>
                       </Flex>
@@ -986,7 +986,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         h="34px"
                         _hover={{ filter: "brightness(1.2)" }}
                         fontSize="11px"
-                        fontFamily="Inter"
+                        fontFamily={FONT_FAMILIES.INTER}
                         color={colors.offWhite}
                         fontWeight="500"
                         cursor="pointer"
@@ -1009,7 +1009,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         borderRadius="12px"
                         opacity={0.5}
                       >
-                        <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                        <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                           {isCompleted ? "Settled" : "Pending"}
                         </Text>
                       </Flex>
@@ -1032,7 +1032,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                 <Text
                   fontSize="13px"
                   color="#A78BFA"
-                  fontFamily="Inter"
+                  fontFamily={FONT_FAMILIES.INTER}
                   cursor="pointer"
                   _hover={{ textDecoration: "underline" }}
                   onClick={fetchNextPage}
@@ -1045,7 +1045,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
             {/* End of List */}
             {!hasMore && swaps.length > 0 && (
               <Flex justify="center" py="8px">
-                <Text fontSize="11px" color={colors.textGray} fontFamily="Inter">
+                <Text fontSize="11px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                   No more swaps
                 </Text>
               </Flex>
@@ -1674,7 +1674,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                   bg="#090909"
                   borderBottom={`1px solid ${colors.borderGray}`}
                   fontSize="11px"
-                  fontFamily="Inter"
+                  fontFamily={FONT_FAMILIES.INTER}
                   color={colors.textGray}
                   fontWeight="600"
                   textTransform="uppercase"
@@ -1750,7 +1750,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       py="16px"
                       borderBottom={`1px solid ${colors.borderGray}`}
                       align="center"
-                      fontFamily="Inter"
+                      fontFamily={FONT_FAMILIES.INTER}
                       _hover={{ bg: "rgba(255, 255, 255, 0.02)" }}
                       transition="background 0.15s ease"
                       cursor="pointer"

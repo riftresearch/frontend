@@ -1,5 +1,6 @@
 import { Flex, Text, Box, Image } from "@chakra-ui/react";
 import { colors } from "@/utils/colors";
+import { FONT_FAMILIES } from "@/utils/font";
 import { CHAIN_NAMES } from "@/utils/constants";
 import { NetworkBadge } from "./NetworkBadge";
 import { TokenData, Chain } from "@/utils/types";
@@ -121,15 +122,15 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
 
         {/* Token Info */}
         <Flex direction="column" flex="1">
-          <Text fontSize="16px" fontFamily="Inter" color={colors.offWhite} fontWeight="500">
+          <Text fontSize="16px" fontFamily={FONT_FAMILIES.INTER} color={colors.offWhite} fontWeight="500">
             {token.ticker}
           </Text>
           <Flex align="center" gap="8px">
-            <Text fontSize="12px" fontFamily="Inter" color={colors.textGray}>
+            <Text fontSize="12px" fontFamily={FONT_FAMILIES.INTER} color={colors.textGray}>
               {addressLabel || CHAIN_NAMES[token.chain] || "Unknown"}
             </Text>
             {!isMobile && token.address && token.ticker !== "BTC" && token.ticker !== "ETH" && (
-              <Text fontSize="12px" fontFamily="Inter" color={colors.darkerGray}>
+              <Text fontSize="12px" fontFamily={FONT_FAMILIES.INTER} color={colors.darkerGray}>
                 {`${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
               </Text>
             )}
@@ -141,14 +142,14 @@ export const TokenDisplay: React.FC<TokenDisplayProps> = ({
           <Flex direction="column" align="flex-end">
             <Text
               fontSize="16px"
-              fontFamily="Inter"
+              fontFamily={FONT_FAMILIES.INTER}
               color={colors.offWhite}
               fontWeight="500"
               letterSpacing="0.5px"
             >
               {formatUsdValue ? formatUsdValue(token.usdValue) : token.usdValue}
             </Text>
-            <Text fontSize="12px" fontFamily="Inter" color={colors.textGray}>
+            <Text fontSize="12px" fontFamily={FONT_FAMILIES.INTER} color={colors.textGray}>
               {parseFloat(token.balance).toFixed(4)} {token.ticker}
             </Text>
           </Flex>

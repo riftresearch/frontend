@@ -19,6 +19,13 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         {/* Preload critical fonts */}
         <link
           rel="preload"
+          href="/fonts/Inter-VariableFont_opsz,wght.ttf"
+          as="font"
+          type="font/ttf"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
           href="/fonts/NostromoRegular-Bold.otf"
           as="font"
           type="font/otf"

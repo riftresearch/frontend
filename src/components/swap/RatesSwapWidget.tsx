@@ -1,6 +1,7 @@
 import { Flex, Text, Input, Spacer, Spinner, Image } from "@chakra-ui/react";
 import { useState, useEffect, ChangeEvent, useCallback, useRef } from "react";
 import { colors } from "@/utils/colors";
+import { FONT_FAMILIES } from "@/utils/font";
 import useWindowSize from "@/hooks/useWindowSize";
 import {
   GLOBAL_CONFIG,
@@ -1274,7 +1275,7 @@ export const RatesSwapWidget = () => {
                   }}
                 >
                   {resolvedOutputAddress ? (
-                    <Text color="#788CFF" fontSize="13px" fontWeight="500" fontFamily="Inter">
+                    <Text color="#788CFF" fontSize="13px" fontWeight="500" fontFamily={FONT_FAMILIES.INTER}>
                       {`${resolvedOutputAddress.slice(0, 6)}...${resolvedOutputAddress.slice(-4)}`}
                     </Text>
                   ) : (
@@ -1282,7 +1283,7 @@ export const RatesSwapWidget = () => {
                       color={colors.textGray}
                       fontSize="13px"
                       fontWeight="500"
-                      fontFamily="Inter"
+                      fontFamily={FONT_FAMILIES.INTER}
                     >
                       Paste EVM address
                     </Text>

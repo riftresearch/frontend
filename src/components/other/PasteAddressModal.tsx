@@ -101,7 +101,7 @@ export const PasteAddressModal: React.FC<PasteAddressModalProps> = ({
           maxW="480px"
           w="90%"
           border={`2px solid ${borderColor}`}
-          fontFamily="Inter"
+          fontFamily={FONT_FAMILIES.INTER}
           color={colors.offWhite}
           onClick={(e) => e.stopPropagation()}
         >
@@ -201,7 +201,7 @@ export const PasteAddressModal: React.FC<PasteAddressModalProps> = ({
               color={isValid ? colors.greenOutline : colors.textGray}
               fontSize="15px"
               fontWeight="600"
-              fontFamily="Inter"
+              fontFamily={FONT_FAMILIES.INTER}
             >
               Confirm Address
             </Text>

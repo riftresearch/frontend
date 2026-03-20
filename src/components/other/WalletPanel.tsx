@@ -26,6 +26,7 @@ const isTaprootAddress = (address: string): boolean => {
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
+import { FONT_FAMILIES } from "@/utils/font";
 import { useBitcoinBalances } from "@/hooks/useBitcoinBalance";
 import { getPaymentAddress, getAllBtcAddresses, getAllBtcAddressesWithInfo, type BtcAddressInfo } from "@/hooks/useBitcoinTransaction";
 import { FALLBACK_TOKEN_ICON } from "@/utils/constants";
@@ -741,7 +742,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                       color={colors.offWhite}
                       fontSize="15px"
                       fontWeight={500}
-                      fontFamily="Inter"
+                      fontFamily={FONT_FAMILIES.INTER}
                     >
                       {viewMode === "all"
                         ? `All Wallets (${totalWalletCount})`
@@ -853,7 +854,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                                 color={colors.offWhite}
                                 fontSize="18px"
                                 fontWeight="600"
-                                fontFamily="Inter"
+                                fontFamily={FONT_FAMILIES.INTER}
                               >
                                 {formatAddress(displayWallet.address)}
                               </Text>
@@ -868,7 +869,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               <Text
                                 color={colors.textGray}
                                 fontSize="12px"
-                                fontFamily="Inter"
+                                fontFamily={FONT_FAMILIES.INTER}
                               >
                                 {displayWallet.addressLabel}
                               </Text>
@@ -880,7 +881,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           color={colors.offWhite}
                           fontSize="18px"
                           fontWeight="600"
-                          fontFamily="Inter"
+                          fontFamily={FONT_FAMILIES.INTER}
                         >
                           {displayWallet.isLoading
                             ? "..."
@@ -935,7 +936,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               }
                               fontSize="12px"
                               fontWeight="600"
-                              fontFamily="Inter"
+                              fontFamily={FONT_FAMILIES.INTER}
                             >
                               {displayWallet.chainType === "BVM" && displayWallet.addressLabel
                                 ? displayWallet.addressLabel
@@ -950,7 +951,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                                 color={colors.textGray}
                                 fontSize="12px"
                                 fontWeight="500"
-                                fontFamily="Inter"
+                                fontFamily={FONT_FAMILIES.INTER}
                               >
                                 Not Supported
                               </Text>
@@ -962,7 +963,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                                 color={colors.greenOutline}
                                 fontSize="12px"
                                 fontWeight="500"
-                                fontFamily="Inter"
+                                fontFamily={FONT_FAMILIES.INTER}
                               >
                                 Active
                               </Text>
@@ -973,7 +974,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                               fontSize="14px"
                               fontWeight="500"
                               cursor="pointer"
-                              fontFamily="Inter"
+                              fontFamily={FONT_FAMILIES.INTER}
                               _hover={{ color: "#C4B5FD" }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -992,7 +993,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                             fontSize="14px"
                             fontWeight="500"
                             cursor="pointer"
-                            fontFamily="Inter"
+                            fontFamily={FONT_FAMILIES.INTER}
                             _hover={{ color: "#FCA5A5" }}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1030,7 +1031,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                       setShowLinkNewWalletModal(true);
                     }}
                   >
-                    <Text color="#A78BFA" fontSize="16px" fontWeight="600" fontFamily="Inter">
+                    <Text color="#A78BFA" fontSize="16px" fontWeight="600" fontFamily={FONT_FAMILIES.INTER}>
                       Connect New Wallet
                     </Text>
                   </Flex>
@@ -1082,7 +1083,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                   </Box>
                 ))}
               </Flex>
-              <Text color={colors.offWhite} fontSize="15px" fontWeight={500} fontFamily="Inter">
+              <Text color={colors.offWhite} fontSize="15px" fontWeight={500} fontFamily={FONT_FAMILIES.INTER}>
                 {viewMode === "all"
                   ? `All Wallets (${totalWalletCount})`
                   : (() => {
@@ -1122,7 +1123,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 color={colors.offWhite}
                 fontSize="34px"
                 fontWeight="600"
-                fontFamily="Inter"
+                fontFamily={FONT_FAMILIES.INTER}
                 letterSpacing="-1px"
               >
                 $
@@ -1163,7 +1164,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                         color={colors.offWhite}
                         fontSize="14px"
                         fontWeight="500"
-                        fontFamily="Inter"
+                        fontFamily={FONT_FAMILIES.INTER}
                       >
                         All
                       </Text>
@@ -1225,7 +1226,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                         color={viewMode === "all" ? "#A78BFA" : colors.offWhite}
                         fontSize="14px"
                         fontWeight="500"
-                        fontFamily="Inter"
+                        fontFamily={FONT_FAMILIES.INTER}
                       >
                         All
                       </Text>
@@ -1289,7 +1290,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                           color={viewMode === wallet.id ? "#A78BFA" : colors.offWhite}
                           fontSize="14px"
                           fontWeight="500"
-                          fontFamily="Inter"
+                          fontFamily={FONT_FAMILIES.INTER}
                         >
                           {formatAddress(getWalletDisplayAddress(wallet))}
                         </Text>
@@ -1313,7 +1314,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
                 fontSize="15px"
                 fontWeight={600}
-                fontFamily="Inter"
+                fontFamily={FONT_FAMILIES.INTER}
                 pb="12px"
                 borderBottom={activeTab === "tokens" ? `2px solid ${colors.offWhite}` : "none"}
                 cursor="pointer"
@@ -1325,7 +1326,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 color={activeTab === "activity" ? colors.offWhite : colors.textGray}
                 fontSize="15px"
                 fontWeight={600}
-                fontFamily="Inter"
+                fontFamily={FONT_FAMILIES.INTER}
                 pb="12px"
                 borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
                 cursor="pointer"
@@ -1379,7 +1380,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                   <Text
                     color={colors.textGray}
                     fontSize="15px"
-                    fontFamily="Inter"
+                    fontFamily={FONT_FAMILIES.INTER}
                     textAlign="center"
                   >
                     You don't have any wallets connected yet
@@ -1396,7 +1397,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                     _hover={{ bg: "rgba(167, 139, 250, 0.18)" }}
                     onClick={() => setShowAuthFlow(true)}
                   >
-                    <Text color="#A78BFA" fontSize="15px" fontWeight="600" fontFamily="Inter">
+                    <Text color="#A78BFA" fontSize="15px" fontWeight="600" fontFamily={FONT_FAMILIES.INTER}>
                       Connect Wallet
                     </Text>
                   </Flex>
@@ -1404,16 +1405,16 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
               ) : isLoadingBalances && displayTokens.length === 0 ? (
                 <Flex direction="column" align="center" justify="center" py="40px" gap="16px">
                   <Spinner size="lg" color="#A78BFA" borderWidth="3px" />
-                  <Text color={colors.textGray} fontSize="14px" fontFamily="Inter">
+                  <Text color={colors.textGray} fontSize="14px" fontFamily={FONT_FAMILIES.INTER}>
                     Loading balances...
                   </Text>
                 </Flex>
               ) : displayTokens.length === 0 ? (
                 <Flex direction="column" justify="center" align="center" py="40px" gap="8px">
-                  <Text color={colors.textGray} fontSize="15px" fontFamily="Inter">
+                  <Text color={colors.textGray} fontSize="15px" fontFamily={FONT_FAMILIES.INTER}>
                     No tokens found
                   </Text>
-                  <Text color={colors.textGray} fontSize="13px" fontFamily="Inter" opacity={0.7}>
+                  <Text color={colors.textGray} fontSize="13px" fontFamily={FONT_FAMILIES.INTER} opacity={0.7}>
                     This wallet doesn't have any token balances
                   </Text>
                 </Flex>

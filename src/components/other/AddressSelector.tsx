@@ -4,6 +4,7 @@ import { useDynamicContext, useUserWallets, useDynamicModals } from "@dynamic-la
 import { isBitcoinWallet } from "@dynamic-labs/bitcoin";
 import { FiChevronDown, FiPlus, FiEdit3, FiAlertCircle } from "react-icons/fi";
 import { colors } from "@/utils/colors";
+import { FONT_FAMILIES } from "@/utils/font";
 import { getPaymentAddress, getAllBtcAddressesWithInfo, type BtcAddressInfo } from "@/hooks/useBitcoinTransaction";
 
 // Check if address is Taproot (bc1p... or tb1p...)
@@ -356,11 +357,11 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
                     borderRadius="6px"
                   />
                   <Flex direction="column" gap="2px" flex="1">
-                    <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily="Inter">
+                    <Text color={colors.offWhite} fontSize="14px" fontWeight="500" fontFamily={FONT_FAMILIES.INTER}>
                       {formatAddress(address)}
                     </Text>
                     {addressLabel && (
-                      <Text color={colors.textGray} fontSize="11px" fontFamily="Inter">
+                      <Text color={colors.textGray} fontSize="11px" fontFamily={FONT_FAMILIES.INTER}>
                         {addressLabel}
                       </Text>
                     )}
@@ -371,7 +372,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
                       gap="4px"
                       color={colors.textGray}
                       fontSize="10px"
-                      fontFamily="Inter"
+                      fontFamily={FONT_FAMILIES.INTER}
                       whiteSpace="nowrap"
                     >
                       <FiAlertCircle size={12} />
@@ -405,7 +406,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
               >
                 <FiPlus size={14} color={colors.textGray} />
               </Flex>
-              <Text color={colors.textGray} fontSize="14px" fontWeight="500" fontFamily="Inter">
+              <Text color={colors.textGray} fontSize="14px" fontWeight="500" fontFamily={FONT_FAMILIES.INTER}>
                 Connect a new wallet
               </Text>
             </Flex>
@@ -431,7 +432,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
                 >
                   <FiEdit3 size={14} color={colors.textGray} />
                 </Flex>
-                <Text color={colors.textGray} fontSize="14px" fontWeight="500" fontFamily="Inter">
+                <Text color={colors.textGray} fontSize="14px" fontWeight="500" fontFamily={FONT_FAMILIES.INTER}>
                   Paste wallet address
                 </Text>
               </Flex>
