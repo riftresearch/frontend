@@ -42,7 +42,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           rel="preload"
           href="/fonts/SF-Pro.ttf"
           as="font"
-          type="font/otf"
+          type="font/ttf"
           crossOrigin="anonymous"
         />
         <link
@@ -56,7 +56,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           rel="preload"
           href="/fonts/ProtoMono-Regular.otf"
           as="font"
-          type="font/ttf"
+          type="font/otf"
           crossOrigin="anonymous"
         />
         {/* Preload critical background image */}
