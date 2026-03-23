@@ -208,15 +208,17 @@ export const LimitOrderButton = () => {
         validUntil,
       });
 
-      setActiveSwapId(result.swapId);
       console.log("[LimitOrderButton] Limit order created:", result);
 
       toastSuccess({
         title: "Limit order placed",
-        description: `Order ID: ${result.swapId.slice(0, 8)}...`,
+        description: `Order ID: ${result.orderId.slice(0, 8)}...`,
       });
 
-      router.push(`/swap/${result.swapId}`);
+      // Stay on the limit order page — reset form state instead of navigating
+      setButtonPressed(false);
+      setPhase("idle");
+      setIsSwapInProgress(false);
     } catch (error) {
       console.error("[LimitOrderButton] Error:", error);
       setButtonPressed(false);
@@ -238,7 +240,7 @@ export const LimitOrderButton = () => {
   }, [
     rift, getExecuteParams, displayedInputAmount, outputAmount,
     inputToken, outputToken, limitExpiry, toSdkCurrency,
-    setActiveSwapId, setIsSwapInProgress, router,
+    setIsSwapInProgress,
   ]);
 
   const handleButtonClick = useCallback(async () => {

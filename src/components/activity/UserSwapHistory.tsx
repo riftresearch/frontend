@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Box, Flex, Text, Spinner, Button, Image } from "@chakra-ui/react";
-import { AdminSwapItem, AdminSwapFlowStep } from "@/utils/types";
+import { AdminSwapItem, AdminSwapFlowStep, SwapDirection } from "@/utils/types";
 import { FONT_FAMILIES } from "@/utils/font";
 import { colors } from "@/utils/colors";
 import { colorsAnalytics } from "@/utils/colorsAnalytics";
@@ -19,6 +19,11 @@ import { AssetIcon } from "@/components/other/AssetIcon";
 import { NetworkBadge } from "@/components/other/NetworkBadge";
 import { Chain } from "@/utils/types";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
+import { useStore } from "@/utils/store";
+import BASE_ADDRESS_METADATA from "@/utils/tokenData/8453/address_to_metadata.json";
+import ETHEREUM_ADDRESS_METADATA from "@/utils/tokenData/1/address_to_metadata.json";
+import { ETH_ICON, FALLBACK_TOKEN_ICON } from "@/utils/constants";
+import type { RiftSdk } from "@riftresearch/sdk";
 
 /** Asset icon with a small chain badge overlay in the bottom-right corner */
 const AssetIconWithChain: React.FC<{
@@ -100,6 +105,257 @@ function formatBaseUnitAmount(rawAmount: string, decimals: number, maxDecimals?:
   }
 }
 
+/** Resolve ticker, icon, and decimals for an SDK Currency object */
+function resolveCurrencyMeta(currency: any): {
+  ticker: string;
+  icon: string;
+  address: string;
+  decimals: number;
+  chainLabel: "ETH" | "BASE" | "BTC";
+} {
+  if (!currency) {
+    return { ticker: "???", icon: FALLBACK_TOKEN_ICON, address: "", decimals: 18, chainLabel: "ETH" };
+  }
+  const { chain, token } = currency;
+
+  if (chain.kind === "BITCOIN") {
+    return { ticker: "BTC", icon: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1696501400", address: "native", decimals: token.decimals, chainLabel: "BTC" };
+  }
+
+  const evmChainId = chain.kind === "EVM" ? chain.chainId : 1;
+  const chainLabel: "ETH" | "BASE" = evmChainId === 8453 ? "BASE" : "ETH";
+
+  if (token.kind === "NATIVE") {
+    return { ticker: "ETH", icon: ETH_ICON, address: "", decimals: token.decimals, chainLabel };
+  }
+
+  // ERC20 token — look up metadata
+  const addr = token.address.toLowerCase();
+  const meta =
+    evmChainId === 8453
+      ? (BASE_ADDRESS_METADATA as any)[addr]
+      : (ETHEREUM_ADDRESS_METADATA as any)[addr];
+  return {
+    ticker: meta?.ticker || `${addr.slice(0, 6)}...`,
+    icon: meta?.icon || FALLBACK_TOKEN_ICON,
+    address: addr,
+    decimals: meta?.decimals ?? token.decimals,
+    chainLabel,
+  };
+}
+
+/**
+ * Map an SDK AnalyticsOrderResponse to the AdminSwapItem shape used by the rendering code.
+ * Handles all swap directions (BTC↔EVM, EVM↔EVM, any token pair) using sellCurrency/buyCurrency.
+ */
+function mapSdkOrderToAdminSwap(order: any, btcPrice?: number | null): AdminSwapItem {
+  const createdAtMs = new Date(order.createdAt).getTime();
+
+  // Resolve metadata for both sides
+  const sellMeta = resolveCurrencyMeta(order.sellCurrency);
+  const buyMeta = resolveCurrencyMeta(order.buyCurrency);
+
+  // Determine direction from sell/buy currencies
+  let direction: SwapDirection = "UNKNOWN";
+  if (order.sellCurrency?.chain.kind === "BITCOIN") {
+    direction = "BTC_TO_EVM";
+  } else if (order.buyCurrency?.chain.kind === "BITCOIN") {
+    direction = "EVM_TO_BTC";
+  }
+
+  // Determine EVM chain — prefer sell side, fall back to buy side
+  const chain: "ETH" | "BASE" =
+    sellMeta.chainLabel !== "BTC" ? sellMeta.chainLabel :
+    buyMeta.chainLabel !== "BTC" ? buyMeta.chainLabel : "ETH";
+
+  // Sell (input) amounts
+  const sellAmount = order.executedSellAmount || order.quotedSellAmount || "0";
+  const buyAmount = order.executedBuyAmount || order.quotedBuyAmount || "0";
+
+  // BTC amount for USD estimation (only meaningful if one side is BTC)
+  let swapInitialAmountBtc = 0;
+  if (direction === "BTC_TO_EVM") {
+    try { swapInitialAmountBtc = Number(BigInt(sellAmount)) / 10 ** sellMeta.decimals; }
+    catch { swapInitialAmountBtc = parseFloat(sellAmount) / 10 ** sellMeta.decimals; }
+  } else if (direction === "EVM_TO_BTC") {
+    try { swapInitialAmountBtc = Number(BigInt(buyAmount)) / 10 ** buyMeta.decimals; }
+    catch { swapInitialAmountBtc = parseFloat(buyAmount) / 10 ** buyMeta.decimals; }
+  }
+  const swapInitialAmountUsd = (btcPrice || 0) * swapInitialAmountBtc;
+
+  // Always build startAssetMetadata from sellCurrency
+  const startAssetMetadata: AdminSwapItem["startAssetMetadata"] = {
+    ticker: sellMeta.ticker,
+    address: sellMeta.address,
+    icon: sellMeta.icon,
+    amount: order.quotedSellAmount || "0",
+    executed_amount: order.executedSellAmount || undefined,
+    decimals: sellMeta.decimals,
+  };
+
+  // Always build endAssetMetadata from buyCurrency
+  const endAssetMetadata: AdminSwapItem["endAssetMetadata"] = {
+    ticker: buyMeta.ticker,
+    address: buyMeta.address,
+    icon: buyMeta.icon,
+    amount: order.quotedBuyAmount || "0",
+    executed_amount: order.executedBuyAmount || undefined,
+    decimals: buyMeta.decimals,
+  };
+
+  // Determine flow position from SDK status + available tx hashes
+  const sdkStatus: string = order.status;
+  const depositTxHash: string | undefined = order.depositTxHash || undefined;
+  const payoutTxHash: string | undefined = order.payoutTxHash || undefined;
+
+  const userTxChain: "ETH" | "BTC" = direction === "BTC_TO_EVM" ? "BTC" : "ETH";
+  const mmTxChain: "ETH" | "BTC" = direction === "BTC_TO_EVM" ? "ETH" : "BTC";
+
+  let currentIndex: number;
+  switch (sdkStatus) {
+    case "unfilled":
+      if (payoutTxHash) currentIndex = 4;
+      else if (depositTxHash) currentIndex = 2;
+      else currentIndex = 1;
+      break;
+    case "filled":
+    case "settled":
+      currentIndex = 5;
+      break;
+    case "refunded":
+    case "failed":
+    case "cancelled":
+      currentIndex = depositTxHash ? 2 : 0;
+      break;
+    default:
+      currentIndex = 0;
+  }
+
+  const steps: AdminSwapFlowStep[] = [
+    {
+      status: "pending",
+      label: "Created",
+      state: currentIndex > 0 ? "completed" : "inProgress",
+    },
+    {
+      status: "waiting_for_deposit",
+      label: "User Sent",
+      state: currentIndex > 1 ? "completed" : currentIndex === 1 ? "inProgress" : "notStarted",
+      badge: sellMeta.ticker,
+      badgeIconUrl: sellMeta.icon,
+      txHash: depositTxHash,
+      txChain: userTxChain,
+    },
+    {
+      status: "deposit_confirming",
+      label: "Confirming",
+      state: currentIndex > 2 ? "completed" : currentIndex === 2 ? "inProgress" : "notStarted",
+    },
+    {
+      status: "initiating_payout",
+      label: "MM Sent",
+      state: currentIndex > 3 ? "completed" : currentIndex === 3 ? "inProgress" : "notStarted",
+      badge: buyMeta.ticker,
+      txHash: payoutTxHash,
+      txChain: mmTxChain,
+    },
+    {
+      status: "confirming_payout",
+      label: "Confirming",
+      state: currentIndex > 4 ? "completed" : currentIndex === 4 ? "inProgress" : "notStarted",
+    },
+    {
+      status: "swap_complete",
+      label: "Settled",
+      state: currentIndex >= 5 ? "completed" : "notStarted",
+    },
+  ];
+
+  // Terminal states: add appropriate final step
+  if (sdkStatus === "refunded") {
+    const inProgressStep = steps.find((s) => s.state === "inProgress");
+    if (inProgressStep) inProgressStep.state = "completed";
+    steps.push({ status: "refunding_user" as any, label: "Refunded", state: "completed" });
+  } else if (sdkStatus === "cancelled") {
+    const inProgressStep = steps.find((s) => s.state === "inProgress");
+    if (inProgressStep) inProgressStep.state = "completed";
+    steps.push({ status: "cancelled" as any, label: "Cancelled", state: "completed" });
+  } else if (sdkStatus === "failed") {
+    const inProgressStep = steps.find((s) => s.state === "inProgress");
+    if (inProgressStep) inProgressStep.state = "completed";
+    steps.push({ status: "failed" as any, label: "Failed", state: "completed" });
+  }
+
+  return {
+    id: order.orderId,
+    swapCreationTimestamp: createdAtMs,
+    evmAccountAddress: order.senderAddress || "0x0000000000000000000000000000000000000000",
+    chain,
+    direction,
+    swapInitialAmountBtc,
+    swapInitialAmountUsd,
+    riftFeeSats: 0,
+    networkFeeUsd: 0,
+    mmFeeUsd: 0,
+    flow: steps,
+    startAssetMetadata,
+    endAssetMetadata,
+    outputAmount: order.executedBuyAmount || order.quotedBuyAmount || undefined,
+    outputAsset: buyMeta.ticker,
+    outputDecimals: buyMeta.decimals,
+    rawData: {
+      ...order,
+      user_destination_address: order.destinationAddress,
+      user_evm_account_address: order.senderAddress,
+    },
+  };
+}
+
+/**
+ * Fetch user swaps via the SDK's getOrders() endpoint.
+ * Fetches for all provided addresses in parallel, merges and deduplicates.
+ */
+async function fetchUserSwapsViaSdk(
+  rift: RiftSdk,
+  addresses: string[],
+  limit: number,
+  btcPrice?: number | null
+): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> {
+  if (addresses.length === 0) return { swaps: [], hasMore: false };
+
+  // For each address, query by both sender and destination to catch all user orders
+  const results = await Promise.all(
+    addresses.flatMap((addr) => [
+      rift.getOrders({ sender: addr, limit }).catch((e) => {
+        console.error("[fetchUserSwapsViaSdk] sender error for", addr, e);
+        return { items: [] as any[], nextCursor: null };
+      }),
+      rift.getOrders({ destination: addr, limit }).catch((e) => {
+        console.error("[fetchUserSwapsViaSdk] destination error for", addr, e);
+        return { items: [] as any[], nextCursor: null };
+      }),
+    ])
+  );
+
+  const swapMap = new Map<string, AdminSwapItem>();
+  let anyHasMore = false;
+
+  for (const result of results) {
+    if (result.nextCursor !== null) anyHasMore = true;
+    for (const order of result.items) {
+      if (!swapMap.has(order.orderId)) {
+        swapMap.set(order.orderId, mapSdkOrderToAdminSwap(order, btcPrice));
+      }
+    }
+  }
+
+  const merged = Array.from(swapMap.values()).sort(
+    (a, b) => (b.swapCreationTimestamp || 0) - (a.swapCreationTimestamp || 0)
+  );
+
+  return { swaps: merged, hasMore: anyHasMore };
+}
+
 function formatTimeAgo(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
@@ -177,6 +433,58 @@ const StatusBadge: React.FC<{ swap: AdminSwapItem; onClaimRefund?: () => void }>
           letterSpacing="-0.5px"
         >
           Claim Refund
+        </Text>
+      </Flex>
+    );
+  }
+
+  // Cancelled (from SDK limit orders)
+  if ((currentStatus as string) === "cancelled") {
+    return (
+      <Flex
+        align="center"
+        gap="6px"
+        bg="rgba(165, 165, 165, 0.15)"
+        border="1.5px solid rgba(165, 165, 165, 0.4)"
+        borderRadius="16px"
+        px="12px"
+        h="35px"
+      >
+        <FiX size={14} color="#a5a5a5" />
+        <Text
+          fontSize="13px"
+          color="#a5a5a5"
+          fontWeight="500"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          letterSpacing="-0.5px"
+        >
+          Cancelled
+        </Text>
+      </Flex>
+    );
+  }
+
+  // Failed (from SDK orders)
+  if ((currentStatus as string) === "failed") {
+    return (
+      <Flex
+        align="center"
+        gap="6px"
+        bg="rgba(178, 50, 50, 0.15)"
+        border="1.5px solid rgba(178, 50, 50, 0.4)"
+        borderRadius="16px"
+        px="12px"
+        h="35px"
+      >
+        <FiX size={14} color="#E74C4C" />
+        <Text
+          fontSize="13px"
+          color="#E74C4C"
+          fontWeight="500"
+          fontFamily={FONT_FAMILIES.AUX_MONO}
+          letterSpacing="-0.5px"
+        >
+          Failed
         </Text>
       </Flex>
     );
@@ -442,6 +750,9 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   // Use simulated address if provided, otherwise use all connected EVM addresses
   const isSimulating = !!simulatedAddress;
   const addresses: string[] = isSimulating ? [simulatedAddress!] : evmAddresses;
+  const rift = useStore((s) => s.rift);
+  // Use SDK for normal users, analytics API for admin simulate
+  const useSdk = !isSimulating && rift !== null;
   const router = useRouter();
   const { isMobile } = useWindowSize();
   const { btcPrice } = useBtcEthPrices(); // Fetch current BTC price as fallback
@@ -469,11 +780,11 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   } = useRefundModal({
     onSuccess: () => {
       // Refresh the swaps list to update the status after successful refund
-      if (addresses.length > 0) {
-        fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
-          setSwaps(newSwaps);
-        });
-      }
+      if (addresses.length === 0) return;
+      const refresh = useSdk && rift
+        ? fetchUserSwapsViaSdk(rift, addresses, pageSize, btcPrice)
+        : fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
+      refresh.then(({ swaps: newSwaps }) => setSwaps(newSwaps));
     },
   });
 
@@ -500,21 +811,29 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       return;
     }
 
+    // Helper: fetch first page via SDK or analytics API
+    // SDK uses a larger limit since cursor-based pagination is not supported for load-more
+    const fetchFirstPage = (): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> => {
+      if (useSdk && rift) {
+        return fetchUserSwapsViaSdk(rift, addresses, 50, btcPrice);
+      }
+      return fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
+    };
+
     // Initial fetch with retries
     const fetchWithRetries = async () => {
       setLoading(true);
 
-      // First attempt
-      let result = await fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
+      let result = await fetchFirstPage();
 
       // If no swaps found, retry 2 more times with 100ms delay
       if (result.swaps.length === 0) {
         await new Promise((resolve) => setTimeout(resolve, 100));
-        result = await fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
+        result = await fetchFirstPage();
 
         if (result.swaps.length === 0) {
           await new Promise((resolve) => setTimeout(resolve, 100));
-          result = await fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
+          result = await fetchFirstPage();
         }
       }
 
@@ -527,7 +846,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
     // Set up polling every 3 seconds - refresh and merge intelligently
     const pollInterval = setInterval(() => {
-      fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice).then(({ swaps: newSwaps }) => {
+      fetchFirstPage().then(({ swaps: newSwaps }) => {
         setSwaps((prev) => {
           if (prev.length === 0) return newSwaps;
 
@@ -565,11 +884,17 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
     // Cleanup interval on unmount or when addresses/connection changes
     return () => clearInterval(pollInterval);
-  }, [addresses.join(","), isEvmConnected, isSimulating]);
+  }, [addresses.join(","), isEvmConnected, isSimulating, useSdk, rift]);
 
-  // Fetch next page - use actual swaps count as offset to handle filtered items correctly
+  // Fetch next page - only supported for analytics API (offset-based pagination)
+  // SDK uses cursor-based pagination and fetches a larger initial page instead
   const fetchNextPage = useCallback(async () => {
     if (loadingMore || !hasMore || fetchingRef.current || addresses.length === 0) return;
+    // SDK mode doesn't support offset-based load-more
+    if (useSdk) {
+      setHasMore(false);
+      return;
+    }
 
     fetchingRef.current = true;
     setLoadingMore(true);
@@ -610,7 +935,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       fetchingRef.current = false;
       setLoadingMore(false);
     }
-  }, [addresses.join(","), pageSize, loadingMore, hasMore, swaps.length]);
+  }, [addresses.join(","), pageSize, loadingMore, hasMore, swaps.length, useSdk]);
 
   // Handle scroll for infinite loading
   const handleScroll = useCallback(
@@ -791,29 +1116,33 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
               const mmBg = isBTCtoEVM ? "rgba(57, 74, 255, 0.2)" : "rgba(255, 143, 40, 0.15)";
               const mmBorder = isBTCtoEVM ? "rgba(57, 74, 255, 0.7)" : "rgba(255, 143, 40, 0.4)";
 
-              // Determine input/output based on direction
+              // Determine input/output from metadata (SDK) or direction (legacy)
               let inputAsset: string;
               let inputAmount: string;
               let inputIcon: string | undefined;
               let outputAsset: string;
+              let outputIcon: string | undefined;
 
-              if (isBTCtoEVM) {
+              if (swap.startAssetMetadata) {
+                inputAsset = swap.startAssetMetadata.ticker;
+                inputAmount = formatBaseUnitAmount(
+                  swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount,
+                  swap.startAssetMetadata.decimals
+                );
+                inputIcon = swap.startAssetMetadata.icon;
+              } else if (isBTCtoEVM) {
                 inputAsset = "BTC";
                 inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
-                outputAsset = "cbBTC";
               } else {
-                if (swap.startAssetMetadata) {
-                  inputAsset = swap.startAssetMetadata.ticker;
-                  inputAmount = formatBaseUnitAmount(
-                    swap.startAssetMetadata.amount,
-                    swap.startAssetMetadata.decimals
-                  );
-                  inputIcon = swap.startAssetMetadata.icon;
-                } else {
-                  inputAsset = "cbBTC";
-                  inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
-                }
-                outputAsset = "BTC";
+                inputAsset = "cbBTC";
+                inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
+              }
+
+              if (swap.endAssetMetadata) {
+                outputAsset = swap.endAssetMetadata.ticker;
+                outputIcon = swap.endAssetMetadata.icon;
+              } else {
+                outputAsset = isBTCtoEVM ? "cbBTC" : "BTC";
               }
 
               // Check refund status
@@ -873,7 +1202,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       →
                     </Text>
                     <Flex align="center" gap="6px">
-                      <AssetIcon asset={outputAsset} size={22} />
+                      <AssetIcon asset={outputAsset} iconUrl={outputIcon} size={22} />
                       <Text
                         fontSize="14px"
                         color={colors.offWhite}
@@ -1287,119 +1616,51 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                           Amount
                         </Text>
                         <Flex gap="4px" align="center" flexWrap="wrap">
-                          {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
-                            // Show ERC20 → BTC for EVM->BTC swaps
+                          {/* Input */}
+                          {swap.startAssetMetadata ? (
                             <>
-                              {/* Input Amount + Asset */}
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
-                                {formatBaseUnitAmount(
-                                  swap.startAssetMetadata.amount,
-                                  swap.startAssetMetadata.decimals
-                                )}
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
+                                {formatBaseUnitAmount(swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount, swap.startAssetMetadata.decimals)}
                               </Text>
-                              <AssetIcon
-                                asset={swap.startAssetMetadata.ticker}
-                                iconUrl={swap.startAssetMetadata.icon}
-                                address={swap.startAssetMetadata.address}
-                                chainId={swap.chain === "BASE" ? 8453 : 1}
-                              />
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
+                              <AssetIcon asset={swap.startAssetMetadata.ticker} iconUrl={swap.startAssetMetadata.icon} address={swap.startAssetMetadata.address} chainId={swap.chain === "BASE" ? 8453 : 1} />
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray} fontWeight="500" letterSpacing="-0.5px">
                                 {swap.startAssetMetadata.ticker}
-                              </Text>
-
-                              {/* Arrow */}
-                              <Text
-                                fontSize="12px"
-                                color="rgba(255, 255, 255, 0.4)"
-                                fontWeight="bold"
-                              >
-                                →
-                              </Text>
-
-                              {/* Output Amount + Asset (BTC) */}
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
-                                {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
-                              </Text>
-                              <AssetIcon asset="BTC" />
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
-                                BTC
                               </Text>
                             </>
                           ) : (
-                            // Show BTC → ERC20 for BTC->EVM swaps or legacy swaps
                             <>
-                              {/* Input Amount + Asset (BTC) */}
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
                                 {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                               </Text>
-                              <AssetIcon asset="BTC" />
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
-                                BTC
+                              <AssetIcon asset={isBTCtoEVM ? "BTC" : "cbBTC"} />
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray} fontWeight="500" letterSpacing="-0.5px">
+                                {isBTCtoEVM ? "BTC" : "cbBTC"}
                               </Text>
+                            </>
+                          )}
 
-                              {/* Arrow */}
-                              <Text
-                                fontSize="12px"
-                                color="rgba(255, 255, 255, 0.4)"
-                                fontWeight="bold"
-                              >
-                                →
+                          <Text fontSize="12px" color="rgba(255, 255, 255, 0.4)" fontWeight="bold">→</Text>
+
+                          {/* Output */}
+                          {swap.endAssetMetadata ? (
+                            <>
+                              {swap.outputAmount && (
+                                <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
+                                  {formatBaseUnitAmount(swap.endAssetMetadata.executed_amount || swap.endAssetMetadata.amount, swap.endAssetMetadata.decimals)}
+                                </Text>
+                              )}
+                              <AssetIcon asset={swap.endAssetMetadata.ticker} iconUrl={swap.endAssetMetadata.icon} address={swap.endAssetMetadata.address} chainId={swap.chain === "BASE" ? 8453 : 1} />
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray} fontWeight="500" letterSpacing="-0.5px">
+                                {swap.endAssetMetadata.ticker}
                               </Text>
-
-                              {/* Output Amount + Asset (cbBTC or other ERC20) */}
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.offWhite}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
+                            </>
+                          ) : (
+                            <>
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
                                 {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                               </Text>
                               <AssetIcon asset={isBTCtoEVM ? "cbBTC" : "BTC"} />
-                              <Text
-                                fontSize="13px"
-                                fontFamily={FONT_FAMILIES.AUX_MONO}
-                                color={colors.textGray}
-                                fontWeight="500"
-                                letterSpacing="-0.5px"
-                              >
+                              <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray} fontWeight="500" letterSpacing="-0.5px">
                                 {isBTCtoEVM ? "cbBTC" : "BTC"}
                               </Text>
                             </>
@@ -1929,16 +2190,11 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       {/* Asset: input amount+icon → output amount+icon */}
                       <Flex flex="0 0 276px" gap="5px" align="center">
                         {/* Input */}
-                        {swap.direction === "EVM_TO_BTC" && swap.startAssetMetadata ? (
+                        {swap.startAssetMetadata ? (
                           <>
-                            <Text
-                              fontSize="13px"
-                              color={colors.offWhite}
-                              fontWeight="500"
-                              letterSpacing="-0.5px"
-                            >
+                            <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
                               {formatBaseUnitAmount(
-                                swap.startAssetMetadata.amount,
+                                swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount,
                                 swap.startAssetMetadata.decimals
                               )}
                             </Text>
@@ -1946,17 +2202,12 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                               asset={swap.startAssetMetadata.ticker}
                               iconUrl={swap.startAssetMetadata.icon}
                               size={24}
-                              chain={swap.chain}
+                              chain={swap.startAssetMetadata.ticker === "BTC" ? "BTC" : swap.chain}
                             />
                           </>
                         ) : (
                           <>
-                            <Text
-                              fontSize="13px"
-                              color={colors.offWhite}
-                              fontWeight="500"
-                              letterSpacing="-0.5px"
-                            >
+                            <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
                               {swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")}
                             </Text>
                             <AssetIconWithChain
@@ -1970,21 +2221,34 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         <Text fontSize="13px" color={colors.textGray} mx="1px">→</Text>
 
                         {/* Output */}
-                        {swap.outputAmount ? (
-                          <Text
-                            fontSize="13px"
-                            color={colors.offWhite}
-                            fontWeight="500"
-                            letterSpacing="-0.5px"
-                          >
-                            {formatBaseUnitAmount(swap.outputAmount, swap.outputDecimals || 8)}
-                          </Text>
-                        ) : null}
-                        <AssetIconWithChain
-                          asset={swap.outputAsset || (isBTCtoEVM ? "cbBTC" : "BTC")}
-                          size={24}
-                          chain={isBTCtoEVM ? swap.chain : "BTC"}
-                        />
+                        {swap.endAssetMetadata ? (
+                          <>
+                            {swap.outputAmount && (
+                              <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
+                                {formatBaseUnitAmount(swap.outputAmount, swap.endAssetMetadata.decimals)}
+                              </Text>
+                            )}
+                            <AssetIconWithChain
+                              asset={swap.endAssetMetadata.ticker}
+                              iconUrl={swap.endAssetMetadata.icon}
+                              size={24}
+                              chain={swap.endAssetMetadata.ticker === "BTC" ? "BTC" : swap.chain}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            {swap.outputAmount ? (
+                              <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
+                                {formatBaseUnitAmount(swap.outputAmount, swap.outputDecimals || 8)}
+                              </Text>
+                            ) : null}
+                            <AssetIconWithChain
+                              asset={swap.outputAsset || (isBTCtoEVM ? "cbBTC" : "BTC")}
+                              size={24}
+                              chain={isBTCtoEVM ? swap.chain : "BTC"}
+                            />
+                          </>
+                        )}
                       </Flex>
 
                       {/* Value */}
