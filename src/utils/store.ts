@@ -5,7 +5,7 @@ import type { WalletClient } from "viem";
 import type { RiftSdk } from "@riftresearch/sdk";
 
 export type OrderMode = "market" | "limit";
-export type LimitExpiry = "1h" | "1d" | "1w" | "1mo";
+export type LimitExpiry = "1h" | "1d" | "1w" | "1mo" | "1y";
 
 // Inline to avoid circular dependency with constants.ts
 const DEFAULT_INPUT_TOKEN: TokenData = {
@@ -319,7 +319,7 @@ export const useStore = create<{
   setOrderMode: (mode: OrderMode) => set({ orderMode: mode }),
   limitPrice: "",
   setLimitPrice: (price: string) => set({ limitPrice: price }),
-  limitExpiry: "1d",
+  limitExpiry: "1y",
   setLimitExpiry: (expiry: LimitExpiry) => set({ limitExpiry: expiry }),
   marketRate: null,
   setMarketRate: (rate: number | null) => set({ marketRate: rate }),

@@ -29,6 +29,7 @@ const EXPIRY_OPTIONS: { key: LimitExpiry; label: string; seconds: number }[] = [
   { key: "1d", label: "1 Day", seconds: 86400 },
   { key: "1w", label: "1 Week", seconds: 604800 },
   { key: "1mo", label: "1 Month", seconds: 2592000 },
+  { key: "1y", label: "1 Year", seconds: 31536000 },
 ];
 
 export function getExpirySeconds(expiry: LimitExpiry): number {
