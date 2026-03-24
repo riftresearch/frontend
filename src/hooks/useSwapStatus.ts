@@ -137,7 +137,7 @@ function mapSdkResponse(sdkResponse: RiftSwap): NormalizedSwapStatus {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Polls the Rift SDK for swap status using sdk.getSwapStatus().
+ * Polls the Rift SDK for swap status using sdk.getOrderStatus().
  * Returns a normalized response shape compatible with existing components.
  */
 export function useSwapStatus(swapId: string | undefined) {
@@ -153,7 +153,7 @@ export function useSwapStatus(swapId: string | undefined) {
       if (!rift) {
         throw new Error("Rift SDK not initialized");
       }
-      const sdkResponse = await rift.getSwapStatus(swapId);
+      const sdkResponse = await rift.getOrderStatus(swapId);
       return mapSdkResponse(sdkResponse);
     },
     enabled: isValidId && !!rift,
