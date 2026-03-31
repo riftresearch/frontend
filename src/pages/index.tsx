@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex, Text, Box, Spinner } from "@chakra-ui/react";
 import { SwapWidget } from "@/components/swap/SwapWidget";
+import { OpenOrdersPanel } from "@/components/swap/OpenOrdersPanel";
 import { Navbar } from "@/components/nav/Navbar";
 import { OpenGraph } from "@/components/other/OpenGraph";
 import { RiftLogo } from "@/components/other/RiftLogo";
@@ -19,6 +20,8 @@ export default function Home() {
   const { isTablet, isMobile, isWindowValid } = useWindowSize();
   const { isOtcServerDead } = useStore();
   const { swapResponse, transactionConfirmed } = useStore();
+  const orderMode = useStore((s) => s.orderMode);
+  const isLimitMode = orderMode === "limit";
   const router = useRouter();
   const [isLocalhost, setIsLocalhost] = React.useState(false);
 
@@ -115,7 +118,19 @@ export default function Home() {
             </Text>
           </Flex>
 
-          <SwapWidget />
+          {isLimitMode ? (
+            <Flex
+              direction={!isMobile && !isTablet ? "row" : "column"}
+              gap="20px"
+              align="flex-start"
+              justify="center"
+            >
+              <SwapWidget />
+              <OpenOrdersPanel />
+            </Flex>
+          ) : (
+            <SwapWidget />
+          )}
         </Flex>
         {process.env.NEXT_PUBLIC_FAKE_OTC === "true" ||
         process.env.NEXT_PUBLIC_FAKE_RFQ === "true" ? null : (
