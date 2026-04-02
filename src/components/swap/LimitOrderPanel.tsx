@@ -2,11 +2,7 @@ import { Flex, Text, Input, Spacer, Spinner } from "@chakra-ui/react";
 import { useState, useEffect, useCallback, useMemo, ChangeEvent } from "react";
 import { colors } from "@/utils/colors";
 import useWindowSize from "@/hooks/useWindowSize";
-import {
-  ZERO_USD_DISPLAY,
-  bitcoinStyle,
-  evmStyle,
-} from "@/utils/constants";
+import { ZERO_USD_DISPLAY, bitcoinStyle, evmStyle } from "@/utils/constants";
 import WebAssetTag from "@/components/other/WebAssetTag";
 import { AssetSelectorModal } from "@/components/other/AssetSelectorModal";
 import { AddressSelector } from "@/components/other/AddressSelector";
@@ -14,11 +10,7 @@ import { PasteAddressModal } from "@/components/other/PasteAddressModal";
 import { FONT_FAMILIES } from "@/utils/font";
 import { useStore, LimitExpiry } from "@/utils/store";
 import { TokenData } from "@/utils/types";
-import {
-  calculateUsdValue,
-  validatePayoutAddress,
-  truncateAmount,
-} from "@/utils/swapHelpers";
+import { calculateUsdValue, validatePayoutAddress, truncateAmount } from "@/utils/swapHelpers";
 import { useBtcEthPrices } from "@/hooks/useBtcEthPrices";
 import { fetchTokenPrice } from "@/utils/userTokensClient";
 import { useSwitchNetwork, useSwitchWallet, useUserWallets } from "@dynamic-labs/sdk-react-core";
@@ -99,6 +91,7 @@ export const LimitOrderPanel = () => {
   const [assetSelectorDirection, setAssetSelectorDirection] = useState<"input" | "output">("input");
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [pasteModalType, setPasteModalType] = useState<"EVM" | "BTC">("BTC");
+  const [isExpiryDropdownOpen, setIsExpiryDropdownOpen] = useState(false);
 
   const isSwappingForBTC = outputToken.chain === "bitcoin";
 
@@ -129,9 +122,7 @@ export const LimitOrderPanel = () => {
   const selectEvmWallet = useCallback(
     async (address: string, targetChainId?: number) => {
       const wallet = userWallets.find(
-        (c) =>
-          c.chain?.toUpperCase() === "EVM" &&
-          c.address.toLowerCase() === address.toLowerCase()
+        (c) => c.chain?.toUpperCase() === "EVM" && c.address.toLowerCase() === address.toLowerCase()
       );
       if (!wallet) return;
       try {
@@ -178,7 +169,14 @@ export const LimitOrderPanel = () => {
       }
       await selectEvmWallet(address, inputToken.chain as number);
     },
-    [inputToken.chain, outputToken.chain, selectEvmWallet, setBtcAddress, setOutputEvmAddress, setPastedBTCAddress]
+    [
+      inputToken.chain,
+      outputToken.chain,
+      selectEvmWallet,
+      setBtcAddress,
+      setOutputEvmAddress,
+      setPastedBTCAddress,
+    ]
   );
 
   // Fetch token prices
@@ -189,7 +187,10 @@ export const LimitOrderPanel = () => {
         setPrice(btcPrice);
         return;
       }
-      if (tokenData.ticker === "ETH" || tokenData.address === "0x0000000000000000000000000000000000000000") {
+      if (
+        tokenData.ticker === "ETH" ||
+        tokenData.address === "0x0000000000000000000000000000000000000000"
+      ) {
         setPrice(ethPrice);
         return;
       }
@@ -227,12 +228,7 @@ export const LimitOrderPanel = () => {
       setLastTokenPairKey(tokenPairKey);
     }
 
-    if (
-      inputTokenPrice &&
-      outputTokenPrice &&
-      inputTokenPrice > 0 &&
-      outputTokenPrice > 0
-    ) {
+    if (inputTokenPrice && outputTokenPrice && inputTokenPrice > 0 && outputTokenPrice > 0) {
       const rate = inputTokenPrice / outputTokenPrice;
       setMarketRate(rate);
       setIsLoadingMarketRate(false);
@@ -249,7 +245,14 @@ export const LimitOrderPanel = () => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputTokenPrice, outputTokenPrice, tokenPairKey, setMarketRate, setIsLoadingMarketRate, setLimitPrice]);
+  }, [
+    inputTokenPrice,
+    outputTokenPrice,
+    tokenPairKey,
+    setMarketRate,
+    setIsLoadingMarketRate,
+    setLimitPrice,
+  ]);
 
   // ============================================================================
   // LINKED FIELD CALCULATIONS (all local, no API calls)
@@ -292,7 +295,15 @@ export const LimitOrderPanel = () => {
         calculateUsdValue(truncated, inputToken.ticker, ethPrice, btcPrice, inputTokenPrice)
       );
     },
-    [inputToken.ticker, ethPrice, btcPrice, inputTokenPrice, setDisplayedInputAmount, setFullPrecisionInputAmount, setInputUsdValue]
+    [
+      inputToken.ticker,
+      ethPrice,
+      btcPrice,
+      inputTokenPrice,
+      setDisplayedInputAmount,
+      setFullPrecisionInputAmount,
+      setInputUsdValue,
+    ]
   );
 
   // ============================================================================
@@ -348,7 +359,12 @@ export const LimitOrderPanel = () => {
     setLimitPrice(value);
     setLimitLastEditedField("price");
 
-    if (value && parseFloat(value) > 0 && displayedInputAmount && parseFloat(displayedInputAmount) > 0) {
+    if (
+      value &&
+      parseFloat(value) > 0 &&
+      displayedInputAmount &&
+      parseFloat(displayedInputAmount) > 0
+    ) {
       recalcBuyAmount(displayedInputAmount, value);
     }
   };
@@ -364,19 +380,91 @@ export const LimitOrderPanel = () => {
     return ((lp - marketRate) / marketRate) * 100;
   }, [marketRate, limitPrice]);
 
+  // Local state for percentage input display
+  const [percentInput, setPercentInput] = useState("");
+
+  // Sync percentage input with calculated pctDiffFromMarket when limit price changes externally
+  useEffect(() => {
+    if (pctDiffFromMarket !== null) {
+      setPercentInput(pctDiffFromMarket.toFixed(2));
+    } else {
+      setPercentInput("");
+    }
+  }, [pctDiffFromMarket]);
+
+  const handlePercentInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    // Allow numbers, minus sign, and decimal point
+    if (raw !== "" && !/^-?\d*\.?\d{0,2}$/.test(raw)) return;
+
+    setPercentInput(raw);
+
+    if (!marketRate || marketRate <= 0) return;
+
+    const pct = parseFloat(raw);
+    if (!Number.isFinite(pct)) return;
+
+    const newPrice = marketRate * (1 + pct / 100);
+    if (newPrice > 0) {
+      const rateStr = formatRate(newPrice);
+      setLimitPrice(rateStr);
+      setLimitLastEditedField("price");
+      if (displayedInputAmount && parseFloat(displayedInputAmount) > 0) {
+        recalcBuyAmount(displayedInputAmount, rateStr);
+      }
+    }
+  };
+
+  const applyPercentAdjustment = useCallback(
+    (delta: number) => {
+      if (!marketRate || marketRate <= 0) return;
+      const currentPct = pctDiffFromMarket ?? 0;
+      const newPct = currentPct + delta;
+      const newPrice = marketRate * (1 + newPct / 100);
+      if (newPrice > 0) {
+        const rateStr = formatRate(newPrice);
+        setLimitPrice(rateStr);
+        setLimitLastEditedField("price");
+        if (displayedInputAmount && parseFloat(displayedInputAmount) > 0) {
+          recalcBuyAmount(displayedInputAmount, rateStr);
+        }
+      }
+    },
+    [
+      marketRate,
+      pctDiffFromMarket,
+      displayedInputAmount,
+      setLimitPrice,
+      setLimitLastEditedField,
+      recalcBuyAmount,
+    ]
+  );
+
   // USD values update when prices change
   useEffect(() => {
     setInputUsdValue(
-      calculateUsdValue(displayedInputAmount, inputToken.ticker, ethPrice, btcPrice, inputTokenPrice)
+      calculateUsdValue(
+        displayedInputAmount,
+        inputToken.ticker,
+        ethPrice,
+        btcPrice,
+        inputTokenPrice
+      )
     );
     setOutputUsdValue(
       calculateUsdValue(outputAmount, outputToken.ticker, ethPrice, btcPrice, outputTokenPrice)
     );
   }, [
-    inputTokenPrice, outputTokenPrice, btcPrice, ethPrice,
-    displayedInputAmount, outputAmount,
-    inputToken.ticker, outputToken.ticker,
-    setInputUsdValue, setOutputUsdValue,
+    inputTokenPrice,
+    outputTokenPrice,
+    btcPrice,
+    ethPrice,
+    displayedInputAmount,
+    outputAmount,
+    inputToken.ticker,
+    outputToken.ticker,
+    setInputUsdValue,
+    setOutputUsdValue,
   ]);
 
   // ============================================================================
@@ -460,7 +548,15 @@ export const LimitOrderPanel = () => {
             </Text>
           </Flex>
           <Spacer />
-          <Flex mr="8px" py="12px" direction="column" align="flex-end" justify="space-between" h="100%" flexShrink={0}>
+          <Flex
+            mr="8px"
+            py="12px"
+            direction="column"
+            align="flex-end"
+            justify="space-between"
+            h="100%"
+            flexShrink={0}
+          >
             <AddressSelector
               chainType={inputToken.chain === "bitcoin" ? "BTC" : "EVM"}
               selectedAddress={resolvedInputAddress}
@@ -470,7 +566,10 @@ export const LimitOrderPanel = () => {
             <WebAssetTag
               cursor="pointer"
               asset={inputToken.ticker}
-              onDropDown={() => { setAssetSelectorDirection("input"); setIsAssetSelectorOpen(true); }}
+              onDropDown={() => {
+                setAssetSelectorDirection("input");
+                setIsAssetSelectorOpen(true);
+              }}
             />
             <Flex h="21px" />
           </Flex>
@@ -559,7 +658,15 @@ export const LimitOrderPanel = () => {
             </Text>
           </Flex>
           <Spacer />
-          <Flex mr="8px" py="12px" direction="column" align="flex-end" justify="space-between" h="100%" flexShrink={0}>
+          <Flex
+            mr="8px"
+            py="12px"
+            direction="column"
+            align="flex-end"
+            justify="space-between"
+            h="100%"
+            flexShrink={0}
+          >
             <AddressSelector
               chainType={outputToken.chain === "bitcoin" ? "BTC" : "EVM"}
               selectedAddress={resolvedOutputAddress}
@@ -573,7 +680,10 @@ export const LimitOrderPanel = () => {
             <WebAssetTag
               cursor="pointer"
               asset={outputToken.ticker}
-              onDropDown={() => { setAssetSelectorDirection("output"); setIsAssetSelectorOpen(true); }}
+              onDropDown={() => {
+                setAssetSelectorDirection("output");
+                setIsAssetSelectorOpen(true);
+              }}
               isOutput={true}
             />
             <Flex h="21px" />
@@ -607,18 +717,93 @@ export const LimitOrderPanel = () => {
           border={`2px solid ${actualBorderColor}`}
           borderRadius="16px"
           direction="column"
-          gap="10px"
+          gap="12px"
         >
+          {/* Top row: Limit Price left, Expiry dropdown, Market rate on far right */}
           <Flex justify="space-between" align="center">
-            <Text
-              fontSize="13px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.textGray}
-              letterSpacing="-0.5px"
-              userSelect="none"
-            >
-              Limit Price
-            </Text>
+            <Flex align="center" gap="10px">
+              <Text
+                fontSize="13px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={colors.textGray}
+                letterSpacing="-0.5px"
+                userSelect="none"
+              >
+                Limit Price
+              </Text>
+              {/* Expiry Dropdown */}
+              <Flex position="relative">
+                <Flex
+                  align="center"
+                  gap="4px"
+                  px="8px"
+                  py="4px"
+                  bg="#1a1a1a"
+                  borderRadius="6px"
+                  border="1px solid #2a2a2a"
+                  cursor="pointer"
+                  onClick={() => setIsExpiryDropdownOpen(!isExpiryDropdownOpen)}
+                  _hover={{ bg: "#222", borderColor: "#3a3a3a" }}
+                  transition="all 0.15s ease"
+                >
+                  <Text
+                    fontSize="11px"
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    color={colors.textGray}
+                    letterSpacing="-0.5px"
+                    userSelect="none"
+                  >
+                    Expiry: {EXPIRY_OPTIONS.find((o) => o.key === limitExpiry)?.label || "1 Day"}
+                  </Text>
+                  <Text fontSize="8px" color={colors.darkerGray} userSelect="none">
+                    ▼
+                  </Text>
+                </Flex>
+                {isExpiryDropdownOpen && (
+                  <Flex
+                    position="absolute"
+                    top="100%"
+                    left="0"
+                    mt="4px"
+                    direction="column"
+                    bg="#1a1a1a"
+                    border="1px solid #2a2a2a"
+                    borderRadius="8px"
+                    overflow="hidden"
+                    zIndex="dropdown"
+                    minW="90px"
+                  >
+                    {EXPIRY_OPTIONS.map(({ key, label }) => {
+                      const isActive = limitExpiry === key;
+                      return (
+                        <Flex
+                          key={key}
+                          px="10px"
+                          py="6px"
+                          cursor="pointer"
+                          bg={isActive ? "#2a2a2a" : "transparent"}
+                          _hover={{ bg: "#252525" }}
+                          onClick={() => {
+                            setLimitExpiry(key);
+                            setIsExpiryDropdownOpen(false);
+                          }}
+                        >
+                          <Text
+                            fontSize="11px"
+                            fontFamily={FONT_FAMILIES.AUX_MONO}
+                            color={isActive ? colors.offWhite : colors.textGray}
+                            letterSpacing="-0.5px"
+                            userSelect="none"
+                          >
+                            {label}
+                          </Text>
+                        </Flex>
+                      );
+                    })}
+                  </Flex>
+                )}
+              </Flex>
+            </Flex>
             {isLoadingMarketRate ? (
               <Spinner size="xs" color={colors.textGray} />
             ) : marketRate !== null ? (
@@ -630,7 +815,7 @@ export const LimitOrderPanel = () => {
                   letterSpacing="-0.5px"
                   userSelect="none"
                 >
-                  Market: {formatRate(marketRate)}
+                  Market Rate: {formatRate(marketRate)}
                 </Text>
                 <Text
                   fontSize="11px"
@@ -656,50 +841,134 @@ export const LimitOrderPanel = () => {
             ) : null}
           </Flex>
 
-          <Flex align="center" gap="8px">
-            <Text
-              fontSize="13px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.darkerGray}
-              letterSpacing="-0.5px"
-              whiteSpace="nowrap"
-              userSelect="none"
+          {/* Middle row: rate input left, percentage right */}
+          <Flex justify="space-between" align="center" gap="16px">
+            {/* Left: Rate input */}
+            <Flex align="center" gap="8px">
+              <Text
+                fontSize="13px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={colors.darkerGray}
+                letterSpacing="-0.5px"
+                whiteSpace="nowrap"
+                userSelect="none"
+              >
+                1 {inputToken.ticker} =
+              </Text>
+              <Flex
+                align="center"
+                bg="#1a1a1a"
+                borderRadius="8px"
+                px="10px"
+                py="6px"
+                border="1px solid #2a2a2a"
+              >
+                <Input
+                  value={limitPrice}
+                  onChange={handleLimitPriceChange}
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  border="none"
+                  bg="transparent"
+                  outline="none"
+                  p="0px"
+                  fontSize="18px"
+                  letterSpacing="-1px"
+                  color={colors.offWhite}
+                  _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _selected={{ border: "none", boxShadow: "none", outline: "none" }}
+                  placeholder="0.0"
+                  _placeholder={{ color: "#333" }}
+                  w="130px"
+                  textAlign="left"
+                />
+                <Text
+                  fontSize="13px"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  color={colors.darkerGray}
+                  letterSpacing="-0.5px"
+                  whiteSpace="nowrap"
+                  userSelect="none"
+                  ml="4px"
+                >
+                  {outputToken.ticker}
+                </Text>
+              </Flex>
+            </Flex>
+
+            {/* Right: Percentage input */}
+            <Flex
+              align="center"
+              bg="#1a1a1a"
+              borderRadius="8px"
+              px="10px"
+              py="8px"
+              border="1px solid #2a2a2a"
             >
-              1 {inputToken.ticker} =
-            </Text>
-            <Input
-              value={limitPrice}
-              onChange={handleLimitPriceChange}
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              border="none"
-              bg="transparent"
-              outline="none"
-              p="0px"
-              fontSize="18px"
-              letterSpacing="-1px"
-              color={colors.offWhite}
-              _active={{ border: "none", boxShadow: "none", outline: "none" }}
-              _focus={{ border: "none", boxShadow: "none", outline: "none" }}
-              _selected={{ border: "none", boxShadow: "none", outline: "none" }}
-              placeholder="0.0"
-              _placeholder={{ color: "#333" }}
-              flex="1"
-            />
-            <Text
-              fontSize="13px"
-              fontFamily={FONT_FAMILIES.AUX_MONO}
-              color={colors.darkerGray}
-              letterSpacing="-0.5px"
-              whiteSpace="nowrap"
-              userSelect="none"
-            >
-              {outputToken.ticker}
-            </Text>
+              <Text
+                fontSize="16px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={
+                  pctDiffFromMarket !== null && pctDiffFromMarket > 0
+                    ? colors.greenOutline
+                    : pctDiffFromMarket !== null && pctDiffFromMarket < 0
+                      ? colors.redHover
+                      : colors.darkerGray
+                }
+                letterSpacing="-0.5px"
+                mr="2px"
+                userSelect="none"
+              >
+                {pctDiffFromMarket !== null && pctDiffFromMarket >= 0 ? "+" : ""}
+              </Text>
+              <Input
+                value={percentInput}
+                onChange={handlePercentInputChange}
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                border="none"
+                bg="transparent"
+                outline="none"
+                p="0px"
+                w="80px"
+                fontSize="16px"
+                letterSpacing="-0.5px"
+                color={
+                  pctDiffFromMarket !== null && pctDiffFromMarket > 0
+                    ? colors.greenOutline
+                    : pctDiffFromMarket !== null && pctDiffFromMarket < 0
+                      ? colors.redHover
+                      : colors.offWhite
+                }
+                _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                _selected={{ border: "none", boxShadow: "none", outline: "none" }}
+                placeholder="0.00"
+                _placeholder={{ color: "#444" }}
+                textAlign="right"
+              />
+              <Text
+                fontSize="14px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={
+                  pctDiffFromMarket !== null && pctDiffFromMarket > 0
+                    ? colors.greenOutline
+                    : pctDiffFromMarket !== null && pctDiffFromMarket < 0
+                      ? colors.redHover
+                      : colors.darkerGray
+                }
+                letterSpacing="-0.5px"
+                ml="4px"
+                userSelect="none"
+              >
+                %
+              </Text>
+            </Flex>
           </Flex>
 
-          {/* % diff from market */}
-          {pctDiffFromMarket !== null && (
-            <Flex align="center" gap="4px">
+          {/* Bottom row: % vs market left, quick buttons right */}
+          <Flex justify="space-between" align="center">
+            {/* % vs market indicator */}
+            {pctDiffFromMarket !== null && (
               <Text
                 fontSize="12px"
                 fontFamily={FONT_FAMILIES.AUX_MONO}
@@ -715,51 +984,59 @@ export const LimitOrderPanel = () => {
                 {pctDiffFromMarket > 0 ? "+" : ""}
                 {pctDiffFromMarket.toFixed(2)}% vs market
               </Text>
+            )}
+
+            {/* Quick adjustment buttons */}
+            <Flex gap="6px">
+              {[5, 10].map((pct) => (
+                <Flex
+                  key={pct}
+                  px="10px"
+                  py="5px"
+                  borderRadius="8px"
+                  cursor="pointer"
+                  bg="#1a1a1a"
+                  border="1px solid #2a2a2a"
+                  onClick={() => applyPercentAdjustment(pct)}
+                  transition="all 0.15s ease"
+                  _hover={{ bg: "#252525", borderColor: "#3a3a3a" }}
+                >
+                  <Text
+                    fontSize="11px"
+                    fontFamily={FONT_FAMILIES.AUX_MONO}
+                    color={colors.textGray}
+                    letterSpacing="-0.5px"
+                    userSelect="none"
+                  >
+                    {pct > 0 ? "+" : ""}
+                    {pct}%
+                  </Text>
+                </Flex>
+              ))}
+            </Flex>
+          </Flex>
+
+          {/* Warning when limit price is below market */}
+          {pctDiffFromMarket !== null && pctDiffFromMarket < 0 && (
+            <Flex
+              mt="10px"
+              px="12px"
+              py="10px"
+              bg="rgba(180, 150, 50, 0.1)"
+              border="1px solid rgba(180, 150, 50, 0.5)"
+              borderRadius="8px"
+            >
+              <Text
+                fontSize="12px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color="#b49632"
+                letterSpacing="-0.5px"
+              >
+                Trigger price is {pctDiffFromMarket.toFixed(2)}% below market price and may fill
+                instantly
+              </Text>
             </Flex>
           )}
-        </Flex>
-
-        {/* Expiration Selector */}
-        <Flex mt="10px" gap="6px">
-          <Text
-            fontSize="12px"
-            fontFamily={FONT_FAMILIES.AUX_MONO}
-            color={colors.darkerGray}
-            letterSpacing="-0.5px"
-            alignSelf="center"
-            mr="4px"
-            userSelect="none"
-          >
-            Expires
-          </Text>
-          {EXPIRY_OPTIONS.map(({ key, label }) => {
-            const isActive = limitExpiry === key;
-            return (
-              <Flex
-                key={key}
-                px="10px"
-                py="5px"
-                borderRadius="8px"
-                cursor="pointer"
-                bg={isActive ? "#2a2a2a" : "transparent"}
-                border={isActive ? "1px solid #444" : "1px solid transparent"}
-                onClick={() => setLimitExpiry(key)}
-                transition="all 0.15s ease"
-                _hover={!isActive ? { bg: "#1e1e1e" } : undefined}
-              >
-                <Text
-                  fontSize="11px"
-                  fontFamily={FONT_FAMILIES.AUX_MONO}
-                  fontWeight={isActive ? "bold" : "normal"}
-                  color={isActive ? colors.offWhite : colors.darkerGray}
-                  letterSpacing="-0.5px"
-                  userSelect="none"
-                >
-                  {label}
-                </Text>
-              </Flex>
-            );
-          })}
         </Flex>
       </Flex>
 

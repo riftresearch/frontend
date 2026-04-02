@@ -36,9 +36,17 @@ export const OrderModeToggle = () => {
       setOrderMode(mode);
     },
     [
-      orderMode, setOrderMode, setDisplayedInputAmount, setOutputAmount,
-      setInputUsdValue, setOutputUsdValue, setFullPrecisionInputAmount,
-      setQuote, setExecuteSwap, setFeeOverview, setLimitPrice,
+      orderMode,
+      setOrderMode,
+      setDisplayedInputAmount,
+      setOutputAmount,
+      setInputUsdValue,
+      setOutputUsdValue,
+      setFullPrecisionInputAmount,
+      setQuote,
+      setExecuteSwap,
+      setFeeOverview,
+      setLimitPrice,
     ]
   );
 
@@ -50,20 +58,22 @@ export const OrderModeToggle = () => {
   return (
     <Flex
       bg="#1a1a1a"
-      borderRadius="10px"
-      p="3px"
+      borderRadius="11px"
+      p="4px"
       gap="2px"
-      mb="16px"
+      mt="-4px"
+      mb="20px"
       w="fit-content"
+      alignSelf="center"
     >
       {modes.map(({ key, label }) => {
         const isActive = orderMode === key;
         return (
           <Flex
             key={key}
-            px="16px"
-            py="6px"
-            borderRadius="8px"
+            px="18px"
+            py="7px"
+            borderRadius="9px"
             cursor="pointer"
             bg={isActive ? "#2a2a2a" : "transparent"}
             onClick={() => handleModeChange(key)}
@@ -71,7 +81,7 @@ export const OrderModeToggle = () => {
             _hover={!isActive ? { bg: "#222" } : undefined}
           >
             <Text
-              fontSize="13px"
+              fontSize="14px"
               fontFamily={FONT_FAMILIES.AUX_MONO}
               fontWeight={isActive ? "bold" : "normal"}
               color={isActive ? colors.offWhite : colors.textGray}

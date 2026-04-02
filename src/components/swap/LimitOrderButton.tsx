@@ -11,6 +11,7 @@ import useWindowSize from "@/hooks/useWindowSize";
 import { useDynamicContext, useUserWallets } from "@dynamic-labs/sdk-react-core";
 import { mainnet, base } from "viem/chains";
 import { useBitcoinTransaction } from "@/hooks/useBitcoinTransaction";
+import { useBitcoinBalance } from "@/hooks/useBitcoinBalance";
 import { getDynamicWalletClient } from "@/utils/wallet";
 import { validatePayoutAddress } from "@/utils/swapHelpers";
 import { Currencies, createCurrency } from "@riftresearch/sdk";
@@ -25,6 +26,10 @@ export const LimitOrderButton = () => {
   const { setShowAuthFlow } = useDynamicContext();
   const userWallets = useUserWallets();
   const { sendBitcoin, isLoading: isBtcTxLoading } = useBitcoinTransaction();
+
+  // Get BTC balance from store first, then use hook (btcAddress comes from store below)
+  const btcAddressFromStore = useStore((s) => s.btcAddress);
+  const { balanceSats: btcBalanceSats } = useBitcoinBalance(btcAddressFromStore);
 
   const [buttonPressed, setButtonPressed] = useState(false);
   const [phase, setPhase] = useState<"idle" | "approving" | "signing">("idle");
@@ -277,10 +282,25 @@ export const LimitOrderButton = () => {
       }
     }
 
+    // Check Bitcoin balance if selling BTC
+    if (inputToken.chain === "bitcoin") {
+      const requiredSats = Math.ceil(parseFloat(displayedInputAmount) * 100_000_000);
+      const requiredWithFees = requiredSats + 5000;
+
+      if (btcBalanceSats < requiredWithFees) {
+        toastError(null, {
+          title: "Insufficient Bitcoin Balance",
+          description: `Required: ${(requiredWithFees / 100_000_000).toFixed(8)} BTC, Available: ${(btcBalanceSats / 100_000_000).toFixed(8)} BTC`,
+        });
+        return;
+      }
+    }
+
     await startLimitOrder();
   }, [
     allFieldsFilled, isSwappingForBTC, primaryEvmAddress, btcAddress,
     pastedBTCAddress, inputToken.chain, startLimitOrder, setShowAuthFlow,
+    displayedInputAmount, btcBalanceSats,
   ]);
 
   // Enter to submit
