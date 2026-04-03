@@ -83,6 +83,13 @@ function formatBTC(n: number) {
 }
 
 /**
+ * Check if a raw amount string is non-zero and non-empty
+ */
+function isNonZeroAmount(v: string | null | undefined): boolean {
+  return v != null && v !== "" && v !== "0";
+}
+
+/**
  * Format a raw base-unit amount string (e.g. wei) into a human-readable decimal.
  * Uses BigInt to avoid floating-point precision loss for large numbers.
  */
@@ -319,18 +326,19 @@ async function fetchUserSwapsViaSdk(
   rift: RiftSdk,
   addresses: string[],
   limit: number,
-  btcPrice?: number | null
+  btcPrice?: number | null,
+  orderTypeFilter?: "market" | "limit"
 ): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> {
   if (addresses.length === 0) return { swaps: [], hasMore: false };
 
   // For each address, query by both sender and destination to catch all user orders
   const results = await Promise.all(
     addresses.flatMap((addr) => [
-      rift.getOrders({ sender: addr, limit }).catch((e) => {
+      rift.getOrders({ sender: addr, limit, orderType: orderTypeFilter }).catch((e) => {
         console.error("[fetchUserSwapsViaSdk] sender error for", addr, e);
         return { items: [] as any[], nextCursor: null };
       }),
-      rift.getOrders({ destination: addr, limit }).catch((e) => {
+      rift.getOrders({ destination: addr, limit, orderType: orderTypeFilter }).catch((e) => {
         console.error("[fetchUserSwapsViaSdk] destination error for", addr, e);
         return { items: [] as any[], nextCursor: null };
       }),
@@ -730,6 +738,7 @@ interface UserSwapHistoryProps {
   simulatedAddress?: string; // Optional simulated address for admin view
   embedded?: boolean; // When true, renders in compact mode for WalletPanel
   onSwapClick?: () => void; // Callback when a swap is clicked (for closing panel etc.)
+  orderTypeFilter?: "market" | "limit"; // Optional filter to only show specific order types
 }
 
 export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
@@ -737,6 +746,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
   simulatedAddress,
   embedded = false,
   onSwapClick,
+  orderTypeFilter,
 }) => {
   // Get all EVM wallet addresses directly from Dynamic (supports multiple wallets)
   const { setShowAuthFlow } = useDynamicContext();
@@ -782,7 +792,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
       // Refresh the swaps list to update the status after successful refund
       if (addresses.length === 0) return;
       const refresh = useSdk && rift
-        ? fetchUserSwapsViaSdk(rift, addresses, pageSize, btcPrice)
+        ? fetchUserSwapsViaSdk(rift, addresses, pageSize, btcPrice, orderTypeFilter)
         : fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
       refresh.then(({ swaps: newSwaps }) => setSwaps(newSwaps));
     },
@@ -815,7 +825,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
     // SDK uses a larger limit since cursor-based pagination is not supported for load-more
     const fetchFirstPage = (): Promise<{ swaps: AdminSwapItem[]; hasMore: boolean }> => {
       if (useSdk && rift) {
-        return fetchUserSwapsViaSdk(rift, addresses, 50, btcPrice);
+        return fetchUserSwapsViaSdk(rift, addresses, 50, btcPrice, orderTypeFilter);
       }
       return fetchSwapsForAllAddresses(addresses, pageSize, 0, btcPrice);
     };
@@ -884,7 +894,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
     // Cleanup interval on unmount or when addresses/connection changes
     return () => clearInterval(pollInterval);
-  }, [addresses.join(","), isEvmConnected, isSimulating, useSdk, rift]);
+  }, [addresses.join(","), isEvmConnected, isSimulating, useSdk, rift, orderTypeFilter]);
 
   // Fetch next page - only supported for analytics API (offset-based pagination)
   // SDK uses cursor-based pagination and fetches a larger initial page instead
@@ -1125,17 +1135,21 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
 
               if (swap.startAssetMetadata) {
                 inputAsset = swap.startAssetMetadata.ticker;
-                inputAmount = formatBaseUnitAmount(
-                  swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount,
-                  swap.startAssetMetadata.decimals
-                );
+                const rawInputAmount = swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount;
+                inputAmount = isNonZeroAmount(rawInputAmount)
+                  ? formatBaseUnitAmount(rawInputAmount, swap.startAssetMetadata.decimals)
+                  : "—";
                 inputIcon = swap.startAssetMetadata.icon;
               } else if (isBTCtoEVM) {
                 inputAsset = "BTC";
-                inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
+                inputAmount = swap.swapInitialAmountBtc > 0
+                  ? swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")
+                  : "—";
               } else {
                 inputAsset = "cbBTC";
-                inputAmount = swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "");
+                inputAmount = swap.swapInitialAmountBtc > 0
+                  ? swap.swapInitialAmountBtc.toFixed(8).replace(/\.?0+$/, "")
+                  : "—";
               }
 
               if (swap.endAssetMetadata) {
@@ -1178,7 +1192,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                       fontFamily={FONT_FAMILIES.INTER}
                       fontWeight="600"
                     >
-                      {formatUSD(swap.swapInitialAmountUsd)}
+                      {swap.swapInitialAmountUsd > 0 ? formatUSD(swap.swapInitialAmountUsd) : "—"}
                     </Text>
                     <Text fontSize="13px" color={colors.textGray} fontFamily={FONT_FAMILIES.INTER}>
                       {formatTimeAgo(timestamp)}
@@ -1563,7 +1577,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                           fontWeight="500"
                           letterSpacing="-0.5px"
                         >
-                          {formatUSD(swap.swapInitialAmountUsd)}
+                          {swap.swapInitialAmountUsd > 0 ? formatUSD(swap.swapInitialAmountUsd) : "—"}
                         </Text>
                       </Flex>
 
@@ -1620,7 +1634,9 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                           {swap.startAssetMetadata ? (
                             <>
                               <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
-                                {formatBaseUnitAmount(swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount, swap.startAssetMetadata.decimals)}
+                                {isNonZeroAmount(swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount)
+                                  ? formatBaseUnitAmount(swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount, swap.startAssetMetadata.decimals)
+                                  : "—"}
                               </Text>
                               <AssetIcon asset={swap.startAssetMetadata.ticker} iconUrl={swap.startAssetMetadata.icon} address={swap.startAssetMetadata.address} chainId={swap.chain === "BASE" ? 8453 : 1} />
                               <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.textGray} fontWeight="500" letterSpacing="-0.5px">
@@ -1644,7 +1660,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                           {/* Output */}
                           {swap.endAssetMetadata ? (
                             <>
-                              {swap.outputAmount && (
+                              {isNonZeroAmount(swap.outputAmount) && (
                                 <Text fontSize="13px" fontFamily={FONT_FAMILIES.AUX_MONO} color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
                                   {formatBaseUnitAmount(swap.endAssetMetadata.executed_amount || swap.endAssetMetadata.amount, swap.endAssetMetadata.decimals)}
                                 </Text>
@@ -2193,10 +2209,12 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         {swap.startAssetMetadata ? (
                           <>
                             <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
-                              {formatBaseUnitAmount(
-                                swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount,
-                                swap.startAssetMetadata.decimals
-                              )}
+                              {isNonZeroAmount(swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount)
+                                ? formatBaseUnitAmount(
+                                    swap.startAssetMetadata.executed_amount || swap.startAssetMetadata.amount,
+                                    swap.startAssetMetadata.decimals
+                                  )
+                                : "—"}
                             </Text>
                             <AssetIconWithChain
                               asset={swap.startAssetMetadata.ticker}
@@ -2223,9 +2241,9 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                         {/* Output */}
                         {swap.endAssetMetadata ? (
                           <>
-                            {swap.outputAmount && (
+                            {isNonZeroAmount(swap.outputAmount) && (
                               <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
-                                {formatBaseUnitAmount(swap.outputAmount, swap.endAssetMetadata.decimals)}
+                                {formatBaseUnitAmount(swap.outputAmount!, swap.endAssetMetadata.decimals)}
                               </Text>
                             )}
                             <AssetIconWithChain
@@ -2237,9 +2255,9 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                           </>
                         ) : (
                           <>
-                            {swap.outputAmount ? (
+                            {isNonZeroAmount(swap.outputAmount) ? (
                               <Text fontSize="13px" color={colors.offWhite} fontWeight="500" letterSpacing="-0.5px">
-                                {formatBaseUnitAmount(swap.outputAmount, swap.outputDecimals || 8)}
+                                {formatBaseUnitAmount(swap.outputAmount!, swap.outputDecimals || 8)}
                               </Text>
                             ) : null}
                             <AssetIconWithChain
@@ -2258,7 +2276,7 @@ export const UserSwapHistory: React.FC<UserSwapHistoryProps> = ({
                           color={colors.offWhite}
                           fontWeight="500"
                         >
-                          {formatUSD(swap.swapInitialAmountUsd)}
+                          {swap.swapInitialAmountUsd > 0 ? formatUSD(swap.swapInitialAmountUsd) : "—"}
                         </Text>
                       </Flex>
 

@@ -55,6 +55,7 @@ export const LimitOrderButton = () => {
     setActiveSwapId,
     setIsSwapInProgress,
     isLoadingMarketRate,
+    openWalletPanelToTab,
   } = useStore();
 
   const mainnetPublicClient = usePublicClient({ chainId: mainnet.id });
@@ -220,6 +221,9 @@ export const LimitOrderButton = () => {
         description: `Order ID: ${result.orderId.slice(0, 8)}...`,
       });
 
+      // Open wallet panel to limit orders tab
+      openWalletPanelToTab("limit");
+
       // Stay on the limit order page — reset form state instead of navigating
       setButtonPressed(false);
       setPhase("idle");
@@ -245,7 +249,7 @@ export const LimitOrderButton = () => {
   }, [
     rift, getExecuteParams, displayedInputAmount, outputAmount,
     inputToken, outputToken, limitExpiry, toSdkCurrency,
-    setIsSwapInProgress,
+    setIsSwapInProgress, openWalletPanelToTab,
   ]);
 
   const handleButtonClick = useCallback(async () => {

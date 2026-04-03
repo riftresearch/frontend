@@ -155,6 +155,13 @@ export const useStore = create<{
   setIsLoadingMarketRate: (value: boolean) => void;
   limitLastEditedField: "sell" | "buy" | "price";
   setLimitLastEditedField: (field: "sell" | "buy" | "price") => void;
+
+  // Wallet panel state
+  walletPanelOpen: boolean;
+  setWalletPanelOpen: (open: boolean) => void;
+  walletPanelTab: "tokens" | "market" | "limit";
+  setWalletPanelTab: (tab: "tokens" | "market" | "limit") => void;
+  openWalletPanelToTab: (tab: "tokens" | "market" | "limit") => void;
 }>((set) => ({
   primaryEvmAddress: typeof window !== "undefined" ? localStorage.getItem("rift_selectedEvmAddress") : null,
   setPrimaryEvmAddress: (address: string | null) => {
@@ -327,4 +334,12 @@ export const useStore = create<{
   setIsLoadingMarketRate: (value: boolean) => set({ isLoadingMarketRate: value }),
   limitLastEditedField: "sell",
   setLimitLastEditedField: (field: "sell" | "buy" | "price") => set({ limitLastEditedField: field }),
+
+  // Wallet panel state
+  walletPanelOpen: false,
+  setWalletPanelOpen: (open: boolean) => set({ walletPanelOpen: open }),
+  walletPanelTab: "tokens",
+  setWalletPanelTab: (tab: "tokens" | "market" | "limit") => set({ walletPanelTab: tab }),
+  openWalletPanelToTab: (tab: "tokens" | "market" | "limit") =>
+    set({ walletPanelOpen: true, walletPanelTab: tab }),
 }));

@@ -30,12 +30,18 @@ export const ConnectWalletButton: React.FC = () => {
   const primaryEvmAddress = useStore((state) => state.primaryEvmAddress);
   const isEvmConnected = !!primaryEvmAddress;
 
-  const { setUserTokensForChain, setUserTokensForWallet, setSearchResults, inputToken, setInputToken } =
-    useStore();
+  const {
+    setUserTokensForChain,
+    setUserTokensForWallet,
+    setSearchResults,
+    inputToken,
+    setInputToken,
+    walletPanelOpen,
+    setWalletPanelOpen,
+  } = useStore();
   const { isMobile } = useWindowSize();
   const { setShowAuthFlow, primaryWallet } = useDynamicContext();
   const userWallets = useUserWallets();
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   // Check if ANY wallet is connected (EVM or Bitcoin)
   const isConnected = !!primaryWallet;
@@ -57,10 +63,10 @@ export const ConnectWalletButton: React.FC = () => {
     }
     // After window: trigger when going from disconnected to connected (active connect action)
     if (isConnected && !prevIsConnectedRef.current) {
-      setIsPanelOpen(true);
+      setWalletPanelOpen(true);
     }
     prevIsConnectedRef.current = isConnected;
-  }, [isConnected, isSessionRestoreWindow]);
+  }, [isConnected, isSessionRestoreWindow, setWalletPanelOpen]);
 
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {
@@ -311,7 +317,7 @@ export const ConnectWalletButton: React.FC = () => {
         </Button>
       ) : (
         <Flex
-          onClick={() => setIsPanelOpen(true)}
+          onClick={() => setWalletPanelOpen(true)}
           cursor="pointer"
           align="center"
           gap="8px"
@@ -363,8 +369,8 @@ export const ConnectWalletButton: React.FC = () => {
 
       {/* Wallet Panel Slide-out */}
       <WalletPanel
-        isOpen={isPanelOpen}
-        onClose={() => setIsPanelOpen(false)}
+        isOpen={walletPanelOpen}
+        onClose={() => setWalletPanelOpen(false)}
         onConnectNewWallet={() => setShowAuthFlow(true)}
       />
     </>

@@ -95,6 +95,12 @@ export const LimitOrderPanel = () => {
 
   const isSwappingForBTC = outputToken.chain === "bitcoin";
 
+  // Stablecoin pricing flip: show "1 BTC = X USDC" instead of "1 USDC = 0.00001 BTC"
+  const STABLECOINS = ["USDC", "USDT"];
+  const isInputStablecoin = STABLECOINS.includes(inputToken.ticker);
+  const isOutputStablecoin = STABLECOINS.includes(outputToken.ticker);
+  const shouldFlipPricing = isInputStablecoin && !isOutputStablecoin;
+
   const evmWalletAddresses = useMemo(
     () =>
       userWallets
@@ -233,9 +239,10 @@ export const LimitOrderPanel = () => {
       setMarketRate(rate);
       setIsLoadingMarketRate(false);
 
-      // Set limit price to market rate on token change or if not yet set
+      // Set limit price to +1% above market rate on token change or if not yet set
+      // This gives users a better deal by default (green direction)
       if (tokensChanged || !limitPrice) {
-        setLimitPrice(formatRate(rate));
+        setLimitPrice(formatRate(rate * 1.01));
       }
     } else {
       setMarketRate(null);
@@ -369,6 +376,56 @@ export const LimitOrderPanel = () => {
     }
   };
 
+  // Local state for the displayed price input (used when flipped)
+  const [displayedPriceInput, setDisplayedPriceInput] = useState("");
+
+  // Sync displayed price input when limit price changes
+  useEffect(() => {
+    const lp = parseFloat(limitPrice);
+    if (Number.isFinite(lp) && lp > 0) {
+      if (shouldFlipPricing) {
+        setDisplayedPriceInput(formatRate(1 / lp));
+      } else {
+        setDisplayedPriceInput(limitPrice);
+      }
+    } else {
+      setDisplayedPriceInput(limitPrice);
+    }
+  }, [limitPrice, shouldFlipPricing]);
+
+  // Handler for displayed price input (converts back to actual limitPrice when flipped)
+  const handleDisplayedPriceChange = (e: ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value;
+    if (displayedPriceInput === "" && (value === "0" || value === ".")) value = "0.";
+    if (value !== "" && !/^\d*\.?\d{0,18}$/.test(value)) return;
+
+    setDisplayedPriceInput(value);
+    setLimitLastEditedField("price");
+
+    if (shouldFlipPricing) {
+      const displayedVal = parseFloat(value);
+      if (Number.isFinite(displayedVal) && displayedVal > 0) {
+        const actualPrice = formatRate(1 / displayedVal);
+        setLimitPrice(actualPrice);
+        if (displayedInputAmount && parseFloat(displayedInputAmount) > 0) {
+          recalcBuyAmount(displayedInputAmount, actualPrice);
+        }
+      } else if (value === "") {
+        setLimitPrice("");
+      }
+    } else {
+      setLimitPrice(value);
+      if (
+        value &&
+        parseFloat(value) > 0 &&
+        displayedInputAmount &&
+        parseFloat(displayedInputAmount) > 0
+      ) {
+        recalcBuyAmount(displayedInputAmount, value);
+      }
+    }
+  };
+
   // ============================================================================
   // % DIFFERENCE FROM MARKET
   // ============================================================================
@@ -380,17 +437,34 @@ export const LimitOrderPanel = () => {
     return ((lp - marketRate) / marketRate) * 100;
   }, [marketRate, limitPrice]);
 
+  // Display values for flipped stablecoin pricing
+  const displayedMarketRate = useMemo(() => {
+    if (!marketRate) return null;
+    return shouldFlipPricing ? 1 / marketRate : marketRate;
+  }, [marketRate, shouldFlipPricing]);
+
+  const displayedLimitPrice = useMemo(() => {
+    const lp = parseFloat(limitPrice);
+    if (!Number.isFinite(lp) || lp <= 0) return "";
+    return shouldFlipPricing ? formatRate(1 / lp) : limitPrice;
+  }, [limitPrice, shouldFlipPricing]);
+
+  const displayedPctDiff = useMemo(() => {
+    if (pctDiffFromMarket === null) return null;
+    return shouldFlipPricing ? -pctDiffFromMarket : pctDiffFromMarket;
+  }, [pctDiffFromMarket, shouldFlipPricing]);
+
   // Local state for percentage input display
   const [percentInput, setPercentInput] = useState("");
 
   // Sync percentage input with calculated pctDiffFromMarket when limit price changes externally
   useEffect(() => {
-    if (pctDiffFromMarket !== null) {
-      setPercentInput(pctDiffFromMarket.toFixed(2));
+    if (displayedPctDiff !== null) {
+      setPercentInput(displayedPctDiff.toFixed(2));
     } else {
       setPercentInput("");
     }
-  }, [pctDiffFromMarket]);
+  }, [displayedPctDiff]);
 
   const handlePercentInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -404,7 +478,9 @@ export const LimitOrderPanel = () => {
     const pct = parseFloat(raw);
     if (!Number.isFinite(pct)) return;
 
-    const newPrice = marketRate * (1 + pct / 100);
+    // In flipped mode, negate the percentage for actual calculation
+    const actualPct = shouldFlipPricing ? -pct : pct;
+    const newPrice = marketRate * (1 + actualPct / 100);
     if (newPrice > 0) {
       const rateStr = formatRate(newPrice);
       setLimitPrice(rateStr);
@@ -711,19 +787,24 @@ export const LimitOrderPanel = () => {
         {/* Limit Price Input */}
         <Flex
           mt="12px"
-          px="16px"
-          py="14px"
+          px={isMobile ? "12px" : "16px"}
+          py={isMobile ? "12px" : "14px"}
           bg="#111"
           border={`2px solid ${actualBorderColor}`}
-          borderRadius="16px"
+          borderRadius={isMobile ? "12px" : "16px"}
           direction="column"
-          gap="12px"
+          gap={isMobile ? "10px" : "12px"}
         >
           {/* Top row: Limit Price left, Expiry dropdown, Market rate on far right */}
-          <Flex justify="space-between" align="center">
-            <Flex align="center" gap="10px">
+          <Flex
+            justify="space-between"
+            align={isMobile ? "flex-start" : "center"}
+            direction={isMobile ? "column" : "row"}
+            gap={isMobile ? "8px" : "0"}
+          >
+            <Flex align="center" gap={isMobile ? "8px" : "10px"} flexWrap="wrap">
               <Text
-                fontSize="13px"
+                fontSize={isMobile ? "12px" : "13px"}
                 fontFamily={FONT_FAMILIES.AUX_MONO}
                 color={colors.textGray}
                 letterSpacing="-0.5px"
@@ -736,7 +817,7 @@ export const LimitOrderPanel = () => {
                 <Flex
                   align="center"
                   gap="4px"
-                  px="8px"
+                  px={isMobile ? "6px" : "8px"}
                   py="4px"
                   bg="#1a1a1a"
                   borderRadius="6px"
@@ -747,7 +828,7 @@ export const LimitOrderPanel = () => {
                   transition="all 0.15s ease"
                 >
                   <Text
-                    fontSize="11px"
+                    fontSize={isMobile ? "10px" : "11px"}
                     fontFamily={FONT_FAMILIES.AUX_MONO}
                     color={colors.textGray}
                     letterSpacing="-0.5px"
@@ -806,19 +887,19 @@ export const LimitOrderPanel = () => {
             </Flex>
             {isLoadingMarketRate ? (
               <Spinner size="xs" color={colors.textGray} />
-            ) : marketRate !== null ? (
-              <Flex align="center" gap="6px">
+            ) : displayedMarketRate !== null ? (
+              <Flex align="center" gap={isMobile ? "4px" : "6px"}>
                 <Text
-                  fontSize="12px"
+                  fontSize={isMobile ? "10px" : "12px"}
                   fontFamily={FONT_FAMILIES.AUX_MONO}
                   color={colors.darkerGray}
                   letterSpacing="-0.5px"
                   userSelect="none"
                 >
-                  Market Rate: {formatRate(marketRate)}
+                  {isMobile ? "Mkt:" : "Market Rate:"} {formatRate(displayedMarketRate)}
                 </Text>
                 <Text
-                  fontSize="11px"
+                  fontSize={isMobile ? "10px" : "11px"}
                   fontFamily={FONT_FAMILIES.AUX_MONO}
                   color={inputStyle.border_color_light}
                   letterSpacing="-0.5px"
@@ -841,37 +922,56 @@ export const LimitOrderPanel = () => {
             ) : null}
           </Flex>
 
-          {/* Middle row: rate input left, percentage right */}
-          <Flex justify="space-between" align="center" gap="16px">
+          {/* Middle row: rate input left, percentage right - stacks on mobile */}
+          <Flex
+            justify="space-between"
+            align={isMobile ? "stretch" : "center"}
+            gap={isMobile ? "10px" : "16px"}
+            direction={isMobile ? "column" : "row"}
+          >
             {/* Left: Rate input */}
-            <Flex align="center" gap="8px">
+            <Flex align="center" gap="6px" flex={isMobile ? "none" : "1"}>
               <Text
-                fontSize="13px"
+                fontSize={isMobile ? "10px" : "11px"}
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={shouldFlipPricing ? colors.greenOutline : colors.redHover}
+                letterSpacing="-0.5px"
+                fontWeight="bold"
+                userSelect="none"
+                flexShrink={0}
+              >
+                {shouldFlipPricing ? "BUY" : "SELL"}
+              </Text>
+              <Text
+                fontSize={isMobile ? "11px" : "13px"}
                 fontFamily={FONT_FAMILIES.AUX_MONO}
                 color={colors.darkerGray}
                 letterSpacing="-0.5px"
                 whiteSpace="nowrap"
                 userSelect="none"
+                flexShrink={0}
               >
-                1 {inputToken.ticker} =
+                1 {shouldFlipPricing ? outputToken.ticker : inputToken.ticker} =
               </Text>
               <Flex
                 align="center"
                 bg="#1a1a1a"
                 borderRadius="8px"
-                px="10px"
+                px={isMobile ? "8px" : "10px"}
                 py="6px"
                 border="1px solid #2a2a2a"
+                flex="1"
+                minW="0"
               >
                 <Input
-                  value={limitPrice}
-                  onChange={handleLimitPriceChange}
+                  value={displayedPriceInput}
+                  onChange={handleDisplayedPriceChange}
                   fontFamily={FONT_FAMILIES.AUX_MONO}
                   border="none"
                   bg="transparent"
                   outline="none"
                   p="0px"
-                  fontSize="18px"
+                  fontSize={isMobile ? "16px" : "18px"}
                   letterSpacing="-1px"
                   color={colors.offWhite}
                   _active={{ border: "none", boxShadow: "none", outline: "none" }}
@@ -879,161 +979,179 @@ export const LimitOrderPanel = () => {
                   _selected={{ border: "none", boxShadow: "none", outline: "none" }}
                   placeholder="0.0"
                   _placeholder={{ color: "#333" }}
-                  w="130px"
+                  flex="1"
+                  minW="0"
                   textAlign="left"
                 />
                 <Text
-                  fontSize="13px"
+                  fontSize={isMobile ? "11px" : "13px"}
                   fontFamily={FONT_FAMILIES.AUX_MONO}
                   color={colors.darkerGray}
                   letterSpacing="-0.5px"
                   whiteSpace="nowrap"
                   userSelect="none"
                   ml="4px"
+                  flexShrink={0}
                 >
-                  {outputToken.ticker}
+                  {shouldFlipPricing ? inputToken.ticker : outputToken.ticker}
                 </Text>
               </Flex>
             </Flex>
 
-            {/* Right: Percentage input */}
+            {/* Right: Percentage input - full width on mobile */}
             <Flex
               align="center"
+              justify={isMobile ? "space-between" : "flex-end"}
               bg="#1a1a1a"
               borderRadius="8px"
-              px="10px"
+              px={isMobile ? "12px" : "10px"}
               py="8px"
               border="1px solid #2a2a2a"
+              flex={isMobile ? "none" : "0 0 auto"}
             >
-              <Text
-                fontSize="16px"
-                fontFamily={FONT_FAMILIES.AUX_MONO}
-                color={
-                  pctDiffFromMarket !== null && pctDiffFromMarket > 0
-                    ? colors.greenOutline
-                    : pctDiffFromMarket !== null && pctDiffFromMarket < 0
-                      ? colors.redHover
-                      : colors.darkerGray
-                }
-                letterSpacing="-0.5px"
-                mr="2px"
-                userSelect="none"
-              >
-                {pctDiffFromMarket !== null && pctDiffFromMarket >= 0 ? "+" : ""}
-              </Text>
-              <Input
-                value={percentInput}
-                onChange={handlePercentInputChange}
-                fontFamily={FONT_FAMILIES.AUX_MONO}
-                border="none"
-                bg="transparent"
-                outline="none"
-                p="0px"
-                w="80px"
-                fontSize="16px"
-                letterSpacing="-0.5px"
-                color={
-                  pctDiffFromMarket !== null && pctDiffFromMarket > 0
-                    ? colors.greenOutline
-                    : pctDiffFromMarket !== null && pctDiffFromMarket < 0
-                      ? colors.redHover
-                      : colors.offWhite
-                }
-                _active={{ border: "none", boxShadow: "none", outline: "none" }}
-                _focus={{ border: "none", boxShadow: "none", outline: "none" }}
-                _selected={{ border: "none", boxShadow: "none", outline: "none" }}
-                placeholder="0.00"
-                _placeholder={{ color: "#444" }}
-                textAlign="right"
-              />
-              <Text
-                fontSize="14px"
-                fontFamily={FONT_FAMILIES.AUX_MONO}
-                color={
-                  pctDiffFromMarket !== null && pctDiffFromMarket > 0
-                    ? colors.greenOutline
-                    : pctDiffFromMarket !== null && pctDiffFromMarket < 0
-                      ? colors.redHover
-                      : colors.darkerGray
-                }
-                letterSpacing="-0.5px"
-                ml="4px"
-                userSelect="none"
-              >
-                %
-              </Text>
+              {isMobile && (
+                <Text
+                  fontSize="11px"
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  color={colors.darkerGray}
+                  letterSpacing="-0.5px"
+                  userSelect="none"
+                >
+                  Adjustment
+                </Text>
+              )}
+              <Flex align="center">
+                <Text
+                  fontSize={isMobile ? "15px" : "16px"}
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  color={
+                    displayedPctDiff !== null && displayedPctDiff > 0
+                      ? shouldFlipPricing ? colors.redHover : colors.greenOutline
+                      : displayedPctDiff !== null && displayedPctDiff < 0
+                        ? shouldFlipPricing ? colors.greenOutline : colors.redHover
+                        : colors.darkerGray
+                  }
+                  letterSpacing="-0.5px"
+                  mr="2px"
+                  userSelect="none"
+                >
+                  {displayedPctDiff !== null && displayedPctDiff >= 0 ? "+" : ""}
+                </Text>
+                <Input
+                  value={percentInput}
+                  onChange={handlePercentInputChange}
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  border="none"
+                  bg="transparent"
+                  outline="none"
+                  p="0px"
+                  w={isMobile ? "60px" : "80px"}
+                  fontSize={isMobile ? "15px" : "16px"}
+                  letterSpacing="-0.5px"
+                  color={
+                    displayedPctDiff !== null && displayedPctDiff > 0
+                      ? shouldFlipPricing ? colors.redHover : colors.greenOutline
+                      : displayedPctDiff !== null && displayedPctDiff < 0
+                        ? shouldFlipPricing ? colors.greenOutline : colors.redHover
+                        : colors.offWhite
+                  }
+                  _active={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _focus={{ border: "none", boxShadow: "none", outline: "none" }}
+                  _selected={{ border: "none", boxShadow: "none", outline: "none" }}
+                  placeholder="0.00"
+                  _placeholder={{ color: "#444" }}
+                  textAlign="right"
+                />
+                <Text
+                  fontSize={isMobile ? "13px" : "14px"}
+                  fontFamily={FONT_FAMILIES.AUX_MONO}
+                  color={
+                    displayedPctDiff !== null && displayedPctDiff > 0
+                      ? shouldFlipPricing ? colors.redHover : colors.greenOutline
+                      : displayedPctDiff !== null && displayedPctDiff < 0
+                        ? shouldFlipPricing ? colors.greenOutline : colors.redHover
+                        : colors.darkerGray
+                  }
+                  letterSpacing="-0.5px"
+                  ml="4px"
+                  userSelect="none"
+                >
+                  %
+                </Text>
+              </Flex>
             </Flex>
           </Flex>
 
           {/* Bottom row: % vs market left, quick buttons right */}
-          <Flex justify="space-between" align="center">
+          <Flex justify="space-between" align="center" flexWrap="wrap" gap={isMobile ? "8px" : "0"}>
             {/* % vs market indicator */}
-            {pctDiffFromMarket !== null && (
+            {displayedPctDiff !== null && (
               <Text
-                fontSize="12px"
+                fontSize={isMobile ? "11px" : "12px"}
                 fontFamily={FONT_FAMILIES.AUX_MONO}
                 letterSpacing="-0.5px"
                 color={
-                  pctDiffFromMarket > 0
-                    ? colors.greenOutline
-                    : pctDiffFromMarket < -1
-                      ? colors.redHover
+                  displayedPctDiff > 0
+                    ? shouldFlipPricing ? colors.redHover : colors.greenOutline
+                    : displayedPctDiff < -1
+                      ? shouldFlipPricing ? colors.greenOutline : colors.redHover
                       : colors.textGray
                 }
               >
-                {pctDiffFromMarket > 0 ? "+" : ""}
-                {pctDiffFromMarket.toFixed(2)}% vs market
+                {displayedPctDiff > 0 ? "+" : ""}
+                {displayedPctDiff.toFixed(2)}% vs market
               </Text>
             )}
 
-            {/* Quick adjustment buttons */}
-            <Flex gap="6px">
-              {[5, 10].map((pct) => (
+            {/* Quick adjustment buttons - flipped shows negative % (better deal = pay less stablecoin) */}
+            <Flex gap={isMobile ? "4px" : "6px"}>
+              {(shouldFlipPricing ? [-5, -10] : [5, 10]).map((displayPct) => (
                 <Flex
-                  key={pct}
-                  px="10px"
-                  py="5px"
+                  key={displayPct}
+                  px={isMobile ? "8px" : "10px"}
+                  py={isMobile ? "4px" : "5px"}
                   borderRadius="8px"
                   cursor="pointer"
                   bg="#1a1a1a"
                   border="1px solid #2a2a2a"
-                  onClick={() => applyPercentAdjustment(pct)}
+                  onClick={() => applyPercentAdjustment(shouldFlipPricing ? -displayPct : displayPct)}
                   transition="all 0.15s ease"
                   _hover={{ bg: "#252525", borderColor: "#3a3a3a" }}
                 >
                   <Text
-                    fontSize="11px"
+                    fontSize={isMobile ? "10px" : "11px"}
                     fontFamily={FONT_FAMILIES.AUX_MONO}
                     color={colors.textGray}
                     letterSpacing="-0.5px"
                     userSelect="none"
                   >
-                    {pct > 0 ? "+" : ""}
-                    {pct}%
+                    {displayPct > 0 ? "+" : ""}
+                    {displayPct}%
                   </Text>
                 </Flex>
               ))}
             </Flex>
           </Flex>
 
-          {/* Warning when limit price is below market */}
+          {/* Warning when limit price is below market (worse deal - may fill instantly) */}
           {pctDiffFromMarket !== null && pctDiffFromMarket < 0 && (
             <Flex
-              mt="10px"
-              px="12px"
-              py="10px"
+              mt={isMobile ? "8px" : "10px"}
+              px={isMobile ? "10px" : "12px"}
+              py={isMobile ? "8px" : "10px"}
               bg="rgba(180, 150, 50, 0.1)"
               border="1px solid rgba(180, 150, 50, 0.5)"
               borderRadius="8px"
             >
               <Text
-                fontSize="12px"
+                fontSize={isMobile ? "10px" : "12px"}
                 fontFamily={FONT_FAMILIES.AUX_MONO}
                 color="#b49632"
                 letterSpacing="-0.5px"
               >
-                Trigger price is {pctDiffFromMarket.toFixed(2)}% below market price and may fill
-                instantly
+                {shouldFlipPricing
+                  ? `Trigger price is +${Math.abs(pctDiffFromMarket).toFixed(2)}% above market price and may fill instantly`
+                  : `Trigger price is ${pctDiffFromMarket.toFixed(2)}% below market price and may fill instantly`}
               </Text>
             </Flex>
           )}

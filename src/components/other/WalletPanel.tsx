@@ -24,6 +24,8 @@ const isTaprootAddress = (address: string): boolean => {
   return address.startsWith("bc1p") || address.startsWith("tb1p");
 };
 import { UserSwapHistory } from "@/components/activity/UserSwapHistory";
+import { useUserLimitOrders, type LimitOrderItem } from "@/hooks/useUserLimitOrders";
+import { LimitOrderRow } from "@/components/swap/LimitOrderRow";
 import { useStore } from "@/utils/store";
 import { colors } from "@/utils/colors";
 import { FONT_FAMILIES } from "@/utils/font";
@@ -72,10 +74,26 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     btcPrice,
     inputToken,
     outputToken,
+    rift,
+    walletPanelTab,
+    setWalletPanelTab,
   } = useStore();
 
   // Derive swap direction from token chains
   const isSwappingForBTC = outputToken.chain === "bitcoin";
+
+  // Get user address for limit orders
+  const userAddress = primaryEvmAddress || btcAddress;
+
+  // Fetch limit orders for the user
+  const {
+    openOrders,
+    historyOrders,
+    hasMoreOpen,
+    hasMoreHistory,
+    isLoading: isLimitOrdersLoading,
+    refetch: refetchLimitOrders,
+  } = useUserLimitOrders(userAddress, rift);
   const { isMobile } = useWindowSize();
 
   // Get all BTC wallets
@@ -132,7 +150,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
 
   // Fetch balances for all BTC wallets
   const btcBalances = useBitcoinBalances(btcWalletAddresses);
-  const [activeTab, setActiveTab] = useState<"tokens" | "activity">("tokens");
+  // Use the tab from the store (can be set externally, e.g., after placing a limit order)
+  const activeTab = walletPanelTab;
+  const setActiveTab = setWalletPanelTab;
   const [showWalletsOverlay, setShowWalletsOverlay] = useState(false);
   const [showViewModeDropdown, setShowViewModeDropdown] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
@@ -142,6 +162,9 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
 
   // Full-screen history modal state (desktop only)
   const [showFullHistory, setShowFullHistory] = useState(false);
+
+  // Sub-tab for limit orders (open vs history)
+  const [limitSubTab, setLimitSubTab] = useState<"open" | "history">("open");
 
   // Get wallet icon key for Dynamic sprite - use connector name directly
   const getWalletIconKey = (wallet: any): string => {
@@ -1309,10 +1332,10 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
             justify="space-between"
             align="center"
           >
-            <Flex gap="24px">
+            <Flex gap="20px">
               <Text
                 color={activeTab === "tokens" ? colors.offWhite : colors.textGray}
-                fontSize="15px"
+                fontSize="14px"
                 fontWeight={600}
                 fontFamily={FONT_FAMILIES.INTER}
                 pb="12px"
@@ -1323,20 +1346,32 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 Tokens
               </Text>
               <Text
-                color={activeTab === "activity" ? colors.offWhite : colors.textGray}
-                fontSize="15px"
+                color={activeTab === "market" ? colors.offWhite : colors.textGray}
+                fontSize="14px"
                 fontWeight={600}
                 fontFamily={FONT_FAMILIES.INTER}
                 pb="12px"
-                borderBottom={activeTab === "activity" ? `2px solid ${colors.offWhite}` : "none"}
+                borderBottom={activeTab === "market" ? `2px solid ${colors.offWhite}` : "none"}
                 cursor="pointer"
-                onClick={() => setActiveTab("activity")}
+                onClick={() => setActiveTab("market")}
               >
-                Swap Activity
+                Market Orders
+              </Text>
+              <Text
+                color={activeTab === "limit" ? colors.offWhite : colors.textGray}
+                fontSize="14px"
+                fontWeight={600}
+                fontFamily={FONT_FAMILIES.INTER}
+                pb="12px"
+                borderBottom={activeTab === "limit" ? `2px solid ${colors.offWhite}` : "none"}
+                cursor="pointer"
+                onClick={() => setActiveTab("limit")}
+              >
+                Limit Orders
               </Text>
             </Flex>
-            {/* Expand button - only show on Activity tab, desktop only */}
-            {activeTab === "activity" && !isMobile && (
+            {/* Expand button - only show on Market Orders tab, desktop only */}
+            {activeTab === "market" && !isMobile && (
               <Box
                 cursor="pointer"
                 p="6px"
@@ -1435,8 +1470,8 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
             </Box>
           )}
 
-          {/* Activity Tab */}
-          {activeTab === "activity" && (
+          {/* Market Orders Tab */}
+          {activeTab === "market" && (
             <Box
               flex="1"
               overflow="auto"
@@ -1459,7 +1494,45 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
                 scrollbarColor: "#333 transparent",
               }}
             >
-              <UserSwapHistory embedded onSwapClick={onClose} />
+              <UserSwapHistory embedded onSwapClick={onClose} orderTypeFilter="market" />
+            </Box>
+          )}
+
+          {/* Limit Orders Tab */}
+          {activeTab === "limit" && (
+            <Box
+              flex="1"
+              overflow="auto"
+              pt="12px"
+              css={{
+                "&::-webkit-scrollbar": {
+                  width: "6px",
+                },
+                "&::-webkit-scrollbar-track": {
+                  background: "transparent",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: "#333",
+                  borderRadius: "3px",
+                },
+                "&::-webkit-scrollbar-thumb:hover": {
+                  background: "#444",
+                },
+                scrollbarWidth: "thin",
+                scrollbarColor: "#333 transparent",
+              }}
+            >
+              <LimitOrdersContent
+                openOrders={openOrders}
+                historyOrders={historyOrders}
+                hasMoreOpen={hasMoreOpen}
+                hasMoreHistory={hasMoreHistory}
+                isLoading={isLimitOrdersLoading}
+                refetch={refetchLimitOrders}
+                address={userAddress}
+                limitSubTab={limitSubTab}
+                setLimitSubTab={setLimitSubTab}
+              />
             </Box>
           )}
         </Flex>
@@ -1502,7 +1575,7 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
               px="20px"
               pb="40px"
             >
-              <UserSwapHistory embedded={false} />
+              <UserSwapHistory embedded={false} orderTypeFilter="market" />
             </Flex>
           </Box>
         </Portal>
@@ -1510,3 +1583,161 @@ export const WalletPanel: React.FC<WalletPanelProps> = ({
     </>
   );
 };
+
+// Limit Orders Content Component
+type LimitTab = "open" | "history";
+
+interface LimitOrdersContentProps {
+  openOrders: LimitOrderItem[];
+  historyOrders: LimitOrderItem[];
+  hasMoreOpen: boolean;
+  hasMoreHistory: boolean;
+  isLoading: boolean;
+  refetch: () => void;
+  address: string | null;
+  limitSubTab: LimitTab;
+  setLimitSubTab: (tab: LimitTab) => void;
+}
+
+const LimitOrdersContent: React.FC<LimitOrdersContentProps> = ({
+  openOrders,
+  historyOrders,
+  hasMoreOpen,
+  hasMoreHistory,
+  isLoading,
+  refetch,
+  address,
+  limitSubTab,
+  setLimitSubTab,
+}) => {
+  const orders = limitSubTab === "open" ? openOrders : historyOrders;
+
+  const formatCount = (count: number, hasMore: boolean) =>
+    hasMore ? `${count}+` : `${count}`;
+
+  const tabs: { key: LimitTab; label: string; countDisplay: string }[] = [
+    { key: "open", label: "Open", countDisplay: formatCount(openOrders.length, hasMoreOpen) },
+    { key: "history", label: "History", countDisplay: formatCount(historyOrders.length, hasMoreHistory) },
+  ];
+
+  return (
+    <Flex direction="column" h="100%" px="8px">
+      {/* Open/History Tab bar */}
+      <Flex
+        bg="#1a1a1a"
+        borderRadius="10px"
+        p="3px"
+        gap="2px"
+        mb="16px"
+        w="fit-content"
+      >
+        {tabs.map(({ key, label, countDisplay }) => {
+          const isActive = limitSubTab === key;
+          return (
+            <Flex
+              key={key}
+              px="16px"
+              py="6px"
+              borderRadius="8px"
+              cursor="pointer"
+              bg={isActive ? "#2a2a2a" : "transparent"}
+              onClick={() => setLimitSubTab(key)}
+              transition="background 0.15s ease"
+              _hover={!isActive ? { bg: "#222" } : undefined}
+              gap="6px"
+              align="center"
+            >
+              <Text
+                fontSize="13px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                fontWeight={isActive ? "bold" : "normal"}
+                color={isActive ? colors.offWhite : colors.textGray}
+                letterSpacing="-0.5px"
+                userSelect="none"
+              >
+                {label}
+              </Text>
+              <Text
+                fontSize="11px"
+                fontFamily={FONT_FAMILIES.AUX_MONO}
+                color={isActive ? colors.textGray : colors.darkerGray}
+                userSelect="none"
+              >
+                ({countDisplay})
+              </Text>
+            </Flex>
+          );
+        })}
+      </Flex>
+
+      {/* Orders list */}
+      <Flex direction="column" flex={1} gap="8px">
+        {!address ? (
+          <LimitOrdersEmptyState message="Connect wallet to view orders" />
+        ) : isLoading && orders.length === 0 ? (
+          <Flex justify="center" align="center" py="60px">
+            <Spinner size="md" color={colors.textGray} />
+          </Flex>
+        ) : orders.length === 0 ? (
+          <LimitOrdersEmptyState
+            message={
+              limitSubTab === "open"
+                ? "No open orders"
+                : "No order history"
+            }
+            subtitle={
+              limitSubTab === "open"
+                ? "Your open limit orders will appear here"
+                : "Completed and cancelled orders will appear here"
+            }
+          />
+        ) : (
+          orders.map((order) => (
+            <LimitOrderRow
+              key={order.orderId}
+              order={order}
+              onCancelled={refetch}
+            />
+          ))
+        )}
+      </Flex>
+    </Flex>
+  );
+};
+
+const LimitOrdersEmptyState = ({
+  message,
+  subtitle,
+}: {
+  message: string;
+  subtitle?: string;
+}) => (
+  <Flex
+    direction="column"
+    align="center"
+    justify="center"
+    py="50px"
+    gap="8px"
+  >
+    <Text
+      fontSize="14px"
+      fontFamily={FONT_FAMILIES.AUX_MONO}
+      color={colors.textGray}
+      letterSpacing="-0.5px"
+      textAlign="center"
+    >
+      {message}
+    </Text>
+    {subtitle && (
+      <Text
+        fontSize="12px"
+        fontFamily={FONT_FAMILIES.AUX_MONO}
+        color={colors.darkerGray}
+        letterSpacing="-0.5px"
+        textAlign="center"
+      >
+        {subtitle}
+      </Text>
+    )}
+  </Flex>
+);
